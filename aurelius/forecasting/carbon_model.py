@@ -393,6 +393,74 @@ class CarbonQuantileForecaster:
             result[f.region][f.timestamp] = {"p50": f.p50, "p90": f.p90}
         return result
 
+    # ------------------------------------------------------------------
+    # Persistence — joblib serialisation of the full forecaster state
+    # ------------------------------------------------------------------
+
+    def save(self, path) -> None:
+        """Save this forecaster to disk.
+
+        Serialises the LightGBM models and all state required to reconstruct
+        an identical forecaster via CarbonQuantileForecaster.load(path).
+
+        Args:
+            path: Destination file path (str or pathlib.Path).
+        """
+        import joblib
+        state = {
+            "config": self.config,
+            "model_p50": self._model_p50,
+            "model_p90": self._model_p90,
+            "fitted": self._fitted,
+            "known_regions": self._known_regions,
+            "metadata": self._metadata,
+            "baseline_mean": self._baseline_mean,
+            "use_lags": self._use_lags,
+            "use_rolling": self._use_rolling,
+            "lag_hours": self._lag_hours,
+            "rolling_hours": self._rolling_hours,
+        }
+        joblib.dump(state, path)
+        logger.info(f"CarbonQuantileForecaster saved to {path}")
+
+    @classmethod
+    def load(cls, path) -> "CarbonQuantileForecaster":
+        """Load a CarbonQuantileForecaster from disk.
+
+        Args:
+            path: Path previously written by save() (str or pathlib.Path).
+
+        Returns:
+            A fully reconstructed CarbonQuantileForecaster ready to call predict().
+
+        Raises:
+            FileNotFoundError: If path does not exist.
+            ValueError: If the file does not contain a valid forecaster state.
+        """
+        import joblib
+        state = joblib.load(path)
+        required = {
+            "config", "model_p50", "model_p90", "fitted",
+            "known_regions", "metadata", "baseline_mean",
+        }
+        missing = required - set(state.keys())
+        if missing:
+            raise ValueError(f"Forecaster state missing keys: {missing}")
+
+        forecaster = cls(config=state["config"])
+        forecaster._model_p50 = state["model_p50"]
+        forecaster._model_p90 = state["model_p90"]
+        forecaster._fitted = state["fitted"]
+        forecaster._known_regions = state["known_regions"]
+        forecaster._metadata = state["metadata"]
+        forecaster._baseline_mean = state["baseline_mean"]
+        forecaster._use_lags = state.get("use_lags", True)
+        forecaster._use_rolling = state.get("use_rolling", True)
+        forecaster._lag_hours = state.get("lag_hours", [1, 6])
+        forecaster._rolling_hours = state.get("rolling_hours", [6])
+        logger.info(f"CarbonQuantileForecaster loaded from {path}")
+        return forecaster
+
 
 class CarbonForecaster:
     """Forecasts carbon intensity using interpretable methods.
