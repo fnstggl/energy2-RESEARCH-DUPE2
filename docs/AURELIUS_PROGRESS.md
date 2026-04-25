@@ -1,82 +1,101 @@
 # Aurelius Progress Tracker
 
 ## Current Status
-- Phase: PHASE_2 → PHASE_3 ready
-- Milestone: Phase 2 — Complete ML Forecasting
+- Phase: PHASE_3 → PHASE_4 ready
+- Milestone: Phase 3 — Production-Like Simulation Environment
 - Status: MERGED
 
 ## Last Run
 - Date: 2026-04-25
-- Branch: claude/bold-dirac-OmIoy
-- PR URL: https://github.com/fnstggl/energy2/pull/7
+- Branch: claude/bold-dirac-z8f0z
+- PR URL: https://github.com/fnstggl/energy2/pull/8
 - PR Status: MERGED (squash)
 - Merge Status: MERGED
-- Main Commit SHA: 05c0d0ab6b0e63dc4557b21687b6c93e30d6b5a8
+- Main Commit SHA: 2c093db8bdc260711e367b0327f28a2eb65aa431
 
 ## Tests
-- Unit: 310 passed, 0 failed (full suite)
-- Integration: covered in test_phase2_completion.py (40 new tests)
-- E2E: retrain_forecasters CLI smoke test + model promotion test pass
+- Unit: 370 passed, 0 failed (full suite)
+- Phase 3 new tests: 60 (test_phase3_workloads.py)
+- Pre-existing tests: 310 (all still pass)
 - Result: ALL PASSING
 
-## Phase 2 Acceptance Criteria Verification
+## Phase 3 Acceptance Criteria Verification
 
 | Criterion | Status | Evidence |
 |-----------|--------|----------|
-| MAPE < 15% on held-out price series | PASS | 3.01% on 30-day holdout |
-| p90 coverage >= 88% on 30-day holdout | PASS | 89.7% with calibration (scale=1.096) |
-| Model artifacts versioned on disk | PASS | ModelStore + joblib save/load |
-| features.py: build_features(df, weather_df) | DONE | aurelius/forecasting/features.py |
-| calibration.py: calibrate_quantile() | DONE | aurelius/forecasting/calibration.py |
-| price_model.py: save/load/validate_coverage | DONE | PriceQuantileForecaster |
-| carbon_model.py: same | DONE | CarbonQuantileForecaster |
-| Bias correction from forecast_corrections_v1.json | DONE | _load_corrections() on __init__ |
-| train_offline.py: LightGBM for savings + risk | DONE | trainers.py lgbm variants |
-| scripts/retrain_forecasters.py --start/--end | DONE | scripts/ + aurelius/scripts/ |
+| load_workload_csv() → list[Job] with GPU/SLA/PUE fields | DONE | aurelius/ingestion/workload_traces.py |
+| Job model: workload_type, gpu_type, gpu_count, sla_penalty_per_hour, data_transfer_gb, pue | DONE | aurelius/models.py |
+| Job model: interruptible, preemptible, checkpointable, sla_class, allowed_regions, forbidden_regions | DONE | aurelius/models.py |
+| Data residency enforced in Job.__post_init__ | DONE | allowed_regions narrows region_options, forbidden_regions removed |
+| Existing tests still pass with defaults | DONE | 310 pre-existing tests pass |
+| Objective: sla_penalty_cost, data_transfer_cost, pue_factor | DONE | aurelius/optimization/objective.py |
+| Integration test: high-penalty job not scheduled past deadline | DONE | test_phase3_workloads.py |
+| WorkloadSimulator.generate() — statistically distinct per type | DONE | aurelius/simulation/workload_simulator.py |
+| 7 workload types × 8 GPU types, seeded reproducibility | DONE | _PROFILES + _GPU_BASE_POWER_KW |
+| ShadowRunner.run() — decisions vs realized prices | DONE | aurelius/execution/shadow_runner.py |
+| Costs from real_prices/real_carbon only (not forecasts) | DONE | tested + verified adversarially |
+| JSONL persistence of shadow results | DONE | ShadowRunner.output_path |
+| docker/Dockerfile: multi-stage, Python 3.11, non-root | DONE | docker/Dockerfile |
+| docker/docker-compose.yml: api + postgres + redis | DONE | docker/docker-compose.yml |
+| .github/workflows/ci.yml: ruff + mypy + pytest + Docker | DONE | .github/workflows/ci.yml |
 
 ## What Was Completed This Run
 
 ### New Files
-- aurelius/forecasting/features.py — build_features(df, weather_df=None) pandas interface
-- aurelius/forecasting/calibration.py — calibrate_quantile() binary-search calibration
-- scripts/retrain_forecasters.py — Full retraining CLI with --start/--end
-- aurelius/scripts/__init__.py + aurelius/scripts/retrain_forecasters.py — module invocation
-- tests/test_phase2_completion.py — 40 new Phase 2 tests
+- aurelius/ingestion/workload_traces.py — load_workload_csv() with full validation
+- aurelius/simulation/workload_simulator.py — WorkloadSimulator.generate() + generate_mixed()
+- aurelius/execution/shadow_runner.py — ShadowRunner + ShadowResult + ShadowDecisionRecord
+- docker/Dockerfile — multi-stage Python 3.11, non-root user
+- docker/docker-compose.yml — aurelius-api + postgres:15 + redis:7
+- .github/workflows/ci.yml — ruff + mypy + pytest + docker-build jobs
+- tests/test_phase3_workloads.py — 60 Phase 3 tests
 
 ### Modified Files
-- aurelius/forecasting/price_model.py — save/load, validate_coverage, bias correction
-- aurelius/forecasting/carbon_model.py — same
-- aurelius/ml/trainers.py — LightGBM savings and risk models with fallback
-- aurelius/ml/train_offline.py — LightGBM by default, --min-records guard, --no-lgbm flag
+- aurelius/models.py — Extended Job (14 new fields) and OptimizationConfig (6 new fields)
+- aurelius/optimization/objective.py — PUE, SLA penalty, data transfer cost terms
+- .env.example — Added Phase 3 env vars (AURELIUS_API_KEY, REDIS_URL, ML_ARTIFACTS_DIR)
 
-## What Remains for Phase 2
-NONE — all Phase 2 acceptance criteria are met.
+## Adversarial Review Findings and Fixes
 
-## Phase 3 Next Steps
-Phase 3: Production-Like Simulation Environment requires:
-1. aurelius/models.py — Add workload_type, gpu_type, gpu_count, sla_penalty_per_hour, data_transfer_gb, pue fields to Job and OptimizationConfig
-2. aurelius/ingestion/workload_traces.py — load_workload_csv() returning list[Job]
-3. aurelius/simulation/workload_simulator.py — GPU-typed realistic workload generation
-4. aurelius/optimization/objective.py — SLA penalty, data transfer, PUE cost terms
-5. aurelius/execution/shadow_runner.py — ShadowRunner.run() recording decisions vs realized prices
-6. docker/Dockerfile + docker/docker-compose.yml — multi-stage build, non-root, postgres
-7. .github/workflows/ci.yml — ruff, mypy, pytest, Docker build
+| Issue Found | Fix Applied |
+|-------------|-------------|
+| Test used floor(earliest_start) which could be < earliest_start | Fixed test to use ceil(earliest_start) |
+| ruff: 10 import/unused-var issues in new files | Auto-fixed with ruff --fix |
+| PUE must scale both energy cost AND carbon (not just cost) | Verified in objective.py + adversarial test |
+| Shadow runner must not use forecast data for cost computation | Verified: real_prices/real_carbon only |
+| WorkloadSimulator: deadline must always be >= earliest_start + runtime | Tested across all 7 types × 100 jobs |
 
-## Known Risks
-- p90 coverage >= 88% requires calibration step after training (raw coverage ~65% on synthetic data)
-- Real price/carbon data requires API keys — CSV fallback provided
-- LightGBM falls back to bucketed stats when < 50 labelled records (correct behavior)
-- Phase 3 Docker/CI is a substantial lift requiring careful dependency management
+## Known Risks for Phase 4
+
+- Docker build not verified locally (no Docker daemon) — CI will verify on GitHub Actions
+- sla_class stored in Job but safety gate SLA thresholds not yet automatically loaded from workload_type (requires Phase 4 wiring)
+- Shadow runner uses default price when real_prices dict is missing hour keys (graceful, logged)
+- No HTML report generator yet (Phase 4)
+- No API auth middleware yet (Phase 4)
+- No GET /simulations or GET /simulations/{id} endpoints yet (Phase 4)
+- No confidence intervals on savings metrics yet (Phase 4)
+
+## What Remains for Phase 3
+NONE — all Phase 3 acceptance criteria are met.
+
+## Phase 4 Next Steps
+Phase 4: Reporting and Pilot Readiness requires:
+1. aurelius/reporting/savings_report.py — SavingsReport.generate(backtest_result) with 95% bootstrap CIs
+2. aurelius/reporting/html_report.py — render_html_report() → self-contained HTML with embedded charts
+3. aurelius/api/app.py — Implement GET /simulations + GET /simulations/{run_id} + API key auth middleware
+4. aurelius/validation/leakage_audit.py — assert_no_leakage() raising DataLeakageError on overlap
+
+All reports must include:
+- Cost savings with 95% CI (bootstrap)
+- Carbon reduction in tonnes
+- Methodology section proving leakage-free computation
+- Independent reproducibility instructions
 
 ## Next Task
-Start Phase 3 sprint. Exact scope:
-- Audit aurelius/models.py for existing Job/OptimizationConfig fields
-- Add workload_type, gpu_type, gpu_count, sla_penalty_per_hour, data_transfer_gb, pue to Job
-- Create aurelius/ingestion/workload_traces.py with load_workload_csv()
-- Create aurelius/simulation/workload_simulator.py with GPU/workload profiles
-- Modify aurelius/optimization/objective.py to include SLA/PUE/transfer costs
-- Create aurelius/execution/shadow_runner.py with ShadowRunner
-- Create docker/Dockerfile (multi-stage, Python 3.11, non-root)
-- Create docker/docker-compose.yml (aurelius-api + postgres)
-- Create .github/workflows/ci.yml (ruff + mypy + pytest + docker build)
-- All with full unit + integration + E2E test coverage
+Start Phase 4 sprint. Exact scope:
+- Implement SavingsReport.generate() with bootstrap confidence intervals
+- Implement HTML report generation (Jinja2 + matplotlib embedded as base64)
+- Add GET /simulations + GET /simulations/{run_id} to API
+- Add API key auth middleware (AURELIUS_API_KEY env var)
+- Add DataLeakageError and assert_no_leakage() to validation
+- Write unit + integration + E2E tests for all reporting
