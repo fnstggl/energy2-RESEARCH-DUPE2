@@ -4,26 +4,68 @@ Provides a minimal REST API for running simulations.
 
 Endpoints:
 - POST /simulate: Run a simulation with custom parameters
-- GET /health: Health check
+- GET /health: Health check (no auth required)
 - GET /simulations: List past simulations (from database)
 - GET /simulations/{run_id}: Get specific simulation results
 
-No authentication, no pagination, no streaming.
-This is a research-grade API for running simulations.
+Authentication:
+    When AURELIUS_API_KEY is set in the environment, all endpoints except
+    /health require an API key in the X-API-Key header.
+    Unauthenticated requests return HTTP 401.
 """
 
+import logging
+import os
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-import logging
 
-from ..models import Job, OptimizationConfig
-from ..simulation.replay import SimulationReplay, SimulationConfig
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.security.api_key import APIKeyHeader
+from pydantic import BaseModel, Field
+
 from ..database import get_db
+from ..models import Job, OptimizationConfig
+from ..simulation.replay import SimulationConfig, SimulationReplay
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# API key authentication
+# ---------------------------------------------------------------------------
+
+_API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def _get_configured_api_key() -> Optional[str]:
+    """Return the configured API key, or None if auth is disabled."""
+    return os.environ.get("AURELIUS_API_KEY") or None
+
+
+async def require_api_key(
+    request: Request,
+    api_key: Optional[str] = Security(_API_KEY_HEADER),
+) -> None:
+    """Dependency that enforces API key authentication when configured.
+
+    - If AURELIUS_API_KEY is not set: auth is skipped (dev/test mode); a
+      warning is logged once so operators notice the open API.
+    - If AURELIUS_API_KEY is set: the X-API-Key header must match exactly.
+      Missing or wrong key → HTTP 401.
+    """
+    configured = _get_configured_api_key()
+    if configured is None:
+        logger.warning(
+            "AURELIUS_API_KEY is not set — API is unauthenticated. "
+            "Set this environment variable in production."
+        )
+        return
+    if api_key != configured:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key. Provide X-API-Key header.",
+        )
+
 
 app = FastAPI(
     title="Aurelius",
@@ -94,7 +136,7 @@ async def health_check():
     )
 
 
-@app.post("/simulate", response_model=SimulationResponse)
+@app.post("/simulate", response_model=SimulationResponse, dependencies=[Depends(require_api_key)])
 async def run_simulation(request: SimulationRequest):
     """Run a simulation.
 
@@ -164,7 +206,7 @@ async def run_simulation(request: SimulationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/simulations")
+@app.get("/simulations", dependencies=[Depends(require_api_key)])
 async def list_simulations(limit: int = 100):
     """List past simulation runs from database.
 
@@ -182,7 +224,7 @@ async def list_simulations(limit: int = 100):
     return {"simulations": simulations}
 
 
-@app.get("/simulations/{run_id}")
+@app.get("/simulations/{run_id}", dependencies=[Depends(require_api_key)])
 async def get_simulation(run_id: str):
     """Get a specific simulation by run_id.
 
