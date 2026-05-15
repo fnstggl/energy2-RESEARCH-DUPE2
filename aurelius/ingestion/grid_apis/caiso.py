@@ -309,12 +309,18 @@ def _parse_zip_response(
                 xml_names = [n for n in zf.namelist() if n.lower().endswith(".xml")]
                 if xml_names:
                     with zf.open(xml_names[0]) as f:
-                        err_text = f.read(2000).decode("utf-8", errors="replace")
+                        err_text = f.read(8000).decode("utf-8", errors="replace")
                     logger.error(
-                        f"CAISO OASIS returned XML error for node={node}: {err_text[:500]}"
+                        "CAISO OASIS returned XML (no CSV) for node=%s. "
+                        "ZIP contents: %s\n--- CAISO XML ---\n%s\n--- END ---",
+                        node, zf.namelist(), err_text,
                     )
                 else:
-                    logger.error(f"CAISO OASIS ZIP contains no CSV for node={node}")
+                    logger.error(
+                        "CAISO OASIS ZIP contains no CSV and no XML for node=%s. "
+                        "ZIP contents: %s",
+                        node, zf.namelist(),
+                    )
                 return rows
 
             for csv_name in csv_names:
@@ -328,8 +334,11 @@ def _parse_zip_response(
                     rows.extend(_extract_lmp_rows(df, region, csv_name, floor_to))
 
     except zipfile.BadZipFile:
-        snippet = content[:500].decode("utf-8", errors="replace")
-        logger.error(f"CAISO OASIS response is not a ZIP (node={node}): {snippet}")
+        snippet = content[:2000].decode("utf-8", errors="replace")
+        logger.error(
+            "CAISO OASIS response is not a valid ZIP (node=%s, %d bytes):\n%s",
+            node, len(content), snippet,
+        )
 
     return rows
 

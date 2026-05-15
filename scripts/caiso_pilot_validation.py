@@ -25,6 +25,7 @@ Node: TH_NP15_GEN-APND (NP15 trading hub, Northern California)
 """
 
 import argparse
+import logging
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -34,6 +35,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s  %(name)s  %(message)s",
+    stream=sys.stderr,
+)
 
 REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports" / "pilot_validation" / "caiso"
 
@@ -149,15 +156,101 @@ def run_real_time(hours: int) -> None:
               "to enable carbon-aware optimization.")
 
 
+def run_diagnose() -> None:
+    """Low-level CAISO OASIS diagnostic — dumps raw ZIP contents for debugging.
+
+    Tries two parameter variants (1-day and 31-day) and prints the full content
+    of every file inside each ZIP response so you can see any CAISO error XML
+    verbatim.
+
+    Command:
+        python scripts/caiso_pilot_validation.py --mode diagnose
+    """
+    import io
+    import zipfile
+    import requests
+
+    _OASIS_URL = "https://oasis.caiso.com/oasisapi/SingleZip"
+    node = "TH_NP15_GEN-APND"
+
+    cases = [
+        {
+            "label": "31-day DAM PRC_LMP",
+            "params": {
+                "queryname": "PRC_LMP",
+                "market_run_id": "DAM",
+                "startdatetime": "20240101T0000-0000",
+                "enddatetime": "20240201T0000-0000",
+                "version": "1",
+                "node": node,
+                "resultformat": "6",
+            },
+        },
+        {
+            "label": "1-day DAM PRC_LMP",
+            "params": {
+                "queryname": "PRC_LMP",
+                "market_run_id": "DAM",
+                "startdatetime": "20240101T0000-0000",
+                "enddatetime": "20240102T0000-0000",
+                "version": "1",
+                "node": node,
+                "resultformat": "6",
+            },
+        },
+        {
+            "label": "31-day DAM PRC_LMP without resultformat",
+            "params": {
+                "queryname": "PRC_LMP",
+                "market_run_id": "DAM",
+                "startdatetime": "20240101T0000-0000",
+                "enddatetime": "20240201T0000-0000",
+                "version": "1",
+                "node": node,
+            },
+        },
+    ]
+
+    for case in cases:
+        print(f"\n{'='*60}")
+        print(f"[DIAGNOSE] {case['label']}")
+        print(f"  params: {case['params']}")
+        try:
+            resp = requests.get(_OASIS_URL, params=case["params"], timeout=90)
+            print(f"  HTTP {resp.status_code} — {len(resp.content)} bytes")
+            print(f"  Content-Type: {resp.headers.get('Content-Type', 'unknown')}")
+            print(f"  First 8 bytes: {resp.content[:8]!r}")
+
+            try:
+                zf = zipfile.ZipFile(io.BytesIO(resp.content))
+                print(f"  ZIP files: {zf.namelist()}")
+                for name in zf.namelist():
+                    data = zf.read(name).decode("utf-8", errors="replace")
+                    print(f"\n  --- {name} ({len(data)} chars) ---")
+                    print(data[:4000])
+                    if len(data) > 4000:
+                        print(f"  ... [truncated, {len(data)} total chars]")
+                zf.close()
+            except zipfile.BadZipFile:
+                print(f"  Not a valid ZIP. Raw content (first 2000 bytes):")
+                print(resp.content[:2000].decode("utf-8", errors="replace"))
+        except Exception as exc:
+            print(f"  ERROR: {exc}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="CAISO OASIS pilot validation — fetch and validate real LMP data."
     )
     parser.add_argument(
         "--mode",
-        choices=["day_ahead", "real_time"],
+        choices=["day_ahead", "real_time", "diagnose"],
         required=True,
-        help="'day_ahead' for PRC_LMP/DAM backtest; 'real_time' for PRC_INTVL_LMP/RTM snapshot.",
+        help=(
+            "'day_ahead' for PRC_LMP/DAM backtest; "
+            "'real_time' for PRC_INTVL_LMP/RTM snapshot; "
+            "'diagnose' to dump raw CAISO API responses for debugging."
+        ),
     )
     parser.add_argument(
         "--start",
@@ -179,8 +272,10 @@ def main() -> None:
 
     if args.mode == "day_ahead":
         run_day_ahead(args.start, args.end)
-    else:
+    elif args.mode == "real_time":
         run_real_time(args.hours)
+    else:
+        run_diagnose()
 
 
 if __name__ == "__main__":
