@@ -159,9 +159,9 @@ def run_real_time(hours: int) -> None:
 def run_diagnose() -> None:
     """Low-level CAISO OASIS diagnostic — dumps raw ZIP contents for debugging.
 
-    Tries two parameter variants (1-day and 31-day) and prints the full content
-    of every file inside each ZIP response so you can see any CAISO error XML
-    verbatim.
+    Tries 1-day and 30-day windows (CAISO's 31-day limit is exclusive) and
+    prints the full content of every file inside each ZIP response so you can
+    see any CAISO error XML verbatim.
 
     Command:
         python scripts/caiso_pilot_validation.py --mode diagnose
@@ -176,12 +176,12 @@ def run_diagnose() -> None:
 
     cases = [
         {
-            "label": "31-day DAM PRC_LMP (hh:mm format)",
+            "label": "30-day DAM PRC_LMP (hh:mm format, within 31-day limit)",
             "params": {
                 "queryname": "PRC_LMP",
                 "market_run_id": "DAM",
                 "startdatetime": "20240101T00:00-0000",
-                "enddatetime": "20240201T00:00-0000",
+                "enddatetime": "20240131T00:00-0000",
                 "version": "1",
                 "node": node,
                 "resultformat": "6",

@@ -79,7 +79,7 @@ _OASIS_URL = "https://oasis.caiso.com/oasisapi/SingleZip"
 _MAX_RETRIES = 3
 _RETRY_BACKOFF = 3.0
 _PAGE_SLEEP = 1.0
-_CHUNK_DAYS = 31
+_CHUNK_DAYS = 30  # CAISO's "31 days only" limit is exclusive — 31-day window → ERR_CODE 1004
 
 # TH_NP15_GEN-APND: NP15 trading-hub aggregate price node (Northern California).
 # Standard reference hub for CAISO LMP backtesting and live monitoring.
