@@ -101,12 +101,14 @@ def main() -> None:
         description="PJM Data Miner 2 pilot validation — fetch and validate real LMP data."
     )
     parser.add_argument(
-        "--start", default="2024-01-01",
-        help="Start date YYYY-MM-DD. Default: 2024-01-01",
+        "--start", default="2026-01-01",
+        help="Start date YYYY-MM-DD. Default: 2026-01-01 "
+             "(PJM moves data older than ~12 months to an archive feed that does "
+             "not accept pnode_id/fields filters — keep --start within ~12 months)",
     )
     parser.add_argument(
-        "--end", default="2024-04-01",
-        help="End date YYYY-MM-DD exclusive. Default: 2024-04-01",
+        "--end", default="2026-04-08",
+        help="End date YYYY-MM-DD exclusive. Default: 2026-04-08 (Q1 + 7-day buffer)",
     )
     args = parser.parse_args()
     run_day_ahead(args.start, args.end)

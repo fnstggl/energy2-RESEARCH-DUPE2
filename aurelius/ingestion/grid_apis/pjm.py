@@ -165,10 +165,23 @@ class PJMPriceProvider(PriceProvider):
                     if 400 <= resp.status_code < 500:
                         # Bad-request family: don't retry, log PJM's full error so
                         # format mistakes (e.g. wrong datetime syntax) are visible.
-                        logger.error(
-                            "PJM rejected request (HTTP %d). Params: %s\n--- PJM response ---\n%s\n--- END ---",
-                            resp.status_code, params, resp.text[:2000],
-                        )
+                        body = resp.text[:2000]
+                        if "archived data" in body.lower():
+                            logger.error(
+                                "PJM rejected query as 'archived data' (HTTP %d). "
+                                "Data older than ~12 months is moved to PJM's archive "
+                                "feed which does not accept pnode_id/fields filters. "
+                                "Shift your --start/--end into the last ~12 months "
+                                "or query the archive feed separately. "
+                                "Window: %s..%s\nFull response: %s",
+                                resp.status_code, params.get("datetime_beginning_ept"),
+                                "", body,
+                            )
+                        else:
+                            logger.error(
+                                "PJM rejected request (HTTP %d). Params: %s\n--- PJM response ---\n%s\n--- END ---",
+                                resp.status_code, params, body,
+                            )
                         return empty_price_df()
                     resp.raise_for_status()
                     payload = resp.json()
