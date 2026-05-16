@@ -14,7 +14,8 @@ Forecast modes:
     - Uses p50 predictions as the optimizer signal.
     - Records per-fold forecast quality metrics (MAPE, p90 coverage, calibration).
     - LEAKAGE INVARIANT: forecaster.fit() is called with train-only records.
-      recent_context passed to predict() is the last 48 h of training data.
+      recent_context passed to predict() is the last `context_hours` of training
+      data PER REGION (default 192 h, enough for lag_168h on multi-region setups).
       The forecaster never sees eval-window actuals.
 
 Usage:
@@ -225,7 +226,7 @@ class BacktestEngine:
         price_forecaster_config: Optional[Any] = None,
         carbon_forecaster_cls: Optional[Type] = None,
         carbon_forecaster_config: Optional[Any] = None,
-        context_hours: int = 48,
+        context_hours: int = 192,  # 168h for lag_168h + 24h safety margin
         recorder_path: Optional[Path] = None,
     ) -> None:
         self.method = method
@@ -462,9 +463,19 @@ class BacktestEngine:
             naive_carbon = _build_hourly_carbon_forecast(train_carbon_data, split.eval_start, split.eval_end)
             return naive_price, naive_carbon, ForecastQuality(forecast_method="seasonal_naive_fallback")
 
-        # Recent context: last context_hours of training records (strictly before eval window)
-        context_sorted = sorted(train_price_records, key=lambda r: r.timestamp)
-        recent_context = context_sorted[-self.context_hours:]
+        # Recent context: last context_hours of training records, sliced
+        # PER REGION (not globally). Global slicing meant that for N regions,
+        # each region only got ~context_hours/N records — which silently
+        # broke long-horizon lag features (e.g. lag_168h needs >=168 records
+        # per region). Per-region slicing guarantees each region has
+        # context_hours of history.
+        context_by_region: dict[str, list[EnergyPrice]] = {}
+        for record in sorted(train_price_records, key=lambda r: r.timestamp):
+            context_by_region.setdefault(record.region, []).append(record)
+        recent_context = []
+        for region_records in context_by_region.values():
+            recent_context.extend(region_records[-self.context_hours:])
+        recent_context.sort(key=lambda r: r.timestamp)
 
         # Predict eval window for each region using p50 as optimizer signal
         forecast_price_data: dict[str, dict[datetime, float]] = {}
@@ -508,7 +519,14 @@ class BacktestEngine:
                 else:
                     carbon_fc = self.carbon_forecaster_cls()
                 carbon_fc.fit(train_carbon_records)
-                carbon_context = sorted(train_carbon_records, key=lambda r: r.timestamp)[-self.context_hours:]
+                # Per-region context slicing (same rationale as price context above)
+                carbon_by_region: dict[str, list] = {}
+                for record in sorted(train_carbon_records, key=lambda r: r.timestamp):
+                    carbon_by_region.setdefault(record.region, []).append(record)
+                carbon_context = []
+                for region_records in carbon_by_region.values():
+                    carbon_context.extend(region_records[-self.context_hours:])
+                carbon_context.sort(key=lambda r: r.timestamp)
                 carbon_regions = list(set(r.region for r in train_carbon_records))
                 for region in carbon_regions:
                     rc = [r for r in carbon_context if r.region == region]

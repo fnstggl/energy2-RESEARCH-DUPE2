@@ -147,13 +147,19 @@ class PriceQuantileForecaster:
         self._known_regions: list[str] = []
         self._metadata: Optional[ModelMetadata] = None
         self._baseline_mean: float = 50.0  # Default baseline
-        # v1.1: Enable minimal lags for improved accuracy with safe fallback
-        # Price model uses lag_1h, lag_6h, rolling_mean_6h
-        # Predict-time: falls back to temporal+region if recent data unavailable
+        # v1.2: Full seasonal lag set for accurate long-horizon prediction.
+        # Electricity prices have strong daily (24h) and weekly (168h) cycles —
+        # the previous lag_1h/lag_6h-only set had no long-horizon signal and
+        # collapsed to global mean for predictions >6h out. Adding lag_24h and
+        # lag_168h lets the model learn "today at 4pm looks like yesterday at
+        # 4pm" and "next Monday at 9am looks like this Monday at 9am".
+        # Rolling_24h captures the current price-regime (e.g. cold-snap week).
+        # Requires recent_context of >=168h per region at predict time; the
+        # backtesting engine handles this via per-region context slicing.
         self._use_lags = True
         self._use_rolling = True
-        self._lag_hours = [1, 6]  # lag_1h, lag_6h
-        self._rolling_hours = [6]  # rolling_mean_6h only
+        self._lag_hours = [1, 6, 24, 168]
+        self._rolling_hours = [6, 24]
         # Bias-correction lookup: {region: {hour: bias}} loaded from artifact
         self._p50_bias: dict[str, dict[int, float]] = {}
         self._corrections_loaded: bool = False
