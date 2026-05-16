@@ -376,9 +376,18 @@ def cmd_backtest(args):
         from datetime import datetime
         job_ingester = JobLogIngester()
         sim_start = start_ts.to_pydatetime() if start_ts else datetime.utcnow()
+        # Jobs must span the FULL backtest window so every fold's eval window
+        # gets a real sample. generate_synthetic clusters submissions in the
+        # first 70% of duration_hours (job_logs.py:163), so divide by 0.7 to
+        # ensure submissions reach the latest fold.
+        if start_ts is not None and end_ts is not None:
+            backtest_hours = int((end_ts - start_ts).total_seconds() / 3600)
+        else:
+            backtest_hours = (args.train_days + args.eval_days) * 24
+        duration_hours = int(backtest_hours / 0.7) + 24
         jobs = job_ingester.generate_synthetic(
             start_time=sim_start,
-            duration_hours=args.train_days * 24 + args.eval_days * 24,
+            duration_hours=duration_hours,
             num_jobs=args.num_jobs,
             regions=regions,
             seed=42,
