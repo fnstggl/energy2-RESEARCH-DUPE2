@@ -388,6 +388,15 @@ def cmd_backtest(args):
         print("ERROR: Price DataFrame is empty after loading. Check provider/file and region.", file=sys.stderr)
         sys.exit(1)
 
+    settle_price_df = None
+    if getattr(args, "settlement_price_file", None):
+        from .ingestion.grid_apis.csv_importer import CSVPriceImporter
+        settle_price_df = CSVPriceImporter(args.settlement_price_file).load_all()
+        settle_price_df = settle_price_df[settle_price_df["region"].isin(regions)]
+        if settle_price_df.empty:
+            print("ERROR: Settlement price file is empty for the requested regions.", file=sys.stderr)
+            sys.exit(1)
+
     carbon_df = _load_carbon_df(args, regions)
 
     # Generate synthetic jobs if no job file provided
@@ -472,7 +481,11 @@ def cmd_backtest(args):
         engine.replan_hours = args.replan_hours
 
     print(f"\nRunning backtest: {args.train_days}d train / {args.eval_days}d eval windows")
-    print(f"Price provider: {args.price_provider}")
+    print(f"Price provider: {args.price_provider} (planning signal)")
+    if settle_price_df is not None:
+        print("Settlement: realized prices from --settlement-price-file (RT-exposed customer)")
+    else:
+        print("Settlement: planning price (DA-hedged customer; pays what was planned)")
     print(f"Carbon provider: {args.carbon_provider}")
     print(f"Forecaster: {args.forecaster}"
           + ("  [DIAGNOSTIC: perfect-foresight leakage — not a real savings number]"
@@ -485,7 +498,8 @@ def cmd_backtest(args):
     print(f"Regions: {regions}")
     print()
 
-    rounds = engine.run(jobs, price_df, carbon_df, start=start_ts, end=end_ts)
+    rounds = engine.run(jobs, price_df, carbon_df, start=start_ts, end=end_ts,
+                        settle_price_df=settle_price_df)
 
     if not rounds:
         print("No backtest folds produced. Check date range and data coverage.")
@@ -756,6 +770,17 @@ def main():
         "--price-file", default=None,
         help="Path to CSV price file (required when --price-provider=csv). "
              "Columns: timestamp, region, price_per_mwh",
+    )
+    bt_parser.add_argument(
+        "--settlement-price-file", default=None,
+        help=(
+            "Optional CSV of SETTLEMENT prices (what the customer actually pays, "
+            "e.g. realized real-time LMP). When given, schedules are SCORED against "
+            "these prices while the optimizer still plans against --price-provider "
+            "data (e.g. day-ahead). This is the DA-plan / RT-settle model for an "
+            "RT-exposed customer. Omit it to model a DA-hedged customer (settlement "
+            "== planning price). Columns: timestamp, region, price_per_mwh"
+        ),
     )
     bt_parser.add_argument(
         "--carbon-provider",

@@ -282,16 +282,26 @@ class BacktestEngine:
         carbon_df: pd.DataFrame,
         start: Optional[pd.Timestamp] = None,
         end: Optional[pd.Timestamp] = None,
+        settle_price_df: Optional[pd.DataFrame] = None,
     ) -> list[BacktestRound]:
         """Run the full walk-forward backtest.
 
         Args:
             jobs:      All jobs. The engine assigns jobs to folds by
                        earliest_start timestamp.
-            price_df:  Canonical price DataFrame (columns: timestamp, region, price_per_mwh).
+            price_df:  Canonical PLANNING price DataFrame (columns: timestamp,
+                       region, price_per_mwh). This is the known-ahead signal the
+                       optimizer plans against (e.g. day-ahead LMP) and the
+                       forecaster is trained on.
             carbon_df: Canonical carbon DataFrame (columns: timestamp, region, gco2_per_kwh).
             start:     Backtest start timestamp (defaults to min timestamp in price_df).
             end:       Backtest end timestamp (defaults to max timestamp in price_df + 1h).
+            settle_price_df: Optional SETTLEMENT price DataFrame (same schema).
+                       When provided, schedules are SCORED against these prices
+                       (e.g. realized real-time LMP) while the optimizer still
+                       plans against price_df. This models an RT-exposed customer
+                       who plans on day-ahead but pays real-time. When None,
+                       settlement == planning price (DA-hedged customer).
 
         Returns:
             List of BacktestRound objects, one per fold.
@@ -307,7 +317,7 @@ class BacktestEngine:
 
         rounds: list[BacktestRound] = []
         for split in splits:
-            round_ = self._run_fold(split, jobs, price_df, carbon_df)
+            round_ = self._run_fold(split, jobs, price_df, carbon_df, settle_price_df)
             if round_ is not None:
                 rounds.append(round_)
 
@@ -328,6 +338,7 @@ class BacktestEngine:
         all_jobs: list[Job],
         price_df: pd.DataFrame,
         carbon_df: pd.DataFrame,
+        settle_price_df: Optional[pd.DataFrame] = None,
     ) -> Optional[BacktestRound]:
         """Execute a single fold."""
         eval_jobs = [
@@ -358,6 +369,16 @@ class BacktestEngine:
         eval_carbon_data: dict[str, dict[datetime, float]] = {}
         if not carbon_df.empty:
             eval_carbon_data = _df_to_carbon_data(carbon_df)
+
+        # Settlement prices: what the customer actually PAYS. Schedules are scored
+        # against these (e.g. realized real-time LMP) while the optimizer plans
+        # against eval_price_data (e.g. known day-ahead). When no settlement df is
+        # given, settlement == planning price (DA-hedged customer pays what they
+        # planned). This split is the DA-plan / RT-settle model.
+        if settle_price_df is not None and not settle_price_df.empty:
+            settle_price_data = _df_to_price_data(settle_price_df)
+        else:
+            settle_price_data = eval_price_data
 
         # --- Build forecast signals for the optimizer ---
         forecast_quality: Optional[ForecastQuality] = None
@@ -427,7 +448,7 @@ class BacktestEngine:
             logger.error(f"Fold {split.fold_index}: optimizer failed: {exc}")
             opt_schedule = []
 
-        opt_metrics = evaluate_schedule(opt_schedule, eval_jobs, eval_price_data, eval_carbon_data)
+        opt_metrics = evaluate_schedule(opt_schedule, eval_jobs, settle_price_data, eval_carbon_data)
         if opt_metrics.missing_price_hours > 0:
             logger.warning(
                 f"Fold {split.fold_index}: {opt_metrics.missing_price_hours} optimizer hours "
@@ -444,7 +465,7 @@ class BacktestEngine:
                 continue
             try:
                 bl_schedule = policy(eval_jobs, forecast_price_data, forecast_carbon_data, self.config)
-                bl_metrics = evaluate_schedule(bl_schedule, eval_jobs, eval_price_data, eval_carbon_data)
+                bl_metrics = evaluate_schedule(bl_schedule, eval_jobs, settle_price_data, eval_carbon_data)
                 baseline_schedules[name] = bl_schedule
                 baseline_metrics[name] = bl_metrics
             except Exception as exc:
@@ -472,7 +493,7 @@ class BacktestEngine:
                 eval_jobs=eval_jobs,
                 forecast_price_data=forecast_price_data,
                 forecast_carbon_data=forecast_carbon_data,
-                eval_price_data=eval_price_data,
+                eval_price_data=settle_price_data,
                 eval_carbon_data=eval_carbon_data,
             )
 
