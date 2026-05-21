@@ -630,6 +630,7 @@ class JobScheduler:
         job: Job,
         price_data: dict[str, dict[datetime, float]],
         max_migrations_cap: int = 20,
+        fixed_initial_region: Optional[str] = None,
     ) -> ScheduleDecision:
         """Exact DP for the multi-migration sub-problem given a fixed start_time.
 
@@ -643,7 +644,10 @@ class JobScheduler:
           migrate  : (u+1, r', k+1)  cost = forecast(r', [t, t+m)) + forecast(r', [t+m, t+m+1h))
             (for each r' != r; requires k+1 <= K_max)
 
-        Initial: dp[0][r][0] = 0 for all r (DP picks optimal starting region).
+        Initial: dp[0][r][0] = 0 for all r (DP picks optimal starting region),
+        UNLESS fixed_initial_region is given (mid-flight re-planning), in which
+        case only that region is seeded — the job is already running there, so
+        moving away on the first step legitimately costs a migration.
         Terminal: min over (r, k) of dp[H][r][k].
 
         K_max is bounded by both deadline-feasibility and a configurable cap.
@@ -685,9 +689,14 @@ class JobScheduler:
             [[None] * (K_max + 1) for _ in range(R)] for _ in range(H + 1)
         ]
 
-        # Initial: DP picks any starting region at no extra cost
-        for r_idx in range(R):
-            dp[0][r_idx][0] = 0.0
+        # Initial: DP picks any starting region at no extra cost — unless the
+        # job is already running in a fixed region (mid-flight re-plan), in
+        # which case only that region is seeded.
+        if fixed_initial_region is not None and fixed_initial_region in regions:
+            dp[0][regions.index(fixed_initial_region)][0] = 0.0
+        else:
+            for r_idx in range(R):
+                dp[0][r_idx][0] = 0.0
 
         # Forward DP
         for u in range(H):
@@ -801,6 +810,108 @@ class JobScheduler:
             actual_runtime_hours=H + best_k * m,
             forecast=decision.forecast,
             segments=segments,
+        )
+
+    def replan_remainder(
+        self,
+        decision: ScheduleDecision,
+        job: Job,
+        price_data: dict[str, dict[datetime, float]],
+        t_now: datetime,
+    ) -> ScheduleDecision:
+        """Re-optimize the not-yet-executed remainder of an in-flight job.
+
+        Models receding-horizon (MPC) re-planning: as wallclock advances and new
+        actual prices publish, a running job's FUTURE migration path can be
+        revised. The executed prefix (segments before t_now) is frozen; the
+        remaining useful hours are re-optimized via the migration DP starting
+        from the job's CURRENT region (so any move costs a migration), using the
+        updated price_data. Start time and power are NOT changed — the job is
+        already running.
+
+        Returns a new ScheduleDecision (frozen prefix + re-planned remainder), or
+        the original decision unchanged if there is nothing worth re-planning.
+        """
+        if job.migration_cost_hours is None or len(job.region_options) < 2:
+            return decision
+        segments = decision.all_segments
+        if not segments:
+            return decision
+        job_start = segments[0].start_time
+        job_end = segments[-1].end_time
+        # Only in-flight jobs are eligible (started but not finished by t_now).
+        if t_now <= job_start or t_now >= job_end:
+            return decision
+
+        m = float(job.migration_cost_hours)
+        total_useful = float(int(job.runtime_hours))
+
+        # Walk segments to find useful-hours-done and the region active at t_now.
+        # Segment i>0 begins with m hours of migration warmup (no useful work).
+        useful_done = 0.0
+        current_region = segments[0].region
+        prefix: list[ScheduleSegment] = []
+        for i, seg in enumerate(segments):
+            seg_dur = (seg.end_time - seg.start_time).total_seconds() / 3600.0
+            warmup = m if i > 0 else 0.0
+            if seg.end_time <= t_now:
+                useful_done += max(0.0, seg_dur - warmup)
+                current_region = seg.region
+                prefix.append(ScheduleSegment(
+                    seg.start_time, seg.end_time, seg.region, seg.power_fraction,
+                ))
+            elif seg.start_time < t_now < seg.end_time:
+                elapsed = (t_now - seg.start_time).total_seconds() / 3600.0
+                useful_done += max(0.0, elapsed - warmup)
+                current_region = seg.region
+                prefix.append(ScheduleSegment(
+                    seg.start_time, t_now, seg.region, seg.power_fraction,
+                ))
+                break
+            else:
+                break
+
+        residual_useful = int(round(total_useful - useful_done))
+        if residual_useful < 2:
+            # Too little left for a migration to ever pay off — keep as-is.
+            return decision
+
+        # Re-plan the residual as a fresh sub-problem anchored at t_now, fixed in
+        # the current region.
+        residual_base = ScheduleDecision(
+            job_id=decision.job_id,
+            start_time=t_now,
+            region=current_region,
+            power_fraction=decision.power_fraction,
+            actual_runtime_hours=float(residual_useful),
+        )
+        residual = self._try_optimal_migrations(
+            residual_base, job, price_data,
+            fixed_initial_region=current_region,
+        )
+
+        # Stitch frozen prefix + re-planned remainder, merging the seam if the
+        # remainder simply continues in the current region.
+        new_segments = list(prefix)
+        for seg in residual.all_segments:
+            if new_segments and new_segments[-1].region == seg.region \
+                    and new_segments[-1].end_time == seg.start_time:
+                last = new_segments[-1]
+                new_segments[-1] = ScheduleSegment(
+                    last.start_time, seg.end_time, last.region, last.power_fraction,
+                )
+            else:
+                new_segments.append(seg)
+
+        total_wall = (new_segments[-1].end_time - new_segments[0].start_time).total_seconds() / 3600.0
+        return ScheduleDecision(
+            job_id=decision.job_id,
+            start_time=new_segments[0].start_time,
+            region=new_segments[0].region,
+            power_fraction=decision.power_fraction,
+            actual_runtime_hours=total_wall,
+            forecast=decision.forecast,
+            segments=new_segments if len(new_segments) > 1 else None,
         )
 
     @staticmethod

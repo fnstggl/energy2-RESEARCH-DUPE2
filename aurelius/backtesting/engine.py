@@ -525,33 +525,60 @@ class BacktestEngine:
                 view[region] = pv
             return view
 
-        # Walk replan waves across the eval window
+        # Walk replan waves. At each wave we (1) MID-FLIGHT RE-PLAN the remaining
+        # migration path of every in-flight job using freshly-published actual
+        # prices, then (2) plan newly-available jobs. The loop continues past
+        # eval_end while any job is still running, so long jobs get re-planned
+        # through their full runtime (this is the receding-horizon / MPC core).
+        job_by_id = {j.job_id: j for j in eval_jobs}
         plan_time = split.eval_start
         eval_end = split.eval_end
-        while plan_time < eval_end:
+        hard_stop = eval_end + timedelta(days=400)  # safety against runaway loops
+
+        while True:
             wave_cutoff = plan_time + timedelta(hours=replan)
+            price_view = build_price_view(plan_time)
+
+            # (1) Mid-flight re-planning of in-flight jobs.
+            for jid, dec in list(committed.items()):
+                if dec.start_time < plan_time < dec.end_time:
+                    committed[jid] = self.scheduler.replan_remainder(
+                        dec, job_by_id[jid], price_view, plan_time,
+                    )
+
+            # (2) Plan newly-available, not-yet-committed jobs.
             wave = [
                 j for j in eval_jobs
                 if j.job_id not in committed
                 and _to_ts(j.earliest_start) < wave_cutoff
             ]
             if wave:
-                price_view = build_price_view(plan_time)
                 res = self.scheduler.solve(
                     wave, price_view, forecast_carbon_data, method=self.method,
                 )
                 for d in res.schedule:
                     committed[d.job_id] = d
+
             plan_time = wave_cutoff
 
-        # Any job whose earliest_start is beyond the last wave (shouldn't happen
-        # since eval_jobs are bounded by eval_end, but be safe): plan with the
-        # final available view.
+            # Termination: past the eval window, every eval job committed, and
+            # nothing still in flight.
+            if plan_time >= eval_end:
+                all_committed = all(j.job_id in committed for j in eval_jobs)
+                any_inflight = any(
+                    committed[j.job_id].start_time < plan_time < committed[j.job_id].end_time
+                    for j in eval_jobs if j.job_id in committed
+                )
+                if (all_committed and not any_inflight) or plan_time > hard_stop:
+                    break
+
+        # Safety: plan any uncommitted job (should not occur — all eval jobs have
+        # earliest_start < eval_end and are committed before the loop exits).
         leftover = [j for j in eval_jobs if j.job_id not in committed]
         if leftover:
-            price_view = build_price_view(eval_end)
             res = self.scheduler.solve(
-                leftover, price_view, forecast_carbon_data, method=self.method,
+                leftover, build_price_view(eval_end), forecast_carbon_data,
+                method=self.method,
             )
             for d in res.schedule:
                 committed[d.job_id] = d

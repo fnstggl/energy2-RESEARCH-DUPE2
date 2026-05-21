@@ -382,3 +382,68 @@ class TestMultiMigrationDP:
         sched = JobScheduler(OptimizationConfig())
         result = sched.solve([job], prices, {}, method="greedy_migrate_dp")
         assert result.schedule[0].migration_count == 0
+
+
+class TestReplanRemainder:
+    """Mid-flight re-planning of an in-flight job's remaining migration path."""
+
+    def _scheduler(self):
+        from aurelius.optimization.scheduler import JobScheduler
+        from aurelius.models import OptimizationConfig
+        return JobScheduler(OptimizationConfig())
+
+    def test_replan_adds_migration_when_future_region_gets_cheap(self):
+        from datetime import datetime, timezone, timedelta
+        from aurelius.models import Job, ScheduleDecision
+        UTC = timezone.utc
+        T0 = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+        job = Job(
+            job_id="long", submit_time=T0 - timedelta(hours=1), runtime_hours=10.0,
+            deadline=T0 + timedelta(hours=48), power_kw=100.0, earliest_start=T0,
+            region_options=["us-west", "us-east"], migration_cost_hours=1.0,
+        )
+        # Committed single-region plan in us-west for all 10 useful hours.
+        dec = ScheduleDecision(
+            job_id="long", start_time=T0, region="us-west",
+            power_fraction=1.0, actual_runtime_hours=10.0,
+        )
+        # At t_now = T0+4h the job is in-flight (4 useful hours done). New prices:
+        # us-east becomes drastically cheaper for the remaining hours.
+        t_now = T0 + timedelta(hours=4)
+        price = {"us-west": {}, "us-east": {}}
+        for h in range(0, 60):
+            ts = T0 + timedelta(hours=h)
+            price["us-west"][ts] = 100.0
+            price["us-east"][ts] = 100.0 if ts < t_now else 1.0
+        sched = self._scheduler()
+        out = sched.replan_remainder(dec, job, price, t_now)
+        # Should now migrate to us-east for the remainder.
+        regions = [s.region for s in out.all_segments]
+        assert "us-east" in regions, regions
+        # Frozen prefix: first segment stays us-west and ends no later than t_now.
+        assert out.all_segments[0].region == "us-west"
+        assert out.all_segments[0].end_time <= t_now
+
+    def test_replan_noop_when_nothing_better(self):
+        from datetime import datetime, timezone, timedelta
+        from aurelius.models import Job, ScheduleDecision
+        UTC = timezone.utc
+        T0 = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+        job = Job(
+            job_id="j", submit_time=T0 - timedelta(hours=1), runtime_hours=6.0,
+            deadline=T0 + timedelta(hours=48), power_kw=100.0, earliest_start=T0,
+            region_options=["us-west", "us-east"], migration_cost_hours=1.0,
+        )
+        dec = ScheduleDecision(
+            job_id="j", start_time=T0, region="us-west",
+            power_fraction=1.0, actual_runtime_hours=6.0,
+        )
+        t_now = T0 + timedelta(hours=2)
+        # us-west uniformly cheapest — no reason to migrate.
+        price = {"us-west": {}, "us-east": {}}
+        for h in range(0, 60):
+            ts = T0 + timedelta(hours=h)
+            price["us-west"][ts] = 10.0
+            price["us-east"][ts] = 100.0
+        out = self._scheduler().replan_remainder(dec, job, price, t_now)
+        assert all(s.region == "us-west" for s in out.all_segments)
