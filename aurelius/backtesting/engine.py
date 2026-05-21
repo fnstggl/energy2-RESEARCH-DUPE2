@@ -252,6 +252,15 @@ class BacktestEngine:
             from aurelius.execution.post_execution import PostExecutionRecorder
             self._recorder = PostExecutionRecorder(output_path=str(recorder_path))
 
+        # Diagnostic-only: when True, the optimizer is fed ACTUAL eval-window
+        # prices as its "forecast" (perfect foresight). This is leakage and
+        # must NEVER be used to report real savings — its sole purpose is to
+        # isolate forecast-quality limits from structural price-spread limits.
+        # If oracle savings >> ML savings, forecasting is the bottleneck.
+        # If oracle savings ≈ ML savings, the inter-region/inter-hour spread is
+        # the bottleneck (more regions / better workload mix needed, not better ML).
+        self.oracle_forecast = False
+
     @property
     def uses_ml_forecaster(self) -> bool:
         return self.price_forecaster_cls is not None
@@ -292,7 +301,12 @@ class BacktestEngine:
             if round_ is not None:
                 rounds.append(round_)
 
-        method_label = "ml_quantile" if self.uses_ml_forecaster else "seasonal_naive"
+        if self.oracle_forecast:
+            method_label = "oracle"
+        elif self.uses_ml_forecaster:
+            method_label = "ml_quantile"
+        else:
+            method_label = "seasonal_naive"
         logger.info(
             f"BacktestEngine finished: {len(rounds)} folds, forecast_method={method_label}"
         )
@@ -338,7 +352,15 @@ class BacktestEngine:
         # --- Build forecast signals for the optimizer ---
         forecast_quality: Optional[ForecastQuality] = None
 
-        if self.uses_ml_forecaster:
+        if self.oracle_forecast:
+            # DIAGNOSTIC: perfect-foresight. Feed actual eval-window prices to
+            # the optimizer. This is intentional leakage — used only to measure
+            # the ceiling achievable with a perfect forecaster, isolating
+            # forecast quality from structural price-spread limits.
+            forecast_price_data = {r: dict(ts_map) for r, ts_map in eval_price_data.items()}
+            forecast_carbon_data = {r: dict(ts_map) for r, ts_map in eval_carbon_data.items()}
+            forecast_quality = ForecastQuality(forecast_method="oracle")
+        elif self.uses_ml_forecaster:
             forecast_price_data, forecast_carbon_data, forecast_quality = (
                 self._build_ml_forecast(
                     split, train_price_data, train_carbon_data,

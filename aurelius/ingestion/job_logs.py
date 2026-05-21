@@ -191,6 +191,7 @@ class JobLogIngester:
         multi_region_pct: float = 0.7,
         seed: Optional[int] = None,
         workload_mix: Optional[str] = None,
+        workload_filter: Optional[str] = None,
     ) -> list[Job]:
         """Generate synthetic batch jobs.
 
@@ -206,6 +207,9 @@ class JobLogIngester:
         Args:
             workload_mix: None or "legacy" → use JOB_PROFILES.
                           "realistic" → use WORKLOAD_PROFILES.
+            workload_filter: When set (realistic mix only), generate ALL jobs of
+                          this single workload type — for measuring per-workload
+                          savings in isolation.
 
         Returns:
             List of Job objects
@@ -219,8 +223,17 @@ class JobLogIngester:
         use_workload_mix = workload_mix == "realistic"
         if use_workload_mix:
             profile_dict = self.WORKLOAD_PROFILES
-            profiles = list(profile_dict.keys())
-            weights = [profile_dict[p]["weight"] for p in profiles]
+            if workload_filter is not None:
+                if workload_filter not in profile_dict:
+                    raise ValueError(
+                        f"Unknown workload_filter '{workload_filter}'; "
+                        f"valid: {list(profile_dict)}"
+                    )
+                profiles = [workload_filter]
+                weights = [1.0]
+            else:
+                profiles = list(profile_dict.keys())
+                weights = [profile_dict[p]["weight"] for p in profiles]
         else:
             profile_dict = self.JOB_PROFILES
             profile_weights = profile_weights or {

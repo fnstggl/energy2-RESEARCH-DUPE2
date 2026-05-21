@@ -385,6 +385,10 @@ def cmd_backtest(args):
         else:
             backtest_hours = (args.train_days + args.eval_days) * 24
         duration_hours = int(backtest_hours / 0.7) + 24
+        if args.workload_filter and args.workload_mix != "realistic":
+            print("ERROR: --workload-filter requires --workload-mix realistic",
+                  file=sys.stderr)
+            sys.exit(1)
         jobs = job_ingester.generate_synthetic(
             start_time=sim_start,
             duration_hours=duration_hours,
@@ -392,6 +396,7 @@ def cmd_backtest(args):
             regions=regions,
             seed=42,
             workload_mix=args.workload_mix,
+            workload_filter=args.workload_filter,
         )
 
     config = OptimizationConfig()
@@ -438,12 +443,17 @@ def cmd_backtest(args):
         config=config,
         price_forecaster_cls=price_forecaster_cls,
     )
+    if args.forecaster == "oracle":
+        engine.oracle_forecast = True
 
     print(f"\nRunning backtest: {args.train_days}d train / {args.eval_days}d eval windows")
     print(f"Price provider: {args.price_provider}")
     print(f"Carbon provider: {args.carbon_provider}")
-    print(f"Forecaster: {args.forecaster}")
-    print(f"Workload mix: {args.workload_mix}")
+    print(f"Forecaster: {args.forecaster}"
+          + ("  [DIAGNOSTIC: perfect-foresight leakage — not a real savings number]"
+             if args.forecaster == "oracle" else ""))
+    print(f"Workload mix: {args.workload_mix}"
+          + (f"  filter={args.workload_filter}" if args.workload_filter else ""))
     print(f"Regions: {regions}")
     print()
 
@@ -784,11 +794,32 @@ def main():
     )
     bt_parser.add_argument(
         "--forecaster", default="seasonal_naive",
-        choices=["seasonal_naive", "ml_quantile"],
+        choices=["seasonal_naive", "ml_quantile", "oracle"],
         help=(
             "Price forecaster for each fold (default: seasonal_naive). "
             "ml_quantile fits a LightGBM quantile model per fold on the "
-            "training window — requires `pip install lightgbm scikit-learn`."
+            "training window — requires `pip install lightgbm scikit-learn`. "
+            "oracle is a DIAGNOSTIC ONLY: it feeds the optimizer the actual "
+            "eval-window prices (perfect foresight / intentional leakage). "
+            "Use it to measure the savings ceiling with a perfect forecaster — "
+            "if oracle savings >> ml_quantile savings, forecasting is the "
+            "bottleneck; if they're similar, the price spread is the bottleneck. "
+            "NEVER report oracle numbers as real savings."
+        ),
+    )
+    bt_parser.add_argument(
+        "--workload-filter", default=None,
+        choices=[
+            "realtime_inference", "llm_batch_inference", "fine_tuning",
+            "training", "data_processing", "scheduled_batch",
+            "background_maintenance",
+        ],
+        help=(
+            "Restrict synthetic jobs to a single workload type (only valid "
+            "with --workload-mix realistic). Use to measure per-workload "
+            "savings separately — e.g. 'how much do we save on training jobs "
+            "vs batch inference?' Without this, all 7 types are mixed and the "
+            "blended number is dominated by the cost-heaviest type (training)."
         ),
     )
     bt_parser.add_argument(
