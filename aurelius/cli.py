@@ -280,6 +280,31 @@ def _load_price_df(args, regions):
                 sys.exit(1)
         return pd.concat(dfs, ignore_index=True)
 
+    if provider in ("ercot", "ercot-rt"):
+        from .ingestion.grid_apis.base import ProviderConfigError
+        from .ingestion.grid_apis.ercot import (
+            ERCOTPriceProvider,
+            ERCOTRealtimePriceProvider,
+        )
+        for region in regions:
+            if region not in ("us-south",):
+                print(f"ERROR: ERCOT provider only supports us-south (got '{region}')", file=sys.stderr)
+                sys.exit(1)
+        start_dt = start_ts.to_pydatetime() if start_ts else None
+        end_dt = end_ts.to_pydatetime() if end_ts else None
+        if not start_dt or not end_dt:
+            print(f"ERROR: --start and --end are required for live provider {provider}", file=sys.stderr)
+            sys.exit(1)
+        p = ERCOTRealtimePriceProvider() if provider == "ercot-rt" else ERCOTPriceProvider()
+        dfs = []
+        for region in regions:
+            try:
+                dfs.append(p.fetch_prices(region, start_dt, end_dt))
+            except ProviderConfigError as e:
+                print(f"ERROR: {e}", file=sys.stderr)
+                sys.exit(1)
+        return pd.concat(dfs, ignore_index=True)
+
     if provider == "entsoe":
         from .ingestion.grid_apis.entsoe import ENTSOEPriceProvider
         from .ingestion.grid_apis.base import ProviderConfigError
@@ -756,12 +781,14 @@ def main():
     bt_parser.add_argument(
         "--price-provider",
         required=True,
-        choices=["caiso", "pjm", "pjm-rt", "entsoe", "csv"],
+        choices=["caiso", "pjm", "pjm-rt", "ercot", "ercot-rt", "entsoe", "csv"],
         help=(
             "Price data source: "
             "caiso=CAISO OASIS day-ahead (us-west, no auth), "
             "pjm=PJM Data Miner day-ahead (us-east, requires PJM_API_KEY), "
             "pjm-rt=PJM Data Miner real-time 5-min (us-east, requires PJM_API_KEY), "
+            "ercot=ERCOT day-ahead SPP (us-south, requires ERCOT creds), "
+            "ercot-rt=ERCOT real-time 15-min SPP (us-south, requires ERCOT creds), "
             "entsoe=ENTSO-E (eu-*, requires ENTSOE_API_KEY), "
             "csv=load from --price-file"
         ),
