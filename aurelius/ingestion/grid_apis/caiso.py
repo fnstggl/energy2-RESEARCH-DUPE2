@@ -76,9 +76,9 @@ from .base import (
 logger = logging.getLogger(__name__)
 
 _OASIS_URL = "https://oasis.caiso.com/oasisapi/SingleZip"
-_MAX_RETRIES = 3
-_RETRY_BACKOFF = 3.0
-_PAGE_SLEEP = 1.0
+_MAX_RETRIES = 5
+_RETRY_BACKOFF = 4.0
+_PAGE_SLEEP = 6.0  # CAISO rate-limits rapid successive requests; 6s matches diagnose mode
 _CHUNK_DAYS = 30  # CAISO's "31 days only" limit is exclusive — 31-day window → ERR_CODE 1004
 
 # TH_NP15_GEN-APND: NP15 trading-hub aggregate price node (Northern California).
@@ -216,8 +216,10 @@ def _fetch_lmp(
     all_rows: list[dict] = []
 
     current = start_utc
+    chunk_index = 0
     while current < end_utc:
         chunk_end = min(current + timedelta(days=_CHUNK_DAYS), end_utc)
+        chunk_index += 1
 
         # CAISO OASIS datetime format: YYYYMMDDThh:mm-0000 (colon required)
         start_str = current.strftime("%Y%m%dT%H:%M") + "-0000"
@@ -233,6 +235,8 @@ def _fetch_lmp(
             "resultformat": "6",  # ZIP/CSV output (explicit; avoids XML default)
         }
 
+        chunk_succeeded = False
+        rows_before = len(all_rows)
         for attempt in range(_MAX_RETRIES):
             try:
                 resp = requests.get(
@@ -243,8 +247,9 @@ def _fetch_lmp(
                 if resp.status_code == 429 or resp.status_code == 503:
                     wait = _RETRY_BACKOFF * (2 ** attempt)
                     logger.warning(
-                        f"CAISO OASIS throttled ({resp.status_code}); "
-                        f"retrying in {wait:.0f}s"
+                        f"CAISO OASIS chunk {chunk_index} ({start_str}..{end_str}) "
+                        f"throttled ({resp.status_code}); retry {attempt + 1}/{_MAX_RETRIES} "
+                        f"in {wait:.0f}s"
                     )
                     time.sleep(wait)
                     continue
@@ -252,6 +257,11 @@ def _fetch_lmp(
 
                 rows = _parse_zip_response(resp.content, region, node, floor_to)
                 all_rows.extend(rows)
+                chunk_succeeded = True
+                logger.info(
+                    f"CAISO chunk {chunk_index} ({start_str}..{end_str}): "
+                    f"+{len(rows)} rows"
+                )
                 break
 
             except ProviderConfigError:
@@ -260,9 +270,22 @@ def _fetch_lmp(
                 if attempt == _MAX_RETRIES - 1:
                     logger.error(
                         f"CAISO OASIS request failed "
-                        f"(queryname={queryname}, node={node}): {exc}"
+                        f"(chunk {chunk_index}, {start_str}..{end_str}, "
+                        f"queryname={queryname}, node={node}): {exc}"
                     )
                 time.sleep(_RETRY_BACKOFF * (2 ** attempt))
+
+        if not chunk_succeeded:
+            logger.error(
+                f"CAISO chunk {chunk_index} ({start_str}..{end_str}) DROPPED after "
+                f"{_MAX_RETRIES} retries — backtest will be missing this window. "
+                f"Rerun later or use --price-provider=csv from a cached file."
+            )
+        elif len(all_rows) == rows_before:
+            logger.warning(
+                f"CAISO chunk {chunk_index} ({start_str}..{end_str}) returned 0 rows "
+                f"(request succeeded but CSV was empty). Possible publication lag."
+            )
 
         current = chunk_end
         time.sleep(_PAGE_SLEEP)

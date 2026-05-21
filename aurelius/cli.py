@@ -376,25 +376,90 @@ def cmd_backtest(args):
         from datetime import datetime
         job_ingester = JobLogIngester()
         sim_start = start_ts.to_pydatetime() if start_ts else datetime.utcnow()
+        # Jobs must span the FULL backtest window so every fold's eval window
+        # gets a real sample. generate_synthetic clusters submissions in the
+        # first 70% of duration_hours (job_logs.py:163), so divide by 0.7 to
+        # ensure submissions reach the latest fold.
+        if start_ts is not None and end_ts is not None:
+            backtest_hours = int((end_ts - start_ts).total_seconds() / 3600)
+        else:
+            backtest_hours = (args.train_days + args.eval_days) * 24
+        duration_hours = int(backtest_hours / 0.7) + 24
+        if args.workload_filter and args.workload_mix != "realistic":
+            print("ERROR: --workload-filter requires --workload-mix realistic",
+                  file=sys.stderr)
+            sys.exit(1)
         jobs = job_ingester.generate_synthetic(
             start_time=sim_start,
-            duration_hours=args.train_days * 24 + args.eval_days * 24,
+            duration_hours=duration_hours,
             num_jobs=args.num_jobs,
             regions=regions,
             seed=42,
+            workload_mix=args.workload_mix,
+            workload_filter=args.workload_filter,
         )
 
     config = OptimizationConfig()
+
+    price_forecaster_cls = None
+    if args.forecaster == "ml_quantile":
+        # Mute the benign "X does not have valid feature names" warning that
+        # lightgbm-via-sklearn emits when fit gets a DataFrame and predict
+        # gets a numpy array. It does not affect predictions.
+        import warnings
+        warnings.filterwarnings(
+            "ignore",
+            message="X does not have valid feature names",
+            category=UserWarning,
+        )
+        try:
+            import lightgbm  # noqa: F401  preflight so the error is clear
+        except ImportError:
+            print(
+                "ERROR: --forecaster ml_quantile requires lightgbm. Install with:\n"
+                "  pip install lightgbm scikit-learn",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except OSError as exc:
+            # lightgbm imports but its native lib failed to load. Most common
+            # cause on macOS is the missing libomp.dylib system dependency.
+            hint = ""
+            if "libomp" in str(exc):
+                hint = "\nOn macOS, install the OpenMP runtime:\n  brew install libomp"
+            print(
+                f"ERROR: lightgbm is installed but failed to load its native "
+                f"library:\n  {exc}{hint}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        from .forecasting.price_model import PriceQuantileForecaster
+        price_forecaster_cls = PriceQuantileForecaster
+
     engine = BacktestEngine(
         method=args.method,
         train_days=args.train_days,
         eval_days=args.eval_days,
         config=config,
+        price_forecaster_cls=price_forecaster_cls,
     )
+    if args.forecaster == "oracle":
+        engine.oracle_forecast = True
+    if args.forecast_horizon_hours is not None:
+        engine.forecast_horizon_hours = args.forecast_horizon_hours
+        engine.replan_hours = args.replan_hours
 
     print(f"\nRunning backtest: {args.train_days}d train / {args.eval_days}d eval windows")
     print(f"Price provider: {args.price_provider}")
     print(f"Carbon provider: {args.carbon_provider}")
+    print(f"Forecaster: {args.forecaster}"
+          + ("  [DIAGNOSTIC: perfect-foresight leakage — not a real savings number]"
+             if args.forecaster == "oracle" else ""))
+    print(f"Workload mix: {args.workload_mix}"
+          + (f"  filter={args.workload_filter}" if args.workload_filter else ""))
+    if args.forecast_horizon_hours is not None:
+        print(f"Rolling horizon: {args.forecast_horizon_hours}h actual DAM / "
+              f"replan every {args.replan_hours}h (ML beyond horizon)")
     print(f"Regions: {regions}")
     print()
 
@@ -716,8 +781,85 @@ def main():
     )
     bt_parser.add_argument(
         "--method", default="greedy",
-        choices=["greedy", "local_search"],
-        help="Optimizer method (default: greedy)",
+        choices=[
+            "greedy", "local_search",
+            "greedy_migrate", "local_search_migrate",
+            "greedy_migrate_dp", "local_search_migrate_dp",
+        ],
+        help=(
+            "Optimizer method (default: greedy). The _migrate variants "
+            "post-process the base schedule by trying a single mid-job "
+            "region migration per job whose workload allows it "
+            "(realtime_inference cannot; training/fine-tuning/batch can). "
+            "The _migrate_dp variants do exact multi-migration optimization "
+            "via DP over (useful_hours_done, region, num_migrations) — "
+            "captures cycle-chasing on long jobs that single migration "
+            "cannot. Migration cost (~6-30 min depending on workload) is "
+            "modeled explicitly in the scoring."
+        ),
+    )
+    bt_parser.add_argument(
+        "--forecaster", default="seasonal_naive",
+        choices=["seasonal_naive", "ml_quantile", "oracle"],
+        help=(
+            "Price forecaster for each fold (default: seasonal_naive). "
+            "ml_quantile fits a LightGBM quantile model per fold on the "
+            "training window — requires `pip install lightgbm scikit-learn`. "
+            "oracle is a DIAGNOSTIC ONLY: it feeds the optimizer the actual "
+            "eval-window prices (perfect foresight / intentional leakage). "
+            "Use it to measure the savings ceiling with a perfect forecaster — "
+            "if oracle savings >> ml_quantile savings, forecasting is the "
+            "bottleneck; if they're similar, the price spread is the bottleneck. "
+            "NEVER report oracle numbers as real savings."
+        ),
+    )
+    bt_parser.add_argument(
+        "--forecast-horizon-hours", type=int, default=None,
+        help=(
+            "Enable rolling-horizon (receding-horizon / MPC) optimization. "
+            "Models production reality: day-ahead prices are published ~1 day "
+            "ahead, so the scheduler re-plans daily and KNOWS the actual prices "
+            "for the next N hours (published DAM), using the ML/naive forecast "
+            "only beyond that. Typical value: 24 (single-day DAM) or 36. "
+            "When omitted, the optimizer does a single one-shot plan over the "
+            "whole eval window using the forecast for every hour (the "
+            "pessimistic / pure-forecast baseline). NOT leakage — the next-day "
+            "actual prices are genuinely published in production."
+        ),
+    )
+    bt_parser.add_argument(
+        "--replan-hours", type=int, default=24,
+        help="Re-planning cadence for rolling-horizon mode (default: 24h = daily). "
+             "Only used when --forecast-horizon-hours is set.",
+    )
+    bt_parser.add_argument(
+        "--workload-filter", default=None,
+        choices=[
+            "realtime_inference", "llm_batch_inference", "fine_tuning",
+            "training", "data_processing", "scheduled_batch",
+            "background_maintenance",
+        ],
+        help=(
+            "Restrict synthetic jobs to a single workload type (only valid "
+            "with --workload-mix realistic). Use to measure per-workload "
+            "savings separately — e.g. 'how much do we save on training jobs "
+            "vs batch inference?' Without this, all 7 types are mixed and the "
+            "blended number is dominated by the cost-heaviest type (training)."
+        ),
+    )
+    bt_parser.add_argument(
+        "--workload-mix", default="legacy",
+        choices=["legacy", "realistic"],
+        help=(
+            "Synthetic job mix (default: legacy). "
+            "legacy = size-based profiles (small/medium/large/xlarge), "
+            "global slack range, 70%% multi-region. "
+            "realistic = 7 workload-type profiles (realtime_inference, "
+            "llm_batch_inference, fine_tuning, training, data_processing, "
+            "scheduled_batch, background_maintenance) with per-profile slack "
+            "and multi-region flexibility — gives the optimizer realistic "
+            "headroom to capture price spreads."
+        ),
     )
     bt_parser.add_argument(
         "--output", default=None,

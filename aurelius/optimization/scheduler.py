@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import logging
 import math
 
-from ..models import Job, ScheduleDecision, OptimizationConfig
+from ..models import Job, ScheduleDecision, ScheduleSegment, OptimizationConfig
 from .objective import ObjectiveFunction, ObjectiveComponents
 from .constraints import ConstraintBuilder
 
@@ -107,6 +107,32 @@ class JobScheduler:
         elif method == "local_search":
             result = self._solve_local_search(
                 jobs, price_data, carbon_data, risk_data, time_limit_seconds
+            )
+        elif method == "greedy_migrate":
+            # First solve single-segment with greedy, then try to improve each
+            # migratable job with a single-split (region migration mid-job).
+            result = self._solve_greedy(jobs, price_data, carbon_data, risk_data)
+            result = self._apply_migration_optimization(result, jobs, price_data)
+        elif method == "greedy_migrate_dp":
+            # First solve single-segment with greedy, then run an exact DP per
+            # job over (useful_hours_done, current_region, num_migrations) to
+            # find the globally-optimal multi-migration sequence. Captures
+            # daily/weekly cycle chasing on long jobs that single-migration cannot.
+            result = self._solve_greedy(jobs, price_data, carbon_data, risk_data)
+            result = self._apply_migration_optimization(
+                result, jobs, price_data, mode="dp",
+            )
+        elif method == "local_search_migrate":
+            result = self._solve_local_search(
+                jobs, price_data, carbon_data, risk_data, time_limit_seconds
+            )
+            result = self._apply_migration_optimization(result, jobs, price_data)
+        elif method == "local_search_migrate_dp":
+            result = self._solve_local_search(
+                jobs, price_data, carbon_data, risk_data, time_limit_seconds
+            )
+            result = self._apply_migration_optimization(
+                result, jobs, price_data, mode="dp",
             )
         elif method == "milp":
             result = self._solve_milp(
@@ -458,6 +484,458 @@ class JobScheduler:
             violations=violations,
             iterations=1,
         )
+
+    # ------------------------------------------------------------------
+    # Mid-job region migration support
+    # ------------------------------------------------------------------
+
+    def _apply_migration_optimization(
+        self,
+        result: "SchedulerResult",
+        jobs: list[Job],
+        price_data: dict[str, dict[datetime, float]],
+        mode: str = "single",
+    ) -> "SchedulerResult":
+        """Post-process a single-segment schedule by adding region migrations.
+
+        Two modes:
+          - "single": heuristic — try every (split_hour, dest_region) and keep
+                      the best single-split. Fast; matches greedy_migrate.
+          - "dp":     exact optimization — DP over (useful_hours_done,
+                      current_region, num_migrations). Captures multi-migration
+                      sequences (e.g. chase daily price cycles across the full
+                      runtime of a multi-day training job). Used by
+                      greedy_migrate_dp / local_search_migrate_dp.
+
+        Both modes use forecast prices for the decision, just like the base
+        greedy. The evaluator scores with actual prices via the segment-aware
+        accounting in models.ScheduleDecision.all_segments.
+        """
+        job_by_id = {j.job_id: j for j in jobs}
+        improved: list[ScheduleDecision] = []
+        migrations_added = 0
+        total_extra_migrations = 0
+
+        for decision in result.schedule:
+            job = job_by_id.get(decision.job_id)
+            if job is None:
+                improved.append(decision)
+                continue
+
+            if mode == "dp":
+                improved_decision = self._try_optimal_migrations(decision, job, price_data)
+            else:
+                improved_decision = self._try_single_migration(decision, job, price_data)
+
+            extra = improved_decision.migration_count - decision.migration_count
+            if extra > 0:
+                migrations_added += 1
+                total_extra_migrations += extra
+            improved.append(improved_decision)
+
+        if migrations_added:
+            logger.info(
+                f"Migration optimization ({mode}): added migrations to "
+                f"{migrations_added} of {len(result.schedule)} jobs "
+                f"(total new migrations: {total_extra_migrations})"
+            )
+
+        result.schedule = improved
+        return result
+
+    def _try_single_migration(
+        self,
+        decision: ScheduleDecision,
+        job: Job,
+        price_data: dict[str, dict[datetime, float]],
+    ) -> ScheduleDecision:
+        """Try every single split + dest-region. Return best (possibly unchanged)."""
+        if job.migration_cost_hours is None:
+            return decision
+        if len(job.region_options) < 2:
+            return decision
+        if decision.actual_runtime_hours < 2:
+            # Need at least 2h to split meaningfully
+            return decision
+
+        initial_region = decision.region
+        candidate_regions = [r for r in job.region_options if r != initial_region]
+        if not candidate_regions:
+            return decision
+
+        power_kw = job.power_kw * decision.power_fraction
+        runtime = decision.actual_runtime_hours
+        migration_cost = job.migration_cost_hours
+
+        original_cost = self._segment_forecast_cost(
+            decision.start_time, runtime, initial_region, power_kw, price_data,
+        )
+        best_cost = original_cost
+        best_decision = decision
+
+        for split_h in range(1, int(runtime)):
+            useful_after_split = runtime - split_h
+            for dest_region in candidate_regions:
+                seg1_start = decision.start_time
+                seg1_end = decision.start_time + timedelta(hours=split_h)
+                # Segment 2 includes migration_cost_hours of warmup at destination
+                # at the start of the segment, then useful work. We account for
+                # this by making segment 2's duration = migration_cost + useful_after_split.
+                seg2_start = seg1_end
+                seg2_duration = migration_cost + useful_after_split
+                seg2_end = seg2_start + timedelta(hours=seg2_duration)
+
+                # Deadline feasibility: total wallclock must fit
+                if seg2_end > job.deadline:
+                    continue
+
+                cost1 = self._segment_forecast_cost(
+                    seg1_start, split_h, initial_region, power_kw, price_data,
+                )
+                cost2 = self._segment_forecast_cost(
+                    seg2_start, seg2_duration, dest_region, power_kw, price_data,
+                )
+                total = cost1 + cost2
+
+                if total < best_cost:
+                    best_cost = total
+                    best_decision = ScheduleDecision(
+                        job_id=decision.job_id,
+                        start_time=seg1_start,
+                        region=initial_region,
+                        power_fraction=decision.power_fraction,
+                        actual_runtime_hours=runtime + migration_cost,
+                        forecast=decision.forecast,
+                        segments=[
+                            ScheduleSegment(
+                                start_time=seg1_start,
+                                end_time=seg1_end,
+                                region=initial_region,
+                                power_fraction=decision.power_fraction,
+                            ),
+                            ScheduleSegment(
+                                start_time=seg2_start,
+                                end_time=seg2_end,
+                                region=dest_region,
+                                power_fraction=decision.power_fraction,
+                            ),
+                        ],
+                    )
+
+        return best_decision
+
+    def _try_optimal_migrations(
+        self,
+        decision: ScheduleDecision,
+        job: Job,
+        price_data: dict[str, dict[datetime, float]],
+        max_migrations_cap: int = 20,
+        fixed_initial_region: Optional[str] = None,
+    ) -> ScheduleDecision:
+        """Exact DP for the multi-migration sub-problem given a fixed start_time.
+
+        State:   (u, r, k) — useful_hours_completed, current_region_index, num_migrations
+        Wallclock invariant at state (u, r, k): T_0 + (u + k*m) hours, where m
+        is migration_cost_hours. This holds for every path to (u, r, k) because
+        every useful hour adds 1h wallclock and every migration adds m.
+
+        Transitions from (u, r, k):
+          stay     : (u+1, r,  k)    cost = forecast(r, [t, t+1h))
+          migrate  : (u+1, r', k+1)  cost = forecast(r', [t, t+m)) + forecast(r', [t+m, t+m+1h))
+            (for each r' != r; requires k+1 <= K_max)
+
+        Initial: dp[0][r][0] = 0 for all r (DP picks optimal starting region),
+        UNLESS fixed_initial_region is given (mid-flight re-planning), in which
+        case only that region is seeded — the job is already running there, so
+        moving away on the first step legitimately costs a migration.
+        Terminal: min over (r, k) of dp[H][r][k].
+
+        K_max is bounded by both deadline-feasibility and a configurable cap.
+        Reconstruction via parent pointers, walking backward from optimal terminal.
+        """
+        if job.migration_cost_hours is None:
+            return decision
+        if len(job.region_options) < 2:
+            return decision
+        # Need at least 2 useful hours for any migration to make sense
+        H = int(decision.actual_runtime_hours)
+        if H < 2:
+            return decision
+
+        m = float(job.migration_cost_hours)
+        T_0 = decision.start_time
+        P = job.power_kw * decision.power_fraction
+        D = job.deadline
+        regions = list(job.region_options)
+        R = len(regions)
+
+        # K_max from deadline feasibility:
+        #   final wallclock = H + K*m  must  <= (D - T_0)_hours
+        deadline_hours = (D - T_0).total_seconds() / 3600.0
+        if m > 0:
+            k_max_feasible = int(max(0, (deadline_hours - H) // m))
+        else:
+            k_max_feasible = H  # free migrations — bounded by useful hours
+        K_max = min(max_migrations_cap, k_max_feasible)
+
+        if K_max == 0:
+            # No migrations feasible
+            return decision
+
+        INF = float("inf")
+        # dp[u][r][k] and parent[u][r][k]
+        dp = [[[INF] * (K_max + 1) for _ in range(R)] for _ in range(H + 1)]
+        parent: list[list[list[Optional[tuple]]]] = [
+            [[None] * (K_max + 1) for _ in range(R)] for _ in range(H + 1)
+        ]
+
+        # Initial: DP picks any starting region at no extra cost — unless the
+        # job is already running in a fixed region (mid-flight re-plan), in
+        # which case only that region is seeded.
+        if fixed_initial_region is not None and fixed_initial_region in regions:
+            dp[0][regions.index(fixed_initial_region)][0] = 0.0
+        else:
+            for r_idx in range(R):
+                dp[0][r_idx][0] = 0.0
+
+        # Forward DP
+        for u in range(H):
+            for r_idx in range(R):
+                for k in range(K_max + 1):
+                    cur_cost = dp[u][r_idx][k]
+                    if cur_cost == INF:
+                        continue
+                    wall_now = u + k * m  # hours from T_0
+                    current_dt = T_0 + timedelta(hours=wall_now)
+
+                    # --- Stay transition ---
+                    stay_cost = self._segment_forecast_cost(
+                        current_dt, 1.0, regions[r_idx], P, price_data,
+                    )
+                    cand = cur_cost + stay_cost
+                    if cand < dp[u + 1][r_idx][k]:
+                        dp[u + 1][r_idx][k] = cand
+                        parent[u + 1][r_idx][k] = (u, r_idx, k, "stay")
+
+                    # --- Migrate transition (each other region) ---
+                    if k < K_max:
+                        for r2_idx in range(R):
+                            if r2_idx == r_idx:
+                                continue
+                            # Warmup at destination for m hours, then 1 useful hour
+                            warmup_cost = self._segment_forecast_cost(
+                                current_dt, m, regions[r2_idx], P, price_data,
+                            )
+                            useful_dt = current_dt + timedelta(hours=m)
+                            useful_cost = self._segment_forecast_cost(
+                                useful_dt, 1.0, regions[r2_idx], P, price_data,
+                            )
+                            cand = cur_cost + warmup_cost + useful_cost
+                            if cand < dp[u + 1][r2_idx][k + 1]:
+                                dp[u + 1][r2_idx][k + 1] = cand
+                                parent[u + 1][r2_idx][k + 1] = (u, r_idx, k, "migrate")
+
+        # Find best terminal state
+        best_cost = INF
+        best_r_idx = 0
+        best_k = 0
+        for r_idx in range(R):
+            for k in range(K_max + 1):
+                if dp[H][r_idx][k] < best_cost:
+                    best_cost = dp[H][r_idx][k]
+                    best_r_idx = r_idx
+                    best_k = k
+
+        # Compare to original single-segment cost. Only adopt DP solution if
+        # it's strictly better (avoids gratuitous segmentation on ties).
+        original_cost = self._segment_forecast_cost(
+            decision.start_time, float(decision.actual_runtime_hours),
+            decision.region, P, price_data,
+        )
+        if best_cost >= original_cost:
+            return decision
+
+        # Reconstruct path: walk back from (H, best_r_idx, best_k) to u=0
+        # Collect (next_u, next_r, next_k, action) tuples in reverse order.
+        reverse_path: list[tuple[int, int, int, str]] = []
+        u, r_idx, k = H, best_r_idx, best_k
+        while u > 0:
+            p = parent[u][r_idx][k]
+            if p is None:
+                # Should not happen if dp[H][best_r_idx][best_k] < INF
+                return decision
+            prev_u, prev_r, prev_k, action = p
+            reverse_path.append((u, r_idx, k, action))
+            u, r_idx, k = prev_u, prev_r, prev_k
+
+        forward_path = list(reversed(reverse_path))
+        initial_r_idx = r_idx  # u==0 region
+
+        # Build segment list by walking forward
+        segments: list[ScheduleSegment] = []
+        seg_start_wall = 0.0
+        seg_region_idx = initial_r_idx
+        # Track current state as we walk
+        cur_u, cur_r_idx, cur_k = 0, initial_r_idx, 0
+
+        for (next_u, next_r_idx, next_k, action) in forward_path:
+            if action == "migrate":
+                # Close current segment at the wallclock where migration starts
+                wall_at_migration = cur_u + cur_k * m
+                segments.append(ScheduleSegment(
+                    start_time=T_0 + timedelta(hours=seg_start_wall),
+                    end_time=T_0 + timedelta(hours=wall_at_migration),
+                    region=regions[seg_region_idx],
+                    power_fraction=decision.power_fraction,
+                ))
+                seg_start_wall = wall_at_migration
+                seg_region_idx = next_r_idx
+            # Advance state (both stay and migrate end at (next_u, next_r_idx, next_k))
+            cur_u, cur_r_idx, cur_k = next_u, next_r_idx, next_k
+
+        # Final segment: from current seg_start_wall to terminal wallclock
+        final_wall = H + best_k * m
+        segments.append(ScheduleSegment(
+            start_time=T_0 + timedelta(hours=seg_start_wall),
+            end_time=T_0 + timedelta(hours=final_wall),
+            region=regions[seg_region_idx],
+            power_fraction=decision.power_fraction,
+        ))
+
+        return ScheduleDecision(
+            job_id=decision.job_id,
+            start_time=T_0,
+            region=regions[initial_r_idx],
+            power_fraction=decision.power_fraction,
+            actual_runtime_hours=H + best_k * m,
+            forecast=decision.forecast,
+            segments=segments,
+        )
+
+    def replan_remainder(
+        self,
+        decision: ScheduleDecision,
+        job: Job,
+        price_data: dict[str, dict[datetime, float]],
+        t_now: datetime,
+    ) -> ScheduleDecision:
+        """Re-optimize the not-yet-executed remainder of an in-flight job.
+
+        Models receding-horizon (MPC) re-planning: as wallclock advances and new
+        actual prices publish, a running job's FUTURE migration path can be
+        revised. The executed prefix (segments before t_now) is frozen; the
+        remaining useful hours are re-optimized via the migration DP starting
+        from the job's CURRENT region (so any move costs a migration), using the
+        updated price_data. Start time and power are NOT changed — the job is
+        already running.
+
+        Returns a new ScheduleDecision (frozen prefix + re-planned remainder), or
+        the original decision unchanged if there is nothing worth re-planning.
+        """
+        if job.migration_cost_hours is None or len(job.region_options) < 2:
+            return decision
+        segments = decision.all_segments
+        if not segments:
+            return decision
+        job_start = segments[0].start_time
+        job_end = segments[-1].end_time
+        # Only in-flight jobs are eligible (started but not finished by t_now).
+        if t_now <= job_start or t_now >= job_end:
+            return decision
+
+        m = float(job.migration_cost_hours)
+        total_useful = float(int(job.runtime_hours))
+
+        # Walk segments to find useful-hours-done and the region active at t_now.
+        # Segment i>0 begins with m hours of migration warmup (no useful work).
+        useful_done = 0.0
+        current_region = segments[0].region
+        prefix: list[ScheduleSegment] = []
+        for i, seg in enumerate(segments):
+            seg_dur = (seg.end_time - seg.start_time).total_seconds() / 3600.0
+            warmup = m if i > 0 else 0.0
+            if seg.end_time <= t_now:
+                useful_done += max(0.0, seg_dur - warmup)
+                current_region = seg.region
+                prefix.append(ScheduleSegment(
+                    seg.start_time, seg.end_time, seg.region, seg.power_fraction,
+                ))
+            elif seg.start_time < t_now < seg.end_time:
+                elapsed = (t_now - seg.start_time).total_seconds() / 3600.0
+                useful_done += max(0.0, elapsed - warmup)
+                current_region = seg.region
+                prefix.append(ScheduleSegment(
+                    seg.start_time, t_now, seg.region, seg.power_fraction,
+                ))
+                break
+            else:
+                break
+
+        residual_useful = int(round(total_useful - useful_done))
+        if residual_useful < 2:
+            # Too little left for a migration to ever pay off — keep as-is.
+            return decision
+
+        # Re-plan the residual as a fresh sub-problem anchored at t_now, fixed in
+        # the current region.
+        residual_base = ScheduleDecision(
+            job_id=decision.job_id,
+            start_time=t_now,
+            region=current_region,
+            power_fraction=decision.power_fraction,
+            actual_runtime_hours=float(residual_useful),
+        )
+        residual = self._try_optimal_migrations(
+            residual_base, job, price_data,
+            fixed_initial_region=current_region,
+        )
+
+        # Stitch frozen prefix + re-planned remainder, merging the seam if the
+        # remainder simply continues in the current region.
+        new_segments = list(prefix)
+        for seg in residual.all_segments:
+            if new_segments and new_segments[-1].region == seg.region \
+                    and new_segments[-1].end_time == seg.start_time:
+                last = new_segments[-1]
+                new_segments[-1] = ScheduleSegment(
+                    last.start_time, seg.end_time, last.region, last.power_fraction,
+                )
+            else:
+                new_segments.append(seg)
+
+        total_wall = (new_segments[-1].end_time - new_segments[0].start_time).total_seconds() / 3600.0
+        return ScheduleDecision(
+            job_id=decision.job_id,
+            start_time=new_segments[0].start_time,
+            region=new_segments[0].region,
+            power_fraction=decision.power_fraction,
+            actual_runtime_hours=total_wall,
+            forecast=decision.forecast,
+            segments=new_segments if len(new_segments) > 1 else None,
+        )
+
+    @staticmethod
+    def _segment_forecast_cost(
+        start: datetime,
+        duration_hours: float,
+        region: str,
+        power_kw: float,
+        price_data: dict[str, dict[datetime, float]],
+        fallback_price: float = 50.0,
+    ) -> float:
+        """Sum forecasted energy cost over a [start, start+duration) window."""
+        cost = 0.0
+        remaining = duration_hours
+        current = start.replace(minute=0, second=0, microsecond=0)
+        region_prices = price_data.get(region, {})
+        while remaining > 0:
+            hour_frac = min(1.0, remaining)
+            price = region_prices.get(current, fallback_price)
+            # price [$/MWh] * power [kW] / 1000 * hours = $
+            cost += (price / 1000.0) * power_kw * hour_frac
+            remaining -= hour_frac
+            current = current + timedelta(hours=1)
+        return cost
 
     def create_baseline_schedule(
         self,

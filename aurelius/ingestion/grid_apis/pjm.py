@@ -31,6 +31,11 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+ stdlib
+except ImportError:  # pragma: no cover
+    from backports.zoneinfo import ZoneInfo  # type: ignore
+
 import pandas as pd
 import requests
 
@@ -48,6 +53,7 @@ _DA_LMP_ENDPOINT = "/da_hrl_lmps"
 _MAX_RETRIES = 3
 _RETRY_BACKOFF = 2.0
 _MAX_ROWS_PER_PAGE = 5000
+_EASTERN = ZoneInfo("America/New_York")  # PJM datetime_beginning_ept is EPT, DST-aware
 
 # pnode_id=1 is PJM Western Hub, the most liquid reference price
 _DEFAULT_NODE_MAP: dict[str, dict] = {
@@ -111,10 +117,16 @@ class PJMPriceProvider(PriceProvider):
         start_utc = _to_utc(start)
         end_utc = _to_utc(end)
 
-        # PJM API uses Eastern Prevailing Time (EPT) for datetime parameters.
-        # We pass UTC ISO strings and let PJM handle conversion.
-        start_str = start_utc.strftime("%Y-%m-%dT%H:%M")
-        end_str = end_utc.strftime("%Y-%m-%dT%H:%M")
+        # PJM Data Miner 2 datetime_beginning_ept filter requires:
+        #   - timestamps in Eastern Prevailing Time (EPT, DST-aware), not UTC
+        #   - format MM/DD/YYYY HH:MM
+        #   - range separator " to " (with spaces)
+        # ISO format with bracket notation returns 400 "DateTime filter
+        # field value range is invalid".
+        start_ept = start_utc.astimezone(_EASTERN)
+        end_ept = end_utc.astimezone(_EASTERN)
+        start_str = start_ept.strftime("%m/%d/%Y %H:%M")
+        end_str = end_ept.strftime("%m/%d/%Y %H:%M")
 
         headers = {
             "Ocp-Apim-Subscription-Key": self._api_key,
@@ -128,9 +140,9 @@ class PJMPriceProvider(PriceProvider):
             params = {
                 "startRow": offset,
                 "rowCount": _MAX_ROWS_PER_PAGE,
-                "datetime_beginning_ept": f"[{start_str},{end_str}]",
+                "datetime_beginning_ept": f"{start_str} to {end_str}",
                 "pnode_id": node_spec["pnode_id"],
-                "fields": "datetime_beginning_utc,datetime_ending_utc,pnode_name,total_lmp_da",
+                "fields": "datetime_beginning_utc,pnode_name,total_lmp_da",
             }
 
             for attempt in range(_MAX_RETRIES):
@@ -150,6 +162,42 @@ class PJMPriceProvider(PriceProvider):
                         raise ProviderConfigError(
                             f"PJM API key rejected ({resp.status_code}). Check PJM_API_KEY."
                         )
+                    if 400 <= resp.status_code < 500:
+                        # Bad-request family: don't retry. Parse PJM's structured
+                        # errors[] so the most relevant message surfaces (the feed
+                        # metadata body also includes the word "archived" in its
+                        # description, which would fool a substring match).
+                        body = resp.text[:2000]
+                        try:
+                            errs = resp.json().get("errors", [])
+                            err_msgs = [
+                                f"{e.get('field','?')}: {e.get('message','?')} "
+                                f"(detail={e.get('detail')})"
+                                for e in errs
+                            ]
+                        except Exception:
+                            err_msgs = []
+                        is_archive_error = any(
+                            "archived data" in (e.get("message", "") or "").lower()
+                            for e in (errs if 'errs' in locals() else [])
+                        )
+                        if is_archive_error:
+                            logger.error(
+                                "PJM rejected query as 'archived data' (HTTP %d). "
+                                "Data older than ~24 months is moved to PJM's archive "
+                                "feed which does not accept pnode_id/fields filters. "
+                                "Shift your --start/--end into the last ~24 months "
+                                "or query the archive feed separately. "
+                                "PJM errors: %s",
+                                resp.status_code, err_msgs,
+                            )
+                        else:
+                            logger.error(
+                                "PJM rejected request (HTTP %d). Errors: %s\n"
+                                "Params: %s\n--- PJM response (first 2KB) ---\n%s\n--- END ---",
+                                resp.status_code, err_msgs, params, body,
+                            )
+                        return empty_price_df()
                     resp.raise_for_status()
                     payload = resp.json()
                     break
@@ -169,11 +217,35 @@ class PJMPriceProvider(PriceProvider):
 
             for item in items:
                 try:
-                    # PJM returns UTC timestamps in datetime_beginning_utc
-                    ts_str = item.get("datetime_beginning_utc") or item.get("datetime_beginning_ept", "")
-                    ts = pd.Timestamp(ts_str, tz="UTC") if "UTC" in ts_str.upper() else pd.Timestamp(ts_str)
-                    if ts.tzinfo is None:
-                        ts = ts.tz_localize("US/Eastern").tz_convert("UTC")
+                    # Use the FIELD NAME to determine the timezone, not the value's
+                    # content. PJM returns datetime_beginning_utc as a bare ISO string
+                    # like "2026-01-01T05:00:00" (no 'Z' / 'UTC' suffix), so naive
+                    # string sniffing falls through to the wrong branch and tries to
+                    # localize a UTC value as Eastern — which crashes on the DST
+                    # spring-forward hour (e.g. 2026-03-08T02:00).
+                    utc_str = item.get("datetime_beginning_utc")
+                    ept_str = item.get("datetime_beginning_ept")
+                    if utc_str:
+                        ts = pd.Timestamp(utc_str)
+                        if ts.tzinfo is None:
+                            ts = ts.tz_localize("UTC")
+                        else:
+                            ts = ts.tz_convert("UTC")
+                    elif ept_str:
+                        ts = pd.Timestamp(ept_str)
+                        if ts.tzinfo is None:
+                            # nonexistent='shift_forward': 2:00 AM on spring-forward
+                            # day becomes 3:00 AM. ambiguous='infer': use PJM's
+                            # ordering for fall-back duplicate hours.
+                            ts = ts.tz_localize(
+                                "US/Eastern",
+                                nonexistent="shift_forward",
+                                ambiguous="infer",
+                            ).tz_convert("UTC")
+                        else:
+                            ts = ts.tz_convert("UTC")
+                    else:
+                        continue
 
                     # total_lmp_da is the sum of energy + congestion + loss in $/MWh
                     price = float(item["total_lmp_da"])

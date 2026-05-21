@@ -80,6 +80,8 @@ jobs:
             pulp \
             joblib \
             jinja2 \
+            matplotlib \
+            httpx \
             requests
 
       - name: Run tests (excluding live API tests)

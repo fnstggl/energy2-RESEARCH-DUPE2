@@ -14,7 +14,8 @@ Forecast modes:
     - Uses p50 predictions as the optimizer signal.
     - Records per-fold forecast quality metrics (MAPE, p90 coverage, calibration).
     - LEAKAGE INVARIANT: forecaster.fit() is called with train-only records.
-      recent_context passed to predict() is the last 48 h of training data.
+      recent_context passed to predict() is the last `context_hours` of training
+      data PER REGION (default 192 h, enough for lag_168h on multi-region setups).
       The forecaster never sees eval-window actuals.
 
 Usage:
@@ -225,7 +226,7 @@ class BacktestEngine:
         price_forecaster_config: Optional[Any] = None,
         carbon_forecaster_cls: Optional[Type] = None,
         carbon_forecaster_config: Optional[Any] = None,
-        context_hours: int = 48,
+        context_hours: int = 192,  # 168h for lag_168h + 24h safety margin
         recorder_path: Optional[Path] = None,
     ) -> None:
         self.method = method
@@ -250,6 +251,25 @@ class BacktestEngine:
         if recorder_path is not None:
             from aurelius.execution.post_execution import PostExecutionRecorder
             self._recorder = PostExecutionRecorder(output_path=str(recorder_path))
+
+        # Diagnostic-only: when True, the optimizer is fed ACTUAL eval-window
+        # prices as its "forecast" (perfect foresight). This is leakage and
+        # must NEVER be used to report real savings — its sole purpose is to
+        # isolate forecast-quality limits from structural price-spread limits.
+        # If oracle savings >> ML savings, forecasting is the bottleneck.
+        # If oracle savings ≈ ML savings, the inter-region/inter-hour spread is
+        # the bottleneck (more regions / better workload mix needed, not better ML).
+        self.oracle_forecast = False
+
+        # Rolling-horizon (receding-horizon / MPC) mode. When set, models the
+        # production reality that day-ahead prices are PUBLISHED ~1 day ahead:
+        # the optimizer re-plans every `replan_hours` and, at each replan, knows
+        # the actual prices for the next `forecast_horizon_hours` (published DAM),
+        # falling back to the ML/naive forecast beyond that. This is NOT leakage —
+        # it mirrors exactly what a production scheduler sees. None = disabled
+        # (single one-shot optimize over the whole eval window).
+        self.forecast_horizon_hours: Optional[int] = None
+        self.replan_hours: int = 24
 
     @property
     def uses_ml_forecaster(self) -> bool:
@@ -291,7 +311,12 @@ class BacktestEngine:
             if round_ is not None:
                 rounds.append(round_)
 
-        method_label = "ml_quantile" if self.uses_ml_forecaster else "seasonal_naive"
+        if self.oracle_forecast:
+            method_label = "oracle"
+        elif self.uses_ml_forecaster:
+            method_label = "ml_quantile"
+        else:
+            method_label = "seasonal_naive"
         logger.info(
             f"BacktestEngine finished: {len(rounds)} folds, forecast_method={method_label}"
         )
@@ -324,37 +349,57 @@ class BacktestEngine:
             train_carbon_data = _df_to_carbon_data(carbon_df[carbon_mask])
 
         # --- Actual eval-window data (used only for scoring, never for forecasting) ---
-        eval_price_data = _df_to_price_data(
-            price_df[
-                (pd.to_datetime(price_df["timestamp"]) >= split.eval_start)
-                & (pd.to_datetime(price_df["timestamp"]) < split.eval_end)
-            ]
-        )
+        # Use the FULL price_df (not eval-window-bounded) so jobs whose runtime
+        # extends past split.eval_end get real prices instead of the $50/MWh
+        # fallback. Scoring with actual realized prices outside the eval window
+        # is NOT a leakage concern — the realized prices are public ground truth
+        # by the time the job runs, and the forecaster only sees train_price_data.
+        eval_price_data = _df_to_price_data(price_df)
         eval_carbon_data: dict[str, dict[datetime, float]] = {}
         if not carbon_df.empty:
-            eval_carbon_data = _df_to_carbon_data(
-                carbon_df[
-                    (pd.to_datetime(carbon_df["timestamp"]) >= split.eval_start)
-                    & (pd.to_datetime(carbon_df["timestamp"]) < split.eval_end)
-                ]
-            )
+            eval_carbon_data = _df_to_carbon_data(carbon_df)
 
         # --- Build forecast signals for the optimizer ---
         forecast_quality: Optional[ForecastQuality] = None
 
-        if self.uses_ml_forecaster:
+        # Forecast horizon must cover the latest hour any eval job could be
+        # scheduled into — i.e. up to the latest job deadline — NOT just the
+        # eval window. Otherwise candidate start times past eval_end have no
+        # forecast price and the objective falls back to a flat $50/MWh
+        # (objective.py), which creates phantom-cheap future hours and lets the
+        # optimizer "park" deadline-flexible jobs months out (e.g. scheduling a
+        # late-March job to start in late May). That both corrupts the savings
+        # number and triggers missing-price warnings at scoring time.
+        forecast_end = split.eval_end
+        for j in eval_jobs:
+            j_deadline = _to_ts(j.deadline)
+            if j_deadline > forecast_end:
+                forecast_end = j_deadline
+        # Pad by a day so a job starting at its deadline-minus-runtime still has
+        # prices for its full runtime.
+        forecast_end = forecast_end + pd.Timedelta(days=1)
+
+        if self.oracle_forecast:
+            # DIAGNOSTIC: perfect-foresight. Feed actual eval-window prices to
+            # the optimizer. This is intentional leakage — used only to measure
+            # the ceiling achievable with a perfect forecaster, isolating
+            # forecast quality from structural price-spread limits.
+            forecast_price_data = {r: dict(ts_map) for r, ts_map in eval_price_data.items()}
+            forecast_carbon_data = {r: dict(ts_map) for r, ts_map in eval_carbon_data.items()}
+            forecast_quality = ForecastQuality(forecast_method="oracle")
+        elif self.uses_ml_forecaster:
             forecast_price_data, forecast_carbon_data, forecast_quality = (
                 self._build_ml_forecast(
                     split, train_price_data, train_carbon_data,
-                    eval_price_data, eval_carbon_data,
+                    eval_price_data, eval_carbon_data, forecast_end,
                 )
             )
         else:
             forecast_price_data = _build_hourly_price_forecast(
-                train_price_data, split.eval_start, split.eval_end
+                train_price_data, split.eval_start, forecast_end
             )
             forecast_carbon_data = _build_hourly_carbon_forecast(
-                train_carbon_data, split.eval_start, split.eval_end
+                train_carbon_data, split.eval_start, forecast_end
             )
 
         n_fc = sum(len(v) for v in forecast_price_data.values())
@@ -364,11 +409,20 @@ class BacktestEngine:
 
         # --- Run optimizer ---
         try:
-            opt_result = self.scheduler.solve(
-                eval_jobs, forecast_price_data, forecast_carbon_data,
-                method=self.method,
-            )
-            opt_schedule = opt_result.schedule
+            if self.forecast_horizon_hours is not None and not self.oracle_forecast:
+                # Rolling-horizon (receding-horizon) optimization: re-plan at a
+                # daily cadence, revealing actual published DAM prices for the
+                # next forecast_horizon_hours at each replan, ML/naive beyond.
+                opt_schedule = self._rolling_optimize(
+                    split, eval_jobs, eval_price_data, forecast_price_data,
+                    forecast_carbon_data,
+                )
+            else:
+                opt_result = self.scheduler.solve(
+                    eval_jobs, forecast_price_data, forecast_carbon_data,
+                    method=self.method,
+                )
+                opt_schedule = opt_result.schedule
         except Exception as exc:
             logger.error(f"Fold {split.fold_index}: optimizer failed: {exc}")
             opt_schedule = []
@@ -425,6 +479,114 @@ class BacktestEngine:
         return round_
 
     # ------------------------------------------------------------------
+    # Rolling-horizon (receding-horizon / MPC) optimization
+    # ------------------------------------------------------------------
+
+    def _rolling_optimize(
+        self,
+        split: TemporalSplit,
+        eval_jobs: list[Job],
+        eval_price_data: dict[str, dict[datetime, float]],
+        base_forecast: dict[str, dict[datetime, float]],
+        forecast_carbon_data: dict[str, dict[datetime, float]],
+    ) -> list[ScheduleDecision]:
+        """Receding-horizon optimization mirroring production DAM publication.
+
+        Models the reality that day-ahead prices are published ~1 day ahead:
+        the scheduler re-plans every `replan_hours`, and at each replan it
+        KNOWS the actual prices for the next `forecast_horizon_hours` (published
+        DAM), falling back to the ML/naive forecast (base_forecast) beyond.
+
+        Jobs are planned in waves keyed by earliest_start. A job is planned in
+        the first wave whose window reaches its earliest_start, and its schedule
+        is committed then (commit-at-start; mid-flight re-planning of in-flight
+        jobs is a documented Phase-2 enhancement). Scoring is always on actuals.
+
+        This is NOT leakage: revealing the next ~24h of actual DAM prices is
+        exactly what a production scheduler has access to. Only the >horizon
+        tail uses the (leakage-free) forecast.
+        """
+        horizon = self.forecast_horizon_hours
+        replan = max(1, self.replan_hours)
+
+        regions = set(base_forecast) | set(eval_price_data)
+        committed: dict[str, ScheduleDecision] = {}
+
+        def build_price_view(plan_time: datetime) -> dict[str, dict[datetime, float]]:
+            horizon_end = plan_time + timedelta(hours=horizon)
+            view: dict[str, dict[datetime, float]] = {}
+            for region in regions:
+                # Base: forecast everywhere we have it
+                pv = dict(base_forecast.get(region, {}))
+                # Override with ACTUAL within the published-DAM window
+                for h, price in eval_price_data.get(region, {}).items():
+                    if plan_time <= h < horizon_end:
+                        pv[h] = price
+                view[region] = pv
+            return view
+
+        # Walk replan waves. At each wave we (1) MID-FLIGHT RE-PLAN the remaining
+        # migration path of every in-flight job using freshly-published actual
+        # prices, then (2) plan newly-available jobs. The loop continues past
+        # eval_end while any job is still running, so long jobs get re-planned
+        # through their full runtime (this is the receding-horizon / MPC core).
+        job_by_id = {j.job_id: j for j in eval_jobs}
+        plan_time = split.eval_start
+        eval_end = split.eval_end
+        hard_stop = eval_end + timedelta(days=400)  # safety against runaway loops
+
+        while True:
+            wave_cutoff = plan_time + timedelta(hours=replan)
+            price_view = build_price_view(plan_time)
+
+            # (1) Mid-flight re-planning of in-flight jobs.
+            for jid, dec in list(committed.items()):
+                if dec.start_time < plan_time < dec.end_time:
+                    committed[jid] = self.scheduler.replan_remainder(
+                        dec, job_by_id[jid], price_view, plan_time,
+                    )
+
+            # (2) Plan newly-available, not-yet-committed jobs.
+            wave = [
+                j for j in eval_jobs
+                if j.job_id not in committed
+                and _to_ts(j.earliest_start) < wave_cutoff
+            ]
+            if wave:
+                res = self.scheduler.solve(
+                    wave, price_view, forecast_carbon_data, method=self.method,
+                )
+                for d in res.schedule:
+                    committed[d.job_id] = d
+
+            plan_time = wave_cutoff
+
+            # Termination: past the eval window, every eval job committed, and
+            # nothing still in flight.
+            if plan_time >= eval_end:
+                all_committed = all(j.job_id in committed for j in eval_jobs)
+                any_inflight = any(
+                    committed[j.job_id].start_time < plan_time < committed[j.job_id].end_time
+                    for j in eval_jobs if j.job_id in committed
+                )
+                if (all_committed and not any_inflight) or plan_time > hard_stop:
+                    break
+
+        # Safety: plan any uncommitted job (should not occur — all eval jobs have
+        # earliest_start < eval_end and are committed before the loop exits).
+        leftover = [j for j in eval_jobs if j.job_id not in committed]
+        if leftover:
+            res = self.scheduler.solve(
+                leftover, build_price_view(eval_end), forecast_carbon_data,
+                method=self.method,
+            )
+            for d in res.schedule:
+                committed[d.job_id] = d
+
+        # Preserve input job order
+        return [committed[j.job_id] for j in eval_jobs if j.job_id in committed]
+
+    # ------------------------------------------------------------------
     # ML forecaster path
     # ------------------------------------------------------------------
 
@@ -435,6 +597,7 @@ class BacktestEngine:
         train_carbon_data: dict,
         eval_price_data: dict,
         eval_carbon_data: dict,
+        forecast_end: Optional[pd.Timestamp] = None,
     ) -> tuple[dict, dict, ForecastQuality]:
         """Fit ML forecasters on training data and predict the eval window.
 
@@ -463,20 +626,34 @@ class BacktestEngine:
             price_fc.fit(train_price_records)
         except Exception as exc:
             logger.error(f"ML price forecaster fit failed: {exc}; falling back to naive")
-            naive_price = _build_hourly_price_forecast(train_price_data, split.eval_start, split.eval_end)
-            naive_carbon = _build_hourly_carbon_forecast(train_carbon_data, split.eval_start, split.eval_end)
+            _fc_end = forecast_end if forecast_end is not None else split.eval_end
+            naive_price = _build_hourly_price_forecast(train_price_data, split.eval_start, _fc_end)
+            naive_carbon = _build_hourly_carbon_forecast(train_carbon_data, split.eval_start, _fc_end)
             return naive_price, naive_carbon, ForecastQuality(forecast_method="seasonal_naive_fallback")
 
-        # Recent context: last context_hours of training records (strictly before eval window)
-        context_sorted = sorted(train_price_records, key=lambda r: r.timestamp)
-        recent_context = context_sorted[-self.context_hours:]
+        # Recent context: last context_hours of training records, sliced
+        # PER REGION (not globally). Global slicing meant that for N regions,
+        # each region only got ~context_hours/N records — which silently
+        # broke long-horizon lag features (e.g. lag_168h needs >=168 records
+        # per region). Per-region slicing guarantees each region has
+        # context_hours of history.
+        context_by_region: dict[str, list[EnergyPrice]] = {}
+        for record in sorted(train_price_records, key=lambda r: r.timestamp):
+            context_by_region.setdefault(record.region, []).append(record)
+        recent_context = []
+        for region_records in context_by_region.values():
+            recent_context.extend(region_records[-self.context_hours:])
+        recent_context.sort(key=lambda r: r.timestamp)
 
         # Predict eval window for each region using p50 as optimizer signal
         forecast_price_data: dict[str, dict[datetime, float]] = {}
         regions = list(set(r.region for r in train_price_records))
 
         eval_start_dt = split.eval_start.to_pydatetime()
-        eval_end_dt = split.eval_end.to_pydatetime()
+        # Forecast out to forecast_end (covers latest job deadline), not just
+        # the eval window — see _run_fold for why (phantom-$50 future hours).
+        _fc_end = forecast_end if forecast_end is not None else split.eval_end
+        eval_end_dt = _fc_end.to_pydatetime() if hasattr(_fc_end, "to_pydatetime") else _fc_end
         if eval_start_dt.tzinfo is None:
             eval_start_dt = eval_start_dt.replace(tzinfo=timezone.utc)
         if eval_end_dt.tzinfo is None:
@@ -484,6 +661,15 @@ class BacktestEngine:
 
         n_hours = int((eval_end_dt - eval_start_dt).total_seconds() / 3600)
         eval_timestamps = [eval_start_dt + timedelta(hours=h) for h in range(n_hours)]
+
+        # Forecast-quality measurement must use ONLY the real eval window
+        # (eval_start..split.eval_end), not the extended forecast horizon, so
+        # metrics aren't diluted by post-window hours.
+        true_eval_end_dt = split.eval_end.to_pydatetime()
+        if true_eval_end_dt.tzinfo is None:
+            true_eval_end_dt = true_eval_end_dt.replace(tzinfo=timezone.utc)
+        n_eval_hours = int((true_eval_end_dt - eval_start_dt).total_seconds() / 3600)
+        eval_window_timestamps = [eval_start_dt + timedelta(hours=h) for h in range(n_eval_hours)]
 
         for region in regions:
             region_context = [r for r in recent_context if r.region == region]
@@ -513,7 +699,14 @@ class BacktestEngine:
                 else:
                     carbon_fc = self.carbon_forecaster_cls()
                 carbon_fc.fit(train_carbon_records)
-                carbon_context = sorted(train_carbon_records, key=lambda r: r.timestamp)[-self.context_hours:]
+                # Per-region context slicing (same rationale as price context above)
+                carbon_by_region: dict[str, list] = {}
+                for record in sorted(train_carbon_records, key=lambda r: r.timestamp):
+                    carbon_by_region.setdefault(record.region, []).append(record)
+                carbon_context = []
+                for region_records in carbon_by_region.values():
+                    carbon_context.extend(region_records[-self.context_hours:])
+                carbon_context.sort(key=lambda r: r.timestamp)
                 carbon_regions = list(set(r.region for r in train_carbon_records))
                 for region in carbon_regions:
                     rc = [r for r in carbon_context if r.region == region]
@@ -532,7 +725,7 @@ class BacktestEngine:
         # --- Compute forecast quality using eval-window actuals ---
         # This is MEASUREMENT only: actuals are not fed back to the forecaster
         fq = self._measure_forecast_quality(
-            price_fc, regions, eval_timestamps, recent_context,
+            price_fc, regions, eval_window_timestamps, recent_context,
             eval_price_data,
         )
 
