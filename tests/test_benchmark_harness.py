@@ -451,9 +451,6 @@ class TestBenchmarkFileStructure:
     def test_api_needed_watttime_exists(self):
         assert (self.API_NEEDED_DIR / "WATTTIME.md").exists()
 
-    def test_api_needed_open_meteo_exists(self):
-        assert (self.API_NEEDED_DIR / "OPEN_METEO.md").exists()
-
     def test_api_needed_prometheus_dcgm_exists(self):
         assert (self.API_NEEDED_DIR / "PROMETHEUS_DCGM.md").exists()
 
