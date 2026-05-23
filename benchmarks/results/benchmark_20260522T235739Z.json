@@ -1,0 +1,83 @@
+{
+  "run_ts": "20260522T235739Z",
+  "quick": false,
+  "method": "greedy_migrate",
+  "primary_baseline": "current_price_only",
+  "results": [
+    {
+      "region_combo": "summer2025_3region",
+      "regions": [
+        "us-west",
+        "us-east",
+        "us-south"
+      ],
+      "workload_type": "training",
+      "folds": 6,
+      "num_eval_jobs": 23,
+      "method": "greedy_migrate",
+      "forecaster": "ml_quantile_weather",
+      "oracle": false,
+      "settle_model": true,
+      "carbon_regions": [
+        "us-west"
+      ],
+      "missing_price_hours": 0,
+      "missing_price_pct": 0.0,
+      "savings": {
+        "fifo": {
+          "savings_pct": 35.308,
+          "savings_usd": 5704.3463,
+          "mean_opt_cost": 10451.5612,
+          "mean_baseline_cost": 16155.9075
+        },
+        "peak_blind_asap": {
+          "savings_pct": 33.07,
+          "savings_usd": 5164.0028,
+          "mean_opt_cost": 10451.5612,
+          "mean_baseline_cost": 15615.5639
+        },
+        "latency_first": {
+          "savings_pct": 33.07,
+          "savings_usd": 5164.0028,
+          "mean_opt_cost": 10451.5612,
+          "mean_baseline_cost": 15615.5639
+        },
+        "closest_region": {
+          "savings_pct": 33.07,
+          "savings_usd": 5164.0028,
+          "mean_opt_cost": 10451.5612,
+          "mean_baseline_cost": 15615.5639
+        },
+        "fixed_primary_region": {
+          "savings_pct": 33.07,
+          "savings_usd": 5164.0028,
+          "mean_opt_cost": 10451.5612,
+          "mean_baseline_cost": 15615.5639
+        },
+        "current_price_only": {
+          "savings_pct": 8.217,
+          "savings_usd": 935.6625,
+          "mean_opt_cost": 10451.5612,
+          "mean_baseline_cost": 11387.2236
+        },
+        "round_robin": {
+          "savings_pct": 18.717,
+          "savings_usd": 2406.7541,
+          "mean_opt_cost": 10451.5612,
+          "mean_baseline_cost": 12858.3152
+        }
+      },
+      "primary_savings_pct": 8.217,
+      "date_range": {
+        "start": "2025-06-01",
+        "end": "2025-08-25"
+      },
+      "train_days": 30,
+      "eval_days": 7,
+      "run_ts": "20260522T235739Z"
+    }
+  ],
+  "warnings": [],
+  "leakage_issues": [],
+  "regressions": []
+}

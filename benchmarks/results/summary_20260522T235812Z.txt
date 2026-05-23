@@ -1,0 +1,7 @@
+Aurelius Benchmark Summary — 20260522T235812Z
+Primary baseline: current_price_only
+Method: greedy_migrate
+
+training@summer2025_3region: 8.2% vs current_price_only  (folds=6)
+
+Mean: 8.2%  Min: 8.2%  Max: 8.2%
