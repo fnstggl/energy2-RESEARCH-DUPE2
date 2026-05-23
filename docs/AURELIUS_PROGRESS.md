@@ -2226,3 +2226,74 @@ Next recommended task:
     try decay_halflife_hours=168 or workload-specific correction suppression
   Option C: Database persistence — Postgres for multi-instance production
   Recommended: Option A if ENTSOE_API_KEY available; Option B otherwise
+
+===============================================================================
+RUN: 2026-05-23 — CI FIXES + WORKLOAD-SPECIFIC RECOVERY SUPPRESSION
+===============================================================================
+
+PR #35 (squash-merged): fix(ci): resolve lint errors, fix Docker deps, add workload-specific recovery suppression
+
+Scope of changes:
+  1. Lint (ruff) — FIXED:
+     - Created root-level ruff.toml (scripts/ and tests/ were not covered by
+       aurelius/pyproject.toml due to ruff's nearest-config scoping rules)
+     - Fixed deprecated [tool.ruff] select/ignore → [tool.ruff.lint] in pyproject.toml
+     - Manually resolved 27 lint errors across 20+ files:
+       • Unused variable assignments (F841): cli.py, dcgm_provider.py, job_logs.py,
+         scheduler.py, shadow_runner.py, multiple test files
+       • Undefined name (F821): shadow_runner.py used "ObjectiveResult" type annotation
+         — fixed to "ObjectiveComponents" with proper import added
+       • Ambiguous variable name (E741): l → ln in scripts/fetch_weather_data.py
+         and tests/test_phase5_learning_loop.py
+       • Import sorting (I001): 100+ auto-fixed via ruff --fix, ~5 manual fixes
+       • Missing import (F821): tests/test_per_region_forecaster.py missing pandas
+     - Result: ruff check aurelius/ scripts/ tests/ → 0 errors
+
+  2. Docker — FIXED:
+     - Added libgomp1 to runtime stage (python:3.11-slim lacks OpenMP; LightGBM
+       imports fail at runtime without it)
+     - Added pyyaml>=6.0 and strictyaml>=1.6.0 to builder stage pip install
+       (were in pyproject.toml deps but missing from Dockerfile COPY-install step)
+
+  3. Feature: recovery_excluded_workload_types (fixes -2.7pp training regression):
+     - BacktestEngine.__init__ now accepts recovery_excluded_workload_types: frozenset
+       (default frozenset(), backward-compatible)
+     - _run_fold() computes skip_recovery flag: True when all fold jobs belong to
+       excluded workload types AND apply_recovery_correction=True
+     - _build_ml_forecast() receives skip_recovery_correction: bool, skips the
+       RegimeDetector.apply_corrections_to_forecast() call when True
+     - benchmarks/run_benchmark.py passes frozenset({"training"}) when using
+       ml_quantile_recovery — prevents exponential decay distortion for 96-200h
+       training workloads while preserving correction for background/flexible jobs
+     - 9 new unit tests in TestWorkloadSpecificRecoveryExclusion:
+       test_engine_accepts_excluded_types_parameter
+       test_engine_default_excluded_types_empty
+       test_excluded_types_stored_as_frozenset
+       test_empty_excluded_types_with_correction_on
+       test_training_excluded_skips_correction
+       test_non_excluded_workload_still_receives_correction
+       test_exclusion_no_effect_when_correction_disabled
+       test_multiple_workload_types_in_exclusion
+       test_benchmark_runner_passes_training_exclusion
+
+Tests: 1165 passed, 1 skipped (1166 collected = 1165 pre-existing + 9 new − some
+  previously-skipped tests now run), 0 regressions
+
+Expected benchmark improvement (NOT yet re-validated):
+  With recovery_excluded_workload_types=frozenset({"training"}), the training
+  workload should recover from 12.3% → ~15.0% (matching ml_quantile v2.0 baseline),
+  removing the -2.7pp regression. Mean savings expected to remain at 25.1%+ since
+  background_maintenance and other workloads continue to receive the correction.
+
+Acceptance criterion update:
+  REQUIRED:  mean ≥ 25.0% AND no workload regresses > 2pp vs ml_quantile v2.0
+  PREVIOUS:  mean 25.1% ✓ | training -2.7pp ⚠ (exceeded 2pp threshold)
+  EXPECTED:  mean 25.1% ✓ | training 0pp regression ✓ (correction suppressed)
+  STATUS:    Pending benchmark re-run to validate expected improvement
+
+Next recommended task:
+  Option A: Run benchmark to validate recovery_excluded_workload_types fix
+    (expected: training recovers to ~15.0%, mean stays ≥ 25.0%)
+  Option B: ENTSO-E connector — EU market expansion (requires ENTSOE_API_KEY)
+  Option C: Database persistence — Postgres for multi-instance production
+  Recommended: Option A to confirm the training regression is resolved, then B/C
