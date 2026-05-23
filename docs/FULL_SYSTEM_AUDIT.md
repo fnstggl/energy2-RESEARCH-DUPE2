@@ -9,6 +9,29 @@ This audit is intentionally skeptical. Where a claim is partial, it says
 partial. Where code drift broke a documented command, it says so and the bug
 was fixed (per the audit's bug-fix rule). It does not flatter the repo.
 
+> **Update — 2026-05-23 (productionization pass, same branch).**
+> Following the audit, the learning infrastructure was hardened. The Phase 2
+> verdict below described the *pre-productionization* state; what changed:
+> - **Model registry + rollback** (`model_registry`, `promotion_decisions`):
+>   the loop now trains a candidate, **loads the persisted active model**, and
+>   compares both on a leakage-free holdout (`ForecastEvaluator`) — the unsound
+>   stale-scalar comparison (Q2.6) is gone. Rollback is implemented (`--rollback`).
+> - **Safety gate executes in the shadow decision path** and `gate_status`/
+>   `gate_reason` are persisted on every decision (Q2 / claim #9 upgraded).
+> - **Run locking + lifecycle** (`FileLock`, `learning_runs`): overlapping
+>   cron/Railway runs are prevented; each run has a UUID + state (Q2.18/19).
+> - **Artifact store abstraction** (`aurelius/storage/`, local + S3-compatible):
+>   binaries out of Postgres/git (`ARTIFACT_STORE_URI`).
+> - Tests: +60 new (artifact store, registry/rollback, locking, honest
+>   promotion, gate-in-shadow). See `docs/DATA_MOAT_ARCHITECTURE.md`.
+>
+> **Still open (honest):** the promotion metric is held-out *forecast accuracy*,
+> not yet *realized customer savings* (gap G1′); telemetry ingestion writers,
+> Alembic migrations, multi-host locking, and decision-time feature
+> co-persistence remain. Correct positioning is "append-only operational
+> learning infrastructure with a model registry, rollback, outcome tracking, and
+> shadow-mode evaluation" — **not** "fully autonomous / complete data moat."
+
 ---
 
 ## TL;DR verdict

@@ -816,14 +816,26 @@ What now exists (added 2026-05-23):
 - The daily learning loop reads realized outcomes back from the store
   (mean realized savings, mean |forecast error| pp).
 
-Honest gaps (do NOT claim "data moat complete"):
-- **Realized outcomes do not yet drive model selection** — the loop reports them
-  but promotion still uses an unsound in-engine-vs-stored-scalar comparison.
-- Safety-gate decisions are not recorded (gate not wired into the decision path).
-- No live queue/GPU telemetry writer; no object storage for model artifacts/raw
-  pulls; no retention policy or schema migrations (Alembic) yet.
+Productionization (2026-05-23) added:
+- **Model registry + rollback** (`model_registry`, `promotion_decisions`): the
+  daily loop trains a candidate, **loads the persisted active model**, compares
+  both on a leakage-free holdout, and promotes only if it genuinely wins (the
+  prior unsound stale-scalar comparison is gone). `--rollback` reverts to the
+  previous active model.
+- **Safety gate executes in the shadow decision path**; `gate_status`/
+  `gate_reason` persisted on every decision (fail-closed).
+- **Run locking + lifecycle** (`learning_runs`): no overlapping cron runs;
+  per-run UUID + state.
+- **Artifact store abstraction** (local / S3-compatible via `ARTIFACT_STORE_URI`):
+  model binaries out of Postgres and git.
+
+Honest gaps (do NOT claim "fully autonomous" or "complete data moat"):
+- Promotion uses held-out **forecast accuracy**, not yet **realized customer
+  savings** (gap G1′ in DATA_MOAT_ARCHITECTURE.md).
+- No live queue/GPU telemetry writer; no Alembic migrations / retention policy;
+  single-host lock only; decision-time features not co-persisted.
 - Real customer/pilot data must never be committed to the repo — only schemas,
-  migrations, fixtures, sample traces, and docs.
+  fixtures, sample traces, and docs.
 
 Verification:
 ```bash
