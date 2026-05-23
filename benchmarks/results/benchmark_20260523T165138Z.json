@@ -1,0 +1,89 @@
+{
+  "run_ts": "20260523T165138Z",
+  "quick": false,
+  "method": "greedy_migrate",
+  "primary_baseline": "current_price_only",
+  "results": [
+    {
+      "region_combo": "caiso_pjm_ercot_da_rt",
+      "regions": [
+        "us-west",
+        "us-east",
+        "us-south"
+      ],
+      "workload_type": "realtime_inference",
+      "folds": 5,
+      "num_eval_jobs": 27,
+      "method": "greedy_migrate",
+      "forecaster": "ml_quantile",
+      "oracle": false,
+      "settle_model": true,
+      "carbon_regions": [
+        "us-west"
+      ],
+      "missing_price_hours": 0,
+      "missing_price_pct": 0.0,
+      "savings": {
+        "fifo": {
+          "savings_pct": 32.168,
+          "savings_usd": 2.8612,
+          "mean_opt_cost": 6.0334,
+          "mean_baseline_cost": 8.8946
+        },
+        "peak_blind_asap": {
+          "savings_pct": 32.168,
+          "savings_usd": 2.8612,
+          "mean_opt_cost": 6.0334,
+          "mean_baseline_cost": 8.8946
+        },
+        "latency_first": {
+          "savings_pct": 32.168,
+          "savings_usd": 2.8612,
+          "mean_opt_cost": 6.0334,
+          "mean_baseline_cost": 8.8946
+        },
+        "closest_region": {
+          "savings_pct": 32.168,
+          "savings_usd": 2.8612,
+          "mean_opt_cost": 6.0334,
+          "mean_baseline_cost": 8.8946
+        },
+        "fixed_primary_region": {
+          "savings_pct": 32.168,
+          "savings_usd": 2.8612,
+          "mean_opt_cost": 6.0334,
+          "mean_baseline_cost": 8.8946
+        },
+        "current_price_only": {
+          "savings_pct": 2.819,
+          "savings_usd": 0.175,
+          "mean_opt_cost": 6.0334,
+          "mean_baseline_cost": 6.2085
+        },
+        "round_robin": {
+          "savings_pct": 30.453,
+          "savings_usd": 2.6418,
+          "mean_opt_cost": 6.0334,
+          "mean_baseline_cost": 8.6752
+        }
+      },
+      "primary_savings_pct": 2.819,
+      "date_range": {
+        "start": "2026-01-01",
+        "end": "2026-03-10"
+      },
+      "train_days": 30,
+      "eval_days": 7,
+      "forecast_quality": {
+        "forecaster": "ml_quantile",
+        "folds_with_quality": 5,
+        "mean_mape": 8.2633,
+        "mean_p90_coverage": 0.6674
+      },
+      "run_ts": "20260523T165138Z"
+    }
+  ],
+  "warnings": [],
+  "leakage_issues": [],
+  "regressions": []
+}
