@@ -773,6 +773,55 @@ def cmd_shadow_report(args):
     print(f"  TXT:  {paths['txt']}")
 
 
+def cmd_roi(args):
+    """Compute ROI projection for Aurelius deployment."""
+    from .roi import ROICalculator, ROIInput
+
+    workload_mix = None
+    if args.workload_mix:
+        import json as _json
+        try:
+            # Try as JSON string first
+            workload_mix = _json.loads(args.workload_mix)
+        except _json.JSONDecodeError:
+            # Try as file path
+            p = Path(args.workload_mix)
+            if not p.exists():
+                print(
+                    f"ERROR: --workload-mix must be a JSON string or a path to a JSON file. "
+                    f"Got: {args.workload_mix}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            with p.open() as f:
+                workload_mix = _json.load(f)
+
+    try:
+        roi_input = ROIInput(
+            monthly_gpu_cost_usd=args.monthly_cost,
+            workload_mix=workload_mix,
+            contract_months=args.contract_months,
+            num_gpus=args.num_gpus,
+            gpu_type=args.gpu_type,
+            primary_region=args.region,
+            note=args.note,
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    calc = ROICalculator()
+    result = calc.calculate(roi_input)
+
+    print(result.to_text())
+
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(result.to_json())
+        print(f"\nJSON saved to: {output_path}")
+
+
 def cmd_show_schema(args):
     """Show database schema."""
     from .database import print_schema
@@ -1160,6 +1209,60 @@ def main():
         help="Save results as JSON to this path",
     )
 
+    # --- ROI subcommand ---
+    roi_parser = subparsers.add_parser(
+        "roi",
+        help="Compute projected ROI for Aurelius deployment based on proven benchmark savings rates",
+        description=(
+            "Projects monthly and annual cost savings based on proven benchmark results\n"
+            "(ml_quantile v2.0, real CAISO+PJM+ERCOT data, 5-fold leakage-free backtest).\n"
+            "\nExample:\n"
+            "  python -m aurelius.cli roi --monthly-cost 500000\n"
+            "  python -m aurelius.cli roi --monthly-cost 1000000 --contract-months 24 --output roi.json\n"
+            '  python -m aurelius.cli roi --monthly-cost 500000 \\\n'
+            '      --workload-mix \'{"training":0.5,"llm_batch_inference":0.3,'
+            '"realtime_inference":0.2}\''
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    roi_parser.add_argument(
+        "--monthly-cost", type=float, required=True,
+        help="Total monthly GPU infrastructure cost in USD",
+    )
+    roi_parser.add_argument(
+        "--workload-mix", type=str, default=None,
+        help=(
+            "Workload type distribution as a JSON string or file path. "
+            "Keys must be valid workload types. Values must sum to 1.0. "
+            "If not provided, a typical neocloud mix is used. "
+            "Example: '{\"training\":0.4,\"llm_batch_inference\":0.3,\"realtime_inference\":0.3}'"
+        ),
+    )
+    roi_parser.add_argument(
+        "--contract-months", type=int, default=12,
+        help="Projection period in months (default: 12)",
+    )
+    roi_parser.add_argument(
+        "--num-gpus", type=int, default=None,
+        help="Total GPU count (informational, not used in savings calculation)",
+    )
+    roi_parser.add_argument(
+        "--gpu-type", type=str, default=None,
+        help="Primary GPU model (informational, e.g. A100, H100)",
+    )
+    roi_parser.add_argument(
+        "--region", type=str, default=None,
+        help="Customer's primary region (informational, e.g. us-west)",
+    )
+    roi_parser.add_argument(
+        "--note", type=str, default=None,
+        help="Optional context note appended to the output",
+    )
+    roi_parser.add_argument(
+        "--output", type=str, default=None,
+        help="Save JSON output to this file path",
+    )
+
     # --- Shadow mode subcommand ---
     shadow_parser = subparsers.add_parser(
         "shadow",
@@ -1261,7 +1364,9 @@ def main():
     # Parse arguments
     args = parser.parse_args()
 
-    if args.command == "simulate":
+    if args.command == "roi":
+        cmd_roi(args)
+    elif args.command == "simulate":
         cmd_simulate(args)
     elif args.command == "generate-data":
         cmd_generate_data(args)
