@@ -1746,3 +1746,137 @@ What should be built next to remove the most impactful blocker:
     - Output: projected savings/month, savings/year, payback period
     - Methodology: apply proven 25% mean savings to customer's actual costs
     - This is a 1-2 day implementation but high leverage for contract signing
+
+===============================================================================
+ROADMAP PHASE 8 — ROI METHODOLOGY + DAILY LEARNING LOOP
+===============================================================================
+
+Status: COMPLETE (2026-05-23)
+Branch: claude/youthful-feynman-ahHLz
+
+Summary:
+  ROI Methodology Calculator implemented with p10/p50/p90 projections from
+  proven benchmark data. Phase 8 daily learning loop orchestration implemented.
+  80 new tests. docs/ROI_METHODOLOGY.md + docs/PILOT_READINESS_AUDIT.md updated.
+  PILOT_READINESS_AUDIT now shows PASS (upgraded from CONDITIONAL PASS).
+  1092 total tests passing.
+
+What was implemented:
+
+  1. aurelius/roi/__init__.py + aurelius/roi/calculator.py — ROI Calculator:
+     - ROIInput: validates monthly_gpu_cost_usd, workload_mix sum=1.0, known workloads
+     - BENCHMARK_SAVINGS_RATES: 7 workload types with (p10, p50, p90) tuples
+       derived from ml_quantile v2.0 backtest (real CAISO+PJM+ERCOT data, 5 folds)
+     - DEFAULT_WORKLOAD_MIX: typical neocloud distribution (training-heavy)
+     - ROICalculator.calculate(): weighted sum over workload mix, generates
+       WorkloadROIBreakdown per type, monthly/total/annual savings at 3 quantiles
+     - Honesty constraints: 60% labeled aspirational everywhere, 25% proven explicitly
+     - Warns when flexible_fraction < 20% (insufficient headroom)
+     - ROIResult.to_text(): human-readable report for sales calls
+     - ROIResult.to_dict() / to_json(): machine-readable for JSON output
+
+  2. aurelius/cli.py — `roi` subcommand:
+     - `python -m aurelius.cli roi --monthly-cost 500000`
+     - --workload-mix: JSON string or file path
+     - --contract-months: projection period
+     - --num-gpus / --gpu-type / --region: informational metadata
+     - --output: save JSON to file
+     - ValueError on invalid input → sys.exit(1) (clean error handling)
+
+  3. docs/ROI_METHODOLOGY.md — Formal enterprise methodology document:
+     - Step-by-step calculation methodology
+     - Workload savings table (p10/p50/p90)
+     - Oracle diagnostic table
+     - Shadow validation workflow
+     - FAQ for buyer objections
+     - Honesty constraints section
+     - Reproduction commands
+
+  4. scripts/daily_learning_loop.py — Phase 8 daily loop orchestration:
+     - Step 1: fetch latest prices (CAISO/PJM/ERCOT, graceful fail on missing creds)
+     - Step 2: append_to_store (dedup, sort, merge into rolling CSV)
+     - Step 3: run_evaluation (mini walk-forward backtest on recent data)
+     - Step 4: train_candidate_model (ml_quantile v2.0 on full available window)
+     - Step 5: compare_models (0.5pp improvement threshold, regression detection)
+     - Step 6: promote_candidate only if it improves vs active model
+     - Step 7: run_benchmark_smoke_test (uses bundled q12026 data, no API needed)
+     - Step 8: generate_report (JSON report to reports/learning_loop/)
+     - --dry-run flag: no files written, no models promoted (safe for testing)
+     - CI integration: exits 1 if smoke test fails
+
+  5. tests/test_roi_calculator.py — 60 new tests:
+     - TestBenchmarkSavingsRates (7): p10<p50<p90, oracle ceiling constraints,
+       60% NOT claimed in metadata, mean savings consistent with benchmark
+     - TestROIInput (9): validation, sum-to-1, unknown workload, all fields
+     - TestROICalculatorBasic (10): p-ordering, 60% not claimed, linearity,
+       monthly×months=total, annual=12×monthly, breakdown sum = total
+     - TestROICalculatorCustomMix (7): training-heavy, realtime-only, flexible
+       fractions, low-flexible warning
+     - TestROIResultSerialization (8): dict keys, JSON validity, text report format
+     - TestROICalculatorHonestyConstraints (6): rates match benchmarks, caveats
+       mention 60%/25%/real-data, methodology note present
+     - TestROICalculatorContractMonths (3): 1/24/36-month projections
+     - TestROIPackageImports (2): importable from aurelius.roi
+     - TestROICLISubcommand (6): basic, custom mix, JSON save, 24-month, error exits
+
+  6. tests/test_daily_learning_loop.py — 20 new tests:
+     - TestAppendToStore (6): create, dry-run, dedup, empty input, new region, sorted
+     - TestCompareModels (7): promotion conditions, regression, no-change, threshold
+     - TestGenerateReport (5): writes, dry-run, keys, None inputs
+     - TestBenchmarkSmokeTest (2): skipped without data, runs with real data
+     - TestLearningLoopDryRun (2): exits cleanly, writes no files
+
+Adversarial audit (all verified correct):
+  ✓ ROI p50 effective rate = 22.3% for default mix (training-heavy neocloud)
+    — correctly lower than MEAN_SAVINGS_P50=25% (equal-weighted)
+  ✓ 60% NOT claimed in any output line or savings figure
+  ✓ p90 savings rate capped at oracle ceiling for all workload types
+  ✓ Invalid workload_mix (wrong sum, unknown type) → sys.exit(1), not silent failure
+  ✓ DRY-RUN mode writes zero files (verified by test)
+  ✓ Model promotion requires 0.5pp improvement (not just any positive delta)
+  ✓ Regression (candidate < active) correctly blocks promotion
+  ✓ No secrets committed
+  ✓ No new benchmark claims made (no new backtest runs)
+
+Test suite: 1092 passed, 5 skipped, 0 failed (was 1012 before this run)
+  New: 80 tests (60 test_roi_calculator.py + 20 test_daily_learning_loop.py)
+  Pre-existing: 1012 (all preserved, 0 regressions)
+
+PILOT_READINESS_AUDIT.md:
+  - Added Section 19: ROI Methodology (PASS)
+  - Renumbered Enterprise Contract Readiness to Section 20
+  - Status: CONDITIONAL PASS → PASS (all three original blockers resolved)
+  - ROI methodology blocker: RESOLVED
+  - Customer trace ingestion: RESOLVED (prior run)
+  - Shadow mode: RESOLVED (prior run)
+
+===============================================================================
+ENTERPRISE CONTRACT READINESS NOTE (2026-05-23)
+===============================================================================
+
+Does this run make Aurelius more contract-ready? YES — closes the last open blocker.
+
+Why:
+  The ROI methodology document and CLI calculator are the final piece needed to
+  take Aurelius into a CFO/procurement conversation:
+  - Buyer can run: python -m aurelius.cli roi --monthly-cost 1000000
+  - Output: p10/p50/p90 savings projections with honest caveats in ~2 seconds
+  - docs/ROI_METHODOLOGY.md explains the methodology, data sources, oracle diagnostics,
+    and shadow validation workflow in buyer-readable language
+  - PILOT_READINESS_AUDIT.md now shows PASS across all 3 original contract blockers
+
+What enterprise blocker remains:
+  1. ENTSO-E connector (EU expansion) — connector exists, requires ENTSOE_API_KEY
+  2. Database persistence (Postgres/TimescaleDB) — JSONL works for single-node pilots
+  3. SOC2/security posture documentation — enterprise procurement requirement
+  4. Phase 8 daily loop live deployment — script ready, needs cron/systemd wiring
+
+What should be built next:
+  Option A: ENTSO-E production validation — fetch real EU DA prices, run benchmark,
+    enable EU customer pitch (requires ENTSOE_API_KEY)
+  Option B: Database persistence — Postgres schema migration, TimescaleDB for
+    multi-instance production deployment
+  Option C: Extended training window benchmark — fetch 180+ days of CAISO/PJM/ERCOT
+    data to validate per-region forecaster gains (oracle gap 22.7pp for training)
+  Recommended: Option A (ENTSO-E) — unblocks EU market expansion,
+    highest new ICP value (EU neoclouds, HPC operators)

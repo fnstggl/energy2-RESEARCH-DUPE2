@@ -1,8 +1,8 @@
 # Aurelius Pilot Readiness Audit
 
-**Date:** 2026-05-23
+**Date:** 2026-05-23 (updated 2026-05-23)
 **Auditor:** Autonomous engineering agent
-**Status:** CONDITIONAL PASS — Tier 1 (region/time optimization) is pilot-ready.
+**Status:** PASS — Tier 1 (region/time optimization) is pilot-ready and contract-ready.
            Tier 2 (queue-aware) and Tier 3 (GPU/node) require customer data.
 
 ---
@@ -706,9 +706,61 @@ python benchmarks/compare_against_previous.py \
 
 ---
 
-## 19. Enterprise Contract Readiness
+## 19. ROI Methodology
 
-### What makes Aurelius contract-ready today:
+**Status: PASS**
+
+A formal ROI methodology calculator is now implemented and ready for enterprise sales conversations.
+
+### ROI Calculator CLI
+
+```bash
+# Basic calculation (default neocloud workload mix, 12-month projection)
+python -m aurelius.cli roi --monthly-cost 500000
+
+# Custom workload mix with JSON-encoded distribution
+python -m aurelius.cli roi \
+  --monthly-cost 1000000 \
+  --workload-mix '{"training":0.4,"llm_batch_inference":0.3,"realtime_inference":0.3}' \
+  --contract-months 24 \
+  --output reports/roi_projection.json
+
+# With customer metadata (informational, not used in savings math)
+python -m aurelius.cli roi \
+  --monthly-cost 750000 \
+  --num-gpus 512 \
+  --gpu-type H100 \
+  --region us-west
+```
+
+### Methodology
+- Savings rates derived from ml_quantile v2.0 backtest (real CAISO+PJM+ERCOT data, 5 folds)
+- p10: conservative seasonal bound (lower of Q1 2026 / Summer 2025 × 0.7)
+- p50: primary Q1 2026 benchmark result (the main reported figure)
+- p90: optimistic upper bound, capped at oracle ceiling
+- 60% savings is clearly labeled as aspirational; proven mean is 25.0%
+- Warns when flexible workload fraction is too low for meaningful optimization
+
+### Formal methodology document
+`docs/ROI_METHODOLOGY.md` — includes:
+- Step-by-step ROI calculation methodology
+- Workload-type savings table with p10/p50/p90 ranges
+- FAQ for buyer objections
+- Oracle diagnostic table (proven vs achievable)
+- Honesty constraints enforced by the calculator
+- Shadow mode validation workflow
+- Reproduction commands
+
+### Tests
+80 new tests in `tests/test_roi_calculator.py` and `tests/test_daily_learning_loop.py`.
+Tests explicitly verify: no 60% claim in savings outputs, math accuracy, linear scaling,
+correct p10<p50<p90 ordering, CLI error handling, JSON serialization.
+
+---
+
+## 20. Enterprise Contract Readiness
+
+### What makes Aurelius contract-ready today (all resolved as of 2026-05-23):
 
 1. **Honest, reproducible benchmark methodology** — leakage-free, real data,
    multiple baselines, oracle diagnostics, regression tracking
@@ -723,8 +775,8 @@ python benchmarks/compare_against_previous.py \
 
 1. **Customer workload trace ingestion** — RESOLVED (--jobs-file, 36 tests)
 2. **Live shadow mode** — RESOLVED (aurelius/shadow/ module, 59 tests)
-3. **ROI methodology document** — PARTIAL (methodology in audit/reports; formal
-   $/saved/month ROI calculator not yet standalone doc)
+3. **ROI methodology document** — RESOLVED (docs/ROI_METHODOLOGY.md, `aurelius roi` CLI subcommand,
+   `aurelius/roi/calculator.py` with p10/p50/p90 projections, 80 new tests)
 
 **Remaining soft blockers:**
 - Customer needs to trust the savings numbers → shadow mode on their own data closes this
