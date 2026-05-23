@@ -18,8 +18,7 @@ while preserving predict-time safety and deterministic fallback.
 """
 
 import logging
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
@@ -930,7 +929,7 @@ def _run_validation():
     set_deterministic_seed(42)
     vals2 = np.random.rand(5)
     assert np.allclose(vals1, vals2), "Seeds should produce same values"
-    print(f"  Same seed produces identical values: PASS")
+    print("  Same seed produces identical values: PASS")
 
     # Test 2: Quantile validation
     print("\nTest 2: QUANTILE VALIDATION")
@@ -998,12 +997,12 @@ def _run_validation():
     print("\nTest 7: LIGHTGBM TRAINING")
     print("-" * 40)
     try:
-        import lightgbm
-        X = np.random.rand(100, 5)
+        import lightgbm as _lgbm  # noqa: F401
+        x_train = np.random.rand(100, 5)
         y = np.random.rand(100) * 100
-        model = train_lightgbm_quantile(X, y, quantile=0.5, seed=42, n_estimators=10)
+        model = train_lightgbm_quantile(x_train, y, quantile=0.5, seed=42, n_estimators=10)
         if model is not None:
-            preds = model.predict(X[:5])
+            preds = model.predict(x_train[:5])
             print(f"  Trained p50 model, sample predictions: {preds[:3]}")
             print("  LightGBM training: PASS")
         else:
@@ -1020,20 +1019,20 @@ def _run_validation():
     # With sufficient recent data (>=6 hours)
     recent_sufficient = np.array([50.0, 52.0, 48.0, 55.0, 53.0, 51.0, 49.0, 54.0])
     df_with, used_lags = build_feature_matrix_for_predict(pred_ts, pred_regions, recent_sufficient)
-    assert used_lags == True, "Should use lags with sufficient data"
+    assert used_lags is True, "Should use lags with sufficient data"
     assert "lag_1h" in df_with.columns, "Should have lag_1h with sufficient data"
     print(f"  With 8 hours of data: used_lags={used_lags}, features={len(df_with.columns)}: PASS")
 
     # With insufficient recent data (<6 hours)
     recent_insufficient = np.array([50.0, 52.0, 48.0])
     df_without, used_lags = build_feature_matrix_for_predict(pred_ts, pred_regions, recent_insufficient)
-    assert used_lags == False, "Should NOT use lags with insufficient data"
+    assert used_lags is False, "Should NOT use lags with insufficient data"
     assert "lag_1h" not in df_without.columns, "Should NOT have lag_1h without sufficient data"
     print(f"  With 3 hours of data: used_lags={used_lags}, features={len(df_without.columns)}: PASS")
 
     # With None recent data
     df_none, used_lags = build_feature_matrix_for_predict(pred_ts, pred_regions, None)
-    assert used_lags == False, "Should NOT use lags with None data"
+    assert used_lags is False, "Should NOT use lags with None data"
     print(f"  With None data: used_lags={used_lags}, features={len(df_none.columns)}: PASS")
 
     print("\n" + "=" * 60)

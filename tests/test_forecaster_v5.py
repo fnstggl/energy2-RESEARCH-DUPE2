@@ -33,13 +33,11 @@ import math
 from datetime import datetime, timedelta
 
 import numpy as np
-import pytest
 
 from aurelius.forecasting.quantile_model import (
     PRICE_RANK_FEATURE_COLS,
     build_feature_matrix,
     build_feature_matrix_for_predict,
-    compute_lagged_features,
     compute_price_rank_features,
 )
 from aurelius.forecasting.price_model import (

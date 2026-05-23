@@ -30,23 +30,16 @@ from ..models import EnergyPrice
 from .quantile_model import (
     DEFAULT_SEED,
     MIN_RECENT_HOURS,
-    ModelMetadata,
-    QuantileForecast,
     QUANTILE_P50,
     QUANTILE_P90,
-    WEATHER_FEATURE_COLS,
-    PRICE_RANK_FEATURE_COLS,
+    ModelMetadata,
     build_feature_matrix,
     build_feature_matrix_for_predict,
     build_weather_lookup,
     check_recent_data_sufficient,
     predict_with_fallback,
     set_deterministic_seed,
-    time_series_cv_split,
     train_lightgbm_quantile,
-    validate_quantiles,
-    compute_volatility_regime_features,
-    compute_price_rank_features,
 )
 
 logger = logging.getLogger(__name__)
@@ -256,7 +249,7 @@ class PriceQuantileForecaster:
     def fit(
         self,
         prices: list[EnergyPrice],
-        weather_df: Optional["pd.DataFrame"] = None,
+        weather_df: Optional[Any] = None,
     ) -> "PriceQuantileForecaster":
         """Fit the quantile models on historical price data.
 
@@ -272,7 +265,6 @@ class PriceQuantileForecaster:
         Returns:
             Self for chaining
         """
-        import pandas as _pd  # local import to avoid top-level circular dep in tests
 
         set_deterministic_seed(self.config.seed)
 
@@ -380,7 +372,7 @@ class PriceQuantileForecaster:
         region: str,
         timestamps: list[datetime],
         recent_prices: Optional[list[EnergyPrice]] = None,
-        weather_df: Optional["pd.DataFrame"] = None,
+        weather_df: Optional[Any] = None,
     ) -> list[PriceQuantileForecast]:
         """Generate quantile price forecasts.
 
@@ -748,7 +740,7 @@ class PerRegionForecaster:
     def fit(
         self,
         prices: list[EnergyPrice],
-        weather_df: Optional["pd.DataFrame"] = None,
+        weather_df: Optional[Any] = None,
     ) -> "PerRegionForecaster":
         """Fit one PriceQuantileForecaster per region.
 
@@ -762,7 +754,6 @@ class PerRegionForecaster:
         Returns:
             Self for chaining.
         """
-        import pandas as _pd
 
         # Group price records by region
         by_region: dict[str, list[EnergyPrice]] = {}
@@ -806,7 +797,7 @@ class PerRegionForecaster:
         region: str,
         timestamps: list[datetime],
         recent_prices: Optional[list[EnergyPrice]] = None,
-        weather_df: Optional["pd.DataFrame"] = None,
+        weather_df: Optional[Any] = None,
     ) -> list[PriceQuantileForecast]:
         """Predict prices for a specific region using its dedicated model.
 
