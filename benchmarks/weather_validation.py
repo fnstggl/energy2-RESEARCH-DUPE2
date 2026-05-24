@@ -74,7 +74,12 @@ def _cfg(use_weather):
                             include_weather_features=use_weather, include_rank_features=False)
 
 
-def _gen_jobs(seed, num_jobs, workload, duration_div=0.7, max_delay=None):
+def _gen_jobs(seed, num_jobs, workload, duration_div=0.7, slack_hours=None):
+    """slack_hours: if set, override each job's deadline = earliest_start +
+    runtime + slack_hours. The optimizer schedules off job.deadline (via
+    latest_start = deadline - runtime), so this is the real flexibility lever
+    (NOT max_delay_hours, which the optimizer does not read)."""
+    from datetime import timedelta as _td
     start_ts = pd.Timestamp(START, tz="UTC"); end_ts = pd.Timestamp(END, tz="UTC")
     backtest_hours = int((end_ts - start_ts).total_seconds() / 3600)
     duration_hours = int(backtest_hours / duration_div) + 24
@@ -82,10 +87,9 @@ def _gen_jobs(seed, num_jobs, workload, duration_div=0.7, max_delay=None):
         start_time=start_ts.to_pydatetime(), duration_hours=duration_hours,
         num_jobs=num_jobs, regions=REGIONS, seed=seed,
         workload_mix="realistic", workload_filter=workload)
-    if max_delay is not None:
+    if slack_hours is not None:
         for j in jobs:
-            if getattr(j, "max_delay_hours", None) is not None:
-                j.max_delay_hours = max_delay
+            j.deadline = j.earliest_start + _td(hours=j.runtime_hours + slack_hours)
     return jobs
 
 
@@ -195,14 +199,14 @@ def mode_gating(args, da, rt, w):
 def mode_sensitivity(args, da, rt, w):
     print("=== Sensitivity (RT-scored, weather=full): robustness of the delta ===\n")
     out = {}
-    base = dict(num_jobs=50, workload="training", duration_div=0.7, max_delay=None, no_migrate=False)
+    base = dict(num_jobs=50, workload="training", duration_div=0.7, slack=None, no_migrate=False)
     variants = {
         "base": {},
         "jobs_25": {"num_jobs": 25},
         "jobs_100": {"num_jobs": 100},
         "short_dur": {"duration_div": 1.4},
-        "tight_deadline": {"max_delay": 12},
-        "loose_deadline": {"max_delay": 240},
+        "tight_deadline": {"slack": 12},     # deadline = est + runtime + 12h
+        "loose_deadline": {"slack": 336},    # deadline = est + runtime + 14d
         "no_migration": {"no_migrate": True},
         "mixed_workload": {"workload": None},
     }
@@ -210,9 +214,9 @@ def mode_sensitivity(args, da, rt, w):
         p = {**base, **ov}
         d = []
         for s in range(args.seeds):
-            jobs = _gen_jobs(s, p["num_jobs"], p["workload"], p["duration_div"], p["max_delay"])
+            jobs = _gen_jobs(s, p["num_jobs"], p["workload"], p["duration_div"], p["slack"])
             off, _ = _savings(jobs, da, None, rt, no_migrate=p["no_migrate"])
-            jobs2 = _gen_jobs(s, p["num_jobs"], p["workload"], p["duration_div"], p["max_delay"])
+            jobs2 = _gen_jobs(s, p["num_jobs"], p["workload"], p["duration_div"], p["slack"])
             on, _ = _savings(jobs2, da, w, rt, no_migrate=p["no_migrate"])
             if off is None or on is None:
                 continue
