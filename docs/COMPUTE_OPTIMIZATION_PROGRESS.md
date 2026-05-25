@@ -16,23 +16,13 @@ Every implementation run must read that plan before deciding what to do next.
 
 ## Status Summary
 
-Current status: **PHASE 6 COMPLETE / PHASE 7 NOT STARTED**
+Current status: **PHASE 8 COMPLETE / PHASE 9 NOT STARTED**
 
-Phase 1 produced:
-- `aurelius/state/models.py` — canonical frozen dataclass state models
-- `aurelius/state/store.py` — leakage-safe append-only in-memory snapshot store
-- `aurelius/state/normalize.py` — adapters from existing models + validation helpers
-- `aurelius/state/__init__.py` — package exports
-- `tests/test_state_models.py` — 90 tests for all models
-- `tests/test_state_store.py` — 18 tests for the state store
-- `tests/test_state_normalize.py` — 46 tests for adapters + validation + optimizer non-regression
-- `tests/fixtures/cluster_state/` — 3 JSON fixture cluster snapshots
-
-Phase 2 (Prometheus-native connector) and Phase 3 (DCGM/vLLM/Triton/Ray adapters) are now complete.
+Phase 7 (Constraint Classifier) and Phase 8 (Migration Cost/Risk Model) are now complete.
 
 The next expected milestone is:
 
-**Phase 4 — Kubernetes connector**
+**Phase 9 — Constraint-aware recommendation engine**
 
 ---
 
@@ -159,8 +149,8 @@ Forbidden:
 | 4 | Kubernetes connector | COMPLETE | `aurelius/connectors/kubernetes.py`, 47 tests passing | See Phase 4+5 details below |
 | 5 | Topology collector | COMPLETE | `aurelius/connectors/topology.py`, 62 tests passing | See Phase 4+5 details below |
 | 6 | Synthetic cluster simulator | COMPLETE | `aurelius/simulation/cluster/`, 93 tests passing | See Phase 6 details below |
-| 7 | Constraint classifier | NOT_STARTED | None yet | Depends on Phase 1 and simulator fixtures |
-| 8 | Cost/risk/migration model | NOT_STARTED | None yet | Depends on classifier + SLA/state models |
+| 7 | Constraint classifier | COMPLETE | `aurelius/constraints/classifier.py`, 74 tests passing | See Phase 7+8 details below |
+| 8 | Cost/risk/migration model | COMPLETE | `aurelius/constraints/cost_model.py`, 39 tests passing | See Phase 7+8 details below |
 | 9 | Constraint-aware recommendation engine | NOT_STARTED | None yet | Requires SLA wiring audit |
 | 10 | CLI reports | NOT_STARTED | None yet | Depends on classifier/engine |
 | 11 | Validation + benchmarking loop | NOT_STARTED | None yet | Multi-run continuous improvement |
@@ -727,3 +717,115 @@ The simulator must:
 3. Simulate GPU utilization, thermal, queue, and latency dynamics
 4. Provide baseline comparisons (FIFO, current_price_only, greedy energy, SLA-aware)
 5. Produce ClusterState snapshots via the same normalization paths
+
+---
+
+## Phase 7+8 Completion Evidence
+
+### Phase 7+8 Milestone Decision
+
+- **What this run implemented:** Phase 7 (Constraint Classifier) + Phase 8 (Migration Cost/Risk Model), combined on branch `claude/inspiring-einstein-2rpxi`
+- **Why this was the correct next step:** Two stale Phase 7 PRs existed (#61, #62) — both were closed and the best elements merged into one clean implementation. Phase 8 was added to the same branch since the classifier is its primary input.
+- **Prior dependencies verified:** Phase 1-6 full suite: 484 tests passing, 10 intentional skips (unchanged).
+- **Bug fixes also applied (from PR #61 verification):**
+  - `aurelius/connectors/base.py`: `basic_credentials()` returns `None` when password env var is unset (was returning `(username, "")`)
+  - `aurelius/simulation/cluster/engine.py`: `_parse_float_trace()` handles YAML dash-separated strings (`"200 - 210 - 220"`)
+  - `aurelius/simulation/cluster/engine.py`: energy spike event no longer compounds price each tick; uses `price_spike_active` flag to block trace overwrites
+  - `aurelius/simulation/cluster/model.py`: added `price_spike_active: bool` to `SimRegion`
+  - `benchmarks/v1/queue_surge_latency_sensitive.yaml`: reduced `critical-wl` GPU count from 2→1 and util from 65%→50% so queue actually saturates during surge
+
+### Files Added
+
+| File | Role |
+|---|---|
+| `aurelius/constraints/__init__.py` | Package: exports `ConstraintClassifier`, `ConstraintConfig`, `MigrationCostModel`, `MigrationCostEstimate`, `MigrationGovernor` |
+| `aurelius/constraints/classifier.py` | Phase 7: scores 8 constraint families from ClusterState; hysteresis; tie-break; confidence; fail-safe |
+| `aurelius/constraints/cost_model.py` | Phase 8: `MigrationCostEstimate`, `MigrationCostModel` (conservative heuristics), `MigrationGovernor` (rate-limit/cooldown) |
+| `tests/test_constraint_classifier.py` | 74 tests: all 8 scorers, missing-signal invariants, hysteresis, tie-break, confidence math, 6 simulator scenarios |
+| `tests/test_migration_cost_model.py` | 39 tests: cost estimate viability, governor rate limits, critical vs batch multipliers, topology degradation, thermal penalty, make_recommendation, pipeline integration |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `aurelius/connectors/base.py` | `basic_credentials()` returns `None` when password env var unset |
+| `aurelius/simulation/cluster/engine.py` | `_parse_float_trace()` helper; energy spike uses `price_spike_active` flag |
+| `aurelius/simulation/cluster/model.py` | Added `price_spike_active: bool = False` to `SimRegion` |
+| `benchmarks/v1/queue_surge_latency_sensitive.yaml` | Queue scenario `critical-wl` GPU count 2→1, util 65→50% |
+
+### Classifier Design Decisions (Phase 7)
+
+| Decision | Rationale |
+|---|---|
+| Latency scorer uses separate TTFT SLA (2000ms) vs e2e SLA (30000ms) | LLM e2e p99 can legitimately be 10–30s; a single 2000ms SLA produced false positives on all simulator ticks |
+| Communication scorer requires SM < 50% to score high | High NVLink bytes with high SM = compute active, not stalled; both conditions needed to detect genuine stall |
+| Confidence uses raw binding score, not threshold-normalized | `(score-threshold)/(1-threshold)` collapsed moderate scores to near-zero; raw score preserves signal |
+| Hysteresis requires N consecutive identical candidates | Prevents flapping when scores oscillate near threshold |
+| All thresholds labeled `# HEURISTIC` in `ConstraintConfig` | Operator-visible tuning; none calibrated on real production telemetry |
+
+### Cost Model Design (Phase 8)
+
+| Component | Implementation |
+|---|---|
+| `MigrationCostEstimate` | Frozen dataclass: gross savings, per-type penalties (cold-start, cache warmup, queue instability, topology degradation, SLA risk, thermal, failure retry), total penalty, net expected savings |
+| `MigrationCostModel.estimate()` | Conservative heuristics with `risk_mult` per workload tier; critical×2.5, batch×0.4 |
+| `MigrationGovernor` | Per-workload: min interval (300s), hourly rate limit (2/hr); cluster: per-minute rate limit (3/min); SLA violation cooldown (600s) |
+| `should_keep()` | KEEP when: blocked by governor, net savings unknown, net ≤ 0, or confidence < 0.15 |
+| `make_recommendation()` | Always `recommendation_only` mode; delegates execution to Phase 9 |
+
+### Commands Run
+
+```
+python -m compileall aurelius/constraints/
+ruff check aurelius/constraints/ tests/test_constraint_classifier.py tests/test_migration_cost_model.py
+pytest tests/test_constraint_classifier.py tests/test_migration_cost_model.py -q
+pytest tests/test_state_models.py tests/test_state_store.py tests/test_state_normalize.py tests/test_prometheus_connector.py tests/test_dcgm_adapter.py tests/test_vllm_triton_ray_adapters.py tests/test_kubernetes_connector.py tests/test_topology_connector.py tests/test_cluster_simulator.py tests/test_fake_connectors.py tests/test_constraint_classifier.py tests/test_migration_cost_model.py -q
+```
+
+### Test Results
+
+```
+tests/test_constraint_classifier.py:  74 passed
+tests/test_migration_cost_model.py:   39 passed
+Phase 1-8 full suite:                597 passed, 10 skipped, 0 failed
+
+ruff: All checks passed
+python -m compileall: No errors
+```
+
+### Wiring Evidence
+
+- Phase 7 is additive: `ConstraintClassifier.assess(ClusterState)` → `ConstraintAssessment`; not yet wired into any production optimizer/scheduler path (intentional; wiring in Phase 9)
+- Phase 8 is additive: `MigrationCostModel.estimate(...)` → `MigrationCostEstimate` → `make_recommendation()` → `Recommendation`; not yet wired into optimizer decision path (Phase 9 target)
+- Phase 7+8 both read `ClusterState` from Phase 1 model (verified)
+- `ConstraintAssessment` feeds `MigrationCostModel` as required by the plan
+- `Recommendation` produced is in `recommendation_only` mode (default safe behavior)
+
+### Failure Mode Review
+
+- **Missing signals:** All 8 scorers return `(None, missing_signals)` when required telemetry absent; `binding_constraint=None` when no family scores
+- **Unknown gross savings:** `MigrationCostEstimate.net_expected_savings=None`; `should_keep()` returns KEEP
+- **Low confidence:** `confidence < confidence_floor` → `binding_constraint=None`; `confidence < 0.15` in cost model → KEEP
+- **Governor blocked:** `blocked_by_cooldown=True`, `is_viable()=False`, `make_recommendation()` returns KEEP
+- **Partial ClusterState:** 0.85× confidence penalty; classifier still operates with remaining signals
+- **Sandbox provenance:** `is_sandbox=True` passes through to all outputs; downstream can exclude from economic claims
+
+### Open Limitations
+
+- All classifier thresholds are HEURISTIC — calibrated on synthetic scenarios, not production telemetry
+- Cost model penalty multipliers are HEURISTIC engineering estimates
+- No persistence of migration history (governor is in-memory only); production needs Postgres store (Phase 11/12)
+- `MigrationGovernor` history is per-process-instance; distributed deployments need shared state
+- Phase 9 (recommendation engine) has not yet wired the classifier+cost model into optimizer decisions
+- CLI reporting commands not yet built (Phase 10)
+
+### Next Milestone
+
+**Phase 9 — Constraint-aware recommendation engine**
+
+Requires:
+- Wire `ConstraintClassifier` → `MigrationCostModel` → `Recommendation` into the main scheduler/optimizer path
+- Implement per-constraint action selection logic (8 constraint families → allowed action types)
+- SLA evaluator wiring: `SLARegistry.evaluate()` gates action selection
+- Audit `BacktestEngine` to consume `ClusterState` + `ConstraintAssessment`
+- Extend `WorkloadState` (deferred from Phase 1) to carry `service_id`, `gpu_uuids`, `comm_bytes_per_s`
