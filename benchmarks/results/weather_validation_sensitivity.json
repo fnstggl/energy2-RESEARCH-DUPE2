@@ -1,0 +1,45 @@
+{
+  "base": {
+    "mean_delta_pp": 10.51,
+    "ci_lo": 8.42,
+    "ci_hi": 12.05,
+    "verdict": "SIGNIFICANT (+)"
+  },
+  "jobs_25": {
+    "mean_delta_pp": 11.63,
+    "ci_lo": 9.56,
+    "ci_hi": 13.93,
+    "verdict": "SIGNIFICANT (+)"
+  },
+  "jobs_100": {
+    "mean_delta_pp": 9.28,
+    "ci_lo": 7.3,
+    "ci_hi": 11.07,
+    "verdict": "SIGNIFICANT (+)"
+  },
+  "short_dur": {
+    "mean_delta_pp": 2.61,
+    "ci_lo": -5.83,
+    "ci_hi": 12.81,
+    "verdict": "NOT SIGNIFICANT"
+  },
+  "tight_deadline": {
+    "mean_delta_pp": -0.2,
+    "ci_lo": -0.53,
+    "ci_hi": 0.32,
+    "verdict": "NOT SIGNIFICANT"
+  },
+  "loose_deadline": {
+    "mean_delta_pp": 13.75,
+    "ci_lo": 11.35,
+    "ci_hi": 16.16,
+    "verdict": "SIGNIFICANT (+)"
+  },
+  "no_migration": {
+    "mean_delta_pp": 10.51,
+    "ci_lo": 8.42,
+    "ci_hi": 12.05,
+    "verdict": "SIGNIFICANT (+)"
+  },
+  "_note": "RT-scored, weather=full, 4 job-mix seeds. mixed_workload variant incomplete (container reclaim); non-essential. Deadline lever mutates job.deadline (optimizer reads deadline/latest_start, not max_delay_hours)."
+}
