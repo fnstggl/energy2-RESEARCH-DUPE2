@@ -1174,6 +1174,14 @@ def cmd_robustness_test(args):
 
 
 def main():
+    from .cli_constraint import (
+        cmd_constraint_report,
+        cmd_simulate_constraint_scenario,
+        cmd_telemetry_check,
+        cmd_topology_report,
+        cmd_validate_connectors,
+    )
+
     parser = argparse.ArgumentParser(
         description="Aurelius - Predictive control for energy-constrained batch compute",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1766,6 +1774,120 @@ def main():
         help="Maximum rows to display (default: 20)",
     )
 
+    # --- constraint-report ---
+    cr_parser = subparsers.add_parser(
+        "constraint-report",
+        help="Run constraint classifier + recommendation engine on a scenario or snapshot",
+    )
+    cr_parser.add_argument(
+        "--scenario", type=str, default=None,
+        help="Simulator scenario name (e.g. energy_price_arbitrage_multiregion)",
+    )
+    cr_parser.add_argument(
+        "--snapshot", type=str, default=None,
+        help="Path to a ClusterState JSON snapshot file",
+    )
+    cr_parser.add_argument(
+        "--steps", type=int, default=1,
+        help="Number of simulator ticks to run before assessment (default: 1)",
+    )
+    cr_parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Random seed for simulator (default: 42)",
+    )
+    cr_parser.add_argument(
+        "--format", choices=["text", "json"], default="text",
+        help="Output format: text (default) or json",
+    )
+    cr_parser.add_argument(
+        "--output", type=str, default=None,
+        help="Write report to this file path instead of stdout",
+    )
+
+    # --- simulate-constraint-scenario ---
+    scs_parser = subparsers.add_parser(
+        "simulate-constraint-scenario",
+        help="Run a named scenario and show baseline vs Aurelius comparison table",
+    )
+    scs_parser.add_argument(
+        "--scenario", type=str, default=None,
+        help="Scenario name (use --list to see available scenarios)",
+    )
+    scs_parser.add_argument(
+        "--list", action="store_true",
+        help="List available scenario names and exit",
+    )
+    scs_parser.add_argument(
+        "--steps", type=int, default=24,
+        help="Number of simulator ticks (default: 24)",
+    )
+    scs_parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Random seed (default: 42)",
+    )
+    scs_parser.add_argument(
+        "--output", type=str, default=None,
+        help="Write report to this file path instead of stdout",
+    )
+
+    # --- telemetry-check ---
+    tc_parser = subparsers.add_parser(
+        "telemetry-check",
+        help="Show which constraint signals are available or missing",
+    )
+    tc_parser.add_argument(
+        "--scenario", type=str, default=None,
+        help="Simulator scenario name",
+    )
+    tc_parser.add_argument(
+        "--snapshot", type=str, default=None,
+        help="Path to a ClusterState JSON snapshot file",
+    )
+    tc_parser.add_argument(
+        "--steps", type=int, default=1,
+        help="Number of simulator ticks to run before check (default: 1)",
+    )
+    tc_parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Random seed (default: 42)",
+    )
+    tc_parser.add_argument(
+        "--output", type=str, default=None,
+        help="Write report to this file path",
+    )
+
+    # --- topology-report ---
+    tr_parser = subparsers.add_parser(
+        "topology-report",
+        help="Show topology graph summary and placement quality",
+    )
+    tr_parser.add_argument(
+        "--scenario", type=str, default=None,
+        help="Simulator scenario name",
+    )
+    tr_parser.add_argument(
+        "--snapshot", type=str, default=None,
+        help="Path to a ClusterState JSON snapshot file",
+    )
+    tr_parser.add_argument(
+        "--steps", type=int, default=1,
+        help="Number of simulator ticks to run before report (default: 1)",
+    )
+    tr_parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Random seed (default: 42)",
+    )
+    tr_parser.add_argument(
+        "--output", type=str, default=None,
+        help="Write report to this file path",
+    )
+
+    # --- validate-connectors ---
+    vc_parser = subparsers.add_parser(
+        "validate-connectors",
+        help="Smoke-test all fake (sandbox) connectors via production code paths",
+    )
+
     # Parse arguments
     args = parser.parse_args()
 
@@ -1796,6 +1918,16 @@ def main():
         else:
             shadow_parser.print_help()
             sys.exit(1)
+    elif args.command == "constraint-report":
+        cmd_constraint_report(args)
+    elif args.command == "simulate-constraint-scenario":
+        cmd_simulate_constraint_scenario(args)
+    elif args.command == "telemetry-check":
+        cmd_telemetry_check(args)
+    elif args.command == "topology-report":
+        cmd_topology_report(args)
+    elif args.command == "validate-connectors":
+        cmd_validate_connectors(args)
     else:
         parser.print_help()
         sys.exit(1)
