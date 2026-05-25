@@ -139,6 +139,17 @@ workloads:
     migration_allowed: true
     latency_sensitive: false
 
+  - workload_id: batch-wl-west
+    service_id: batch-llm-west
+    workload_type: batch_training
+    priority_tier: batch
+    region_id: us-west
+    gpu_count_required: 4
+    target_util_pct: 70.0
+    communication_intensity: medium
+    migration_allowed: true
+    latency_sensitive: false
+
   - workload_id: inference-wl-east
     service_id: inference-svc-east
     workload_type: inference

@@ -13,7 +13,7 @@ from typing import Any
 
 from ..constraints.engine import EngineResult
 from ..simulation.cluster.engine import TickMetrics
-from ..state.models import ConstraintAssessment, ConstraintType
+from ..state.models import ConstraintAssessment, ConstraintType, TopologyLinkType
 
 # Constraint display order and label
 _CONSTRAINT_LABELS: dict[str, str] = {
@@ -245,13 +245,22 @@ def format_topology_report_text(cluster_state: Any) -> str:
             lines.append(f"  Topology: {len(topo.gpu_uuids)} GPUs, {pair_count} link pairs")
             if topo.pair_levels:
                 all_links = list(topo.pair_levels.values())
-                best = max(all_links, key=lambda lnk: lnk.bandwidth_score)
-                worst = min(all_links, key=lambda lnk: lnk.bandwidth_score)
+                # Bandwidth quality: lower penalty = better (NVSWITCH=0.0, REGION=1.0)
+                _PENALTY: dict[TopologyLinkType, float] = {
+                    TopologyLinkType.NVSWITCH: 0.00, TopologyLinkType.NV4: 0.05,
+                    TopologyLinkType.NV3: 0.10,      TopologyLinkType.NV2: 0.15,
+                    TopologyLinkType.NV1: 0.20,      TopologyLinkType.PIX: 0.35,
+                    TopologyLinkType.PXB: 0.45,      TopologyLinkType.PHB: 0.55,
+                    TopologyLinkType.NODE: 0.70,     TopologyLinkType.SYS: 0.85,
+                    TopologyLinkType.RACK: 0.92,     TopologyLinkType.REGION: 1.00,
+                }
+                best = min(all_links, key=lambda lnk: _PENALTY.get(lnk, 0.5))
+                worst = max(all_links, key=lambda lnk: _PENALTY.get(lnk, 0.5))
                 lines.append(
-                    f"    Best link : {best.link_type.value} bw={best.bandwidth_score:.2f}"
+                    f"    Best link : {best.value} quality={1.0 - _PENALTY.get(best, 0.5):.2f}"
                 )
                 lines.append(
-                    f"    Worst link: {worst.link_type.value} bw={worst.bandwidth_score:.2f}"
+                    f"    Worst link: {worst.value} quality={1.0 - _PENALTY.get(worst, 0.5):.2f}"
                 )
         else:
             lines.append("  Topology: not available (nvidia-smi topo not collected)")

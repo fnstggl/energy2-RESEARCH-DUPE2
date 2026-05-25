@@ -535,8 +535,11 @@ class ConstraintBenchmarkRunner:
                 observed_dominant = max(constraint_counts, key=constraint_counts.__getitem__)
 
         expected = scenario.expected_primary_constraint
-        # Normalize expected: YAML uses "energy_bound", enum uses "energy"
-        expected_normalized = expected.removesuffix("_bound") if expected else None
+        # Normalize expected: YAML uses "energy_bound"/"memory_bound_indirect", enum uses "energy"/"memory"
+        if expected == "memory_bound_indirect":
+            expected_normalized: Optional[str] = "memory"
+        else:
+            expected_normalized = expected.removesuffix("_bound") if expected else None
         constraint_match = (
             observed_dominant == expected_normalized
             if expected_normalized and observed_dominant
