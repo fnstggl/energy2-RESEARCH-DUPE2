@@ -18,11 +18,11 @@ Every implementation run must read that plan before deciding what to do next.
 
 Current status: **PHASE 9 COMPLETE / PHASE 10 NOT STARTED**
 
-Phases 1–9 of the constraint-aware orchestration initiative are complete.
+Phases 1–10 of the constraint-aware orchestration initiative are complete.
 
 The next expected milestone is:
 
-**Phase 10 — CLI reports (constraint-report, simulate-constraint-scenario, telemetry-check, topology-report, validate-connectors)**
+**Phase 11 — Validation, benchmarking, and continuous optimization loop**
 
 ---
 
@@ -817,11 +817,7 @@ python -m compileall: No errors
 - No persistence of migration history (governor is in-memory only); production needs Postgres store (Phase 11/12)
 - `MigrationGovernor` history is per-process-instance; distributed deployments need shared state
 - Phase 9 (recommendation engine) has not yet wired the classifier+cost model into optimizer decisions
-- CLI reporting commands not yet built (Phase 10)
-
-### Next Milestone (after Phase 9)
-
-**Phase 10 — CLI reports**
+- CLI reporting commands shipped in Phase 10 (constraint-report, simulate-constraint-scenario, telemetry-check, topology-report, validate-connectors)
 
 ---
 
@@ -963,11 +959,69 @@ What remains unwired until later phases:
 
 ### Next Milestone
 
-**Phase 10 — CLI reports**
+**Phase 11 — Validation, benchmarking, and continuous optimization loop**
 
-Implement:
-- `aurelius constraint-report` — run classifier on live/simulator state, print assessment
-- `aurelius simulate-constraint-scenario` — run a named scenario, compare baselines
-- `aurelius telemetry-check` — check connector coverage
-- `aurelius topology-report` — topology graph summary and bad placements
-- `aurelius validate-connectors` — smoke test all fake connectors via same code paths
+Planned:
+- Wire `ConstraintAwareEngine` into `BacktestEngine` for historical replay
+- `MigrationGovernor` persistence to Postgres
+- `PlacementScorer.score_placement()` integration (replace 0.7/0.3 heuristics)
+- `WorkloadState` extension (`service_id`, `gpu_uuids`, `comm_bytes_per_s`)
+- Continuous optimization loop with real telemetry connectors
+
+---
+
+## Phase 10 Completion Evidence
+
+### Phase 10 Milestone Decision
+
+- **What this run implemented:** Phase 10 — CLI constraint-aware report commands
+- **Why it was the correct next step:** Phase 9 complete (660 tests passing). The `ConstraintAwareEngine` was fully implemented but had no user-facing CLI surface; Phase 10 exposes it via 5 CLI subcommands.
+- **Prior dependencies verified:** Phase 1-9 full suite: 660 tests passing.
+- **What was explicitly NOT attempted:** BacktestEngine wiring (Phase 11), MigrationGovernor Postgres persistence (Phase 11/12), PlacementScorer integration (Phase 11).
+
+### Files Added
+
+| File | Role |
+|---|---|
+| `aurelius/cli_constraint.py` | Command implementations for all 5 CLI subcommands (lazy imports) |
+| `aurelius/reporting/constraint_report.py` | Text/JSON formatters for all constraint-aware CLI outputs |
+| `tests/test_cli_assess_recommend.py` | 58 tests covering formatters, dispatch, sandbox invariants, CLI registration |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `aurelius/cli.py` | Added 5 argparse subparsers + dispatch branches |
+| `aurelius/reporting/__init__.py` | Wrapped matplotlib/pandas/numpy imports in try/except to prevent cascade |
+
+### CLI Commands
+
+| Command | Flags | Description |
+|---|---|---|
+| `constraint-report` | `--scenario`/`--snapshot`, `--steps`, `--format text\|json` | Assess constraints, emit `recommendation_only` recommendations |
+| `simulate-constraint-scenario` | `--scenario`, `--steps`, `--list` | Run ClusterSimulator; output labeled `[SANDBOX]` |
+| `telemetry-check` | `--scenario`/`--snapshot`, `--steps` | Report telemetry coverage per region/node |
+| `topology-report` | `--scenario`/`--snapshot`, `--steps` | Display GPU topology |
+| `validate-connectors` | _(none)_ | Smoke-test all 10 connectors/adapters |
+
+### Test Evidence
+
+```
+pytest tests/test_cli_assess_recommend.py
+58 passed in 0.89s
+
+pytest (full suite)
+718 passed
+```
+
+### Invariants Maintained
+
+- All recommendations are `recommendation_only`; no cluster mutations
+- Missing telemetry is `None`, never fabricated as `0`
+- Sandbox outputs explicitly labeled `[SANDBOX]`
+- No secrets in logs or reports
+- `validate-connectors` reports 10/10 PASSED
+
+### Merge
+
+PR #65 merged to main via squash at commit `0471e8533e5d06f1078ff4862cbb491296edc6f3`.
