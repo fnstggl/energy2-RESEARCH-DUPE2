@@ -72,11 +72,16 @@ class TestFormatAssessmentText:
 
     def test_missing_signals_shown(self):
         from aurelius.reporting.constraint_report import format_assessment_text
-        state = _get_simulator_state()
+        from aurelius.state.models import ClusterState, Provenance
         from aurelius.constraints import ConstraintClassifier
-        assessment = ConstraintClassifier().assess(state)
+        from datetime import datetime, timezone
+        # Use an empty ClusterState — no GPU/queue/energy data → all scorers report missing
+        ts = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        prov = Provenance(source="test", fetched_at=ts, confidence="low")
+        empty_state = ClusterState(timestamp=ts, provenance=prov, regions={}, is_partial=True)
+        assessment = ConstraintClassifier().assess(empty_state)
         text = format_assessment_text(assessment)
-        # Simulator always has at least topology signals missing
+        # Empty state has no signals at all → MISSING TELEMETRY section must appear
         assert "MISSING TELEMETRY" in text
 
     def test_scores_are_bounded(self):

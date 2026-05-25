@@ -27,6 +27,17 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _normalize_constraint_name(s: str) -> str:
+    """Normalize YAML expected_primary_constraint to ConstraintType.value format.
+
+    YAML uses 'energy_bound', 'thermal_bound', 'memory_bound_indirect', etc.
+    ConstraintType.value uses 'energy', 'thermal', 'memory', etc.
+    """
+    if s == "memory_bound_indirect":
+        return "memory"
+    return s.removesuffix("_bound")
+
+
 # ---------------------------------------------------------------------------
 # constraint-report
 # ---------------------------------------------------------------------------
@@ -113,7 +124,8 @@ def cmd_simulate_constraint_scenario(args) -> None:
         if constraint_counts:
             dominant = max(constraint_counts, key=constraint_counts.__getitem__)
             expected = scenario.expected_primary_constraint
-            match_str = "MATCHES" if dominant == expected else "MISMATCH"
+            expected_norm = _normalize_constraint_name(expected)
+            match_str = "MATCHES" if dominant == expected_norm else "MISMATCH"
             print(
                 f"\nSCENARIO VALIDATION: expected={expected!r} "
                 f"dominant={dominant!r} [{match_str}]"

@@ -42,6 +42,8 @@ from ...state.models import (
     NodeState,
     Provenance,
     RegionState,
+    TopologyLinkType,
+    TopologyState,
 )
 
 # EnergyState and ThermalState are used for region-level context
@@ -905,6 +907,37 @@ class ClusterSimulator:
     # Helper methods
     # ------------------------------------------------------------------
 
+    def _derive_region_interconnect_class(self, region: "SimRegion") -> str:  # type: ignore[name-defined]
+        """Derive the worst-case interconnect_class for a region from node topology_class.
+
+        nvswitch → nvlink_full; nvlink4/nvlink2 → nvlink_partial;
+        pcie_multi_numa → cross_numa; pcie → pcie; mixed/poor → pcie.
+        If any node has a poor class (pcie/cross_numa), the region is poor.
+        """
+        _CLASS_RANK = {
+            "nvswitch": 4,
+            "nvlink4": 3,
+            "nvlink2": 3,
+            "pcie_multi_numa": 2,
+            "pcie": 1,
+        }
+        _CLASS_TO_INTERCONNECT = {
+            "nvswitch": "nvlink_full",
+            "nvlink4": "nvlink_partial",
+            "nvlink2": "nvlink_partial",
+            "pcie_multi_numa": "cross_numa",
+            "pcie": "pcie",
+        }
+        worst_rank = 99
+        worst_class = "unknown"
+        for node in region.nodes:
+            cls = node.labels.get("topology-class", "unknown")
+            rank = _CLASS_RANK.get(cls, 0)
+            if rank < worst_rank:
+                worst_rank = rank
+                worst_class = cls
+        return _CLASS_TO_INTERCONNECT.get(worst_class, "unknown")
+
     def _find_workload_for_service(
         self, service_id: str, region_id: str, cluster: SimCluster
     ) -> Optional[SimWorkload]:
@@ -1122,6 +1155,34 @@ class ClusterSimulator:
             spare_pct = ((total_gpus - alloc_gpus) / total_gpus * 100.0
                          if total_gpus > 0 else None)
 
+            # Build a minimal TopologyState for the region based on node topology classes.
+            # interconnect_class summarizes the worst-case link in the region so the
+            # classifier can detect topology-bound pressure without live nvidia-smi data.
+            region_interconnect = self._derive_region_interconnect_class(region)
+            # Populate pair_levels from topology_links on each node so PlacementScorer works.
+            pair_levels: dict[tuple[str, str], TopologyLinkType] = {}
+            for node in region.nodes:
+                for link in node.topology_links:
+                    try:
+                        lt = TopologyLinkType(link.link_type.lower())
+                    except ValueError:
+                        lt = TopologyLinkType.SYS
+                    a, b = link.gpu_a, link.gpu_b
+                    key: tuple[str, str] = (a, b) if a < b else (b, a)
+                    pair_levels[key] = lt
+            all_gpu_uuids = tuple(
+                gpu.uuid for node in region.nodes for gpu in node.gpus
+            )
+            region_topology = TopologyState(
+                node_id=f"{region.region_id}-aggregate",
+                timestamp=ts,
+                provenance=prov,
+                gpu_uuids=all_gpu_uuids,
+                numa_affinity={},
+                pair_levels=pair_levels,
+                interconnect_class=region_interconnect,
+            )
+
             rs = RegionState(
                 region=region.region_id,
                 timestamp=ts,
@@ -1130,6 +1191,7 @@ class ClusterSimulator:
                 services=service_states,
                 energy=energy,
                 spare_capacity_pct=spare_pct,
+                topology=region_topology,
             )
             region_states[region.region_id] = rs
 
