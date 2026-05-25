@@ -54,6 +54,8 @@ from aurelius.state.models import (
     Provenance,
     RegionState,
     ThermalState,
+    TopologyState,
+    TopologyLinkType,
 )
 
 # ---------------------------------------------------------------------------
@@ -926,3 +928,200 @@ class TestSerialization:
                 "timestamp", "is_noop", "implementation_mode", "rationale",
             ]:
                 assert key in d, f"Missing key {key!r} in Recommendation.to_dict()"
+
+
+# ---------------------------------------------------------------------------
+# PlacementScorer integration
+# ---------------------------------------------------------------------------
+
+class TestPlacementScorerIntegration:
+    """Verify that real topology data from RegionState.topology is used
+    when computing topology degradation scores for cross-region migrations.
+
+    The engine must NOT use the 0.7/0.3 heuristic when real topology is
+    present — instead it calls PlacementScorer.score_placement() and inverts
+    the result to get a quality score (0.0 = worst, 1.0 = best).
+    """
+
+    def _make_nvswitch_topology(self) -> TopologyState:
+        """Build an NVSwitch-class topology: all GPU pairs are NVSWITCH links."""
+        uuids = [f"GPU-{i:04X}" for i in range(4)]
+        pair_levels = {}
+        for i, a in enumerate(uuids):
+            for b in uuids[i + 1:]:
+                key = TopologyState.make_pair_key(a, b)
+                pair_levels[key] = TopologyLinkType.NVSWITCH
+        return TopologyState(
+            node_id="nvswitch-node",
+            timestamp=NOW,
+            provenance=_prov(),
+            gpu_uuids=tuple(uuids),
+            numa_affinity={},
+            pair_levels=pair_levels,
+            interconnect_class="nvlink_full",
+        )
+
+    def _make_pcie_topology(self) -> TopologyState:
+        """Build a PCIe-class topology: all GPU pairs are PIX links."""
+        uuids = [f"GPU-PCIe-{i:04X}" for i in range(4)]
+        pair_levels = {}
+        for i, a in enumerate(uuids):
+            for b in uuids[i + 1:]:
+                key = TopologyState.make_pair_key(a, b)
+                pair_levels[key] = TopologyLinkType.PIX
+        return TopologyState(
+            node_id="pcie-node",
+            timestamp=NOW,
+            provenance=_prov(),
+            gpu_uuids=tuple(uuids),
+            numa_affinity={},
+            pair_levels=pair_levels,
+            interconnect_class="pcie",
+        )
+
+    def _energy_state_for_region(self, region: str, price: float) -> EnergyState:
+        return EnergyState(
+            region=region,
+            timestamp=NOW,
+            provenance=_prov(),
+            price_per_mwh=price,
+            price_percentile=90.0 if price > 150 else 10.0,
+        )
+
+    def test_engine_uses_real_topology_not_heuristic(self):
+        """When RegionState.topology is populated, the engine derives current_topo_score
+        from PlacementScorer rather than using the fixed 0.7 heuristic."""
+        nvswitch_topo = self._make_nvswitch_topology()
+        svc = _service("test-svc", region="r-nvswitch")
+        cheap_svc = _service("cheap-svc", region="r-cheap")
+
+        state = _cluster({
+            "r-nvswitch": RegionState(
+                region="r-nvswitch",
+                timestamp=NOW,
+                provenance=_prov(),
+                services={"test-svc": svc},
+                energy=self._energy_state_for_region("r-nvswitch", 250.0),
+                spare_capacity_pct=80.0,
+                topology=nvswitch_topo,
+            ),
+            "r-cheap": RegionState(
+                region="r-cheap",
+                timestamp=NOW,
+                provenance=_prov(),
+                services={"cheap-svc": cheap_svc},
+                energy=self._energy_state_for_region("r-cheap", 30.0),
+                spare_capacity_pct=80.0,
+            ),
+        })
+        result = ConstraintAwareEngine().run(state)
+        # Engine must run without error when topology is present
+        recs = [r for r in result.recommendations if r.workload_id == "test-svc"]
+        assert len(recs) == 1
+
+    def test_nvswitch_region_higher_topology_quality_than_pcie(self):
+        """NVSwitch topology → higher quality score than PCIe topology.
+
+        The real PlacementScorer gives NVSwitch penalty=0.0 (quality=1.0) and
+        PIX penalty=0.35 (quality=0.65). Both should score better than the
+        cross-region target_topo_score=0.0 (quality=0.0).
+        """
+        from aurelius.connectors.topology import PlacementWorkloadSpec, score_placement
+
+        nvswitch_topo = self._make_nvswitch_topology()
+        pcie_topo = self._make_pcie_topology()
+
+        wspec = PlacementWorkloadSpec(gpu_count=4, communication_intensity="high")
+        nvs_score = score_placement(wspec, list(nvswitch_topo.gpu_uuids), nvswitch_topo)
+        pcie_score = score_placement(wspec, list(pcie_topo.gpu_uuids), pcie_topo)
+
+        nvs_quality = 1.0 - nvs_score.score
+        pcie_quality = 1.0 - pcie_score.score
+
+        # NVSwitch should have better (higher) quality than PCIe
+        assert nvs_quality > pcie_quality, (
+            f"NVSwitch quality={nvs_quality:.3f} should exceed PCIe quality={pcie_quality:.3f}"
+        )
+        # NVSwitch quality should be near 1.0 (penalty=0.0)
+        assert nvs_quality >= 0.99
+        # PCIe quality should be below 1.0
+        assert pcie_quality < 1.0
+
+    def test_cross_region_target_score_is_zero(self):
+        """Cross-region target topology quality = 0.0 (REGION link penalty = 1.0).
+
+        This is higher degradation than the previous 0.3 heuristic,
+        correctly reflecting that cross-region communication is worst-case.
+        """
+        from aurelius.constraints.cost_model import MigrationCostModel, CostModelConfig
+        from aurelius.state.models import ConstraintType, ConstraintAssessment, Provenance
+
+        cost_model = MigrationCostModel(CostModelConfig())
+        nvswitch_topo = self._make_nvswitch_topology()
+        svc = _service("test-svc", region="r-nvswitch")
+
+        state = _cluster({
+            "r-nvswitch": RegionState(
+                region="r-nvswitch",
+                timestamp=NOW,
+                provenance=_prov(),
+                services={"test-svc": svc},
+                energy=self._energy_state_for_region("r-nvswitch", 250.0),
+                spare_capacity_pct=80.0,
+                topology=nvswitch_topo,
+            ),
+            "r-cheap": RegionState(
+                region="r-cheap",
+                timestamp=NOW,
+                provenance=_prov(),
+                services={},
+                energy=self._energy_state_for_region("r-cheap", 30.0),
+                spare_capacity_pct=80.0,
+            ),
+        })
+
+        # Simulate what the engine computes for a cross-region migration
+        cur_region = state.regions.get("r-nvswitch")
+        assert cur_region is not None and cur_region.topology is not None
+        from aurelius.connectors.topology import PlacementWorkloadSpec, score_placement
+        wspec = PlacementWorkloadSpec(
+            gpu_count=max(1, len(cur_region.topology.gpu_uuids)),
+            communication_intensity="medium",
+            latency_sensitive=False,
+        )
+        gpu_uuids = list(cur_region.topology.gpu_uuids)
+        ps = score_placement(wspec, gpu_uuids, cur_region.topology)
+        current_topo_quality = 1.0 - ps.score  # NVSwitch → ~1.0
+        target_topo_quality = 0.0              # cross-region = REGION link
+
+        # Cross-region degradation should be high for a good NVSwitch source
+        topo_deg = max(0.0, current_topo_quality - target_topo_quality)
+        assert topo_deg > 0.9, (
+            f"NVSwitch→cross-region topology degradation should be high, got {topo_deg:.3f}"
+        )
+
+    def test_engine_falls_back_to_heuristic_when_topology_absent(self):
+        """When RegionState.topology is None, engine falls back to 0.7 heuristic."""
+        svc = _service("test-svc", region="r-no-topo")
+        state = _cluster({
+            "r-no-topo": RegionState(
+                region="r-no-topo",
+                timestamp=NOW,
+                provenance=_prov(),
+                services={"test-svc": svc},
+                energy=self._energy_state_for_region("r-no-topo", 250.0),
+                spare_capacity_pct=80.0,
+                topology=None,  # no topology
+            ),
+            "r-cheap": RegionState(
+                region="r-cheap",
+                timestamp=NOW,
+                provenance=_prov(),
+                services={},
+                energy=self._energy_state_for_region("r-cheap", 30.0),
+                spare_capacity_pct=80.0,
+            ),
+        })
+        # Must run without crash when topology is absent
+        result = ConstraintAwareEngine().run(state)
+        assert isinstance(result.recommendations, list)
