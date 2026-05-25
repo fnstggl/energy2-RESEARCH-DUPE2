@@ -38,6 +38,7 @@ from ..state.models import (
     Provenance,
     Recommendation,
 )
+from ..connectors.topology import PlacementWorkloadSpec, score_placement
 from .classifier import ConstraintClassifier, ConstraintConfig
 from .cost_model import CostModelConfig, MigrationCostModel, RiskInputs
 
@@ -646,13 +647,27 @@ class ConstraintAwareEngine:
         if not chosen.is_noop and chosen.expected_savings_pct > 0:
             gross_savings = chosen.expected_savings_pct  # use pct as abstract cost unit
 
-        # Topology scores: proxy from region topology availability
+        # Topology scores: derived from PlacementScorer when topology data is available.
+        # Falls back to conservative heuristics (0.7 / 0.0) when topology is absent.
+        # score_placement returns 0.0 (ideal) … 1.0 (worst); quality = 1.0 - score.
         current_topo_score: Optional[float] = None
         target_topo_score: Optional[float] = None
         if service.region and chosen.target_region and chosen.target_region != service.region:
-            # Cross-region migration implies topology degradation
-            current_topo_score = 0.7  # HEURISTIC: decent within-region topology
-            target_topo_score = 0.3   # HEURISTIC: cross-region = worse topology
+            # Current-region topology quality from real placement scorer
+            cur_region = state.regions.get(service.region)
+            if cur_region and cur_region.topology and cur_region.topology.gpu_uuids:
+                wspec = PlacementWorkloadSpec(
+                    gpu_count=max(1, len(cur_region.topology.gpu_uuids)),
+                    communication_intensity="medium",
+                    latency_sensitive=is_latency_sensitive,
+                )
+                gpu_uuids = list(cur_region.topology.gpu_uuids)
+                ps = score_placement(wspec, gpu_uuids, cur_region.topology)
+                current_topo_score = 1.0 - ps.score  # invert: lower penalty = higher quality
+            else:
+                current_topo_score = 0.7  # fallback: decent within-region topology
+            # Cross-region link quality = 0.0 (REGION link has penalty=1.0 in _LINK_PENALTY)
+            target_topo_score = 0.0
 
         # Build state-conditioned risk inputs for the chosen action. The cost
         # model derives risk from these observed/predicted states rather than from

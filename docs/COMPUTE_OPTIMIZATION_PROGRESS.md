@@ -1635,7 +1635,95 @@ ruff: no new violations
 **Operationally complete for enterprise pilot readiness.** No mandatory implementation work remains.
 
 The only remaining optional improvements are:
-1. PlacementScorer integration into engine (replace 0.7/0.3 heuristic scores)
+1. ~~PlacementScorer integration into engine~~ **COMPLETE** (implemented in routine run 2026-05-25 third pass)
 2. MigrationGovernor Postgres persistence (in-memory sufficient for single-process)
 3. AureliusObserver auto-wired to engine (currently caller-driven)
 4. BacktestEngine wiring to ClusterState (legacy energy path is separate, not a gap)
+
+---
+
+## PlacementScorer Integration — Routine Run 2026-05-25 (Third Pass)
+
+### What was done
+
+Replaced the static `0.7/0.3` heuristic topology quality scores in `aurelius/constraints/engine.py` with real `PlacementScorer.score_placement()` calls when `RegionState.topology` is populated.
+
+**Before (heuristic):**
+```python
+current_topo_score = 0.7  # HEURISTIC: decent within-region topology
+target_topo_score = 0.3   # HEURISTIC: cross-region = worse topology
+```
+
+**After (real scoring):**
+```python
+# Current-region quality from real PlacementScorer
+cur_region = state.regions.get(service.region)
+if cur_region and cur_region.topology and cur_region.topology.gpu_uuids:
+    wspec = PlacementWorkloadSpec(...)
+    gpu_uuids = list(cur_region.topology.gpu_uuids)
+    ps = score_placement(wspec, gpu_uuids, cur_region.topology)
+    current_topo_score = 1.0 - ps.score  # invert: lower penalty = higher quality
+else:
+    current_topo_score = 0.7  # fallback when topology unavailable
+# Cross-region link quality = 0.0 (REGION link has penalty=1.0 in _LINK_PENALTY)
+target_topo_score = 0.0
+```
+
+**Why this is more correct:**
+- NVSwitch topology → quality ≈ 1.0 (penalty = 0.0); cross-region degradation = 1.0
+- PCIe (PIX) topology → quality ≈ 0.65 (penalty = 0.35); cross-region degradation = 0.65
+- Cross-region target quality = 0.0 (REGION link is the worst link type, penalty = 1.0)
+- Previous heuristic (0.3) underestimated cross-region topology cost
+
+**Safety:** Falls back to the prior 0.7 heuristic when `RegionState.topology` is absent, preserving safe degradation behavior for real connectors without topology data.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `aurelius/constraints/engine.py` | Import `PlacementWorkloadSpec`, `score_placement` from connectors; replace heuristic with real scorer; fall back to 0.7 when topology absent |
+| `tests/test_constraint_engine.py` | Import `TopologyState`, `TopologyLinkType`; add `TestPlacementScorerIntegration` (4 tests) |
+
+### Test Results
+
+```
+tests/test_constraint_engine.py:  57 passed (53 original + 4 new)
+Full constraint-aware suite:      842 passed, 0 failed
+optimizer-regression-check:       PASS (all 6 scenarios)
+validate-connectors:              10/10 PASSED
+ruff:                             All checks passed
+```
+
+### Why target_topo_score changes from 0.3 to 0.0
+
+The `_LINK_PENALTY` dict in `topology.py` defines `TopologyLinkType.REGION: 1.00`. A cross-region GPU placement uses REGION-level links (WAN/inter-DC). Quality = `1.0 - 1.0 = 0.0`. 
+
+The previous 0.3 heuristic underestimated the topology cost. The corrected 0.0 means the topology degradation fraction (30% of gross savings) now correctly penalizes cross-region migration from good topology clusters.
+
+For NVSwitch → cross-region: `topo_deg = 1.0 - 0.0 = 1.0` → topology_penalty = 30% of gross savings.
+Previously: `topo_deg = 0.7 - 0.3 = 0.4` → topology_penalty = 12% of gross savings.
+
+This makes Aurelius more conservative about recommending cross-region migrations from high-quality topology clusters — the correct enterprise-safe behavior.
+
+### Independent Completeness Audit (updated after PlacementScorer integration)
+
+| Phase | Claimed Status | Repo-Reality After This Audit | Evidence | Gaps | Final Status |
+|---|---|---|---|---|---|
+| 0 | COMPLETE | COMPLETE | Plan doc exists | None | COMPLETE |
+| 1 | COMPLETE | COMPLETE | 154 model/store/normalize tests | None | COMPLETE |
+| 2 | COMPLETE | COMPLETE | Prometheus connector, all tests pass | None | COMPLETE |
+| 3 | COMPLETE | COMPLETE | DCGM/vLLM/Triton/Ray adapters | Triton/Ray p99 = None by design | COMPLETE |
+| 4 | COMPLETE | COMPLETE | K8s connector, 47 tests | kubernetes pkg in prod env | COMPLETE |
+| 5 | COMPLETE | COMPLETE | Topology collector, 62 tests; PlacementScorer now wired to engine | nvidia-smi not in CI | COMPLETE |
+| 6 | COMPLETE | COMPLETE | Simulator + fakes, 93 tests | Thermal EMA proxy | COMPLETE |
+| 7 | COMPLETE | COMPLETE | Classifier, 74 tests, 5/6 scenarios match | Thresholds heuristic | COMPLETE |
+| 8 | COMPLETE | COMPLETE | Cost model, 47 tests, state-conditioned | Governor in-memory | COMPLETE |
+| 9 | COMPLETE | COMPLETE | Engine, 57 tests (4 new topology tests); topology heuristic replaced | BacktestEngine not wired (intentional) | COMPLETE |
+| 10 | COMPLETE | COMPLETE | 5 CLI commands, 58 tests | None | COMPLETE |
+| 11 | COMPLETE | COMPLETE | Benchmark framework, 58 tests, regression detection | Scenarios synthetic | COMPLETE |
+| 12 | COMPLETE | COMPLETE | Observability, 51 tests, CLI self-metrics | Observer caller-driven | COMPLETE |
+
+**Remaining optional work (non-blocking for pilot):**
+1. MigrationGovernor Postgres persistence
+2. AureliusObserver auto-wired to engine
+3. BacktestEngine wiring to ClusterState
