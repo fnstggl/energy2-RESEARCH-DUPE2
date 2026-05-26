@@ -16,34 +16,43 @@ Every implementation run must read that plan before deciding what to do next.
 
 ## Status Summary
 
-Current status: **PHASE 12 COMPLETE (components) — NOT PILOT-READY (system)**
+Current status: **READY_FOR_SHADOW_PILOT_WITH_REAL_TELEMETRY (recommendation-only, read-only)**
 
-Phases 1–12 built the constraint-aware *components* (state model, connectors,
-simulator, classifier, cost model, engine, CLI, reporting, benchmark, hardening),
-and their unit tests pass. **However, an independent end-to-end audit
-(2026-05-26) found that the system is not yet enterprise-pilot-ready.** The
-prior "enterprise-pilot-ready" claim was an overclaim. The corrected verdict is
-**READY_FOR_SIM_ONLY_DEMO**. See **"Independent Audit Findings (2026-05-26)"**
-below for evidence. The three blocking gaps:
+The audit-first run (2026-05-26) downgraded the system to
+`READY_FOR_SIM_ONLY_DEMO` after finding three product-level blockers. A
+follow-up repair run (Missions 1–3, 2026-05-26) resolved all three. The
+corrected verdict is **READY_FOR_SHADOW_PILOT_WITH_REAL_TELEMETRY**, with
+explicit remaining work below. It is **not** production-ready: all heuristics
+are uncalibrated and all KPI evidence is simulator-only.
 
-1. **Real telemetry cannot drive the engine.** No code assembles connector
-   output (Prometheus/DCGM/vLLM/Triton/Ray/K8s/topology) into a `ClusterState`.
-   The only `ClusterState` producer is the simulator. The connectors are
-   high-quality, fail-safe *components* that dead-end at leaf objects.
-2. **No demonstrated KPI improvement.** In all 6 canonical benchmark scenarios
-   the `constraint_aware` policy is byte-identical to `fifo` — it makes zero
-   KPI-changing interventions, because the benchmark only applies cross-region
-   migrations and the simulator only models `migrate_workload` (SPREAD / SCALE /
-   CONSOLIDATE / DEFER / REROUTE are computed but never applied or simulated).
-3. **Decisions are top-label-driven, not multi-constraint.** The engine acts
-   only on `binding_constraint`; meaningful secondary constraints are ignored
-   (e.g. it will CONSOLIDATE into warm nodes when utilization out-scores a real
-   secondary thermal signal — adversarial cases C2/D/E/G fail).
+**Blocker resolution (see "Product Repair (Missions 1–3, 2026-05-26)" below):**
 
-Phase-12 component work is complete; the **next mandatory work is a pilot-readiness
-phase** (connector→ClusterState assembler, multi-constraint action conditioning,
-and a benchmark that exercises non-migration actions). Optional future work is at
-the bottom of this tracker.
+1. ~~Real telemetry cannot drive the engine.~~ **RESOLVED.** `aurelius/state/assemble.py`
+   `build_cluster_state(...)` aggregates connector leaf objects
+   (GPU/service/node/topology/energy/thermal) into the canonical `ClusterState`,
+   with honest `is_partial`/`missing_sources`, staleness→confidence, NaN→None, and
+   unknown-reference detection. Proven end-to-end through the REAL DCGM/vLLM
+   adapters (fixture-backed integration test) and via `constraint-report --config`.
+2. ~~No demonstrated KPI improvement.~~ **RESOLVED (sim-only).** The benchmark
+   apply layer had a latent bug (UPPERCASE vs lowercase action names) so it
+   applied nothing. Fixed, plus simulator action methods (SCALE/SPREAD/DEFER/
+   CONSOLIDATE). `constraint_aware` now differs from FIFO in 4/6 scenarios:
+   thermal throttle −83%, p99 −15%, queue-wait 180s→0.23s, cost/token improves
+   in every acting scenario, **no SLA regression** anywhere.
+3. ~~Decisions are top-label-driven.~~ **RESOLVED.** The engine now reasons over
+   the full constraint score vector: protects materially-active SLA-risk
+   constraints, rejects actions that worsen them, and hard-blocks migrations to
+   unsafe destinations. Adversarial cases A–G pass (`tests/test_constraint_multi.py`).
+
+**Remaining before a real shadow pilot (NOT done):**
+- Calibrate all `# HEURISTIC` thresholds (classifier, cost model, operational-relief
+  weight, simulator physics) against real pilot telemetry.
+- Complete `build_cluster_state_from_connectors` per-cluster node/service mapping
+  (current orchestration is a working scaffold; multi-node topology mapping is manual).
+- Validate against a LIVE cluster (all KPI evidence is simulator-only).
+- Model within-region topology replacement (CHANGE_PLACEMENT) and node resume cost.
+- Simulator realism is still dev-grade (smooth queue arrivals, fixed latency tails,
+  cheap migrations, always-perfect telemetry) — see Synthetic Realism Audit.
 
 ---
 
@@ -145,6 +154,86 @@ aggregates connector leaf objects into `RegionState`/`ClusterState`, marking
 absent sources via `is_partial`/`missing_sources`) and an integration test that
 drives the classifier from fixture-backed connector output end-to-end. This
 unblocks every other claim (real telemetry, calibration, shadow pilot).
+
+> **DONE** in the repair run below.
+
+---
+
+## Product Repair (Missions 1–3, 2026-05-26)
+
+This run repaired the three product-level blockers from the audit above. All
+changes keep `recommendation_only` as default and introduce no cluster mutation.
+
+### Mission 1 — Real telemetry assembly path (`aurelius/state/assemble.py`)
+- `build_cluster_state(*, timestamp, gpu_states, inference_services, node_states,
+  topology_state, energy_states, thermal_states, prometheus_snapshot,
+  placement_states, source_metadata, default_region, ...)` aggregates connector
+  leaf objects into one canonical `ClusterState`.
+- Missing sources → `is_partial=True` + `missing_sources` (never fabricated 0s);
+  staleness → confidence degradation; NaN/inf → None; unknown region/node/GPU
+  references detected and recorded; sandbox provenance propagated.
+- `build_cluster_state_from_connectors(config, connectors, timestamp)` drives
+  connectors with per-source try/except (a failed connector → missing source,
+  not a crash).
+- CLI: `constraint-report --config <fixtures.json>` and `telemetry-check --config`
+  drive the REAL DCGM/vLLM adapters → assembler → ClusterState → classifier →
+  engine.
+- Tests: `tests/test_state_assemble.py` (23) incl. a real-adapter integration
+  path (simulator DCGM/vLLM Prometheus text → production adapters → assembler →
+  engine) and a connector-failure-handling test.
+- **Evidence chain:** connector fixture text → `DCGMAdapter.normalize_gpus` /
+  `VLLMAdapter.normalize_all_services` → `build_cluster_state` → `ConstraintClassifier`
+  → `ConstraintAwareEngine` → `Recommendation`. No simulator `get_cluster_state()`
+  involved.
+
+### Mission 2 — Holistic multi-constraint engine (`aurelius/constraints/engine.py`)
+- The engine consumes the full `scores` vector, not just `binding_constraint`.
+- Active-constraint candidate generation; when any SLA-risk constraint
+  (latency/queue/thermal/memory) is materially active (≥ `safety_active_threshold`,
+  HEURISTIC 0.20) the engine PROTECTS it and does not chase energy/cost migrations.
+- `_action_impact` estimates each candidate's signed impact across all families;
+  cross-constraint rejection drops any action that worsens a materially-active
+  SLA-risk constraint (disallowed-union across active constraints).
+- Hard destination-safety gate: a migration to a critically-low / unverifiable
+  destination is blocked regardless of gross savings (closes the
+  soft-penalty-ceiling escape).
+- Operational-relief value lets SPREAD/SCALE/REROUTE be recommended (previously
+  always KEEP'd for lack of monetary savings).
+- Tests: `tests/test_constraint_multi.py` (14) — adversarial A–G now pass; all 53
+  pre-existing engine tests preserved.
+
+### Mission 3 — Simulator/benchmark action realism
+- **Latent bug fixed:** the benchmark apply layer compared action types against
+  UPPERCASE names while `ActionType.value` is lowercase, so `constraint_aware`
+  /`sla_aware` applied NOTHING (the real reason they were byte-identical to FIFO).
+- Simulator action methods with documented realism + confidence:
+  `add_replica` (MODERATE), `spread_workload` (MODERATE), `defer_flexible_workload`
+  (LOW), `consolidate_low_priority` (LOW). Each mutates SimCluster so the next
+  tick's physics reflect it; semantics/limitations/calibration-needs are in
+  docstrings.
+- Benchmark dispatches every safe action type; regression detector now flags
+  cost on **cost-per-token** (throughput-normalized), not absolute cost.
+- Tests: `tests/test_simulator_actions.py` (11).
+- **Sim-only results vs FIFO:** thermal throttle 72→12 (−83%), p99 −15%, +37%
+  tokens, same cost, same SLA; queue p95 wait 180 000ms→233ms; cost/token improves
+  in all 4 acting scenarios; **no SLA regression** anywhere.
+  `latency_tail_kvcache` (node full → no idle GPU) and `topology_fragmentation`
+  (within-region replacement not modeled) correctly take no action.
+
+### Honest limits of this repair
+- All KPI improvements are **simulator-only**; the simulator is dev-grade and
+  optimizer-friendly (see Synthetic Realism Audit). Do not quote these as
+  customer savings.
+- All thresholds remain `# HEURISTIC`; none are calibrated to real telemetry.
+- `build_cluster_state_from_connectors` is a working scaffold; multi-node
+  per-service mapping for a specific cluster is still manual.
+- No live-cluster validation has been performed.
+
+### Next task after this run
+Run a read-only shadow pilot against real Prometheus/DCGM/K8s telemetry (via the
+assembler) to (a) validate the connector→ClusterState path on live data and
+(b) collect the telemetry needed to calibrate the HEURISTIC thresholds. Do not
+make production savings claims until that calibration is done.
 
 ---
 
@@ -1558,18 +1647,21 @@ The observer is NOT yet wired into the engine's auto-recording path. Callers mus
 
 ### What is production-ready
 
-> **Audit correction (2026-05-26):** "production-ready" here means "unit-tested
-> component," not "wired into the end-to-end path." Per the Independent Audit
-> Findings above, the connector/topology/ingestion entries are
-> **IMPLEMENTED_BUT_NOT_WIRED** — they parse real-shaped fixtures and emit
-> canonical leaf objects but are not assembled into a `ClusterState`, so they do
-> not yet drive the engine with live telemetry.
+> **Audit correction (2026-05-26), updated after Mission 1:** "production-ready"
+> here means "unit-tested component." The connector→`ClusterState` assembler now
+> EXISTS (`aurelius/state/assemble.py`) and is proven end-to-end through the real
+> DCGM/vLLM adapters with fixtures, so connectors CAN now drive the engine. What
+> remains is (a) per-cluster node/service mapping in
+> `build_cluster_state_from_connectors` and (b) validation against LIVE telemetry
+> — neither has been done, so this is "wired and fixture-validated," not
+> "validated on a real cluster."
 
 - Normalized ClusterState model (energy, thermal, topology, GPU, inference, queue)
-- Prometheus-native ingestion with fake server for offline testing *(not wired to ClusterState)*
-- DCGM, vLLM, Triton, Ray Serve, OTel adapters *(emit leaf objects; not assembled into ClusterState)*
-- Kubernetes read-only connector (with RBAC config) *(not wired to ClusterState)*
-- nvidia-smi topology parser and placement scorer *(not wired to ClusterState)*
+- Connector→ClusterState assembler (`build_cluster_state`) *(fixture-validated via real adapters; live-untested)*
+- Prometheus-native ingestion with fake server for offline testing
+- DCGM, vLLM, Triton, Ray Serve, OTel adapters *(emit leaf objects; now assembled via build_cluster_state)*
+- Kubernetes read-only connector (with RBAC config)
+- nvidia-smi topology parser and placement scorer
 - Synthetic cluster simulator (6 canonical scenarios, deterministic)
 - Constraint classifier (8 families, staleness-aware, hysteresis)
 - State-conditioned migration cost/risk model (SLA-hard-gate, no static multipliers)
