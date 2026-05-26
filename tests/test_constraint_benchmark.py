@@ -27,22 +27,21 @@ from typing import Any
 import pytest
 
 from aurelius.benchmarks import (
-    ConstraintBenchmarkRunner,
     BenchmarkRegressionChecker,
+    ConstraintBenchmarkRunner,
 )
 from aurelius.benchmarks.constraint_runner import (
-    BenchmarkResult,
-    POLICY_FIFO,
-    POLICY_CONSTRAINT_AWARE,
-    POLICY_GREEDY_ENERGY,
     ALL_POLICIES,
+    POLICY_CONSTRAINT_AWARE,
+    POLICY_FIFO,
+    POLICY_GREEDY_ENERGY,
+    BenchmarkResult,
 )
-from aurelius.benchmarks.report import build_scorecard, AggregatedKPI, TickKPI
-from aurelius.benchmarks.scenario_lock import check_lockfile, _collect_hashes
+from aurelius.benchmarks.report import AggregatedKPI, TickKPI, build_scorecard
+from aurelius.benchmarks.scenario_lock import _collect_hashes, check_lockfile
 from aurelius.simulation.cluster.engine import ClusterSimulator
 from aurelius.simulation.cluster.scenarios import load_scenario
-from aurelius.state.models import Recommendation, Provenance
-
+from aurelius.state.models import Provenance, Recommendation
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -109,9 +108,16 @@ class TestRunnerBasic:
         assert isinstance(r.is_valid, bool)
 
     def test_run_all_scenarios_no_crash(self, runner_minimal):
-        """All 6 canonical scenarios run without raising."""
+        """All registered scenarios run without raising.
+
+        Covers the 6 canonical constraint-detection scenarios plus the KV-cache
+        realism validation scenarios; the count tracks the scenario registry.
+        """
+        from aurelius.simulation.cluster.scenarios import list_scenarios
+
         results = runner_minimal.run_all_scenarios(seed=42, steps=8)
-        assert len(results) == 6
+        assert len(results) == len(list_scenarios())
+        assert len(results) >= 6
         for name, res in results.items():
             assert res is not None, f"Scenario {name!r} returned None"
 

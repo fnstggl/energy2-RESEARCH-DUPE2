@@ -499,6 +499,184 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
     },
 
     # -----------------------------------------------------------------------
+    # 4b. Prefix-affinity energy arbitrage — cache-aware routing should win
+    # -----------------------------------------------------------------------
+    # A high-prefix-overlap inference workload with a long shared prefix, free to
+    # migrate, in an anti-correlated energy market. Naive energy-greedy rerouting
+    # chases cheap power across regions, loses the warm prefix cache on every hop
+    # (cold_route_penalty), and pays it back in TTFT — so it should LOSE on
+    # latency vs the affinity-preserving constraint-aware policy.
+    "prefix_affinity_energy_arbitrage": {
+        "scenario_name": "prefix_affinity_energy_arbitrage",
+        "description": (
+            "High-prefix-overlap inference, migration allowed, anti-correlated "
+            "energy. Expected: cache-aware affinity preservation beats naive "
+            "energy-greedy rerouting on TTFT/p99 (cold-route penalties dominate)."
+        ),
+        "seed": 42,
+        "tick_duration_hours": 1.0,
+        "expected_primary_constraint": "energy_bound",
+        "expected_events": ["energy_price_spike"],
+        "scenario_version": "v1",
+        "simulator_version": "1.0.0",
+        "regions": [
+            {
+                "region_id": "us-east",
+                "energy_price_trace": [
+                    45, 48, 52, 80, 110, 95, 70, 55, 48, 45, 43, 42,
+                    48, 55, 62, 75, 120, 140, 130, 100, 75, 60, 52, 48,
+                ],
+                "ambient_temp_c": 22.0,
+                "network_latency_to": {"us-west": 70},
+                "nodes": [
+                    {
+                        "node_id": "us-east-node0",
+                        "gpu_type": "h100-sxm5-80gb",
+                        "gpu_count": 4,
+                        "topology_class": "nvswitch",
+                        "rack_id": "us-east-rack0",
+                        "zone": "us-east-1a",
+                    }
+                ],
+                "queues": [
+                    {
+                        "queue_id": "us-east-q0",
+                        "service_id": "chat-affinity",
+                        "base_arrival_rate_per_sec": 2.0,
+                        "diurnal_amplitude": 0.2,
+                    }
+                ],
+            },
+            {
+                "region_id": "us-west",
+                "energy_price_trace": [
+                    60, 55, 50, 48, 45, 42, 40, 42, 45, 50, 55, 60,
+                    58, 52, 48, 45, 43, 42, 45, 50, 55, 60, 62, 62,
+                ],
+                "ambient_temp_c": 18.0,
+                "network_latency_to": {"us-east": 70},
+                "nodes": [
+                    {
+                        "node_id": "us-west-node0",
+                        "gpu_type": "h100-sxm5-80gb",
+                        "gpu_count": 4,
+                        "topology_class": "nvswitch",
+                        "rack_id": "us-west-rack0",
+                        "zone": "us-west-2a",
+                    }
+                ],
+                "queues": [
+                    {
+                        "queue_id": "us-west-q0",
+                        "service_id": "chat-affinity-west",
+                        "base_arrival_rate_per_sec": 0.3,
+                        "diurnal_amplitude": 0.2,
+                    }
+                ],
+            },
+        ],
+        "workloads": [
+            {
+                "workload_id": "chat-affinity-wl",
+                "service_id": "chat-affinity",
+                "workload_type": "inference",
+                "priority_tier": "standard",
+                "region_id": "us-east",
+                "gpu_count_required": 2,
+                "target_util_pct": 65.0,
+                "communication_intensity": "low",
+                "migration_allowed": True,
+                # Not hard latency-sensitive (so naive energy-greedy WILL reroute
+                # it), but it still carries an SLA and a warm prefix cache to lose.
+                "latency_sensitive": False,
+                "latency_sla_p99_ms": 4000.0,
+                # High overlap + long shared prefix → lots to lose on a cold hop.
+                "model_kv_profile": "llama3-8b",
+                "prefix_overlap": 0.85,
+                "avg_seq_len_tokens": 4096,
+            }
+        ],
+        "events": [
+            {"tick": 10, "type": "energy_price_spike", "region_id": "us-east",
+             "multiplier": 2.5},
+            {"tick": 14, "type": "energy_price_spike_end", "region_id": "us-east"},
+        ],
+    },
+
+    # -----------------------------------------------------------------------
+    # 4c. KV exhaustion / preemption storm — pressure → 1.0
+    # -----------------------------------------------------------------------
+    # Long contexts + a sustained arrival surge on a workload whose weights leave
+    # little KV headroom drive KV pressure into the preemption region: preemption
+    # count climbs, recompute penalties spike TTFT, and tails explode.
+    "kv_exhaustion_preemption_storm": {
+        "scenario_name": "kv_exhaustion_preemption_storm",
+        "description": (
+            "Long-context workload with thin KV headroom under an arrival surge. "
+            "Expected: KV pressure enters the preemption region; preemptions and "
+            "recompute spike TTFT/p99 (decode instability under memory pressure)."
+        ),
+        "seed": 42,
+        "tick_duration_hours": 1.0,
+        "expected_primary_constraint": "memory_bound_indirect",
+        "expected_events": ["queue_surge"],
+        "scenario_version": "v1",
+        "simulator_version": "1.0.0",
+        "serving_config": {"enable_bursts": False},
+        "regions": [
+            {
+                "region_id": "us-east",
+                "energy_price_trace": [50.0] * 24,
+                "ambient_temp_c": 22.0,
+                "nodes": [
+                    {
+                        "node_id": "us-east-node0",
+                        "gpu_type": "a100-sxm4-80gb",
+                        "gpu_count": 2,
+                        "topology_class": "nvswitch",
+                        "rack_id": "us-east-rack0",
+                        "zone": "us-east-1a",
+                    }
+                ],
+                "queues": [
+                    {
+                        "queue_id": "us-east-q0",
+                        "service_id": "longctx-inference",
+                        "base_arrival_rate_per_sec": 3.0,
+                        "diurnal_amplitude": 0.1,
+                    }
+                ],
+            }
+        ],
+        "workloads": [
+            {
+                "workload_id": "longctx-wl",
+                "service_id": "longctx-inference",
+                "workload_type": "inference",
+                "priority_tier": "critical",
+                "region_id": "us-east",
+                "gpu_count_required": 2,
+                "target_util_pct": 80.0,
+                "communication_intensity": "low",
+                "migration_allowed": False,
+                "latency_sensitive": True,
+                "latency_sla_p99_ms": 3000.0,
+                # Classic MHA (32 KV heads) + very long context + large weights
+                # leaving thin KV headroom → high KV bytes/token → pressure → 1.
+                "model_kv_profile": "llama2-7b",
+                "prefix_overlap": 0.2,
+                "avg_seq_len_tokens": 8192,
+                "memory_required_bytes": 64424509440,
+            }
+        ],
+        "events": [
+            {"tick": 6, "type": "queue_surge", "service_id": "longctx-inference",
+             "multiplier": 4.0},
+            {"tick": 18, "type": "queue_surge_end", "service_id": "longctx-inference"},
+        ],
+    },
+
+    # -----------------------------------------------------------------------
     # 5. Topology fragmentation — H100 NVSwitch vs PCIe
     # -----------------------------------------------------------------------
     "topology_fragmentation_h100": {

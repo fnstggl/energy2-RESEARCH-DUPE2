@@ -104,6 +104,15 @@ class TickKPI:
     thermal_throttle_gpu_count: int
     migration_count: int
     mean_topology_score: float
+    # KV-cache / prefix-affinity / locality realism KPIs (optional)
+    kv_pressure_max: Optional[float] = None
+    prefix_hit_rate_mean: Optional[float] = None
+    preemption_count: int = 0
+    cold_reroute_count: int = 0
+    cache_eviction_count: int = 0
+    locality_confidence_mean: Optional[float] = None
+    cache_fragmentation_frac_mean: Optional[float] = None
+    ttft_p99_ms: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -121,6 +130,14 @@ class TickKPI:
             "thermal_throttle_gpu_count": self.thermal_throttle_gpu_count,
             "migration_count": self.migration_count,
             "mean_topology_score": self.mean_topology_score,
+            "kv_pressure_max": self.kv_pressure_max,
+            "prefix_hit_rate_mean": self.prefix_hit_rate_mean,
+            "preemption_count": self.preemption_count,
+            "cold_reroute_count": self.cold_reroute_count,
+            "cache_eviction_count": self.cache_eviction_count,
+            "locality_confidence_mean": self.locality_confidence_mean,
+            "cache_fragmentation_frac_mean": self.cache_fragmentation_frac_mean,
+            "ttft_p99_ms": self.ttft_p99_ms,
         }
 
 
@@ -141,6 +158,15 @@ class AggregatedKPI:
     total_thermal_throttle_ticks: int
     total_migrations: int
     mean_topology_score: float
+    # KV-cache / prefix-affinity / locality realism KPIs (optional)
+    kv_pressure_max: Optional[float] = None
+    prefix_hit_rate_mean: Optional[float] = None
+    total_preemptions: int = 0
+    total_cold_reroutes: int = 0
+    total_cache_evictions: int = 0
+    locality_confidence_mean: Optional[float] = None
+    cache_fragmentation_frac_mean: Optional[float] = None
+    ttft_p99_ms: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -169,6 +195,27 @@ class AggregatedKPI:
             "total_thermal_throttle_ticks": self.total_thermal_throttle_ticks,
             "total_migrations": self.total_migrations,
             "mean_topology_score": round(self.mean_topology_score, 3),
+            "kv_pressure_max": (
+                round(self.kv_pressure_max, 3) if self.kv_pressure_max is not None else None
+            ),
+            "prefix_hit_rate_mean": (
+                round(self.prefix_hit_rate_mean, 3)
+                if self.prefix_hit_rate_mean is not None else None
+            ),
+            "total_preemptions": self.total_preemptions,
+            "total_cold_reroutes": self.total_cold_reroutes,
+            "total_cache_evictions": self.total_cache_evictions,
+            "locality_confidence_mean": (
+                round(self.locality_confidence_mean, 3)
+                if self.locality_confidence_mean is not None else None
+            ),
+            "cache_fragmentation_frac_mean": (
+                round(self.cache_fragmentation_frac_mean, 4)
+                if self.cache_fragmentation_frac_mean is not None else None
+            ),
+            "ttft_p99_ms": (
+                round(self.ttft_p99_ms, 1) if self.ttft_p99_ms is not None else None
+            ),
         }
 
 

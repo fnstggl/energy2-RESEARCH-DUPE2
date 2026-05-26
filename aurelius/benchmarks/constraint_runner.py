@@ -379,6 +379,17 @@ def _aggregate_kpis(policy_name: str, tick_kpis: list[TickKPI]) -> AggregatedKPI
     qwait_vals = [k.queue_wait_p95_ms for k in tick_kpis if k.queue_wait_p95_ms is not None]
     topo_vals = [k.mean_topology_score for k in tick_kpis]
 
+    kvp_vals = [k.kv_pressure_max for k in tick_kpis if k.kv_pressure_max is not None]
+    hit_vals = [k.prefix_hit_rate_mean for k in tick_kpis if k.prefix_hit_rate_mean is not None]
+    loc_vals = [
+        k.locality_confidence_mean for k in tick_kpis if k.locality_confidence_mean is not None
+    ]
+    frag_vals = [
+        k.cache_fragmentation_frac_mean for k in tick_kpis
+        if k.cache_fragmentation_frac_mean is not None
+    ]
+    ttft99_vals = [k.ttft_p99_ms for k in tick_kpis if k.ttft_p99_ms is not None]
+
     return AggregatedKPI(
         policy_name=policy_name,
         total_energy_cost=total_cost,
@@ -394,6 +405,14 @@ def _aggregate_kpis(policy_name: str, tick_kpis: list[TickKPI]) -> AggregatedKPI
         total_thermal_throttle_ticks=sum(k.thermal_throttle_gpu_count for k in tick_kpis),
         total_migrations=tick_kpis[-1].migration_count if tick_kpis else 0,
         mean_topology_score=sum(topo_vals) / len(topo_vals) if topo_vals else 1.0,
+        kv_pressure_max=max(kvp_vals) if kvp_vals else None,
+        prefix_hit_rate_mean=sum(hit_vals) / len(hit_vals) if hit_vals else None,
+        total_preemptions=sum(k.preemption_count for k in tick_kpis),
+        total_cold_reroutes=tick_kpis[-1].cold_reroute_count if tick_kpis else 0,
+        total_cache_evictions=sum(k.cache_eviction_count for k in tick_kpis),
+        locality_confidence_mean=sum(loc_vals) / len(loc_vals) if loc_vals else None,
+        cache_fragmentation_frac_mean=sum(frag_vals) / len(frag_vals) if frag_vals else None,
+        ttft_p99_ms=max(ttft99_vals) if ttft99_vals else None,
     )
 
 
@@ -413,6 +432,14 @@ def _tick_metrics_to_kpi(tm: TickMetrics) -> TickKPI:
         thermal_throttle_gpu_count=tm.thermal_throttle_gpu_count,
         migration_count=tm.migration_count,
         mean_topology_score=tm.mean_topology_score,
+        kv_pressure_max=tm.kv_pressure_max,
+        prefix_hit_rate_mean=tm.prefix_hit_rate_mean,
+        preemption_count=tm.preemption_count,
+        cold_reroute_count=tm.cold_reroute_count,
+        cache_eviction_count=tm.cache_eviction_count,
+        locality_confidence_mean=tm.locality_confidence_mean,
+        cache_fragmentation_frac_mean=tm.cache_fragmentation_frac_mean,
+        ttft_p99_ms=tm.ttft_p99_ms,
     )
 
 
