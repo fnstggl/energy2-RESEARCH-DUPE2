@@ -33,8 +33,10 @@ from ...state.models import (
     TopologyLinkType,
     TopologyState,
 )
+from . import kv_cache as kvc
 from . import serving
-from .calibration import serving_value
+from .cache_model import WorkloadCacheState
+from .calibration import kv_value, serving_value
 from .model import (
     GPU_PROFILES,
     GPUProfile,
@@ -94,6 +96,19 @@ class TickMetrics:
     thermal_throttle_gpu_count: int
     migration_count: int
     mean_topology_score: float
+    # KV-cache / prefix-affinity / locality realism KPIs
+    kv_pressure_max: Optional[float] = None
+    prefix_hit_rate_mean: Optional[float] = None
+    preemption_count: int = 0
+    recompute_count: int = 0
+    cold_reroute_count: int = 0
+    cache_eviction_count: int = 0
+    locality_confidence_mean: Optional[float] = None
+    cache_fragmentation_frac_mean: Optional[float] = None
+    routing_affinity_score_mean: Optional[float] = None
+    ttft_p50_ms: Optional[float] = None
+    ttft_p95_ms: Optional[float] = None
+    ttft_p99_ms: Optional[float] = None
     is_sandbox: bool = True
 
 
@@ -326,10 +341,26 @@ class ClusterSimulator:
             migration_allowed=w_cfg.get("migration_allowed", True),
             kv_cache_usage_frac=w_cfg.get("kv_cache_usage_frac", 0.3),
             prefix_cache_hit_rate_frac=w_cfg.get("prefix_cache_hit_rate_frac", 0.5),
+            model_kv_profile=w_cfg.get("model_kv_profile", "llama3-8b"),
+            prefix_overlap=w_cfg.get("prefix_overlap", 0.5),
+            avg_seq_len_tokens=w_cfg.get("avg_seq_len_tokens", 1024),
         )
 
         # Place workload onto GPUs in the target region
         self._place_workload(workload, cluster)
+
+        # Initialize first-class KV-cache / locality state on its home route.
+        cfg = self._serving_config or None
+        cache = WorkloadCacheState()
+        cache.locality.confidence = kv_value("locality_confidence_init", cfg)
+        cache.prefix.overlap = workload.prefix_overlap
+        cache.prefix.shared_prefix_tokens = (
+            workload.prefix_overlap * workload.avg_seq_len_tokens
+        )
+        cache.routing.home_region = workload.region_id
+        cache.routing.home_gpu_ids = tuple(workload.gpu_ids)
+        cache.routing.telemetry_tier = (cfg or {}).get("kv_telemetry_tier", "high")
+        workload.cache = cache
         return workload
 
     def _place_workload(self, workload: SimWorkload, cluster: SimCluster) -> None:
@@ -371,8 +402,8 @@ class ClusterSimulator:
         self._update_workload_targets(cluster)
         self._update_gpu_state(cluster)
         self._update_thermal(cluster)
+        self._update_kv_cache(cluster)
         self._update_queues(cluster)
-        self._update_cache_proxy(cluster)
         self._update_cost_accounting(cluster)
 
         ts = self._tick_timestamp(cluster.tick)
@@ -419,8 +450,8 @@ class ClusterSimulator:
             self._update_workload_targets(cluster)
             self._update_gpu_state(cluster)
             self._update_thermal(cluster)
+            self._update_kv_cache(cluster)
             self._update_queues(cluster)
-            self._update_cache_proxy(cluster)
             self._update_cost_accounting(cluster)
             ts = self._tick_timestamp(cluster.tick)
             m = self._compute_tick_metrics(cluster, ts)
@@ -527,16 +558,18 @@ class ClusterSimulator:
                 for wl in cluster.workloads.values():
                     if service_id and wl.service_id != service_id:
                         continue
-                    wl.kv_cache_usage_frac = cache_usage
-                    wl.prefix_cache_hit_rate_frac = hit_rate
+                    # Force a KV-pressure floor and a depressed prefix hit rate;
+                    # the KV realism layer honours these overrides each tick.
+                    wl.kv_pressure_override = cache_usage
+                    wl.prefix_hit_override = hit_rate
 
             elif etype == "kv_cache_pressure_end":
                 service_id = event.get("service_id")
                 for wl in cluster.workloads.values():
                     if service_id and wl.service_id != service_id:
                         continue
-                    wl.kv_cache_usage_frac = 0.3
-                    wl.prefix_cache_hit_rate_frac = 0.5
+                    wl.kv_pressure_override = None
+                    wl.prefix_hit_override = None
 
     def _update_energy_prices(self, cluster: SimCluster) -> None:
         tick = cluster.tick
@@ -727,7 +760,15 @@ class ClusterSimulator:
 
                 # Batching/replica tradeoff: spreading the same load over more
                 # replicas pushes each below the batching knee → lower tput/GPU.
-                batch_eff = serving.batching_efficiency(active_seqs, replicas, cfg)
+                # Cache-aware: shared prefixes pack batches better; KV pressure
+                # thins them.
+                base_eff = serving.batching_efficiency(active_seqs, replicas, cfg)
+                cache = workload.cache
+                kv_pressure = cache.pressure.pressure if cache else 0.0
+                hit_rate = cache.prefix.hit_rate if cache else 0.0
+                batch_eff = kvc.cache_aware_batch_efficiency(
+                    base_eff, hit_rate, kv_pressure, cfg
+                )
                 tokens_per_sec *= batch_eff
 
                 total_tokens_per_sec = tokens_per_sec * replicas
@@ -762,14 +803,22 @@ class ClusterSimulator:
                 # batching-efficiency loss applied to throughput above.)
                 active_per_replica = active_seqs / replicas
 
-                # Decomposed TTFT: queue + prefill + active-seq contention + KV stall.
+                # Decomposed TTFT = queue + prefill + active-seq contention + KV
+                # stall + cold-route penalty + recompute penalty. Prefill shrinks
+                # under prefix reuse; the contention/KV part is amplified by KV
+                # pressure; cold reroutes and preemption add explicit penalties.
                 prompt_tokens = _TOKENS_PER_REQUEST  # representative; heavy-tailed dist = remaining gap
-                kv = workload.kv_cache_usage_frac
-                # Cold-start/warmup is NOT applied to TTFT directly: it already
-                # flows through reduced service rate → higher queue wait → higher
-                # TTFT. Dividing TTFT again would double-count it (warmup_factor=1).
-                ttft_p50 = serving.ttft_ms(mean_wait_ms, prompt_tokens, active_per_replica, kv,
-                                           1.0, cfg)
+                kv = min(1.0, kv_pressure)
+                savings = cache.prefix.prefill_savings_frac if cache else 0.0
+                eff_prompt = prompt_tokens * (1.0 - savings)   # prefix reuse cuts prefill
+                # Compute part only (queue wait passed as 0), then amplify by KV
+                # pressure and add cache penalties; finally add the queue wait.
+                ttft_compute = serving.ttft_ms(0.0, eff_prompt, active_per_replica, kv, 1.0, cfg)
+                ttft_compute *= kvc.pressure_ttft_multiplier(kv, cfg)
+                if cache is not None:
+                    ttft_compute += cache.affinity.cold_route_penalty_ms
+                    ttft_compute += cache.preemption.recompute_penalty_ms
+                ttft_p50 = mean_wait_ms + ttft_compute
                 queue.ttft_p50_ms = ttft_p50
                 queue.ttft_p95_ms = ttft_p50 * p95_mult
                 queue.ttft_p99_ms = ttft_p50 * p99_mult
@@ -804,40 +853,143 @@ class ClusterSimulator:
                 queue.tokens_per_second = total_tokens_per_sec
                 queue.requests_per_second = service_rate
 
-    def _update_cache_proxy(self, cluster: SimCluster) -> None:
-        """Update KV cache and prefix cache hit rate proxies."""
+                # Remember offered concurrency so the NEXT tick's KV pressure is
+                # computed from it (deterministic pre/post ordering).
+                if cache is not None:
+                    cache.active_seqs_prev = float(active_seqs)
+
+    def _update_kv_cache(self, cluster: SimCluster) -> None:
+        """Realistic KV-cache / prefix-affinity / memory-pressure update.
+
+        Runs BEFORE _update_queues so this tick's queue physics see the pressure,
+        prefix hit rate, and pending cold-route/recompute penalties. Pressure is
+        computed from last tick's offered concurrency (cache.active_seqs_prev),
+        keeping the pre/post update order deterministic. See kv_cache.py.
+        """
+        cfg = self._serving_config or None
         for region in cluster.regions.values():
             for queue in region.queues:
-                workload = self._find_workload_for_service(
+                wl = self._find_workload_for_service(
                     queue.service_id, region.region_id, cluster
                 )
-                if workload is None:
+                if wl is None or wl.cache is None:
                     continue
+                cache = wl.cache
+                profile = kvc.resolve_kv_profile(wl.model_kv_profile, cfg)
 
-                # KV cache builds up as memory pressure increases
-                mem_used_frac = 0.0
-                gpus = self._workload_gpus(workload, cluster)
-                if gpus:
-                    mem_used_frac = sum(
-                        g.memory_used_bytes / g.profile.memory_total_bytes for g in gpus
-                    ) / len(gpus)
-
-                workload.kv_cache_usage_frac = max(
-                    workload.kv_cache_usage_frac, mem_used_frac * 0.8
+                # --- KV memory + pressure (scaling law) -----------------------
+                batch = max(1.0, cache.active_seqs_prev)
+                seq_len = max(1.0, float(wl.avg_seq_len_tokens))
+                gpus = self._workload_gpus(wl, cluster)
+                replicas = max(1, len(gpus))
+                per_gpu_total = (
+                    gpus[0].profile.memory_total_bytes if gpus else 80 * 1024**3
                 )
-                workload.kv_cache_usage_frac = min(workload.kv_cache_usage_frac, 0.98)
+                free_after_weights = max(1.0, per_gpu_total - wl.memory_required_bytes)
+                budget = free_after_weights * kv_value("kv_reserved_budget_frac", cfg) * replicas
 
-                # Prefix cache hit rate decreases after migration (cold start)
-                if workload.cold_start_warmup_ticks_remaining > 0:
-                    warmup_pct = (
-                        workload.cold_start_warmup_ticks_remaining / _COLD_START_WARMUP_TICKS
-                    )
-                    workload.prefix_cache_hit_rate_frac = max(
-                        0.05, workload.prefix_cache_hit_rate_frac * (1.0 - warmup_pct)
-                    )
+                allocated = kvc.kv_bytes(profile, batch, seq_len)
+                frag = kvc.fragmentation_frac(batch, seq_len, profile, cfg)
+                allocated_with_slack = (
+                    allocated / (1.0 - frag) if frag < 0.999 else allocated
+                )
+                pressure = kvc.kv_pressure(allocated_with_slack, budget)
+                if wl.kv_pressure_override is not None:
+                    pressure = max(pressure, wl.kv_pressure_override)
+                region_name = kvc.pressure_region(pressure, cfg)
 
-                queue.kv_cache_usage_pct = workload.kv_cache_usage_frac * 100.0
-                queue.prefix_cache_hit_rate_pct = workload.prefix_cache_hit_rate_frac * 100.0
+                cache.kv.allocated_bytes = allocated_with_slack
+                cache.kv.reserved_budget_bytes = budget
+                cache.kv.batch_size = batch
+                cache.kv.avg_seq_len = seq_len
+                cache.kv.occupancy_frac = min(
+                    1.0, allocated_with_slack / max(1.0, per_gpu_total * replicas)
+                )
+                cache.pressure.pressure = pressure
+                cache.pressure.region = region_name
+                cache.fragmentation.slack_frac = frag
+                cache.fragmentation.slack_bytes = max(0.0, allocated_with_slack - allocated)
+
+                # --- Locality confidence (reuse-driven warmup / decay) --------
+                in_cold_window = cache.affinity.cold_warmup_ticks_remaining > 0
+                reused = not in_cold_window
+                cache.locality.confidence = kvc.locality_confidence_step(
+                    cache.locality.confidence, reused, cfg
+                )
+                # High pressure thrashes the cache (LRU eviction) → confidence dips.
+                if region_name in (kvc.PressureRegion.THROTTLING, kvc.PressureRegion.PREEMPTION):
+                    cache.locality.confidence *= 1.0 - kv_value(
+                        "locality_confidence_decay", cfg
+                    )
+                cache.warmup.warm = cache.locality.confidence > 0.7
+                cache.warmup.ticks_warm = (
+                    cache.warmup.ticks_warm + 1 if reused and cache.warmup.warm else 0
+                )
+
+                # --- Prefix hit rate (overlap × locality), honoring override --
+                cache.prefix.overlap = wl.prefix_overlap
+                cache.prefix.shared_prefix_tokens = wl.prefix_overlap * wl.avg_seq_len_tokens
+                hit = kvc.prefix_hit_rate(wl.prefix_overlap, cache.locality.confidence, cfg)
+                if wl.prefix_hit_override is not None:
+                    hit = min(hit, wl.prefix_hit_override)
+                cache.prefix.hit_rate = hit
+                cache.prefix.prefill_savings_frac = kvc.prefill_savings_frac(hit, cfg)
+
+                # --- Preemption / recompute / eviction under exhaustion -------
+                seq_bytes = max(1.0, kvc.kv_bytes(profile, 1.0, seq_len))
+                overflow_seqs = int(max(0.0, allocated_with_slack - budget) / seq_bytes)
+                prob = kvc.preemption_probability(pressure, cfg)
+                preempted = overflow_seqs
+                if prob > 0.0 and self._rng.random() < prob:
+                    preempted = max(preempted, 1)
+                if preempted > 0:
+                    cache.preemption.last_tick_count = preempted
+                    cache.preemption.cumulative_count += preempted
+                    cache.preemption.recompute_penalty_ms = kvc.recompute_penalty_ms(
+                        preempted, seq_len, cfg
+                    )
+                    cache.eviction.last_tick_evictions = preempted
+                    cache.eviction.cumulative_evictions += preempted
+                else:
+                    cache.preemption.last_tick_count = 0
+                    cache.eviction.last_tick_evictions = 0
+                    # Pending recompute penalty drains over subsequent ticks.
+                    cache.preemption.recompute_penalty_ms *= 0.5
+
+                # --- Cold-route penalty decay over the warmup window ----------
+                if cache.affinity.cold_warmup_ticks_remaining > 0:
+                    cache.affinity.cold_warmup_ticks_remaining -= 1
+                    cache.affinity.cold_route_penalty_ms *= 0.5
+                else:
+                    cache.affinity.cold_route_penalty_ms = 0.0
+
+                # --- Routing affinity score -----------------------------------
+                on_home = wl.region_id == cache.routing.home_region
+                cache.routing.affinity_score = (
+                    cache.locality.confidence if on_home else cache.locality.confidence * 0.3
+                )
+
+                # --- Back-compat fracs + telemetry-facing queue fields --------
+                wl.kv_cache_usage_frac = min(0.98, pressure)
+                wl.prefix_cache_hit_rate_frac = hit
+                tier = cache.routing.telemetry_tier
+                # Missing/low telemetry hides KV internals (but NOT 'no pressure').
+                if tier == "low":
+                    queue.kv_cache_usage_pct = None
+                    queue.prefix_cache_hit_rate_pct = None
+                    queue.kv_pressure = None
+                    queue.kv_pressure_region = None
+                    queue.preemptions_total = None
+                    queue.cache_fragmentation_frac = None
+                else:
+                    # kv_cache_usage mirrors vLLM gpu_cache_usage_perc — KV-block
+                    # utilization (≈ pressure clamped to 1), NOT total-GPU-mem.
+                    queue.kv_cache_usage_pct = min(1.0, pressure) * 100.0
+                    queue.prefix_cache_hit_rate_pct = hit * 100.0
+                    queue.kv_pressure = pressure
+                    queue.kv_pressure_region = region_name
+                    queue.preemptions_total = float(cache.preemption.cumulative_count)
+                    queue.cache_fragmentation_frac = frag
 
     def _update_cost_accounting(self, cluster: SimCluster) -> None:
         """Accumulate cost and energy metrics for this tick."""
@@ -868,6 +1020,9 @@ class ClusterSimulator:
         util_values: list[float] = []
         p99_values: list[float] = []
         p95_wait_values: list[float] = []
+        ttft_p50_values: list[float] = []
+        ttft_p95_values: list[float] = []
+        ttft_p99_values: list[float] = []
         throttle_count = 0
 
         for region in cluster.regions.values():
@@ -887,6 +1042,36 @@ class ClusterSimulator:
                     p99_values.append(queue.latency_p99_ms)
                 if queue.queue_wait_p95_ms is not None:
                     p95_wait_values.append(queue.queue_wait_p95_ms)
+                if queue.ttft_p50_ms is not None:
+                    ttft_p50_values.append(queue.ttft_p50_ms)
+                if queue.ttft_p95_ms is not None:
+                    ttft_p95_values.append(queue.ttft_p95_ms)
+                if queue.ttft_p99_ms is not None:
+                    ttft_p99_values.append(queue.ttft_p99_ms)
+
+        # Cache / locality KPIs aggregated across workloads.
+        kv_pressures: list[float] = []
+        hit_rates: list[float] = []
+        loc_confs: list[float] = []
+        frag_fracs: list[float] = []
+        affinity_scores: list[float] = []
+        preemption_count = 0
+        recompute_count = 0
+        cold_reroute_count = 0
+        eviction_count = 0
+        for wl in cluster.workloads.values():
+            c = wl.cache
+            if c is None:
+                continue
+            kv_pressures.append(c.pressure.pressure)
+            hit_rates.append(c.prefix.hit_rate)
+            loc_confs.append(c.locality.confidence)
+            frag_fracs.append(c.fragmentation.slack_frac)
+            affinity_scores.append(c.routing.affinity_score)
+            preemption_count += c.preemption.last_tick_count
+            recompute_count += 1 if c.preemption.recompute_penalty_ms > 0 else 0
+            cold_reroute_count += c.affinity.cold_reroute_count
+            eviction_count += c.eviction.last_tick_evictions
 
         mean_util = sum(util_values) / len(util_values) if util_values else 0.0
         p99_lat = max(p99_values) if p99_values else None
@@ -918,6 +1103,26 @@ class ClusterSimulator:
             thermal_throttle_gpu_count=throttle_count,
             migration_count=cluster.migration_count,
             mean_topology_score=mean_topo,
+            kv_pressure_max=max(kv_pressures) if kv_pressures else None,
+            prefix_hit_rate_mean=(
+                sum(hit_rates) / len(hit_rates) if hit_rates else None
+            ),
+            preemption_count=preemption_count,
+            recompute_count=recompute_count,
+            cold_reroute_count=cold_reroute_count,
+            cache_eviction_count=eviction_count,
+            locality_confidence_mean=(
+                sum(loc_confs) / len(loc_confs) if loc_confs else None
+            ),
+            cache_fragmentation_frac_mean=(
+                sum(frag_fracs) / len(frag_fracs) if frag_fracs else None
+            ),
+            routing_affinity_score_mean=(
+                sum(affinity_scores) / len(affinity_scores) if affinity_scores else None
+            ),
+            ttft_p50_ms=max(ttft_p50_values) if ttft_p50_values else None,
+            ttft_p95_ms=max(ttft_p95_values) if ttft_p95_values else None,
+            ttft_p99_ms=max(ttft_p99_values) if ttft_p99_values else None,
         )
 
     # ------------------------------------------------------------------
@@ -1147,6 +1352,7 @@ class ClusterSimulator:
                         queue.prefix_cache_hit_rate_pct / 100.0
                         if queue.prefix_cache_hit_rate_pct is not None else None
                     ),
+                    preemptions_total=queue.preemptions_total,
                     tokens_per_s=max(0.0, queue.tokens_per_second),
                     error_rate_pct=max(0.0, min(100.0, queue.timeout_rate_pct)),
                 )
@@ -1322,6 +1528,27 @@ class ClusterSimulator:
                         gpu.assigned_workload_id = None
                         gpu.memory_used_bytes = int(gpu.profile.memory_total_bytes * 0.01)
 
+        # Cache-aware cold-reroute cost: the destination cannot reuse the prefix
+        # it never cached, so the previously reused prefix tokens must be
+        # re-prefilled. Price that lost prefill into a pending TTFT penalty and
+        # reset locality confidence — this is what makes naive rerouting destroy
+        # TTFT and lets affinity preservation beat cheaper energy.
+        cfg = self._serving_config or None
+        cache = workload.cache
+        if cache is not None:
+            hit_before = cache.prefix.hit_rate
+            shared = cache.prefix.shared_prefix_tokens or (
+                workload.prefix_overlap * workload.avg_seq_len_tokens
+            )
+            lost = kvc.lost_prefill_tokens(shared, hit_before)
+            cache.affinity.cold_route_penalty_ms = kvc.cold_route_penalty_ms(lost, cfg)
+            cache.affinity.cold_reroute_count += 1
+            cache.affinity.cold_warmup_ticks_remaining = _COLD_START_WARMUP_TICKS
+            cache.locality.confidence = kv_value("cold_route_confidence", cfg)
+            cache.warmup.warm = False
+            cache.warmup.ticks_warm = 0
+            cache.prefix.hit_rate = 0.0
+
         # Update workload region
         workload.region_id = target_region_id
         workload.gpu_ids = []
@@ -1332,6 +1559,12 @@ class ClusterSimulator:
 
         # Place on new region
         self._place_workload(workload, cluster)
+
+        # The cache is now warm nowhere; its new home is the destination route.
+        if cache is not None:
+            cache.routing.home_region = target_region_id
+            cache.routing.home_gpu_ids = tuple(workload.gpu_ids)
+            cache.active_seqs_prev = 0.0
 
         # Recompute topology score
         workload.topology_score = self._compute_topology_score(workload, cluster)

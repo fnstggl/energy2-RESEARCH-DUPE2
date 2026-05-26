@@ -211,6 +211,11 @@ class SimQueue:
     batch_size: int = 0
     kv_cache_usage_pct: Optional[float] = None
     prefix_cache_hit_rate_pct: Optional[float] = None
+    # KV-cache realism telemetry (None = not visible / not yet computed)
+    kv_pressure: Optional[float] = None
+    kv_pressure_region: Optional[str] = None
+    preemptions_total: Optional[float] = None
+    cache_fragmentation_frac: Optional[float] = None
     tokens_per_second: float = 0.0
     requests_per_second: float = 0.0
 
@@ -251,6 +256,21 @@ class SimWorkload:
     # Cache proxy (0-1 fractions)
     kv_cache_usage_frac: float = 0.3
     prefix_cache_hit_rate_frac: float = 0.5
+
+    # KV-cache architecture + workload prefix character (drives the KV realism
+    # layer). model_kv_profile names an entry in calibration.MODEL_KV_PROFILES;
+    # prefix_overlap is the workload-family shared-prefix overlap in [0, 1].
+    model_kv_profile: str = "llama3-8b"
+    prefix_overlap: float = 0.5
+    avg_seq_len_tokens: int = 1024
+
+    # Event-forced overrides (kv_cache_pressure event). None = no override.
+    kv_pressure_override: Optional[float] = None
+    prefix_hit_override: Optional[float] = None
+
+    # First-class KV-cache / prefix-affinity / locality state (mutable; updated
+    # each tick). Constructed lazily by the engine to avoid an import cycle.
+    cache: Optional[Any] = None
 
     # Computed per tick
     effective_tokens_per_second: float = 0.0
