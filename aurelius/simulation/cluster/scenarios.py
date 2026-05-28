@@ -29,6 +29,11 @@ class ScenarioConfig:
     expected_primary_constraint: Optional[str] = None
     expected_events: list[str] = field(default_factory=list)
     validation_rules: list[dict[str, Any]] = field(default_factory=list)
+    # Per-workload classification populated by load_scenario via
+    # aurelius.benchmarks.per_workload.classify_scenario. Plain ``Any`` so the
+    # simulator package stays independent of the benchmarks package at import
+    # time (the type is ScenarioMetadata).
+    metadata: Optional[Any] = None
 
 
 def load_scenario(
@@ -70,6 +75,9 @@ def load_scenario(
                 expected_primary_constraint=raw.get("expected_primary_constraint"),
                 expected_events=raw.get("expected_events", []),
                 validation_rules=raw.get("validation_rules", []),
+                metadata=_classify_scenario_safe(
+                    name, raw.get("expected_primary_constraint"), raw,
+                ),
             )
 
     # Fall back to built-in scenario
@@ -96,7 +104,28 @@ def load_scenario(
         expected_primary_constraint=raw.get("expected_primary_constraint"),
         expected_events=raw.get("expected_events", []),
         validation_rules=raw.get("validation_rules", []),
+        metadata=_classify_scenario_safe(
+            name, raw.get("expected_primary_constraint"), raw,
+        ),
     )
+
+
+def _classify_scenario_safe(name: str, expected_primary_constraint: Optional[str],
+                            raw: dict[str, Any]) -> Optional[Any]:
+    """Call into the benchmarks per-workload classifier with a safe fallback.
+
+    Done lazily/by-import to avoid a hard scenarios → benchmarks dependency
+    at module import time. Never raises — classification failure returns None
+    (legacy callers can fall back to FIFO comparisons).
+    """
+    try:  # pragma: no cover - import is the only real failure path
+        from aurelius.benchmarks.per_workload import classify_scenario
+    except Exception:
+        return None
+    try:
+        return classify_scenario(name, expected_primary_constraint, raw)
+    except Exception:
+        return None
 
 
 def list_scenarios(version: str = "v1") -> list[str]:
@@ -164,7 +193,14 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                     45, 48, 52, 80, 110, 95, 70, 55, 48, 45, 43, 42,  # hours 0-11
                     48, 55, 62, 75, 120, 140, 130, 100, 75, 60, 52, 48,  # hours 12-23
                 ],
-                "carbon_intensity_trace": [200, 210, 220, 250, 280, 260] * 4,
+                # Kept in sync with benchmarks/v1/energy_price_arbitrage_multiregion.yaml.
+                # YAML is source of truth — previously this was [...] * 4 (mod-6 cyclical)
+                # which diverged from the YAML's varying 24-hour curve and caused
+                # pytest-vs-direct KPI drift on energy and downstream metrics.
+                "carbon_intensity_trace": [
+                    200, 210, 220, 250, 280, 260, 240, 220, 210, 200, 195, 190,
+                    200, 220, 240, 260, 280, 300, 280, 250, 230, 210, 205, 200,
+                ],
                 "ambient_temp_c": 22.0,
                 "network_latency_to": {"us-west": 70, "eu-west": 100},
                 "nodes": [
@@ -200,7 +236,11 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                     60, 55, 50, 48, 45, 42, 40, 42, 45, 50, 55, 60,  # anti-correlated
                     58, 52, 48, 45, 43, 42, 45, 50, 55, 60, 62, 62,
                 ],
-                "carbon_intensity_trace": [150, 140, 130, 120, 110, 120] * 4,
+                # Kept in sync with benchmarks/v1/energy_price_arbitrage_multiregion.yaml.
+                "carbon_intensity_trace": [
+                    150, 140, 130, 120, 110, 120, 130, 140, 150, 155, 160, 158,
+                    155, 150, 145, 140, 135, 130, 135, 140, 145, 150, 152, 150,
+                ],
                 "ambient_temp_c": 18.0,
                 "network_latency_to": {"us-east": 70, "eu-west": 140},
                 "nodes": [
@@ -290,7 +330,19 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "region_id": "us-east",
                 "energy_price_trace": [55.0] * 24,
                 "ambient_temp_c": 28.0,  # hot environment
-                "ambient_temp_trace": [28] * 6 + [32] * 6 + [35] * 6 + [30] * 6,  # gets hotter
+                # Kept in sync with benchmarks/v1/thermal_hotspot_mixed_cluster.yaml.
+                # YAML is source of truth — the YAML expresses the trace as three
+                # dash-separated strings ("28 - 28 - 29 - 30 - 32 - 34 - 35 - 35"...).
+                # When PyYAML+engine._parse_float_trace runs, those flatten to the
+                # 24-element list below. The previous step-function builtin
+                # ([28]*6+[32]*6+[35]*6+[30]*6) caused pytest (no PyYAML → builtin)
+                # vs direct python (PyYAML → YAML) to score the thermal scenario
+                # differently. Sync.
+                "ambient_temp_trace": [
+                    28, 28, 29, 30, 32, 34, 35, 35,
+                    34, 33, 32, 30, 30, 31, 32, 33,
+                    33, 32, 30, 29, 28, 28, 27, 27,
+                ],
                 "nodes": [
                     {
                         "node_id": "hot-node0",
@@ -420,8 +472,12 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "workload_type": "inference",
                 "priority_tier": "latency_sensitive",
                 "region_id": "us-east",
-                "gpu_count_required": 2,
-                "target_util_pct": 65.0,
+                # Sync with benchmarks/v1/queue_surge_latency_sensitive.yaml
+                # (gpu_count_required=1, target_util_pct=50.0). The prior values
+                # (2 and 65.0) made the queue scenario score differently under
+                # pytest (builtin) vs direct python (YAML).
+                "gpu_count_required": 1,
+                "target_util_pct": 50.0,
                 "communication_intensity": "low",
                 "migration_allowed": False,   # critical — no migration
                 "latency_sensitive": True,
@@ -1070,16 +1126,35 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "region_id": "us-east",
                 "energy_price_trace": [55.0] * 24,
                 "ambient_temp_c": 22.0,
+                # Synced with benchmarks/v1/underutilization_stranded_capacity.yaml:
+                # nodes 0/1 in (rack0, 1a); node 2 in (rack0, 1b); node 3 in
+                # (rack1, 1b). The previous uniform-rack/zone definition caused
+                # pytest-vs-direct topology drift on this scenario.
                 "nodes": [
                     {
-                        "node_id": f"sparse-node{i}",
-                        "gpu_type": "a100-sxm4-80gb",
-                        "gpu_count": 4,
+                        "node_id": "sparse-node0",
+                        "gpu_type": "a100-sxm4-80gb", "gpu_count": 4,
                         "topology_class": "nvswitch",
-                        "rack_id": "us-east-rack0",
-                        "zone": "us-east-1a",
-                    }
-                    for i in range(4)
+                        "rack_id": "us-east-rack0", "zone": "us-east-1a",
+                    },
+                    {
+                        "node_id": "sparse-node1",
+                        "gpu_type": "a100-sxm4-80gb", "gpu_count": 4,
+                        "topology_class": "nvswitch",
+                        "rack_id": "us-east-rack0", "zone": "us-east-1a",
+                    },
+                    {
+                        "node_id": "sparse-node2",
+                        "gpu_type": "a100-sxm4-80gb", "gpu_count": 4,
+                        "topology_class": "nvswitch",
+                        "rack_id": "us-east-rack0", "zone": "us-east-1b",
+                    },
+                    {
+                        "node_id": "sparse-node3",
+                        "gpu_type": "a100-sxm4-80gb", "gpu_count": 4,
+                        "topology_class": "nvswitch",
+                        "rack_id": "us-east-rack1", "zone": "us-east-1b",
+                    },
                 ],
                 "queues": [
                     {
@@ -1091,6 +1166,10 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 ],
             }
         ],
+        # Synced with benchmarks/v1/underutilization_stranded_capacity.yaml:
+        # per-workload target_util_pct varies [20.0, 22.0, 18.0, 21.0] — not
+        # uniform 20.0 — which produces a small KPI drift under pytest if not
+        # synced.
         "workloads": [
             {
                 "workload_id": f"sparse-wl-{i}",
@@ -1099,11 +1178,11 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "priority_tier": "flexible",
                 "region_id": "us-east",
                 "gpu_count_required": 1,
-                "target_util_pct": 20.0,  # very low — underutilized
+                "target_util_pct": util,
                 "communication_intensity": "low",
                 "migration_allowed": True,
             }
-            for i in range(4)
+            for i, util in enumerate([20.0, 22.0, 18.0, 21.0])
         ],
         "events": [],
     },

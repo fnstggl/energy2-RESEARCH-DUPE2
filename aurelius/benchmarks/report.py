@@ -757,9 +757,16 @@ class BenchmarkReport:
     # Packing baseline frontier (first-fit / best-fit / FFD / clairvoyant) for
     # utilization/fragmentation scenarios — analysis-only, never a deployable policy.
     packing_frontier: Optional[list[dict[str, Any]]] = None
+    # Per-workload-aware baseline reporting (PR #87): the headline baseline is
+    # workload-relevant, not FIFO. FIFO is sanity-only. See
+    # aurelius/benchmarks/per_workload.py.
+    scenario_metadata: Optional[Any] = None
+    headline_baseline_name: Optional[str] = None
+    headline_baseline_rationale: Optional[str] = None
+    outcome: Optional[Any] = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "metadata": self.metadata.to_dict(),
             "kpi_comparison": {k: v.to_dict() for k, v in self.aggregated.items()},
             "scorecard": self.scorecard.to_dict(),
@@ -770,7 +777,37 @@ class BenchmarkReport:
             "is_valid": self.is_valid,
             "validity_notes": self.validity_notes,
             "packing_frontier": self.packing_frontier,
+            "headline_baseline_name": self.headline_baseline_name,
+            "headline_baseline_rationale": self.headline_baseline_rationale,
         }
+        if self.scenario_metadata is not None:
+            sm = self.scenario_metadata
+            out["scenario_metadata"] = {
+                "scenario_name": getattr(sm, "scenario_name", None),
+                "primary_workload_type": getattr(sm, "primary_workload_type", None),
+                "optimization_intent": getattr(sm, "optimization_intent", None),
+                "relevant_baselines": list(
+                    getattr(sm, "relevant_baselines", ()) or ()
+                ),
+                "headline_baseline_override":
+                    getattr(sm, "headline_baseline_override", None),
+                "goodput_unit": getattr(sm, "goodput_unit", None),
+                "sla_slo_type": getattr(sm, "sla_slo_type", None),
+                "is_telemetry_failsafe":
+                    getattr(sm, "is_telemetry_failsafe", False),
+            }
+        if self.outcome is not None:
+            oc = self.outcome
+            out["outcome"] = {
+                "outcome": getattr(oc, "outcome", None),
+                "margin_pct": getattr(oc, "margin_pct", None),
+                "safety_evidence": list(
+                    getattr(oc, "safety_evidence", ()) or ()
+                ),
+                "loss_reasons": list(getattr(oc, "loss_reasons", ()) or ()),
+                "notes": getattr(oc, "notes", None),
+            }
+        return out
 
     def to_text(self) -> str:
         """Human-readable benchmark report."""
@@ -920,5 +957,25 @@ class BenchmarkReport:
         lines.append(f"Comparison validity: {validity_str}")
         for note in self.validity_notes:
             lines.append(f"  → {note}")
+
+        # Headline baseline (per-workload reporting layer). Appended last so
+        # we don't disturb any existing readers of to_text() prefixes.
+        if self.headline_baseline_name is not None:
+            lines.append("")
+            lines.append("Headline baseline (workload-relevant strong baseline, "
+                         "not FIFO):")
+            rationale = self.headline_baseline_rationale or ""
+            lines.append(
+                f"  Headline baseline: {self.headline_baseline_name}  ({rationale})"
+            )
+            if self.outcome is not None:
+                lines.append(
+                    f"  Outcome: {self.outcome.outcome}  "
+                    f"(margin = {self.outcome.margin_pct:+.2f}%)"
+                )
+                if self.outcome.outcome == "LOSS" and self.outcome.loss_reasons:
+                    lines.append(
+                        "  Loss reasons: " + ", ".join(self.outcome.loss_reasons)
+                    )
 
         return "\n".join(lines)

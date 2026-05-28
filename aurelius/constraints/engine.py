@@ -583,6 +583,10 @@ def _workload_class(service: InferenceServiceState) -> str:
     Falls back to ``standard_interactive`` only when no workload-class signal is
     available (the engine's pre-fix default); ``unknown`` is reserved for cases
     where state is genuinely missing.
+
+    NOTE: a public alias ``workload_class`` is exposed at the bottom of this
+    module for external callers — do not duplicate this logic. See
+    ``aurelius.benchmarks.per_workload.workload_class_from_iss``.
     """
     tier = (service.priority_tier or "").lower()
     wtype = (service.workload_type or "").lower()
@@ -1394,3 +1398,8 @@ class ConstraintAwareEngine:
                 implementation_mode=self.implementation_mode,
             ))
         return recommendations
+
+
+# Public alias — preferred name for external callers. The underscore-prefixed
+# original is kept for back-compat with existing call sites inside this module.
+workload_class = _workload_class

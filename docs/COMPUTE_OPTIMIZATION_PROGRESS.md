@@ -794,6 +794,104 @@ python scripts/generate_realism_report.py --steps 24 --seed 42
 
 ---
 
+## Per-Workload Baseline Reporting (2026-05-28)
+
+The previous benchmark layer compared `constraint_aware` to FIFO across all
+26 scenarios using only economic alpha. That is the wrong reference: FIFO is a
+sanity baseline, not the strong alternative for, say, a batch-training energy
+arbitrage problem (where the real comparison is `current_price_only` or
+`greedy_energy`). The reporting layer now picks the **workload-relevant strong
+baseline** per scenario and classifies the outcome.
+
+ML forecasting is a later phase, after the optimizer has the right objective
+and workload-aware decision rules. Simulator results remain **not production
+savings claims**.
+
+### Files changed
+
+- `aurelius/benchmarks/per_workload.py` (NEW): `ScenarioMetadata`,
+  `OutcomeAnalysis`, `PerScenarioRow`, `CrossScenarioReport`,
+  `classify_scenario`, `select_headline_baseline`, `analyze_outcome`,
+  `workload_class_from_iss`.
+- `aurelius/benchmarks/report.py`: `BenchmarkReport` carries
+  `scenario_metadata`, `headline_baseline_name`, `headline_baseline_rationale`,
+  `outcome` (appended in `to_dict()`/`to_text()` — never replaces existing
+  output).
+- `aurelius/benchmarks/constraint_runner.py`: `_build_report` calls
+  `select_headline_baseline` + `analyze_outcome` after the existing scorecard.
+- `aurelius/benchmarks/__init__.py`: re-exports the new public surface.
+- `aurelius/simulation/cluster/scenarios.py`: `ScenarioConfig.metadata`
+  populated by `load_scenario` via a safe import shim. Three builtin
+  scenarios re-synced to YAML (`thermal_hotspot_mixed_cluster.ambient_temp_trace`,
+  `queue_surge_latency_sensitive.critical-wl.gpu_count_required/target_util_pct`,
+  `underutilization_stranded_capacity` nodes + per-workload utilization).
+  This eliminates the pytest-vs-direct KPI drift on those scenarios.
+- `aurelius/constraints/engine.py`: public alias
+  `workload_class = _workload_class` (no logic duplication).
+- `scripts/generate_realism_report.py`: now uses `CrossScenarioReport`. The
+  realism-audit block (Section 1) and the "what remains simulator-only" block
+  are preserved.
+
+### Per-workload-type results (seed=42, steps=24)
+
+| Workload type | Scenarios | CA median goodput/$ | Strongest baseline |
+|---|---|---|---|
+| batch_training | 6 | 460,027 | sla_aware/fifo (interchangeable) |
+| inference_critical | 3 | 424,896 | sla_aware |
+| inference_standard | 14 | 407,657 | sla_aware |
+| telemetry_fail_safe | 3 | — (KEEP-correctness, not alpha) | fifo (correctness reference) |
+
+Overall outcome distribution across the 26 scenarios:
+ALPHA_WIN = 3, SAFETY_WIN = 0, TIE = 14, KEEP_CORRECT = 3, LOSS = 6.
+
+### Where constraint_aware wins (alpha)
+
+- `thermal_hotspot_mixed_cluster` vs `sla_aware`: **+46.83%** on goodput/$.
+- `underutilization_stranded_capacity` vs `sla_aware`: **+63.85%** on goodput/$.
+- `rack_density_overload_air` vs `sla_aware`: **+1.89%** on goodput/$.
+
+### Where constraint_aware loses (honest, with reasons)
+
+- `energy_price_arbitrage_multiregion` vs `current_price_only`: **-43.25%**.
+  Loss reasons: `missing_candidate_action` (no migration emitted) +
+  `missing_forecast_lookahead` (no DA/RT lookahead → no positive net_savings).
+- `queue_surge_latency_sensitive` vs `sla_aware`: **-7.94%**.
+  Loss reason: `missing_candidate_action` (queue_relief scale-replicas not emitted).
+- `proxy_bottleneck_ingress` vs `sla_aware`: **-8.72%**. Same root cause.
+- `prefix_affinity_energy_arbitrage`, `startup_heavy_migration_trtllm`,
+  `latency_critical_no_energy_shift`: all in the **-4.7% to -5.5%** band; same
+  family — CA emits no relevant action type.
+
+### Honest open issues
+
+- The fragmentation-packing scenarios still resolve through the `sla_aware`
+  headline path (rule 3 fires before rule 5 when the primary workload type is
+  inference); this is intentional but means the section-D packing-baseline
+  comparison is the relevant view for those scenarios. The simulator has no
+  arbitrary-placement primitive — `simulator_limitation` is the surfaced loss
+  reason there.
+- Most LOSS cases trace to `missing_candidate_action` — the engine has the
+  right binding constraint but is not yet emitting the matching action type
+  for queue_relief / energy_arbitrage on interactive workloads. That is a
+  decision-rule gap in the engine, not a reporting gap.
+- All KPI numbers are simulator-only and uncalibrated. Not production claims.
+
+### Test counts
+
+- New: `tests/test_per_workload_reporting.py` — 38 tests (classification,
+  baseline selection, outcome analysis, cross-scenario report, end-to-end).
+- New: `tests/test_pytest_vs_direct_parity.py` — 6 subprocess KPI parity tests
+  + 6 full-signature checks (skipped when PyYAML missing). Documents the
+  root cause of the pytest-vs-direct drift fixed in this PR.
+- Extended: `tests/test_scenario_source_parity.py` — adds a `_full_signature`
+  helper and 6 new parametrized tests.
+
+ML forecasting is a later phase, after the optimizer has the right objective
+and workload-aware decision rules. Simulator results remain **not production
+savings claims**.
+
+---
+
 ## Non-Negotiable Implementation Philosophy
 
 This tracker is also a planning artifact, not proof of correctness.

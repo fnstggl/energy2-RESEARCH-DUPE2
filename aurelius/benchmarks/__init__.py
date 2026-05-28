@@ -28,6 +28,16 @@ from .packing import (
     first_fit_decreasing,
     greedy_bin_packing,
 )
+from .per_workload import (
+    CrossScenarioReport,
+    OutcomeAnalysis,
+    PerScenarioRow,
+    ScenarioMetadata,
+    analyze_outcome,
+    classify_scenario,
+    select_headline_baseline,
+    workload_class_from_iss,
+)
 from .realism_audit import RealismAuditReport, run_realism_audit
 from .regression import BenchmarkRegressionChecker
 from .report import BenchmarkMetadata, BenchmarkReport, OptimizationScorecard
@@ -62,4 +72,13 @@ __all__ = [
     "compute_sla_safe_goodput_per_infra_dollar",
     "compute_cost_per_sla_compliant_token",
     "compute_economic_kpi",
+    # Per-workload baseline reporting (PR #87).
+    "ScenarioMetadata",
+    "OutcomeAnalysis",
+    "PerScenarioRow",
+    "CrossScenarioReport",
+    "classify_scenario",
+    "select_headline_baseline",
+    "analyze_outcome",
+    "workload_class_from_iss",
 ]
