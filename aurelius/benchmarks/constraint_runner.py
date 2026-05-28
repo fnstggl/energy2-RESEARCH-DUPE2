@@ -884,6 +884,44 @@ class ConstraintBenchmarkRunner:
         # Packing baseline frontier (analysis-only) for utilization/fragmentation scenarios.
         packing_frontier = self._packing_frontier(metadata.scenario_name, policy_results)
 
+        # Per-workload baseline reporting (PR #87): pick the workload-relevant
+        # strong baseline (NOT FIFO) and classify CA's outcome against it.
+        # FIFO is now a sanity-only baseline.
+        scenario_metadata = getattr(scenario, "metadata", None)
+        headline_name: Optional[str] = None
+        headline_rationale: Optional[str] = None
+        outcome = None
+        try:
+            from .per_workload import (
+                analyze_outcome,
+                classify_scenario,
+                select_headline_baseline,
+            )
+            if scenario_metadata is None:
+                scenario_metadata = classify_scenario(
+                    metadata.scenario_name,
+                    scenario.expected_primary_constraint,
+                    {},
+                )
+            headline_name, headline_rationale = select_headline_baseline(
+                scenario_metadata, aggregated,
+            )
+            ca_for_outcome = aggregated.get(POLICY_CONSTRAINT_AWARE)
+            headline_kpi = aggregated.get(headline_name) or aggregated.get(
+                POLICY_FIFO
+            )
+            if ca_for_outcome is not None and headline_kpi is not None:
+                outcome = analyze_outcome(
+                    scenario_metadata, ca_for_outcome, headline_kpi, aggregated,
+                    scorecard_flags=tuple(scorecard.flags),
+                )
+        except Exception:
+            # Never fail the benchmark on a reporting-layer issue.
+            scenario_metadata = scenario_metadata
+            headline_name = None
+            headline_rationale = None
+            outcome = None
+
         return BenchmarkReport(
             metadata=metadata,
             aggregated=aggregated,
@@ -895,6 +933,10 @@ class ConstraintBenchmarkRunner:
             is_valid=True,
             validity_notes=[],
             packing_frontier=packing_frontier,
+            scenario_metadata=scenario_metadata,
+            headline_baseline_name=headline_name,
+            headline_baseline_rationale=headline_rationale,
+            outcome=outcome,
         )
 
     @staticmethod
