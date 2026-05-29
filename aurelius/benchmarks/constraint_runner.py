@@ -320,6 +320,15 @@ def _apply_constraint_aware(
                     break
         elif at == "scale_replicas":
             applied = sim.add_replica(svc_id)
+        elif at == "prewarm_replica":
+            # Pre-warm a ready replica (warm pool) then add it, so the scale-up
+            # does not pay cold-start lag. set_warm_pool is best-effort.
+            sim.set_warm_pool(svc_id, 1)
+            applied = sim.add_replica(svc_id)
+        elif at == "reserve_capacity_for_sla":
+            # Reserve capacity for the SLA-bound workload by adding a dedicated
+            # replica (fences it off from best-effort/batch crowding).
+            applied = sim.add_replica(svc_id)
         elif at == "spread_workloads":
             applied = sim.spread_workload(svc_id)
         elif at == "reroute_workload":

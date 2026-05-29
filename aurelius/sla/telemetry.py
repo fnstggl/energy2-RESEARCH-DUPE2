@@ -259,6 +259,21 @@ class HeuristicPredictor:
                 # TODO: replace with M/M/c queueing model when arrival rate known.
                 pred.queue_wait_ms *= 0.7 if action.target_replicas > 0 else 1.3  # # HEURISTIC
 
+        elif at == ActionType.PREWARM_REPLICA:
+            # A pre-warmed replica adds in-region capacity AND hides cold-start:
+            # queue relief like a scale-up, plus a small p99-tail improvement
+            # (no cold-start inflation when the pool is warm). Conservative.
+            if pred.queue_wait_ms is not None:
+                pred.queue_wait_ms *= 0.75  # # HEURISTIC
+            if pred.p99_latency_ms is not None:
+                pred.p99_latency_ms *= 0.95  # # HEURISTIC: warm pool trims the tail
+
+        elif at == ActionType.RESERVE_CAPACITY:
+            # Reserving capacity for the protected workload relieves its queue
+            # by fencing off best-effort/batch contention. Modest, conservative.
+            if pred.queue_wait_ms is not None:
+                pred.queue_wait_ms *= 0.8  # # HEURISTIC
+
         elif at == ActionType.DEFER:
             # Deferring adds queue wait equal to the defer horizon (if provided).
             defer_ms = float(action.metadata.get("defer_ms", 0.0))

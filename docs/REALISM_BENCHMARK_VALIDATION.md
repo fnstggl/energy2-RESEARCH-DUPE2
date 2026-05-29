@@ -165,3 +165,23 @@ Telemetry truth signal from the engine assessments. Telemetry-failsafe scenarios
 - Telemetry truth (Mission 1, FIXED): the canonical `ClusterState` derives provenance confidence + `is_partial` from the simulator's per-subsystem tiers, so degraded-telemetry scenarios report low/partial confidence and the engine force-KEEPs (telemetry subsystem verdict graduated to REALISTIC_ENOUGH_FOR_DEV). The tiers themselves remain uncalibrated heuristics.
 - ML forecasting is a later phase. The current optimizer relies on the engine's workload-aware decision rules; once those land, a calibrated forecaster will get layered on top. Simulator results remain not production savings claims.
 - Next calibration step: run a read-only shadow pilot against real Prometheus/DCGM/K8s telemetry to calibrate the priors and the confidence model (C = R·F·K·S·N) against measured staleness/coverage/noise.
+
+## G. Interactive queue/proxy/prefix candidate audit (recommendation-only)
+
+Simulator/recommendation only — **not production savings**. 24-step runs, fixed
+seed; constraint-aware vs `sla_aware` headline (per `docs/RESULTS.md`).
+
+| scenario | proxy detected | scale suppressed | reroute emitted | outcome vs sla_aware | precise cause |
+|---|---|---|---|---|---|
+| queue_surge_latency_sensitive | n/a | n/a | no (no safe peer) | LOSS | hard overload; modelled add-replica relief does not recover the queue collapse (p99 ≈ 1.0e6 ms); workload not critical (no prewarm) and no batch co-tenant (no reserve) |
+| proxy_bottleneck_ingress | **yes (8 ticks)** | **yes — `blocked_useless_scale_proxy_bottleneck` ×8** | no (single region) | LOSS | front-door proxy cap dominates; no scale/spread can relieve it and there is no reroute target — engine now correctly KEEPs/suppresses instead of wasting 8 SPREADs |
+| prefix_affinity_energy_arbitrage | n/a | n/a | no | LOSS | classified queue/latency-bound, not energy-bound, so the `PRESERVE_AFFINITY` energy veto does not engage in this sim run |
+
+These LOSSes are pre-existing simulator limitations (overload / proxy-capped
+scenarios), not regressions introduced by this change — the canonical 1000-job
+backtest golden and the energy engine core are byte-unchanged. The proxy
+detection is a correctness/explainability improvement (it replaces useless
+SPREADs with an explicit, reported suppression). High cache affinity can veto an
+energy move (proven in `tests/test_interactive_actions.py` /
+`tests/test_energy_adapter.py`), and all actions remain recommendation/simulation
+only.

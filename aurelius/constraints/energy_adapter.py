@@ -119,6 +119,10 @@ class DestinationContext:
     is_stale: bool = False                         # stale / missing telemetry
     topology_fit_ok: bool = True                   # destination fabric suits workload
     is_cold: bool = False                          # destination has no warm pool
+    # True when the destination already holds a warm prefix/KV cache for this
+    # workload (e.g. a replicated home), so the move does NOT pay a cold-route
+    # penalty. Default False = cold cache at the destination.
+    preserves_affinity: bool = False
 
     # HEURISTIC floors (constraint-aware policy). A destination with spare
     # capacity below this floor is "full"; queue p95 above this is "hot queue".
@@ -211,6 +215,8 @@ class ConstraintAwareEnergyCandidate:
     baseline_goodput_per_dollar: float = 0.0
     candidate_goodput_per_dollar: float = 0.0
     prevents_deadline_miss: bool = False
+    # Fraction of goodput value retained after a (possibly cold) move (Part C).
+    cache_loss_factor: float = 1.0
 
     @property
     def accepted(self) -> bool:
@@ -255,6 +261,7 @@ class ConstraintAwareEnergyCandidate:
             "latency_sensitive": c.latency_sensitive,
             "cache_hit_rate": c.cache_hit_rate,
             "cache_sensitive": c.cache_sensitive,
+            "estimated_cache_loss_pct": round((1.0 - self.cache_loss_factor) * 100.0, 2),
             "topology_heavy": c.topology_heavy,
             "baseline_goodput_per_dollar": round(self.baseline_goodput_per_dollar, 6),
             "candidate_goodput_per_dollar": round(self.candidate_goodput_per_dollar, 6),
@@ -293,6 +300,20 @@ class EnergyArbitrageAdapter:
     # when no realized RT price is supplied. Reflects that a DA-only planner is
     # exposed to RT settlement risk.
     DEFAULT_BASIS_RISK_FRACTION: float = 0.10
+
+    # Cache-loss model (Part C). When a workload is moved to a COLD destination
+    # (one that does not preserve its prefix/KV cache), the share of served
+    # goodput that depended on cache hits is degraded by the cold-route penalty
+    # (recompute + TTFT). CACHE_WARMUP_HIT_RATE_LOSS mirrors the existing
+    # cost-model realism constant (CostModelConfig.cache_warmup_hit_rate_loss =
+    # 0.40) rather than introducing a new synthetic weight: a fraction
+    # ``hit_rate * 0.40`` of goodput value is lost on a cold route.
+    CACHE_WARMUP_HIT_RATE_LOSS: float = 0.40
+    # At/above this prefix-cache hit rate a cache-sensitive / latency-sensitive
+    # workload is preserved on its home route regardless of headline savings.
+    CACHE_PRESERVE_HIT_RATE: float = 0.70
+    # Below this hit rate the workload has low cache dependency — moving is safe.
+    CACHE_LOW_DEPENDENCY_HIT_RATE: float = 0.30
 
     def __init__(
         self,
@@ -453,11 +474,20 @@ class EnergyArbitrageAdapter:
                 baseline_goodput_per_dollar=gp, candidate_goodput_per_dollar=gp,
             )
 
+        # Destination preserves the warm cache only when telemetry says so.
+        preserves_affinity = bool(
+            destination_context is not None and destination_context.preserves_affinity
+        )
+        hit = candidate.cache_hit_rate or 0.0
+        cache_loss_factor = self._cache_loss_factor(candidate, preserves_affinity)
+
         baseline_gp = self._goodput_per_dollar(
-            candidate, candidate.baseline_start, candidate.current_region, moved=False
+            candidate, candidate.baseline_start, candidate.current_region,
+            moved=False, cache_loss_factor=1.0,
         )
         candidate_gp = self._goodput_per_dollar(
-            candidate, candidate.window_start, candidate.recommended_region, moved=True
+            candidate, candidate.window_start, candidate.recommended_region,
+            moved=True, cache_loss_factor=cache_loss_factor,
         )
         prevents_miss = self._move_prevents_deadline_miss(candidate)
 
@@ -468,6 +498,7 @@ class EnergyArbitrageAdapter:
                 baseline_goodput_per_dollar=baseline_gp,
                 candidate_goodput_per_dollar=candidate_gp,
                 prevents_deadline_miss=prevents_miss,
+                cache_loss_factor=cache_loss_factor,
             )
 
         def fail(code: str, detail: str) -> ConstraintAwareEnergyCandidate:
@@ -490,16 +521,51 @@ class EnergyArbitrageAdapter:
         if not ok:
             return fail(code, detail)
 
-        # Gate 4 — KPI safety (§D.4): accept only if SLA-safe goodput/$ improves
-        # OR the move prevents a hard deadline miss.
+        # Gate 3b — cache-affinity safety (Part C). Preserve a high-hit-rate
+        # cache-/latency-sensitive workload on its home route regardless of
+        # headline savings (cold-route TTFT/recompute dominates).
+        if (candidate.cache_sensitive or candidate.latency_sensitive) \
+                and hit >= self.CACHE_PRESERVE_HIT_RATE and not preserves_affinity:
+            return fail(
+                "preserve_affinity_high_cache_hit_rate",
+                f"prefix_cache_hit_rate={hit:.2f}≥{self.CACHE_PRESERVE_HIT_RATE:.2f}; "
+                f"est_goodput_loss={(1.0 - cache_loss_factor) * 100:.0f}% on cold route",
+            )
+
+        # Gate 4 — KPI safety (§D.4): accept only if cache-loss-adjusted SLA-safe
+        # goodput/$ improves OR the move prevents a hard deadline miss.
         if candidate_gp > baseline_gp:
-            reasons.append("kpi_positive")
-            details.append(f"goodput/$ {baseline_gp:.4f}->{candidate_gp:.4f}")
+            if preserves_affinity:
+                reasons.append("accept_energy_move_cache_safe")
+                details.append(
+                    f"destination preserves cache affinity; goodput/$ "
+                    f"{baseline_gp:.4f}->{candidate_gp:.4f}"
+                )
+            elif hit < self.CACHE_LOW_DEPENDENCY_HIT_RATE:
+                reasons.append("accept_energy_move_low_cache_dependency")
+                details.append(
+                    f"hit_rate={hit:.2f}<{self.CACHE_LOW_DEPENDENCY_HIT_RATE:.2f}; "
+                    f"goodput/$ {baseline_gp:.4f}->{candidate_gp:.4f}"
+                )
+            else:
+                reasons.append("kpi_positive")
+                details.append(
+                    f"cache-loss-adjusted goodput/$ {baseline_gp:.4f}->{candidate_gp:.4f}"
+                )
             return verdict(GateDecision.ACCEPT)
         if prevents_miss:
             reasons.append("accepted_prevents_deadline_miss")
             details.append("move buys SLA-compliance the no-move placement misses")
             return verdict(GateDecision.MODIFY)
+        # KPI is non-positive. Attribute to cache loss when that is the cause.
+        if hit >= self.CACHE_LOW_DEPENDENCY_HIT_RATE and not preserves_affinity \
+                and cache_loss_factor < 1.0:
+            return fail(
+                "reject_energy_move_cache_loss_exceeds_savings",
+                f"hit_rate={hit:.2f}; cache-loss-adjusted goodput/$ "
+                f"{baseline_gp:.4f}->{candidate_gp:.4f}; gross_savings="
+                f"{candidate.gross_savings_usd:.2f} eroded by cold-route penalty",
+            )
         reasons.append("kpi_non_positive")
         details.append(
             f"goodput/$ {baseline_gp:.4f}->{candidate_gp:.4f}; "
@@ -525,11 +591,9 @@ class EnergyArbitrageAdapter:
         if c.latency_sensitive or c.workload_type in _CRITICAL_INTERACTIVE_TYPES:
             return (False, "ineligible_critical_interactive_inference",
                     f"latency-pinned workload_type={c.workload_type}")
-        if c.cache_sensitive and (c.cache_hit_rate or 0.0) >= 0.5:
-            # Cache-sensitive workload with a high hit rate: a region move
-            # destroys prefix/KV affinity -> blocked by default (§D.2/E.3).
-            return (False, "ineligible_cache_sensitive_high_hit_rate",
-                    f"cache_hit_rate={c.cache_hit_rate:.2f}>=0.5")
+        # NOTE: cache-affinity is handled by the dedicated cache gate in
+        # evaluate() (Part C) so it can emit the precise preserve/reject reason
+        # codes and model cache-loss-vs-savings — not a blanket eligibility block.
         if c.topology_heavy:
             return (False, "ineligible_topology_heavy_workload",
                     "topology-heavy workload pinned to its fabric")
@@ -600,18 +664,35 @@ class EnergyArbitrageAdapter:
 
     # -- KPI accounting ---------------------------------------------------
 
+    def _cache_loss_factor(
+        self, c: ExistingEnergyCandidate, preserves_affinity: bool
+    ) -> float:
+        """Fraction of goodput value retained after a (possibly cold) move.
+
+        A move to a destination that does not preserve the warm cache degrades
+        the share of goodput that depended on cache hits by the cold-route
+        penalty (recompute + TTFT). Returns 1.0 when no degradation applies.
+        Uses the existing realism constant (no new synthetic weight).
+        """
+        if preserves_affinity or not c.is_region_move:
+            return 1.0
+        hit = c.cache_hit_rate or 0.0
+        return max(0.0, 1.0 - hit * self.CACHE_WARMUP_HIT_RATE_LOSS)
+
     def _goodput_per_dollar(
         self,
         c: ExistingEnergyCandidate,
         start_time: datetime,
         region: str,
         moved: bool,
+        cache_loss_factor: float = 1.0,
     ) -> float:
         """SLA-safe goodput per infrastructure dollar for a placement.
 
         Numerator: ``token_equivalent`` goodput = gpu_count * runtime_hours
-        (job-progress proxy, labelled token_equivalent per docs/RESULTS.md §5).
-        Zero if the placement misses the deadline (SLA filter on numerator).
+        (job-progress proxy, labelled token_equivalent per docs/RESULTS.md §5),
+        scaled by ``cache_loss_factor`` (≤ 1.0) when a cold-route move degrades
+        cache-dependent goodput. Zero if the placement misses the deadline.
 
         Denominator: energy_cost + gpu_infra_cost + network_cost. The migration
         warmup energy + DA/RT basis risk are charged to the moved placement's
@@ -625,6 +706,7 @@ class EnergyArbitrageAdapter:
         goodput = max(0.0, c.gpu_count * c.runtime_hours)
         if goodput <= 0:
             goodput = max(0.0, c.runtime_hours)  # fall back to job-progress hours
+        goodput *= max(0.0, min(1.0, cache_loss_factor))  # cold-route cache loss
 
         price = (c.da_price_target_mwh if moved else c.da_price_current_mwh)
         price = price if price is not None else 50.0
