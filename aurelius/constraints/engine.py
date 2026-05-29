@@ -27,7 +27,12 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from ..connectors.topology import PlacementWorkloadSpec, score_placement
-from ..sla.actions import ActionType, OptimizationAction
+from ..sla.actions import CAPACITY_RELIEF_ACTIONS, ActionType, OptimizationAction
+
+# Action *values* (lowercase strings) that consume incremental GPU-hours and so
+# share the per-class eligibility + economic gate (and the proxy-suppression
+# gate) with a plain SCALE_REPLICAS.
+_CAPACITY_RELIEF_VALUES: frozenset[str] = frozenset(a.value for a in CAPACITY_RELIEF_ACTIONS)
 from ..sla.loader import SLARegistry
 from ..sla.selector import SLAAwareActionSelector
 from ..sla.telemetry import RegionContext, WorkloadState
@@ -129,6 +134,78 @@ _PREFIX_AFFINITY_PRESERVE_HIT_RATE: float = 0.70
 # realism model's "proxy dominates" regime (see test_migration_realism).
 _PROXY_SATURATION_BOTTLENECK: float = 1.5
 
+# Mean GPU utilization (%) at/above which replicas are ALSO a binding bottleneck
+# even when the proxy is saturated — in that regime a scale-up still helps, so
+# proxy-suppression does not apply. HEURISTIC.
+_GPU_UTIL_REPLICA_BOUND: float = 90.0
+
+# Workload classes that count as best-effort/batch "crowders" of interactive
+# traffic for the RESERVE_CAPACITY_FOR_SLA decision (Part A.3).
+_CROWDER_CLASSES: frozenset[str] = frozenset({
+    "batch_inference", "best_effort", "embedding_offline", "training",
+})
+
+
+def _region_mean_gpu_util(state: ClusterState, region_id: str) -> Optional[float]:
+    """Mean GPU utilization (%) across a region's GPUs, or None when unknown."""
+    reg = state.regions.get(region_id)
+    if reg is None:
+        return None
+    vals = [
+        gpu.util_pct
+        for node in reg.nodes.values()
+        for gpu in node.gpus.values()
+        if gpu.util_pct is not None
+    ]
+    return sum(vals) / len(vals) if vals else None
+
+
+def _proxy_bottleneck(
+    service: InferenceServiceState, state: ClusterState
+) -> tuple[bool, Optional[float], Optional[float]]:
+    """Detect an ingress/proxy bottleneck (Part B).
+
+    Returns ``(is_proxy_bound, proxy_saturation, region_mean_gpu_util)``. Proxy
+    is the BINDING bottleneck only when its saturation is high AND replicas/GPUs
+    are NOT also saturated — otherwise a scale-up still helps and proxy
+    suppression must not apply ("unless evidence replicas also bind").
+    """
+    sat = service.proxy_saturation
+    if sat is None or sat < _PROXY_SATURATION_BOTTLENECK:
+        return False, sat, None
+    util = _region_mean_gpu_util(state, service.region or "")
+    replicas_also_bind = util is not None and util >= _GPU_UTIL_REPLICA_BOUND
+    return (not replicas_also_bind), sat, util
+
+
+def _region_has_idle_capacity(state: ClusterState, region_id: str) -> bool:
+    """True when the region has allocatable GPU headroom to scale in-region."""
+    reg = state.regions.get(region_id)
+    if reg is None or not reg.nodes:
+        return False
+    alloc = sum((n.gpu_allocatable or 0) for n in reg.nodes.values())
+    used = sum((n.gpu_allocated or 0) for n in reg.nodes.values())
+    return alloc > used
+
+
+def _has_coresident_crowder(
+    service: InferenceServiceState, state: ClusterState
+) -> bool:
+    """True when a batch/best-effort workload shares the service's region.
+
+    Such a workload can crowd interactive traffic; RESERVE_CAPACITY_FOR_SLA
+    fences capacity off for the protected workload (Part A.3).
+    """
+    reg = state.regions.get(service.region or "")
+    if reg is None:
+        return False
+    for sid, svc in reg.services.items():
+        if sid == service.service_id:
+            continue
+        if _workload_class(svc) in _CROWDER_CLASSES:
+            return True
+    return False
+
 
 def _least_loaded_peer(
     state: ClusterState, current_region: str
@@ -189,18 +266,19 @@ def _gen_energy(
         and service.prefix_cache_hit_rate >= _PREFIX_AFFINITY_PRESERVE_HIT_RATE
     )
     if preserve_affinity:
-        # Only the in-region, affinity-preserving DEFER remains.
+        # Block the cache-destroying region move; recommend keeping the workload
+        # on its warm home route (PRESERVE_AFFINITY is a no-move decision).
         candidates.append(OptimizationAction(
-            action_type=ActionType.DEFER,
+            action_type=ActionType.PRESERVE_AFFINITY,
             target_region=current_region,
-            expected_savings_pct=3.0,  # HEURISTIC
+            expected_savings_pct=0.0,
             description=(
                 f"Preserve prefix-cache affinity for {service.service_id} "
                 f"(hit_rate={service.prefix_cache_hit_rate:.2f}≥"
-                f"{_PREFIX_AFFINITY_PRESERVE_HIT_RATE:.2f}): defer in-region "
-                "instead of a cache-destroying cross-region energy move"
+                f"{_PREFIX_AFFINITY_PRESERVE_HIT_RATE:.2f}): keep on warm home "
+                "route instead of a cache-destroying cross-region energy move"
             ),
-            metadata={"preserve_affinity": True,
+            metadata={"preserve_affinity": True, "reason": "preserve_affinity_high_cache_hit_rate",
                       "prefix_cache_hit_rate": service.prefix_cache_hit_rate},
         ))
         return candidates
@@ -276,73 +354,102 @@ def _gen_queue(
     state: ClusterState,
     assessment: ConstraintAssessment,
 ) -> list[OptimizationAction]:
-    """QUEUE-bound relief.
+    """QUEUE-bound interactive relief (Part A / Part B).
 
-    Two regimes (Part E.1 / E.2):
+    Emits the full relevant interactive-relief candidate set; the unified gates
+    in ``_recommend_service`` (proxy-suppression, per-class eligibility,
+    economic, SLA, cost) then accept/reject each one:
 
-    * **Ingress-proxy bottleneck** (``proxy_saturation`` high): throughput is
-      capped by the front-door proxy, NOT replica count. Adding replicas is
-      useless, so we suppress SCALE_REPLICAS and instead reroute traffic to a
-      less-loaded peer region (when one is clearly safe) and spread to rebalance
-      ingress — flagging the proxy bottleneck in the rationale.
-    * **Replica-bound queue surge**: scale replicas (advertising prewarm /
-      reserve-capacity relief variants) and spread. The chosen action_type
-      remains SCALE_REPLICAS / SPREAD so multi-constraint routing is unchanged.
+    * **SCALE_REPLICAS** — always offered as the primary capacity relief. Under
+      a true ingress-proxy bottleneck it is SUPPRESSED by the proxy gate with
+      reason ``blocked_useless_scale_proxy_bottleneck`` (adding replicas cannot
+      relieve a front-door cap).
+    * **PREWARM_REPLICA** — for critical-interactive workloads, where cold-start
+      lag is most harmful; a warm replica hides scale-up latency.
+    * **RESERVE_CAPACITY_FOR_SLA** — when a batch/best-effort workload shares the
+      region and could crowd the protected interactive traffic.
+    * **REROUTE** — when the proxy is the bottleneck OR there is no in-region
+      idle capacity, and a clearly-safer peer exists (and the move would not
+      destroy high cache affinity). Reroutes traffic to a healthier ingress.
+    * **SPREAD** — in-region rebalance (only when NOT proxy-bound; spreading GPUs
+      cannot relieve a front-door proxy cap).
     """
     current_region = service.region or "unknown"
+    wclass = _workload_class(service)
+    interactive = wclass in ("critical_interactive", "standard_interactive")
+    proxy_bound, proxy_sat, gpu_util = _proxy_bottleneck(service, state)
+    hit_rate = service.prefix_cache_hit_rate or 0.0
 
-    proxy_sat = service.proxy_saturation
-    if proxy_sat is not None and proxy_sat >= _PROXY_SATURATION_BOTTLENECK:
-        candidates: list[OptimizationAction] = []
-        peer = _least_loaded_peer(state, current_region)
-        if peer is not None:
-            candidates.append(OptimizationAction(
-                action_type=ActionType.REROUTE,
-                target_region=peer,
-                expected_savings_pct=2.0,  # HEURISTIC: ingress relief avoids timeout
-                description=(
-                    f"Reroute traffic for {service.service_id} away from saturated "
-                    f"ingress proxy in {current_region} (saturation={proxy_sat:.2f}) "
-                    f"to less-loaded {peer}"
-                ),
-                metadata={"proxy_bottleneck": True, "proxy_saturation": proxy_sat,
-                          "flag": "proxy_bottleneck"},
-            ))
-        candidates.append(OptimizationAction(
-            action_type=ActionType.SPREAD,
-            target_region=current_region,
-            expected_savings_pct=0.0,
-            description=(
-                f"Rebalance ingress for {service.service_id} — proxy bottleneck "
-                f"(saturation={proxy_sat:.2f}); adding replicas would not help"
-            ),
-            metadata={"proxy_bottleneck": True, "flag": "proxy_bottleneck",
-                      "suppressed_action": "scale_replicas"},
-        ))
-        return candidates
-
-    return [
+    candidates: list[OptimizationAction] = [
         OptimizationAction(
             action_type=ActionType.SCALE_REPLICAS,
             target_region=current_region,
             expected_savings_pct=0.0,
             description=f"Add replicas for {service.service_id} to absorb queue surge",
-            # prewarm_replica / reserve_capacity_for_sla are execution variants of
-            # the same capacity-relief candidate (Part E.1): they all add SLA-safe
-            # serving capacity. Surfaced as variants so callers can pre-warm or
-            # reserve instead of cold-scaling, without changing the action_type
-            # (multi-constraint routing depends on the action_type set).
-            metadata={"target_replicas_delta": 1,
-                      "relief_variants": ["scale_replicas", "prewarm_replica",
-                                          "reserve_capacity_for_sla"]},
+            metadata={"target_replicas_delta": 1, "proxy_bottleneck": proxy_bound},
         ),
-        OptimizationAction(
+    ]
+
+    # PREWARM for critical-interactive: hide cold-start lag with a ready replica.
+    if wclass == "critical_interactive":
+        candidates.append(OptimizationAction(
+            action_type=ActionType.PREWARM_REPLICA,
+            target_region=current_region,
+            expected_savings_pct=0.0,
+            description=(
+                f"Pre-warm a ready replica for critical {service.service_id} so a "
+                "scale-up does not pay cold-start TTFT/p99 lag under the surge"
+            ),
+            metadata={"target_replicas_delta": 1, "proxy_bottleneck": proxy_bound},
+        ))
+
+    # RESERVE capacity when batch/best-effort shares the region and could crowd
+    # this interactive workload.
+    if interactive and _has_coresident_crowder(service, state):
+        candidates.append(OptimizationAction(
+            action_type=ActionType.RESERVE_CAPACITY,
+            target_region=current_region,
+            expected_savings_pct=0.0,
+            description=(
+                f"Reserve capacity for SLA-bound {service.service_id}: batch/"
+                "best-effort co-tenants are crowding interactive traffic"
+            ),
+            metadata={"target_replicas_delta": 1, "proxy_bottleneck": proxy_bound,
+                      "crowded_by_batch": True},
+        ))
+
+    # REROUTE when proxy-bound or out of local capacity, to a safe peer, and only
+    # when it will not destroy high cache affinity.
+    if (proxy_bound or not _region_has_idle_capacity(state, current_region)) \
+            and hit_rate < _PREFIX_AFFINITY_PRESERVE_HIT_RATE:
+        peer = _least_loaded_peer(state, current_region)
+        if peer is not None:
+            flag = "proxy_bottleneck" if proxy_bound else "queue_reroute_no_local_capacity"
+            why = (
+                f"away from saturated ingress proxy (saturation={proxy_sat:.2f})"
+                if proxy_bound else "to a less-loaded region (no local idle capacity)"
+            )
+            candidates.append(OptimizationAction(
+                action_type=ActionType.REROUTE,
+                target_region=peer,
+                expected_savings_pct=2.0,  # HEURISTIC: ingress relief avoids timeout
+                description=(
+                    f"Reroute traffic for {service.service_id} {why} to {peer}"
+                ),
+                metadata={"proxy_bottleneck": proxy_bound, "flag": flag,
+                          "proxy_saturation": proxy_sat},
+            ))
+
+    # SPREAD only relieves in-region queue concentration — useless against a
+    # front-door proxy cap, so skip it when proxy-bound.
+    if not proxy_bound:
+        candidates.append(OptimizationAction(
             action_type=ActionType.SPREAD,
             target_region=current_region,
             expected_savings_pct=0.0,
             description=f"Spread {service.service_id} to reduce queue concentration",
-        ),
-    ]
+        ))
+    return candidates
 
 
 def _gen_latency(
@@ -556,6 +663,24 @@ _ACTION_CONSTRAINT_SIGN: dict[str, dict[ConstraintType, int]] = {
         ConstraintType.UTILIZATION: -1,  # consumes more GPUs
         ConstraintType.ENERGY: -1,       # more power draw
     },
+    # PREWARM/RESERVE relieve queue/latency like a scale-up (and add a warm
+    # replica that hides cold-start tail), at the same utilization/energy cost.
+    ActionType.PREWARM_REPLICA.value: {
+        ConstraintType.QUEUE: +1,
+        ConstraintType.LATENCY: +1,
+        ConstraintType.MEMORY: +1,
+        ConstraintType.UTILIZATION: -1,
+        ConstraintType.ENERGY: -1,
+    },
+    ActionType.RESERVE_CAPACITY.value: {
+        ConstraintType.QUEUE: +1,
+        ConstraintType.LATENCY: +1,
+        ConstraintType.UTILIZATION: -1,
+        ConstraintType.ENERGY: -1,
+    },
+    # No-move stabilisation: no constraint impact (behaves like KEEP).
+    ActionType.FREEZE_CHURN.value: {},
+    ActionType.PRESERVE_AFFINITY.value: {},
     ActionType.CONSOLIDATE.value: {
         ConstraintType.UTILIZATION: +1,
         ConstraintType.ENERGY: +1,
@@ -1152,8 +1277,28 @@ class ConstraintAwareEngine:
             #     SLA-safe goodput gain. Class eligibility plus a conservative
             #     economic safety net fix this without weakening realism or
             #     tuning constants.
-            if at == ActionType.SCALE_REPLICAS.value:
+            if at in _CAPACITY_RELIEF_VALUES:
                 wclass = _workload_class(service)
+                # Proxy-suppression gate (Part B.2): if the INGRESS PROXY is the
+                # binding bottleneck, adding/pre-warming/reserving replicas does
+                # not relieve the front-door cap — block it (unless replicas also
+                # bind, which _proxy_bottleneck already accounts for via GPU util).
+                proxy_bound, p_sat, p_util = _proxy_bottleneck(service, state)
+                if proxy_bound:
+                    rejected.append({
+                        "service_id": workload_id,
+                        "action": at,
+                        "target_region": action.target_region,
+                        "workload_class": wclass,
+                        "reject_reason": (
+                            "blocked_useless_scale_proxy_bottleneck: "
+                            f"proxy_saturation={p_sat:.2f}"
+                            + (f", gpu_util={p_util:.0f}%" if p_util is not None
+                               else ", gpu_util=unknown")
+                            + " — ingress/proxy is the bottleneck, not replica count"
+                        ),
+                    })
+                    continue
                 sla_risk = max(
                     assessment.scores.get(ConstraintType.QUEUE, 0.0),
                     assessment.scores.get(ConstraintType.LATENCY, 0.0),

@@ -2601,3 +2601,65 @@ This makes Aurelius more conservative about recommending cross-region migrations
 1. MigrationGovernor Postgres persistence
 2. AureliusObserver auto-wired to engine
 3. BacktestEngine wiring to ClusterState
+
+---
+
+## Interactive candidate-generation deepening (queue / proxy / prefix)
+
+> Read `docs/RESULTS.md` first. Simulator/recommendation only — **not production
+> savings**. All actions are recommendation/simulation only; no real cluster is
+> mutated.
+
+This change makes the constraint-aware engine propose the *right* interactive
+relief actions and route them through the existing SLA/KPI/risk gates (no
+bypasses, no weakened gates, no constant tuning to force wins).
+
+**Queue surge (Part A).** `_gen_queue` now emits first-class candidates:
+- `SCALE_REPLICAS` — primary capacity relief (subject to per-class eligibility +
+  the economic goodput/$ gate; mild pressure on batch is still blocked).
+- `PREWARM_REPLICA` — for **critical-interactive** workloads, to hide cold-start
+  TTFT/p99 lag under a surge.
+- `RESERVE_CAPACITY_FOR_SLA` — when a **batch/best-effort co-tenant** shares the
+  region and could crowd protected interactive traffic.
+- `REROUTE` — when the proxy is the bottleneck **or** there is no in-region idle
+  capacity, to a clearly-safer peer (and only when it would not destroy high
+  cache affinity).
+- `PRESERVE_AFFINITY` / no-move — preferred over a cache-destroying move.
+
+**Proxy bottleneck (Part B).** `_proxy_bottleneck()` distinguishes an
+ingress/proxy cap from a replica/GPU cap (`proxy_saturation` high **and** mean
+GPU utilization below the replica-bound floor). When proxy-bound, capacity-relief
+actions are **suppressed** with the explicit reason
+`blocked_useless_scale_proxy_bottleneck` (unless replicas also bind), a reroute
+to a healthy peer is offered when one exists, and the engine KEEPs when no safe
+target exists. Adding replicas can never relieve a front-door proxy cap.
+
+**Prefix affinity (Part C).** When prefix-cache hit rate is high, the engine
+emits `PRESERVE_AFFINITY` instead of `CHOOSE_CHEAPER_REGION`; the energy adapter
+models cold-route cache loss (`hit_rate × cache_warmup_hit_rate_loss`, the
+existing cost-model realism constant — no new synthetic weight) and emits
+explicit decisions: `preserve_affinity_high_cache_hit_rate`,
+`reject_energy_move_cache_loss_exceeds_savings`, `accept_energy_move_cache_safe`,
+`accept_energy_move_low_cache_dependency`.
+
+**Honest benchmark result (24-step, fixed seed).** Against the `sla_aware`
+headline, all three scenarios remain a **LOSS** — these are hard-overload /
+front-door-capped scenarios the simulator cannot relieve by adding modelled
+capacity, not regressions:
+- `queue_surge_latency_sensitive`: byte-identical KPI before/after; its workload
+  is not critical (no prewarm) and has no batch co-tenant (no reserve), and the
+  modelled queue collapse (p99 ≈ 1.0e6 ms) is not recovered by single-replica
+  adds. goodput/$ stays below `sla_aware` (which scales less).
+- `proxy_bottleneck_ingress`: proxy detection now fires — 8 useless
+  `SPREAD`s are replaced by 8 explicit `blocked_useless_scale_proxy_bottleneck`
+  suppressions. KPI is unchanged (the proxy cap dominates; this scenario is
+  single-region so there is no reroute target), but the engine no longer wastes
+  actions and explains why. Correctness/explainability win, not a KPI win.
+- `prefix_affinity_energy_arbitrage`: the classifier finds it queue/latency-bound
+  (not energy-bound), so the `PRESERVE_AFFINITY` energy veto does not engage in
+  this sim run; KPI byte-identical before/after.
+
+The new candidate generation + cache-loss veto are exercised by
+`tests/test_interactive_actions.py` and `tests/test_energy_adapter.py`; the
+canonical 1000-job CAISO/PJM/ERCOT backtest golden is unchanged and the energy
+engine core remains byte-unchanged.

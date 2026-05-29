@@ -23,6 +23,17 @@ class ActionType(str, Enum):
     CHOOSE_LOWER_CARBON_REGION = "choose_lower_carbon_region"
     CHANGE_PLACEMENT = "change_placement"
     KEEP = "keep_current_placement"
+    # Interactive-inference capacity-relief actions. PREWARM_REPLICA and
+    # RESERVE_CAPACITY add SLA-safe serving capacity (like SCALE_REPLICAS) but
+    # with distinct intent: PREWARM keeps a ready replica to hide cold-start
+    # lag; RESERVE_CAPACITY protects critical traffic from batch/best-effort
+    # crowding. FREEZE_CHURN stabilises a workload that migration churn is
+    # destabilising (an explicit, explainable no-move). PRESERVE_AFFINITY keeps
+    # a high-cache-hit workload on its home route instead of an energy move.
+    PREWARM_REPLICA = "prewarm_replica"
+    RESERVE_CAPACITY = "reserve_capacity_for_sla"
+    FREEZE_CHURN = "freeze_churn"
+    PRESERVE_AFFINITY = "preserve_affinity"
 
 
 # Actions that physically move a workload between regions/nodes and therefore
@@ -38,7 +49,24 @@ MIGRATION_ACTIONS = frozenset(
 )
 
 # Actions that change replica packing and therefore affect queue/utilization.
-PACKING_ACTIONS = frozenset({ActionType.CONSOLIDATE, ActionType.SPREAD, ActionType.SCALE_REPLICAS})
+PACKING_ACTIONS = frozenset({
+    ActionType.CONSOLIDATE, ActionType.SPREAD, ActionType.SCALE_REPLICAS,
+    ActionType.PREWARM_REPLICA, ActionType.RESERVE_CAPACITY,
+})
+
+# Capacity-relief actions that consume incremental GPU-hours and therefore must
+# pass the same per-class eligibility + economic (goodput/$) gate as a plain
+# SCALE_REPLICAS — never granted for free.
+CAPACITY_RELIEF_ACTIONS = frozenset({
+    ActionType.SCALE_REPLICAS,
+    ActionType.PREWARM_REPLICA,
+    ActionType.RESERVE_CAPACITY,
+})
+
+# In-region, no-move stabilisation actions (treated as KEEP for migration
+# governance — they never relocate a workload).
+NO_MOVE_ACTIONS = frozenset({ActionType.KEEP, ActionType.FREEZE_CHURN,
+                             ActionType.PRESERVE_AFFINITY})
 
 
 @dataclass
@@ -71,7 +99,10 @@ class OptimizationAction:
 
     @property
     def is_noop(self) -> bool:
-        return self.action_type == ActionType.KEEP
+        # FREEZE_CHURN / PRESERVE_AFFINITY are explicit "do not move" decisions:
+        # they execute no relocation/scale, so for governance and cost purposes
+        # they behave like KEEP (the rationale carries the distinct intent).
+        return self.action_type in NO_MOVE_ACTIONS
 
 
 def keep_current(region: Optional[str] = None) -> OptimizationAction:

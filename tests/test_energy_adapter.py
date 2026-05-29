@@ -125,6 +125,55 @@ def _accepted_batch_candidate():
     )
 
 
+def _cache_candidate(hit, cache_sensitive=True, da_target=40.0, gross=10.0):
+    return ExistingEnergyCandidate(
+        job_id="j", workload_type="llm_batch_inference",
+        action=EnergyCandidateAction.SHIFT_BATCH_TO_CHEAPER_REGION,
+        current_region="us-east", recommended_region="us-west",
+        gross_savings_usd=gross, gross_savings_pct=10.0,
+        da_price_current_mwh=120.0, da_price_target_mwh=da_target, rt_price_target_mwh=da_target,
+        da_rt_basis_risk_usd=0.2, forecast_confidence=0.7,
+        window_start=W, baseline_start=W, runtime_hours=4.0, slack_hours=12.0,
+        deadline=W + timedelta(hours=16), migration_allowed=True,
+        migration_cost_hours=0.1, latency_sensitive=False, gpu_count=2, power_kw=100.0,
+        cache_hit_rate=hit, cache_sensitive=cache_sensitive,
+    )
+
+
+def test_12_destination_preserving_affinity_allows_move():
+    """High hit-rate move is allowed when the destination preserves the cache."""
+    adapter = EnergyArbitrageAdapter()
+    v = adapter.evaluate(
+        _cache_candidate(0.9),
+        DestinationContext("us-west", spare_capacity_pct=40.0, preserves_affinity=True),
+    )
+    assert v.decision == GateDecision.ACCEPT
+    assert "accept_energy_move_cache_safe" in v.reasons
+    assert v.explanation()["estimated_cache_loss_pct"] == 0.0
+
+
+def test_13a_low_cache_dependency_allows_move():
+    adapter = EnergyArbitrageAdapter()
+    v = adapter.evaluate(_cache_candidate(0.1, cache_sensitive=False),
+                         DestinationContext("us-west", spare_capacity_pct=40.0))
+    assert v.decision == GateDecision.ACCEPT
+    assert "accept_energy_move_low_cache_dependency" in v.reasons
+
+
+def test_13b_cache_loss_exceeds_savings_rejected():
+    # Moderate hit-rate (not preserve-blocked) + tiny energy savings: the
+    # cold-route cache loss erases the gain -> reject with the cache reason.
+    adapter = EnergyArbitrageAdapter()
+    v = adapter.evaluate(_cache_candidate(0.6, da_target=119.0, gross=0.4),
+                         DestinationContext("us-west", spare_capacity_pct=40.0))
+    assert v.decision == GateDecision.REJECT
+    assert "reject_energy_move_cache_loss_exceeds_savings" in v.reasons
+    e = v.explanation()
+    assert e["estimated_cache_loss_pct"] > 0
+    assert e["cache_hit_rate"] == 0.6
+    assert "cold-route" in v.reason_details[0]
+
+
 def test_rejected_when_destination_hot():
     adapter = EnergyArbitrageAdapter()
     v = adapter.evaluate(_accepted_batch_candidate(),
@@ -188,7 +237,8 @@ def test_cache_destroying_energy_move_blocked():
                                    "cache_hit_rate": 0.9})
     v = adapter.evaluate(c, DestinationContext("us-west", spare_capacity_pct=40.0))
     assert v.decision == GateDecision.REJECT
-    assert "ineligible_cache_sensitive_high_hit_rate" in v.reasons
+    assert "preserve_affinity_high_cache_hit_rate" in v.reasons
+    assert v.explanation()["estimated_cache_loss_pct"] > 0
 
 
 def test_adapter_does_not_change_the_energy_target():
