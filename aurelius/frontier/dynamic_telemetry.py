@@ -129,6 +129,121 @@ def telemetry_tick_from_arrival_tick(
     )
 
 
+def telemetry_tick_from_inference_service_state(
+    state,
+    *,
+    timestamp_s: Optional[float] = None,
+    tick_duration_s: Optional[float] = None,
+    mean_utilization: Optional[float] = None,
+    gpu_hours_delta: Optional[float] = None,
+    scale_events_delta: Optional[int] = None,
+    churn_delta: Optional[float] = None,
+    telemetry_confidence: Optional[str] = None,
+    source: str = "inference_service_state",
+) -> ServingTelemetryTick:
+    """Bridge: build a :class:`ServingTelemetryTick` from a real
+    :class:`aurelius.state.models.InferenceServiceState` observation.
+
+    Only carries fields the connector actually emitted — everything else
+    stays ``None`` (`docs/PILOT_TELEMETRY_CONTRACT.md` §1). In
+    particular:
+
+    - ``timeout_pct`` is derived from ``error_rate_pct`` ONLY when both
+      are present, because none of vLLM / Triton / Ray Serve metrics
+      surface a per-tick timeout share. Pilot deployments that want a
+      true timeout share should compute it upstream (latency_p99 vs SLA
+      threshold) and pass it via ``InferenceServiceState.error_rate_pct``
+      OR set ``timeout_pct`` directly on the resulting tick.
+    - ``mean_utilization`` is NOT in :class:`InferenceServiceState` — it
+      comes from DCGM (`gpu.util_pct`) or a controller-level signal. The
+      caller passes it in.
+    - ``gpu_hours_delta`` is inferred from
+      ``replicas * tick_duration_s / 3600`` when both are present.
+    - ``scale_events_delta`` / ``churn_delta`` are NOT in
+      :class:`InferenceServiceState`; they come from K8s deployment
+      generation / autoscaling history and are passed in by the caller.
+
+    The result is fully compatible with the dynamic frontier estimator's
+    :func:`validate_dynamic_window` (default required fields:
+    ``observed_rps``, ``queue_p99_ms``, ``active_replicas``).
+    """
+    if timestamp_s is None:
+        ts = getattr(state, "timestamp", None)
+        timestamp_s = (ts.timestamp() if ts is not None else 0.0)
+
+    # Queue depth in vLLM is *requests waiting*, not a millisecond
+    # percentile. The frontier estimator expects queue wait in ms — the
+    # connector layer already converts engine queue percentiles to ms
+    # (see InferenceServiceState.queue_time_p95_ms / p99). Pass them
+    # through when present.
+    queue_p99 = getattr(state, "queue_time_p99_ms", None)
+    if queue_p99 is None:
+        # Fall back to e2e p99 latency — overestimates queue wait but
+        # documented as a fallback in the audit.
+        queue_p99 = getattr(state, "p99_latency_ms", None)
+    queue_p95 = getattr(state, "queue_time_p95_ms", None)
+    if queue_p95 is None:
+        queue_p95 = getattr(state, "p95_latency_ms", None)
+    queue_p50 = getattr(state, "queue_time_p50_ms", None)
+
+    # Active replicas: only Ray Serve currently emits this; otherwise the
+    # caller must supply it from K8s pod-count or HPA telemetry.
+    active_replicas = getattr(state, "replicas", None)
+
+    rps_running = getattr(state, "requests_running", None)
+    rps_waiting = getattr(state, "requests_waiting", None)
+    tokens_per_s = getattr(state, "tokens_per_s", None)
+
+    # error_rate_pct → timeout_pct (best-effort): when the connector
+    # exposes an error rate AND the workload has a hard SLA, the
+    # error_rate is the closest real-time analog. Otherwise stay None
+    # — pilots can fill it explicitly.
+    err_rate = getattr(state, "error_rate_pct", None)
+    timeout_pct = err_rate  # honest equivalence — never invent
+
+    latency_p50 = getattr(state, "p50_latency_ms", None)
+    latency_p95 = getattr(state, "p95_latency_ms", None)
+    latency_p99 = getattr(state, "p99_latency_ms", None)
+
+    # gpu_hours_delta: replicas * duration / 3600 — only when both known.
+    if (gpu_hours_delta is None and active_replicas is not None
+            and tick_duration_s is not None and tick_duration_s > 0):
+        gpu_hours_delta = float(active_replicas) * (
+            float(tick_duration_s) / 3600.0)
+
+    # Confidence: honour the connector's provenance if present.
+    if telemetry_confidence is None:
+        prov = getattr(state, "provenance", None)
+        if prov is not None and getattr(prov, "confidence", None) in (
+                "low", "medium", "high", "unknown"):
+            telemetry_confidence = prov.confidence
+        else:
+            telemetry_confidence = "medium"
+
+    return ServingTelemetryTick(
+        timestamp_s=float(timestamp_s),
+        observed_rps=_coerce_optional_float(rps_running),
+        prompt_tokens_per_s=None,
+        output_tokens_per_s=None,
+        total_tokens_per_s=_coerce_optional_float(tokens_per_s),
+        active_replicas=_coerce_optional_int(active_replicas),
+        gpu_hours_delta=_coerce_optional_float(gpu_hours_delta),
+        mean_utilization=_coerce_optional_float(mean_utilization),
+        queue_p50_ms=_coerce_optional_float(queue_p50),
+        queue_p95_ms=_coerce_optional_float(queue_p95),
+        queue_p99_ms=_coerce_optional_float(queue_p99),
+        latency_p50_ms=_coerce_optional_float(latency_p50),
+        latency_p95_ms=_coerce_optional_float(latency_p95),
+        latency_p99_ms=_coerce_optional_float(latency_p99),
+        timeout_pct=_coerce_optional_float(timeout_pct),
+        sla_violation_pct=None,
+        scale_events_delta=_coerce_optional_int(scale_events_delta),
+        churn_delta=_coerce_optional_float(churn_delta),
+        telemetry_confidence=telemetry_confidence,
+        source=source,
+    )
+
+
 def build_serving_telemetry_window(
     ticks: Iterable,
     *,

@@ -1,0 +1,269 @@
+{
+  "audit_doc": "docs/TELEMETRY_ADAPTER_READINESS_AUDIT.md",
+  "scope": {
+    "is_audit_only": true,
+    "introduces_new_adapter": false,
+    "introduces_new_dataset": false,
+    "introduces_new_executor": false,
+    "changes_robust_energy_engine": false,
+    "changes_scheduler_behavior": false,
+    "claims_production_savings": false,
+    "tiny_bridge_helper_added": "aurelius.frontier.telemetry_tick_from_inference_service_state"
+  },
+  "adapters_inventoried": [
+    {
+      "name": "Prometheus HTTP / scrape (real + fake)",
+      "module": "aurelius/connectors/prometheus.py",
+      "tested_by": "tests/test_prometheus_connector.py, tests/test_fake_connectors.py"
+    },
+    {
+      "name": "DCGM",
+      "module": "aurelius/connectors/dcgm.py + aurelius/ingestion/dcgm_provider.py",
+      "tested_by": "tests/test_dcgm_adapter.py, tests/test_dcgm_provider.py"
+    },
+    {
+      "name": "vLLM",
+      "module": "aurelius/connectors/vllm.py",
+      "tested_by": "tests/test_vllm_triton_ray_adapters.py"
+    },
+    {
+      "name": "Triton",
+      "module": "aurelius/connectors/triton.py",
+      "tested_by": "tests/test_vllm_triton_ray_adapters.py"
+    },
+    {
+      "name": "Ray Serve",
+      "module": "aurelius/connectors/ray_serve.py",
+      "tested_by": "tests/test_vllm_triton_ray_adapters.py"
+    },
+    {
+      "name": "OpenTelemetry (OTLP JSON fixture only)",
+      "module": "aurelius/connectors/otel.py",
+      "tested_by": "tests/test_vllm_triton_ray_adapters.py"
+    },
+    {
+      "name": "Kubernetes read-only",
+      "module": "aurelius/connectors/kubernetes.py",
+      "tested_by": "tests/test_kubernetes_connector.py"
+    },
+    {
+      "name": "GPU topology (nvidia-smi topo)",
+      "module": "aurelius/connectors/topology.py",
+      "tested_by": "tests/test_topology_connector.py, tests/test_topology_realism.py"
+    },
+    {
+      "name": "Cluster-state assembler",
+      "module": "aurelius/state/assemble.py",
+      "tested_by": "tests/test_state_assemble.py"
+    },
+    {
+      "name": "Queue / wait CSV provider",
+      "module": "aurelius/ingestion/queue_provider.py",
+      "tested_by": "tests/test_queue_aware.py"
+    },
+    {
+      "name": "Model residency events / requests",
+      "module": "aurelius/residency/ingest.py + aurelius/residency/sim.py",
+      "tested_by": "tests/test_residency_ingestion.py, tests/test_residency_audit_report.py"
+    },
+    {
+      "name": "ArrivalTick -> ServingTelemetryTick (public trace replay)",
+      "module": "aurelius/frontier/dynamic_telemetry.py::telemetry_tick_from_arrival_tick",
+      "tested_by": "tests/test_dynamic_frontier_estimator.py"
+    },
+    {
+      "name": "InferenceServiceState -> ServingTelemetryTick (real telemetry bridge)",
+      "module": "aurelius/frontier/dynamic_telemetry.py::telemetry_tick_from_inference_service_state",
+      "tested_by": "tests/test_telemetry_adapter_readiness.py"
+    }
+  ],
+  "coverage_matrix": [
+    {
+      "field": "observed_rps",
+      "best_real_source": "vLLM rate(vllm:request_success_total[1m]), Ray Serve rate(ray_serve_num_ongoing_requests_total[1m]), Triton nv_inference_count rate",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high"
+    },
+    {
+      "field": "active_replicas",
+      "best_real_source": "Kubernetes K8sPlacementSnapshot.running_gpu_pods or Ray Serve ray_serve_deployment_replica_count",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high"
+    },
+    {
+      "field": "queue_p99_ms",
+      "best_real_source": "vLLM vllm:request_first_token_seconds (histogram p99) or Ray Serve ray_serve_request_latency_ms (p99)",
+      "status": "partial",
+      "tested": true,
+      "confidence": "medium",
+      "caveat": "queue percentile is end-to-end latency p99, not pure queue wait; vLLM has TTFT histogram; Triton averages only"
+    },
+    {
+      "field": "queue_p95_ms",
+      "best_real_source": "same family as queue_p99",
+      "status": "partial",
+      "tested": true,
+      "confidence": "medium"
+    },
+    {
+      "field": "queue_p50_ms",
+      "best_real_source": "vLLM e2e_p50 OR Triton nv_inference_queue_duration_us / exec_count (average)",
+      "status": "partial",
+      "tested": true,
+      "confidence": "medium"
+    },
+    {
+      "field": "latency_p99_ms",
+      "best_real_source": "vLLM e2e p99, Ray Serve request_latency p99",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high",
+      "caveat": "Triton default metrics expose averages only; histograms must be enabled in Triton config"
+    },
+    {
+      "field": "latency_p95_ms",
+      "best_real_source": "vLLM / Ray Serve histograms",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high"
+    },
+    {
+      "field": "latency_p50_ms",
+      "best_real_source": "vLLM / Ray Serve histograms",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high"
+    },
+    {
+      "field": "timeout_pct",
+      "best_real_source": "error_rate_pct (best-effort) OR pilot-derived from latency_p99 vs latency_sla_p99",
+      "status": "partial",
+      "tested": true,
+      "confidence": "low",
+      "caveat": "no mainstream runtime emits a SLA-aware timeout counter directly"
+    },
+    {
+      "field": "sla_violation_pct",
+      "best_real_source": "pilot-derived from latency_p99 vs latency_sla_p99",
+      "status": "missing",
+      "tested": false,
+      "confidence": "low",
+      "caveat": "requires pilot-side derivation against the workload's SLA policy"
+    },
+    {
+      "field": "mean_utilization",
+      "best_real_source": "DCGM DCGM_FI_DEV_GPU_UTIL (0-100, /100), or controller-supplied rho",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high"
+    },
+    {
+      "field": "scale_events_delta",
+      "best_real_source": "Kubernetes Deployment.metadata.generation delta over window OR HPA events",
+      "status": "partial",
+      "tested": true,
+      "confidence": "medium",
+      "caveat": "K8s connector emits placement snapshot, not generation delta; requires a small follow-up export"
+    },
+    {
+      "field": "churn_delta",
+      "best_real_source": "derived from migration history or replica slope",
+      "status": "partial",
+      "tested": true,
+      "confidence": "medium"
+    },
+    {
+      "field": "gpu_hours_delta",
+      "best_real_source": "derived = active_replicas * tick_duration_s / 3600",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high"
+    },
+    {
+      "field": "telemetry_confidence",
+      "best_real_source": "Provenance.confidence (coverage-based: >70% high, >40% medium, else low)",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high"
+    },
+    {
+      "field": "prefix_cache_hit_rate (diagnostic)",
+      "best_real_source": "vLLM vllm:gpu_prefix_cache_hit_rate",
+      "status": "implemented",
+      "tested": true,
+      "confidence": "high",
+      "caveat": "vLLM-only; Triton / Ray Serve do not surface this"
+    },
+    {
+      "field": "model_residency / cold_start (diagnostic)",
+      "best_real_source": "aurelius/residency/ingest.py adapt_vllm + pilot per-request CSV per PILOT_TELEMETRY_CONTRACT.md",
+      "status": "partial",
+      "tested": true,
+      "confidence": "low",
+      "caveat": "vLLM cannot emit per-request load timestamps; pilot must instrument the model-loader hook"
+    }
+  ],
+  "production_real_vs_simulated_only": {
+    "observed_rps": {
+      "real_source": "vLLM / Ray Serve / Triton counters",
+      "simulated_on_public_traces": true
+    },
+    "queue_p99_ms": {
+      "real_source": "vLLM / Ray Serve histograms",
+      "simulated_on_public_traces": true,
+      "note": "no public trace ships realized queue percentiles per tick"
+    },
+    "latency_p99_ms": {
+      "real_source": "vLLM / Ray Serve histograms",
+      "simulated_on_public_traces": true
+    },
+    "timeout_pct": {
+      "real_source": "derived from error_rate_pct (best-effort)",
+      "simulated_on_public_traces": true,
+      "note": "no public trace ships a real timeout rate per tick"
+    },
+    "mean_utilization": {
+      "real_source": "DCGM DCGM_FI_DEV_GPU_UTIL",
+      "simulated_on_public_traces": true
+    },
+    "active_replicas": {
+      "real_source": "K8s pod count + Ray Serve replica count",
+      "simulated_on_public_traces": true
+    },
+    "prefix_cache_hit_rate": {
+      "real_source": "vLLM vllm:gpu_prefix_cache_hit_rate",
+      "simulated_on_public_traces": false,
+      "note": "not present in any committed public trace; vLLM-only signal"
+    },
+    "model_residency / cold_start": {
+      "real_source": "pilot per-request fields per PILOT_TELEMETRY_CONTRACT.md",
+      "simulated_on_public_traces": false,
+      "note": "GenAI 2026 request<->infra layers are no_join; MIT has node-level GPU residency only"
+    }
+  },
+  "can_calibration_run_on_real_telemetry_today": {
+    "vllm_dcgm_k8s_pilot": "YES, subject to caveats",
+    "triton_pilot": "PARTIAL - p95/p99 latency requires Triton histograms enabled",
+    "ray_serve_pilot": "YES - native percentiles + replicas",
+    "real_cluster_execution": "DISABLED BY DEFAULT (recommendation-only)"
+  },
+  "remaining_gaps_before_pilot_production_claim": [
+    "true per-tick timeout share (no mainstream serving runtime emits a SLA-aware timeout counter)",
+    "sla_violation_pct requires pilot-side derivation from latency_p99 vs latency_sla_p99_ms",
+    "scale_events_delta needs K8s deployment-generation delta export",
+    "SGLang Prometheus adapter (does not exist)",
+    "TensorRT-LLM Prometheus adapter (does not exist)",
+    "per-request cold-start timestamps require pilot model-loader instrumentation"
+  ],
+  "honesty_contract": {
+    "no_new_dataset": true,
+    "no_engine_change": true,
+    "no_scheduler_change": true,
+    "no_real_execution_enabled": true,
+    "no_production_savings_claim": true,
+    "missing_fields_stay_none": true,
+    "bridge_helper_preserves_none_for_unknown": true
+  }
+}

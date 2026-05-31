@@ -89,6 +89,7 @@ from .dynamic_telemetry import (
     TelemetryWindowValidation,
     build_serving_telemetry_window,
     telemetry_tick_from_arrival_tick,
+    telemetry_tick_from_inference_service_state,
     validate_dynamic_window,
 )
 from .estimator import (
@@ -221,6 +222,7 @@ __all__ = [
     "TelemetryWindowValidation",
     "build_serving_telemetry_window",
     "telemetry_tick_from_arrival_tick",
+    "telemetry_tick_from_inference_service_state",
     "validate_dynamic_window",
     "DynamicEstimatorConfig",
     "estimate_dynamic_frontier",
