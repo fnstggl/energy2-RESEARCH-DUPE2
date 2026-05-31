@@ -36,6 +36,30 @@ from .controller import (
 from .dynamic_adapter import (
     dynamic_estimate_to_frontier_decision,
 )
+from .dynamic_calibration import (
+    CalibrationPassResult,
+    CalibrationReplayConfig,
+    CalibrationReplayResult,
+    MultiPassCalibrationConfig,
+    run_dynamic_frontier_calibration_replay,
+    run_multi_pass_calibration,
+)
+from .dynamic_confidence import (
+    ConfidenceUpdateConfig,
+    apply_confidence_update,
+    update_confidence,
+)
+from .dynamic_evaluation import (
+    DynamicFrontierCalibrationRecord,
+    DynamicFrontierObservedOutcome,
+    DynamicFrontierPrediction,
+    OracleSeriesPoint,
+    compute_calibration_record,
+    compute_calibration_records,
+    compute_frontier_calibration_summary,
+    records_from_json,
+    records_to_json,
+)
 from .dynamic_controller import (
     DynamicControllerConfig,
     choose_dynamic_rho,
@@ -216,6 +240,25 @@ __all__ = [
     "write_dynamic_outcome",
     "read_dynamic_outcomes",
     "dynamic_estimate_to_frontier_decision",
+    # dynamic frontier calibration + shadow evaluation v1
+    "DynamicFrontierPrediction",
+    "DynamicFrontierObservedOutcome",
+    "DynamicFrontierCalibrationRecord",
+    "OracleSeriesPoint",
+    "compute_calibration_record",
+    "compute_calibration_records",
+    "compute_frontier_calibration_summary",
+    "records_to_json",
+    "records_from_json",
+    "ConfidenceUpdateConfig",
+    "update_confidence",
+    "apply_confidence_update",
+    "CalibrationReplayConfig",
+    "CalibrationPassResult",
+    "CalibrationReplayResult",
+    "MultiPassCalibrationConfig",
+    "run_dynamic_frontier_calibration_replay",
+    "run_multi_pass_calibration",
     # training frontier v1 — sibling of serving frontier
     "TrainingWorkloadProfile",
     "TrainingFrontierCandidate",

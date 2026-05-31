@@ -334,6 +334,12 @@ demonstration** unless the tarball is downloaded.
   https://dcc.mit.edu/data and is **NOT committed**; the small synthetic
   fixture under `tests/fixtures/mit_supercloud_sample/` exercises every
   code path.
+- **Dynamic Serving Frontier Calibration + Shadow Evaluation v1** is now in
+  place — see `docs/DYNAMIC_SERVING_FRONTIER_CALIBRATION.md` +
+  `docs/AZURE_2024_DYNAMIC_FRONTIER_CALIBRATION_RESULTS.md`. Calibration is
+  opt-in, recommendation-only, shadow / simulator mode; the static frontier
+  controller, the `constraint_aware` engine default rho, and the robust
+  energy engine are unchanged.
 - No Azure **LMM/multimodal** or MIT ingestion yet (this PR did **not** ingest
   Azure LMM/multimodal).
 - No ML training, no neural forecasting.
