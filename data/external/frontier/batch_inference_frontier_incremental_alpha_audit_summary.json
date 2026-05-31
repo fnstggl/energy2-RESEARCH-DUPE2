@@ -1,0 +1,173 @@
+{
+  "doc_version": "batch_inference_frontier_incremental_alpha_audit_v1",
+  "production_claim": false,
+  "ml_training": false,
+  "modifies_serving_rho_controller": false,
+  "modifies_constraint_aware_default": false,
+  "uses_oracle_as_headline": false,
+  "executable_in_real_cluster": false,
+  "source": {
+    "trace": "azure_llm_2024",
+    "path": "/home/user/energy2/tests/fixtures/azure_llm_2024_sample.csv",
+    "scale_rps": 100.0,
+    "tick_seconds": 60.0,
+    "request_count": 5880,
+    "tick_count": 16
+  },
+  "config": {
+    "window_ticks": 30,
+    "deadline_slack_seconds": 300.0,
+    "candidate_rhos": [
+      0.45,
+      0.55,
+      0.65,
+      0.75,
+      0.85,
+      0.95
+    ],
+    "safe_timeout_pct": 10.0,
+    "safe_queue_p99_ms": 2000.0,
+    "incremental_alpha_gate_pct": 2.0
+  },
+  "policy_kpi_table": [
+    {
+      "policy": "sla_aware",
+      "goodput_per_dollar": 1013543.3436532507,
+      "sla_compliant_goodput": 654749,
+      "gpu_hours": 0.31666666666666665,
+      "infra_cost": 0.646,
+      "timeout_pct_mean": 3.764299353012367,
+      "queue_p99_ms": 267.72974372683166,
+      "mean_utilization_rho": 0.5080416311180396,
+      "deadline_miss_pct": 0.0
+    },
+    {
+      "policy": "current_price_only",
+      "goodput_per_dollar": 1199167.2794117646,
+      "sla_compliant_goodput": 652347,
+      "gpu_hours": 0.26666666666666666,
+      "infra_cost": 0.544,
+      "timeout_pct_mean": 4.119816893600281,
+      "queue_p99_ms": 343.4123407224078,
+      "mean_utilization_rho": 0.5357947026886494,
+      "deadline_miss_pct": null
+    },
+    {
+      "policy": "constraint_aware_static",
+      "goodput_per_dollar": 1199167.2794117646,
+      "sla_compliant_goodput": 652347,
+      "gpu_hours": 0.26666666666666666,
+      "infra_cost": 0.544,
+      "timeout_pct_mean": 4.119816893600281,
+      "queue_p99_ms": 343.4123407224078,
+      "mean_utilization_rho": 0.5357947026886494,
+      "deadline_miss_pct": 0.0
+    },
+    {
+      "policy": "static_serving_frontier_controller",
+      "goodput_per_dollar": 1199167.2794117646,
+      "sla_compliant_goodput": 652347,
+      "gpu_hours": 0.26666666666666666,
+      "infra_cost": 0.544,
+      "timeout_pct_mean": 4.119816893600281,
+      "queue_p99_ms": 343.4123407224078,
+      "mean_utilization_rho": 0.5357947026886494,
+      "deadline_miss_pct": 0.0
+    },
+    {
+      "policy": "dynamic_serving_frontier",
+      "goodput_per_dollar": 1199167.2794117646,
+      "sla_compliant_goodput": 652347,
+      "gpu_hours": 0.26666666666666666,
+      "infra_cost": 0.544,
+      "timeout_pct_mean": 4.119816893600281,
+      "queue_p99_ms": 343.4123407224078,
+      "mean_utilization_rho": 0.5357947026886494,
+      "deadline_miss_pct": null
+    },
+    {
+      "policy": "static_batch_inference_frontier",
+      "goodput_per_dollar": 1199167.2794117646,
+      "sla_compliant_goodput": 652347,
+      "gpu_hours": 0.26666666666666666,
+      "infra_cost": 0.544,
+      "timeout_pct_mean": 4.119816893600281,
+      "queue_p99_ms": 343.4123407224078,
+      "mean_utilization_rho": 0.5357947026886494,
+      "deadline_miss_pct": 0.0
+    },
+    {
+      "policy": "dynamic_batch_inference_frontier",
+      "goodput_per_dollar": 1130010.3806228375,
+      "sla_compliant_goodput": 653146,
+      "gpu_hours": 0.2833333333333333,
+      "infra_cost": 0.578,
+      "timeout_pct_mean": 3.9980818640646754,
+      "queue_p99_ms": 318.55714956572183,
+      "mean_utilization_rho": 0.5264264075262622,
+      "deadline_miss_pct": 0.0
+    }
+  ],
+  "alpha_decomposition_pct": {
+    "duplicated_serving_frontier_alpha_pct": 0.0,
+    "deadline_flex_scenario_alpha_pct": 0.0,
+    "true_incremental_alpha_vs_dynamic_serving_pct": -5.767076868779401,
+    "incremental_alpha_vs_static_batch_pct": -5.767076868779401
+  },
+  "safety_regression_flags": {
+    "sla_aware": {
+      "policy": "sla_aware",
+      "timeout_regression_vs_ca_static": false,
+      "queue_p99_regression_vs_ca_static": false
+    },
+    "current_price_only": {
+      "policy": "current_price_only",
+      "timeout_regression_vs_ca_static": false,
+      "queue_p99_regression_vs_ca_static": false
+    },
+    "constraint_aware_static": {
+      "policy": "constraint_aware_static",
+      "timeout_regression_vs_ca_static": false,
+      "queue_p99_regression_vs_ca_static": false
+    },
+    "static_serving_frontier_controller": {
+      "policy": "static_serving_frontier_controller",
+      "timeout_regression_vs_ca_static": false,
+      "queue_p99_regression_vs_ca_static": false
+    },
+    "dynamic_serving_frontier": {
+      "policy": "dynamic_serving_frontier",
+      "timeout_regression_vs_ca_static": false,
+      "queue_p99_regression_vs_ca_static": false
+    },
+    "static_batch_inference_frontier": {
+      "policy": "static_batch_inference_frontier",
+      "timeout_regression_vs_ca_static": false,
+      "queue_p99_regression_vs_ca_static": false
+    },
+    "dynamic_batch_inference_frontier": {
+      "policy": "dynamic_batch_inference_frontier",
+      "timeout_regression_vs_ca_static": false,
+      "queue_p99_regression_vs_ca_static": false
+    }
+  },
+  "dynamic_batch_action_distribution": {
+    "RECOMMEND_BATCH_FRONTIER": 3,
+    "KEEP_CURRENT_BATCH_POLICY": 5
+  },
+  "acceptance_gate": {
+    "incremental_alpha_gate_pct": 2.0,
+    "incremental_alpha_value_pct": -5.767076868779401,
+    "alpha_gate_passed": false,
+    "no_safety_regression": true,
+    "verdict": "SHADOW_DIAGNOSTIC"
+  },
+  "honesty_notes": [
+    "simulator / public-trace evidence only \u2014 NOT production savings",
+    "Azure LLM 2024 is a SERVING trace re-used as a synthetic batch-flex scenario; the deadline-slack is a scenario knob",
+    "no oracle / clairvoyant baseline used as headline",
+    "no serving rho controller default changed",
+    "no constraint_aware default changed",
+    "executable_in_real_cluster is False at construction"
+  ]
+}
