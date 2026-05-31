@@ -161,3 +161,20 @@ The benchmark reports per-window goodput/$, timeout %, queue p99, GPU-hours, mea
 - **Per-tenant safety thresholds.** `max_timeout_pct=10`, `max_queue_p99_ms=2000` are pre-registered defaults from the Azure 2024 audit. Per-tenant SLAs must override these explicitly.
 - **Real executor.** Real-mode execution remains a deliberate stub. Promoting it requires the binding-boundary work described in `docs/SAFE_UTILIZATION_FRONTIER_CONTROLLER.md` §"Real-mode execution boundary".
 - **Trained risk model.** A pilot-data-calibrated logistic / quantile regression for the risk scores is plausible but **out of scope for v1**. Any future learned component must keep the same interface (`probability ∈ [0, 1]`, reason codes, confidence label) so the controller logic stays unchanged.
+
+## 13. Calibration + shadow evaluation
+
+The next phase — closed-loop **shadow calibration** of the dynamic
+estimator's prediction quality — lives in
+`aurelius/frontier/dynamic_calibration.py`,
+`aurelius/frontier/dynamic_evaluation.py`,
+`aurelius/frontier/dynamic_confidence.py`, with an Azure 2024 runner at
+`scripts/run_azure_2024_dynamic_frontier_calibration.py`. The
+methodology, hard rules, and honesty contract are documented in
+`docs/DYNAMIC_SERVING_FRONTIER_CALIBRATION.md`; results land in
+`docs/AZURE_2024_DYNAMIC_FRONTIER_CALIBRATION_RESULTS.md` (and the JSON
+sibling). Calibration does **not** change the estimator's runtime
+behaviour, the static controller, or the `constraint_aware` engine
+default rho — it is an opt-in measurement layer that reports
+prediction quality, oracle-alpha capture, and a deterministic
+confidence update.
