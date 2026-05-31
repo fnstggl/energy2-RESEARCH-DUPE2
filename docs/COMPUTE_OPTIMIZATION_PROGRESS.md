@@ -2906,3 +2906,64 @@ existing 109 HF tests + 211 regression tests still pass.
 
 **Next:** Forecast Leverage Audit v2 (build the actual forecasters in
 the build_now ranking using the new strong-strength evidence).
+
+## 2026-05-31 — CARA Latency Forecaster v1 (`feature/cara-latency-forecaster-v1`)
+
+Research/backtest/shadow-only forecasting PR for TTFT + E2E latency at
+p50/p95/p99 using the CARA analysis-tier ingest from PR #124. No ML
+model wired into any controller; no scheduler defaults changed; no
+external-savings number quoted.
+
+**What landed**
+
+- `aurelius/forecasting/cara_latency_features.py` — leakage-checked
+  feature pipeline (24 numeric + 8 categorical features), with
+  `LeakageError` raised if any of `actual_*`, `completion_timestamp_s`,
+  or `actual_output_tokens` would enter the predicted_only feature set.
+  Derived columns: `model_size`, `gpu_type`, `prompt_token_bin`,
+  `queue_depth_bin`, `kv_util_bin`, `hour_of_day`. Pre-registered bin
+  boundaries (never fit on holdout).
+- `aurelius/forecasting/cara_latency_forecaster.py` — baselines
+  (`GlobalConstantP95Baseline`, `GroupConstantQuantileBaseline`,
+  `SimpleRulePlacementScoreBaseline`), ML
+  (`HistGradientBoostingQuantileForecaster` for p50/p95/p99,
+  `RandomForestMedianForecaster`), safety wrappers
+  (`ConservativeMultiplierCalibration`, `FallbackToBaseline`),
+  per-quantile gate classifier with apples-to-apples pinball-loss
+  comparison.
+- `scripts/run_cara_latency_forecaster_v1.py` — schema audit + train +
+  evaluate on 3 holdouts (random / by_instance_type / time).
+- `scripts/run_cara_latency_forecaster_v1_backtest.py` — counterfactual
+  routing/placement backtest with bucket-mean proxy (explicitly
+  labelled `counterfactual_bucket_mean_proxy`).
+
+**Forecasting outcomes (per-quantile, vs `per_instance_type_p{q}`):**
+
+- TTFT p50 → **`candidate_for_shadow_integration`** (+37 to +51%
+  pinball-loss improvement on all 3 holdouts; no safety regression).
+- TTFT p95 → `diagnostic_only` (safety regression on time_holdout).
+- TTFT p99 → `promising_needs_validation` (-17% on time_holdout flags
+  temporal non-stationarity).
+- E2E p50 → `diagnostic_only` (parity).
+- E2E p95 → `diagnostic_only` (strong OOD signal swamped by parity on
+  random + time).
+- E2E p99 → `promising_needs_validation`.
+
+**Routing backtest:** `diagnostic_only` for both targets — the trivial
+baseline `per_instance_type_p95` always routes to `qwen2.5-3b_a30` and
+wins on latency-only because CARA carries no capacity / quality / cost
+constraints. Honest negative finding.
+
+**Tests:** 60 new (all pass) + 308 existing HF + frontier + forecast-
+leverage tests still pass.
+
+**Honesty invariants:** no scheduler modifications, no production
+claim, no oracle headline, leakage fields blocked, raw + analysis
+samples gitignored, counterfactual routing labelled bucket-mean proxy.
+TTFT p50 model is `candidate_for_shadow_integration` — eligible for
+shadow wiring into `dynamic_estimator.py` priors path, not into the
+controller execution path.
+
+**Next:** production-feasible routing backtest with capacity + quality
++ cost constraints; time-window staleness study for TTFT p99; pilot
+telemetry calibration once `replica_count` + `SLA_label` land.

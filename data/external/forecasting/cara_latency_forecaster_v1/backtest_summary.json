@@ -1,0 +1,179 @@
+{
+  "backtest_ran_at_s": 1780266324.1722867,
+  "doc_version": "cara_latency_forecaster_v1_backtest_v1",
+  "instance_types": [
+    "qwen2.5-3b_a30",
+    "qwen2.5-3b_p100",
+    "qwen2.5-7b_a30",
+    "qwen2.5-14b_v100",
+    "qwen2.5-72b_a100"
+  ],
+  "modifies_controllers_or_defaults": false,
+  "modifies_robust_energy_engine": false,
+  "n_holdout": 15365,
+  "n_train": 61460,
+  "per_target": {
+    "actual_e2e_latency_s": {
+      "goodput_per_dollar": null,
+      "goodput_per_dollar_skipped_reason": "no real cost mapping by GPU type in CARA; per the mission spec, latency-risk reduction is the primary metric and goodput/$ is explicitly not evaluated.",
+      "ml_routing_promotion_classification": "diagnostic_only",
+      "policies": {
+        "ml_hgb_p95": {
+          "instance_pick_counts": {
+            "qwen2.5-14b_v100": 9635,
+            "qwen2.5-3b_a30": 5693,
+            "qwen2.5-7b_a30": 37
+          },
+          "n_actual_match": 3787,
+          "n_rows": 15365,
+          "policy": "ml_hgb_p95",
+          "realised_latency_mean": 2.9477820858471064,
+          "realised_latency_p50": 3.1297393294166516,
+          "realised_latency_p90": 4.347206322387627,
+          "realised_latency_p95": 4.4925971769262105,
+          "realised_latency_p99": 8.734954723040573,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        },
+        "per_instance_type_p95": {
+          "instance_pick_counts": {
+            "qwen2.5-3b_a30": 15365
+          },
+          "n_actual_match": 2541,
+          "n_rows": 15365,
+          "policy": "per_instance_type_p95",
+          "realised_latency_mean": 2.227421049831247,
+          "realised_latency_p50": 2.2390729443930337,
+          "realised_latency_p90": 2.56864406450574,
+          "realised_latency_p95": 3.022746748989448,
+          "realised_latency_p99": 6.015241755056195,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        },
+        "per_instance_type_p95_with_queue": {
+          "instance_pick_counts": {
+            "qwen2.5-3b_a30": 15365
+          },
+          "n_actual_match": 2541,
+          "n_rows": 15365,
+          "policy": "per_instance_type_p95_with_queue",
+          "realised_latency_mean": 2.227421049831247,
+          "realised_latency_p50": 2.2390729443930337,
+          "realised_latency_p90": 2.56864406450574,
+          "realised_latency_p95": 3.022746748989448,
+          "realised_latency_p99": 6.015241755056195,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        },
+        "round_robin": {
+          "instance_pick_counts": {
+            "qwen2.5-14b_v100": 3073,
+            "qwen2.5-3b_a30": 3073,
+            "qwen2.5-3b_p100": 3073,
+            "qwen2.5-72b_a100": 3073,
+            "qwen2.5-7b_a30": 3073
+          },
+          "n_actual_match": 3098,
+          "n_rows": 15365,
+          "policy": "round_robin",
+          "realised_latency_mean": 8.551644609802429,
+          "realised_latency_p50": 6.116989645269796,
+          "realised_latency_p90": 22.336729805935324,
+          "realised_latency_p95": 23.010452784197295,
+          "realised_latency_p99": 36.65727384900674,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        }
+      },
+      "result_quality_label": "counterfactual_bucket_mean_proxy",
+      "safety_regression": 1,
+      "strongest_baseline_policy": "per_instance_type_p95_with_queue",
+      "tail_delta_ml_vs_strongest_baseline_pct": {
+        "p50": -39.7783550220629,
+        "p90": -69.2412889142007,
+        "p95": -48.626317385939025,
+        "p99": -45.21369345959015
+      }
+    },
+    "actual_ttft_s": {
+      "goodput_per_dollar": null,
+      "goodput_per_dollar_skipped_reason": "no real cost mapping by GPU type in CARA; per the mission spec, latency-risk reduction is the primary metric and goodput/$ is explicitly not evaluated.",
+      "ml_routing_promotion_classification": "diagnostic_only",
+      "policies": {
+        "ml_hgb_p95": {
+          "instance_pick_counts": {
+            "qwen2.5-14b_v100": 3026,
+            "qwen2.5-3b_a30": 4138,
+            "qwen2.5-3b_p100": 36,
+            "qwen2.5-72b_a100": 9,
+            "qwen2.5-7b_a30": 8156
+          },
+          "n_actual_match": 6148,
+          "n_rows": 15365,
+          "policy": "ml_hgb_p95",
+          "realised_latency_mean": 0.04554871244959876,
+          "realised_latency_p50": 0.042946854955516756,
+          "realised_latency_p90": 0.06591528555647787,
+          "realised_latency_p95": 0.08206588685429554,
+          "realised_latency_p99": 0.1033952708588913,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        },
+        "per_instance_type_p95": {
+          "instance_pick_counts": {
+            "qwen2.5-3b_a30": 15365
+          },
+          "n_actual_match": 2541,
+          "n_rows": 15365,
+          "policy": "per_instance_type_p95",
+          "realised_latency_mean": 0.029655714623576263,
+          "realised_latency_p50": 0.028959980110673435,
+          "realised_latency_p90": 0.04216082229149684,
+          "realised_latency_p95": 0.0501959755201824,
+          "realised_latency_p99": 0.0501959755201824,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        },
+        "per_instance_type_p95_with_queue": {
+          "instance_pick_counts": {
+            "qwen2.5-3b_a30": 15365
+          },
+          "n_actual_match": 2541,
+          "n_rows": 15365,
+          "policy": "per_instance_type_p95_with_queue",
+          "realised_latency_mean": 0.029655714623576263,
+          "realised_latency_p50": 0.028959980110673435,
+          "realised_latency_p90": 0.04216082229149684,
+          "realised_latency_p95": 0.0501959755201824,
+          "realised_latency_p99": 0.0501959755201824,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        },
+        "round_robin": {
+          "instance_pick_counts": {
+            "qwen2.5-14b_v100": 3073,
+            "qwen2.5-3b_a30": 3073,
+            "qwen2.5-3b_p100": 3073,
+            "qwen2.5-72b_a100": 3073,
+            "qwen2.5-7b_a30": 3073
+          },
+          "n_actual_match": 3098,
+          "n_rows": 15365,
+          "policy": "round_robin",
+          "realised_latency_mean": 0.0842907166052154,
+          "realised_latency_p50": 0.05946937123480646,
+          "realised_latency_p90": 0.14939505966155905,
+          "realised_latency_p95": 0.19784882993647648,
+          "realised_latency_p99": 0.4793133273617261,
+          "result_quality": "counterfactual_bucket_mean_proxy"
+        }
+      },
+      "result_quality_label": "counterfactual_bucket_mean_proxy",
+      "safety_regression": 1,
+      "strongest_baseline_policy": "per_instance_type_p95_with_queue",
+      "tail_delta_ml_vs_strongest_baseline_pct": {
+        "p50": -48.29725293798922,
+        "p90": -56.34250466166054,
+        "p95": -63.49096915408913,
+        "p99": -105.98318846760722
+      }
+    }
+  },
+  "production_claim": false,
+  "result_quality_for_counterfactuals": "bucket_mean_proxy (CARA carries realised latency only at the actually-chosen instance_type; counterfactuals are honest estimates, NOT measurements)",
+  "shadow_only": true,
+  "uses_oracle_as_headline": false
+}
