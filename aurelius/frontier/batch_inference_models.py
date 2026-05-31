@@ -155,20 +155,12 @@ class BatchInferenceFrontierCandidate:
     All four axes are ``Optional`` — the controller may sweep a subset (e.g.
     fix ``batch_window_seconds`` and vary only ``target_rho`` +
     ``deadline_slack_seconds``).
-
-    ``deferral_window_seconds`` is the dynamic-batch-specific lever (added
-    by the dynamic batch frontier v1). Peak-tick arrivals beyond the safe
-    rho can be deferred up to ``deferral_window_seconds`` into the future,
-    inside the deadline-slack budget. The STATIC batch frontier estimator
-    ignores this field (treats it as 0); the DYNAMIC batch frontier
-    estimator uses it as its peak-shift knob.
     """
 
     batch_window_seconds: Optional[float] = None
     batch_concurrency: Optional[int] = None
     target_rho: Optional[float] = None
     deadline_slack_seconds: Optional[float] = None
-    deferral_window_seconds: Optional[float] = None
     # Free-form label naming the underlying policy / measurement source.
     source_policy: Optional[str] = None
 
@@ -190,11 +182,6 @@ class BatchInferenceFrontierCandidate:
             raise BatchInferenceFrontierSchemaError(
                 f"deadline_slack_seconds must be >= 0; got "
                 f"{self.deadline_slack_seconds}")
-        if (self.deferral_window_seconds is not None
-                and self.deferral_window_seconds < 0):
-            raise BatchInferenceFrontierSchemaError(
-                f"deferral_window_seconds must be >= 0; got "
-                f"{self.deferral_window_seconds}")
 
     def to_dict(self) -> dict:
         return asdict(self)
