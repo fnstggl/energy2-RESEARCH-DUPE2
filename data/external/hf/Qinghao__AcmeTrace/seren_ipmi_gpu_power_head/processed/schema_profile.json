@@ -1,0 +1,168 @@
+{
+  "config_name": "seren_ipmi_gpu_power_head",
+  "dataset_id": "Qinghao/AcmeTrace",
+  "dtypes": {
+    "CPU_Power": [
+      "float_str",
+      "null"
+    ],
+    "Memory_Power": [
+      "float_str",
+      "null"
+    ],
+    "PSU1_PIN": [
+      "float_str"
+    ],
+    "PSU2_PIN": [
+      "float_str"
+    ],
+    "PSU3_PIN": [
+      "float_str"
+    ],
+    "PSU4_PIN": [
+      "float_str"
+    ],
+    "PSU5_PIN": [
+      "float_str"
+    ],
+    "PSU6_PIN": [
+      "float_str"
+    ],
+    "PSU_IN_SUM": [
+      "float_str"
+    ],
+    "Sys_Total_Power": [
+      "float_str"
+    ],
+    "Time": [
+      "str"
+    ],
+    "node": [
+      "str"
+    ]
+  },
+  "example_values": {
+    "CPU_Power": [
+      "'310.0'",
+      "'310.0'",
+      "'310.0'"
+    ],
+    "Memory_Power": [
+      "'61.0'",
+      "'60.0'",
+      "'58.0'"
+    ],
+    "PSU1_PIN": [
+      "'795.0'",
+      "'940.0'",
+      "'1050.0'"
+    ],
+    "PSU2_PIN": [
+      "'535.0'",
+      "'950.0'",
+      "'790.0'"
+    ],
+    "PSU3_PIN": [
+      "'915.0'",
+      "'945.0'",
+      "'940.0'"
+    ],
+    "PSU4_PIN": [
+      "'970.0'",
+      "'585.0'",
+      "'895.0'"
+    ],
+    "PSU5_PIN": [
+      "'425.0'",
+      "'485.0'",
+      "'470.0'"
+    ],
+    "PSU6_PIN": [
+      "'460.0'",
+      "'520.0'",
+      "'505.0'"
+    ],
+    "PSU_IN_SUM": [
+      "'4100.0'",
+      "'4425.0'",
+      "'4650.0'"
+    ],
+    "Sys_Total_Power": [
+      "'4756.0'",
+      "'3712.0'",
+      "'4466.0'"
+    ],
+    "Time": [
+      "'2023-05-15 14:15:01+08:00'",
+      "'2023-05-15 14:20:01+08:00'",
+      "'2023-05-15 14:25:01+08:00'"
+    ],
+    "node": [
+      "'SH-IDC1-10-140-0-131'",
+      "'SH-IDC1-10-140-0-131'",
+      "'SH-IDC1-10-140-0-131'"
+    ]
+  },
+  "file_size_bytes": 16777216,
+  "inspected_row_count": 79999,
+  "missing_rates": {
+    "CPU_Power": 7.500093751167114e-05,
+    "Memory_Power": 7.500093751167114e-05,
+    "PSU1_PIN": 0.0,
+    "PSU2_PIN": 0.0,
+    "PSU3_PIN": 0.0,
+    "PSU4_PIN": 0.0,
+    "PSU5_PIN": 0.0,
+    "PSU6_PIN": 0.0,
+    "PSU_IN_SUM": 0.0,
+    "Sys_Total_Power": 0.0,
+    "Time": 0.0,
+    "node": 0.0
+  },
+  "presence_rates": {
+    "CPU_Power": 0.9999249990624883,
+    "Memory_Power": 0.9999249990624883,
+    "PSU1_PIN": 1.0,
+    "PSU2_PIN": 1.0,
+    "PSU3_PIN": 1.0,
+    "PSU4_PIN": 1.0,
+    "PSU5_PIN": 1.0,
+    "PSU6_PIN": 1.0,
+    "PSU_IN_SUM": 1.0,
+    "Sys_Total_Power": 1.0,
+    "Time": 1.0,
+    "node": 1.0
+  },
+  "profiled_columns": [
+    "CPU_Power",
+    "Memory_Power",
+    "PSU1_PIN",
+    "PSU2_PIN",
+    "PSU3_PIN",
+    "PSU4_PIN",
+    "PSU5_PIN",
+    "PSU6_PIN",
+    "PSU_IN_SUM",
+    "Sys_Total_Power",
+    "Time",
+    "node"
+  ],
+  "raw_column_count": 12,
+  "raw_columns": [
+    "CPU_Power",
+    "Memory_Power",
+    "PSU1_PIN",
+    "PSU2_PIN",
+    "PSU3_PIN",
+    "PSU4_PIN",
+    "PSU5_PIN",
+    "PSU6_PIN",
+    "PSU_IN_SUM",
+    "Sys_Total_Power",
+    "Time",
+    "node"
+  ],
+  "source_files_inspected": [
+    "data/utilization/ipmi/GPU_AB_Power.csv"
+  ]
+}

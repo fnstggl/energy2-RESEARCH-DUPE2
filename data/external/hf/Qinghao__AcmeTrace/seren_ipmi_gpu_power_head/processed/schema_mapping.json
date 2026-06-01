@@ -1,0 +1,56 @@
+{
+  "accepted_columns": [
+    "CPU_Power",
+    "Memory_Power",
+    "PSU1_PIN",
+    "PSU2_PIN",
+    "PSU3_PIN",
+    "PSU4_PIN",
+    "PSU5_PIN",
+    "PSU6_PIN",
+    "PSU_IN_SUM",
+    "Sys_Total_Power",
+    "Time",
+    "node"
+  ],
+  "columns": [
+    {
+      "aurelius_signal_category": "request_arrival",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "sample_ts",
+      "notes": "DCGM/Prometheus sample timestamp (15-second interval, README \u00a72).",
+      "presence_rate": 1.0,
+      "raw_column_name": "Time",
+      "usable_for": [
+        "dynamic_frontier_calibration"
+      ]
+    },
+    {
+      "aurelius_signal_category": "gpu_resource",
+      "field_quality": "derived",
+      "host_column_count": 11,
+      "host_column_examples": [
+        "CPU_Power",
+        "Memory_Power",
+        "PSU1_PIN",
+        "PSU2_PIN",
+        "PSU3_PIN"
+      ],
+      "normalized_field": "value_mean,value_min,value_max,value_p50,value_p90,value_p95,value_p99,host_count",
+      "normalized_field_pattern": "ipmi_gpu_power_w__<server_ip_with_underscores>",
+      "notes": "Per-row aggregate of per-host values (DCGM/IPMI 15s sample). Computed in the normalization step; raw per-host columns are preserved in the gitignored raw file but not in the committed sample.",
+      "presence_rate": 0.9999249990624883,
+      "raw_column_name": "<server_ip>",
+      "usable_for": [
+        "dynamic_frontier_calibration"
+      ]
+    }
+  ],
+  "config_name": "seren_ipmi_gpu_power_head",
+  "dataset_id": "Qinghao/AcmeTrace",
+  "rejected_columns": []
+}

@@ -1,0 +1,5 @@
+{"host_count":10,"sample_ts":"2023-05-15 14:15:01+08:00","value_max":4756.0,"value_mean":1332.7,"value_min":61.0,"value_p50":535.0,"value_p90":4100.0,"value_p95":4756.0,"value_p99":4756.0}
+{"host_count":10,"sample_ts":"2023-05-15 14:20:01+08:00","value_max":4425.0,"value_mean":1293.2,"value_min":60.0,"value_p50":585.0,"value_p90":3712.0,"value_p95":4425.0,"value_p99":4425.0}
+{"host_count":10,"sample_ts":"2023-05-15 14:25:01+08:00","value_max":4650.0,"value_mean":1413.4,"value_min":58.0,"value_p50":790.0,"value_p90":4466.0,"value_p95":4650.0,"value_p99":4650.0}
+{"host_count":10,"sample_ts":"2023-05-15 14:30:01+08:00","value_max":4180.0,"value_mean":1290.4,"value_min":58.0,"value_p50":655.0,"value_p90":4176.0,"value_p95":4180.0,"value_p99":4180.0}
+{"host_count":10,"sample_ts":"2023-05-15 14:35:01+08:00","value_max":4814.0,"value_mean":1439.3,"value_min":59.0,"value_p50":845.0,"value_p90":4605.0,"value_p95":4814.0,"value_p99":4814.0}

@@ -1,0 +1,231 @@
+{
+  "config_name": "kalos_jobs",
+  "dataset_id": "Qinghao/AcmeTrace",
+  "dtypes": {
+    "cpu_num": [
+      "int_str"
+    ],
+    "duration": [
+      "int_str"
+    ],
+    "end_time": [
+      "null",
+      "str"
+    ],
+    "fail_time": [
+      "null",
+      "str"
+    ],
+    "gpu_num": [
+      "int_str"
+    ],
+    "gpu_time": [
+      "float_str",
+      "null"
+    ],
+    "job_id": [
+      "str"
+    ],
+    "mem_per_pod_GB": [
+      "int_str"
+    ],
+    "node_num": [
+      "int_str"
+    ],
+    "queue": [
+      "float_str"
+    ],
+    "shared_mem_per_pod": [
+      "float_str",
+      "null"
+    ],
+    "start_time": [
+      "str"
+    ],
+    "state": [
+      "str"
+    ],
+    "stop_time": [
+      "null",
+      "str"
+    ],
+    "submit_time": [
+      "str"
+    ],
+    "type": [
+      "str"
+    ],
+    "user": [
+      "str"
+    ]
+  },
+  "example_values": {
+    "cpu_num": [
+      "'960'",
+      "'960'",
+      "'960'"
+    ],
+    "duration": [
+      "'18'",
+      "'19'",
+      "'82'"
+    ],
+    "end_time": [
+      "'2023-05-17 11:01:16+00:00'",
+      "'2023-05-17 11:21:51+00:00'",
+      "'2023-05-17 11:30:04+00:00'"
+    ],
+    "fail_time": [
+      "'2023-05-17 11:01:16+00:00'",
+      "'2023-05-17 11:21:51+00:00'",
+      "''"
+    ],
+    "gpu_num": [
+      "'64'",
+      "'64'",
+      "'64'"
+    ],
+    "gpu_time": [
+      "'1152.0'",
+      "'1216.0'",
+      "'5248.0'"
+    ],
+    "job_id": [
+      "'dlctk696s0jbvitv'",
+      "'dlcgiwd1g3i1cfgl'",
+      "'dlc1t2ypl09b8qtp'"
+    ],
+    "mem_per_pod_GB": [
+      "'1000'",
+      "'1000'",
+      "'1000'"
+    ],
+    "node_num": [
+      "'8'",
+      "'8'",
+      "'8'"
+    ],
+    "queue": [
+      "'10.0'",
+      "'13.0'",
+      "'12.0'"
+    ],
+    "shared_mem_per_pod": [
+      "'100.0'",
+      "'100.0'",
+      "'100.0'"
+    ],
+    "start_time": [
+      "'2023-05-17 11:01:08+00:00'",
+      "'2023-05-17 11:21:45+00:00'",
+      "'2023-05-17 11:28:54+00:00'"
+    ],
+    "state": [
+      "'FAILED'",
+      "'FAILED'",
+      "'CANCELLED'"
+    ],
+    "stop_time": [
+      "''",
+      "''",
+      "'2023-05-17 11:30:04+00:00'"
+    ],
+    "submit_time": [
+      "'2023-05-17 11:00:58+00:00'",
+      "'2023-05-17 11:21:32+00:00'",
+      "'2023-05-17 11:28:42+00:00'"
+    ],
+    "type": [
+      "'Other'",
+      "'Other'",
+      "'Other'"
+    ],
+    "user": [
+      "'uf794'",
+      "'uf794'",
+      "'uf794'"
+    ]
+  },
+  "file_size_bytes": 8960159,
+  "inspected_row_count": 62413,
+  "missing_rates": {
+    "cpu_num": 0.0,
+    "duration": 0.0,
+    "end_time": 4.806690913750078e-05,
+    "fail_time": 0.7783154150577604,
+    "gpu_num": 0.0,
+    "gpu_time": 0.6810440132664669,
+    "job_id": 0.0,
+    "mem_per_pod_GB": 0.0,
+    "node_num": 0.0,
+    "queue": 0.0,
+    "shared_mem_per_pod": 0.975485876339865,
+    "start_time": 0.0,
+    "state": 0.0,
+    "stop_time": 0.9797638312531043,
+    "submit_time": 0.0,
+    "type": 0.0,
+    "user": 0.0
+  },
+  "presence_rates": {
+    "cpu_num": 1.0,
+    "duration": 1.0,
+    "end_time": 0.9999519330908625,
+    "fail_time": 0.2216845849422396,
+    "gpu_num": 1.0,
+    "gpu_time": 0.3189559867335331,
+    "job_id": 1.0,
+    "mem_per_pod_GB": 1.0,
+    "node_num": 1.0,
+    "queue": 1.0,
+    "shared_mem_per_pod": 0.024514123660134907,
+    "start_time": 1.0,
+    "state": 1.0,
+    "stop_time": 0.02023616874689568,
+    "submit_time": 1.0,
+    "type": 1.0,
+    "user": 1.0
+  },
+  "profiled_columns": [
+    "cpu_num",
+    "duration",
+    "end_time",
+    "fail_time",
+    "gpu_num",
+    "gpu_time",
+    "job_id",
+    "mem_per_pod_GB",
+    "node_num",
+    "queue",
+    "shared_mem_per_pod",
+    "start_time",
+    "state",
+    "stop_time",
+    "submit_time",
+    "type",
+    "user"
+  ],
+  "raw_column_count": 17,
+  "raw_columns": [
+    "cpu_num",
+    "duration",
+    "end_time",
+    "fail_time",
+    "gpu_num",
+    "gpu_time",
+    "job_id",
+    "mem_per_pod_GB",
+    "node_num",
+    "queue",
+    "shared_mem_per_pod",
+    "start_time",
+    "state",
+    "stop_time",
+    "submit_time",
+    "type",
+    "user"
+  ],
+  "source_files_inspected": [
+    "data/job_trace/trace_kalos.csv"
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "accepted_columns": [
+    "cpu_num",
+    "duration",
+    "end_time",
+    "gpu_num",
+    "gpu_time",
+    "job_id",
+    "node_num",
+    "queue",
+    "start_time",
+    "state",
+    "submit_time",
+    "type",
+    "user"
+  ],
+  "columns": [
+    {
+      "aurelius_signal_category": "scheduler_state",
+      "dtypes": [
+        "int_str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "cpu_count",
+      "notes": "Number of CPUs requested for the job.",
+      "presence_rate": 1.0,
+      "raw_column_name": "cpu_num",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "latency",
+      "dtypes": [
+        "int_str"
+      ],
+      "field_quality": "derived",
+      "missing_rate": 0.0,
+      "normalized_field": "duration_s",
+      "notes": "Derived end_time - start_time in seconds (README \u00a71 note 2).",
+      "presence_rate": 1.0,
+      "raw_column_name": "duration",
+      "usable_for": [
+        "throughput_prior",
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "request_completion",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "end_time",
+      "notes": "ISO-8601 termination timestamp.",
+      "presence_rate": 1.0,
+      "raw_column_name": "end_time",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "gpu_resource",
+      "dtypes": [
+        "int_str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "gpu_count",
+      "notes": "Number of GPUs requested for the job.",
+      "presence_rate": 1.0,
+      "raw_column_name": "gpu_num",
+      "usable_for": [
+        "constraint_aware_backtest",
+        "throughput_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "gpu_resource",
+      "dtypes": [
+        "float_str",
+        "null"
+      ],
+      "field_quality": "derived",
+      "missing_rate": 0.4185177314716434,
+      "normalized_field": "gpu_seconds",
+      "notes": "Derived duration * gpu_num GPU-seconds (README \u00a71 note 4).",
+      "presence_rate": 0.5814822685283566,
+      "raw_column_name": "gpu_time",
+      "usable_for": [
+        "throughput_prior",
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "scheduler_state",
+      "dtypes": [
+        "int_str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "job_id",
+      "notes": "Unique scheduler-assigned job id.",
+      "presence_rate": 1.0,
+      "raw_column_name": "job_id",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "scheduler_state",
+      "dtypes": [
+        "int_str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "node_count",
+      "notes": "Number of nodes requested for the job.",
+      "presence_rate": 1.0,
+      "raw_column_name": "node_num",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "queue",
+      "dtypes": [
+        "int_str"
+      ],
+      "field_quality": "derived",
+      "missing_rate": 0.0,
+      "normalized_field": "queue_wait_s",
+      "notes": "Derived start_time - submit_time in seconds (README \u00a71 note 3) \u2014 REAL queue wait signal.",
+      "presence_rate": 1.0,
+      "raw_column_name": "queue",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "scheduler_state",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "start_time",
+      "notes": "ISO-8601 execution-start timestamp.",
+      "presence_rate": 1.0,
+      "raw_column_name": "start_time",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "failure_timeout",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "termination_state",
+      "notes": "COMPLETED / CANCELLED / FAILED / TIMEOUT / NODE_FAIL. Real timeout + failure signal.",
+      "presence_rate": 1.0,
+      "raw_column_name": "state",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "request_arrival",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "submit_time",
+      "notes": "ISO-8601 submission timestamp.",
+      "presence_rate": 1.0,
+      "raw_column_name": "submit_time",
+      "usable_for": [
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "metadata_only",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "workload_type",
+      "notes": "LLM-development workload type (e.g. Other, Eval, ...).",
+      "presence_rate": 1.0,
+      "raw_column_name": "type",
+      "usable_for": [
+        "workload_shape_only",
+        "constraint_aware_backtest"
+      ]
+    },
+    {
+      "aurelius_signal_category": "metadata_only",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "user_hash",
+      "notes": "Hashed user id (prefix 'u').",
+      "presence_rate": 1.0,
+      "raw_column_name": "user",
+      "usable_for": [
+        "workload_shape_only"
+      ]
+    }
+  ],
+  "config_name": "seren_jobs_head",
+  "dataset_id": "Qinghao/AcmeTrace",
+  "rejected_columns": []
+}
