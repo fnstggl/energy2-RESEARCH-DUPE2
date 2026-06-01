@@ -1,0 +1,2430 @@
+{
+  "doc_version": "economic_overlay_eval_v1",
+  "n_operational_rows": 35,
+  "primary_baseline": "A_existing_scorer_baseline",
+  "primary_kpi": "sla_safe_goodput_per_dollar",
+  "production_claim": false,
+  "promotion": {
+    "carbon_cost_held_missing_under_default_policy": true,
+    "carbon_cost_requires_operator_carbon_price_per_kg_usd": true,
+    "final_status": "economic_overlay_ready",
+    "reason": "Baseline (no overlay) computes no economic goodput/$; full overlay computes it on every record where SLA fields are present. The overlay supplies the missing inputs deterministically from public data, but the result depends on public GPU list price and scenario_prior carbon \u2014 NOT production-ready."
+  },
+  "result_classes_reported_separately": [
+    "measured_same_record",
+    "cross_dataset_joined",
+    "scenario_prior"
+  ],
+  "shadow_only": true,
+  "uses_fifo_as_headline": false,
+  "uses_oracle_as_headline": false,
+  "variants": {
+    "A_existing_scorer_baseline": {
+      "applied_overlays": {
+        "cache_prefix_prior": false,
+        "cache_value_overlay": false,
+        "energy_carbon_overlay": false,
+        "gpu_price_overlay": false,
+        "ttft_prior": false
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_decode_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_energy_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_gpu_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": null,
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 1.0,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 1.0,
+          "estimated_cold_start_cost_usd": 1.0,
+          "estimated_decode_cost_usd": 1.0,
+          "estimated_energy_cost_usd": 1.0,
+          "estimated_gpu_cost_usd": 1.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 1.0,
+          "sla_safe_goodput_per_dollar": 1.0
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    },
+    "B_existing_plus_gpu_price": {
+      "applied_overlays": {
+        "cache_prefix_prior": false,
+        "cache_value_overlay": false,
+        "energy_carbon_overlay": false,
+        "gpu_price_overlay": true,
+        "ttft_prior": false
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": 0.0010082222222222222,
+            "mean": 0.00025078519555555553,
+            "min": 0.0,
+            "n": 5,
+            "p50": 0.0,
+            "sum": 0.0012539259777777777
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": 0.0013498976094444444,
+            "mean": 0.0002707452016666667,
+            "min": 8.690166666666667e-07,
+            "n": 5,
+            "p50": 9.789905555555556e-07,
+            "sum": 0.0013537260083333333
+          },
+          "estimated_decode_cost_usd": {
+            "max": 0.22007173974609373,
+            "mean": 0.05594626778539306,
+            "min": 0.001865205693359871,
+            "n": 25,
+            "p50": 0.06626556391601562,
+            "sum": 1.398656694634827
+          },
+          "estimated_energy_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_gpu_cost_usd": {
+            "max": 0.2201990543492794,
+            "mean": 0.06822346288705775,
+            "min": 0.0019528697224037992,
+            "n": 35,
+            "p50": 0.07617364838858709,
+            "sum": 2.3878212010470223
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": 0.0022403383333333333,
+            "mean": 0.0005570387283439701,
+            "min": 6.255279893860405e-06,
+            "n": 30,
+            "p50": 0.00013106761851621753,
+            "sum": 0.016711161850319105
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": 19836.896627727572,
+            "mean": 3591.6068096559943,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1747971787876,
+            "sum": 125706.23833795985
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": {
+          "estimated_cache_value_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.00025078519555555553,
+            "variant_n_non_missing": 5
+          },
+          "estimated_carbon_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_kg": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_cold_start_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002707452016666667,
+            "variant_n_non_missing": 5
+          },
+          "estimated_decode_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.05594626778539306,
+            "variant_n_non_missing": 25
+          },
+          "estimated_energy_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_gpu_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.06822346288705775,
+            "variant_n_non_missing": 35
+          },
+          "estimated_migration_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_prefill_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0005570387283439701,
+            "variant_n_non_missing": 30
+          },
+          "sla_safe_goodput_per_dollar": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 3591.6068096559943,
+            "variant_n_non_missing": 35
+          }
+        },
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": 19836.896627727572,
+            "mean": 3591.6068096559943,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1747971787876,
+            "sum": 125706.23833795985
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 0.8571,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 1.0,
+          "estimated_cold_start_cost_usd": 0.8571,
+          "estimated_decode_cost_usd": 0.2857,
+          "estimated_energy_cost_usd": 1.0,
+          "estimated_gpu_cost_usd": 0.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 0.1429,
+          "sla_safe_goodput_per_dollar": 0.0
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 30,
+              "n_measured": 0,
+              "n_missing": 5,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    },
+    "C_existing_plus_energy_carbon": {
+      "applied_overlays": {
+        "cache_prefix_prior": false,
+        "cache_value_overlay": false,
+        "energy_carbon_overlay": true,
+        "gpu_price_overlay": false,
+        "ttft_prior": false
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": 0.0014435416666666668,
+            "mean": 0.0002951447397176133,
+            "min": 1.2741922436797533e-05,
+            "n": 25,
+            "p50": 8.362441604693068e-05,
+            "sum": 0.007378618492940332
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_decode_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_energy_cost_usd": {
+            "max": 0.00012010516997916665,
+            "mean": 2.3934537750862484e-05,
+            "min": 9.325799357233889e-07,
+            "n": 25,
+            "p50": 6.120462036147281e-06,
+            "sum": 0.0005983634437715622
+          },
+          "estimated_gpu_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": 49590685.72806335,
+            "mean": 8470935.251387417,
+            "min": 8326.036257835189,
+            "n": 25,
+            "p50": 8190705.062366593,
+            "sum": 211773381.28468534
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": {
+          "estimated_cache_value_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_kg": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002951447397176133,
+            "variant_n_non_missing": 25
+          },
+          "estimated_cold_start_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_decode_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_energy_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 2.3934537750862484e-05,
+            "variant_n_non_missing": 25
+          },
+          "estimated_gpu_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_migration_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_prefill_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "sla_safe_goodput_per_dollar": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 8470935.251387417,
+            "variant_n_non_missing": 25
+          }
+        },
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": 49590685.72806335,
+            "mean": 8470935.251387417,
+            "min": 8326.036257835189,
+            "n": 25,
+            "p50": 8190705.062366593,
+            "sum": 211773381.28468534
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 1.0,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 0.2857,
+          "estimated_cold_start_cost_usd": 1.0,
+          "estimated_decode_cost_usd": 1.0,
+          "estimated_energy_cost_usd": 0.2857,
+          "estimated_gpu_cost_usd": 1.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 1.0,
+          "sla_safe_goodput_per_dollar": 0.2857
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 25,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    },
+    "D_existing_plus_cache_value": {
+      "applied_overlays": {
+        "cache_prefix_prior": false,
+        "cache_value_overlay": true,
+        "energy_carbon_overlay": false,
+        "gpu_price_overlay": true,
+        "ttft_prior": false
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": 0.0010082222222222222,
+            "mean": 0.00025078519555555553,
+            "min": 0.0,
+            "n": 5,
+            "p50": 0.0,
+            "sum": 0.0012539259777777777
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": 0.0013498976094444444,
+            "mean": 0.0002707452016666667,
+            "min": 8.690166666666667e-07,
+            "n": 5,
+            "p50": 9.789905555555556e-07,
+            "sum": 0.0013537260083333333
+          },
+          "estimated_decode_cost_usd": {
+            "max": 0.22007173974609373,
+            "mean": 0.05594626778539306,
+            "min": 0.001865205693359871,
+            "n": 25,
+            "p50": 0.06626556391601562,
+            "sum": 1.398656694634827
+          },
+          "estimated_energy_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_gpu_cost_usd": {
+            "max": 0.2201990543492794,
+            "mean": 0.06822346288705775,
+            "min": 0.0019528697224037992,
+            "n": 35,
+            "p50": 0.07617364838858709,
+            "sum": 2.3878212010470223
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": 0.0022403383333333333,
+            "mean": 0.0005570387283439701,
+            "min": 6.255279893860405e-06,
+            "n": 30,
+            "p50": 0.00013106761851621753,
+            "sum": 0.016711161850319105
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": 19836.896627727572,
+            "mean": 3591.6068096559943,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1747971787876,
+            "sum": 125706.23833795985
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": {
+          "estimated_cache_value_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.00025078519555555553,
+            "variant_n_non_missing": 5
+          },
+          "estimated_carbon_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_kg": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_cold_start_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002707452016666667,
+            "variant_n_non_missing": 5
+          },
+          "estimated_decode_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.05594626778539306,
+            "variant_n_non_missing": 25
+          },
+          "estimated_energy_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_gpu_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.06822346288705775,
+            "variant_n_non_missing": 35
+          },
+          "estimated_migration_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_prefill_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0005570387283439701,
+            "variant_n_non_missing": 30
+          },
+          "sla_safe_goodput_per_dollar": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 3591.6068096559943,
+            "variant_n_non_missing": 35
+          }
+        },
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": 19836.896627727572,
+            "mean": 3591.6068096559943,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1747971787876,
+            "sum": 125706.23833795985
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 0.8571,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 1.0,
+          "estimated_cold_start_cost_usd": 0.8571,
+          "estimated_decode_cost_usd": 0.2857,
+          "estimated_energy_cost_usd": 1.0,
+          "estimated_gpu_cost_usd": 0.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 0.1429,
+          "sla_safe_goodput_per_dollar": 0.0
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 30,
+              "n_measured": 0,
+              "n_missing": 5,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    },
+    "E_existing_plus_full_overlay": {
+      "applied_overlays": {
+        "cache_prefix_prior": false,
+        "cache_value_overlay": true,
+        "energy_carbon_overlay": true,
+        "gpu_price_overlay": true,
+        "ttft_prior": false
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": 0.0010082222222222222,
+            "mean": 0.00025078519555555553,
+            "min": 0.0,
+            "n": 5,
+            "p50": 0.0,
+            "sum": 0.0012539259777777777
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": 0.0014435416666666668,
+            "mean": 0.0002951447397176133,
+            "min": 1.2741922436797533e-05,
+            "n": 25,
+            "p50": 8.362441604693068e-05,
+            "sum": 0.007378618492940332
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": 0.0013498976094444444,
+            "mean": 0.0002707452016666667,
+            "min": 8.690166666666667e-07,
+            "n": 5,
+            "p50": 9.789905555555556e-07,
+            "sum": 0.0013537260083333333
+          },
+          "estimated_decode_cost_usd": {
+            "max": 0.22007173974609373,
+            "mean": 0.05594626778539306,
+            "min": 0.001865205693359871,
+            "n": 25,
+            "p50": 0.06626556391601562,
+            "sum": 1.398656694634827
+          },
+          "estimated_energy_cost_usd": {
+            "max": 0.00012010516997916665,
+            "mean": 2.3934537750862484e-05,
+            "min": 9.325799357233889e-07,
+            "n": 25,
+            "p50": 6.120462036147281e-06,
+            "sum": 0.0005983634437715622
+          },
+          "estimated_gpu_cost_usd": {
+            "max": 0.2201990543492794,
+            "mean": 0.06822346288705775,
+            "min": 0.0019528697224037992,
+            "n": 35,
+            "p50": 0.07617364838858709,
+            "sum": 2.3878212010470223
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": 0.0022403383333333333,
+            "mean": 0.0005570387283439701,
+            "min": 6.255279893860405e-06,
+            "n": 30,
+            "p50": 0.00013106761851621753,
+            "sum": 0.016711161850319105
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": 19836.896627727572,
+            "mean": 3591.577652265042,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1264696040573,
+            "sum": 125705.21782927649
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": {
+          "estimated_cache_value_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.00025078519555555553,
+            "variant_n_non_missing": 5
+          },
+          "estimated_carbon_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_kg": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002951447397176133,
+            "variant_n_non_missing": 25
+          },
+          "estimated_cold_start_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002707452016666667,
+            "variant_n_non_missing": 5
+          },
+          "estimated_decode_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.05594626778539306,
+            "variant_n_non_missing": 25
+          },
+          "estimated_energy_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 2.3934537750862484e-05,
+            "variant_n_non_missing": 25
+          },
+          "estimated_gpu_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.06822346288705775,
+            "variant_n_non_missing": 35
+          },
+          "estimated_migration_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_prefill_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0005570387283439701,
+            "variant_n_non_missing": 30
+          },
+          "sla_safe_goodput_per_dollar": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 3591.577652265042,
+            "variant_n_non_missing": 35
+          }
+        },
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": 19836.896627727572,
+            "mean": 3591.577652265042,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1264696040573,
+            "sum": 125705.21782927649
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 0.8571,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 0.2857,
+          "estimated_cold_start_cost_usd": 0.8571,
+          "estimated_decode_cost_usd": 0.2857,
+          "estimated_energy_cost_usd": 0.2857,
+          "estimated_gpu_cost_usd": 0.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 0.1429,
+          "sla_safe_goodput_per_dollar": 0.0
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 25,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 30,
+              "n_measured": 0,
+              "n_missing": 5,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    },
+    "F_full_plus_ttft_prior": {
+      "applied_overlays": {
+        "cache_prefix_prior": false,
+        "cache_value_overlay": true,
+        "energy_carbon_overlay": true,
+        "gpu_price_overlay": true,
+        "ttft_prior": true
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": 0.0010082222222222222,
+            "mean": 0.00025078519555555553,
+            "min": 0.0,
+            "n": 5,
+            "p50": 0.0,
+            "sum": 0.0012539259777777777
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": 0.0014435416666666668,
+            "mean": 0.0002951447397176133,
+            "min": 1.2741922436797533e-05,
+            "n": 25,
+            "p50": 8.362441604693068e-05,
+            "sum": 0.007378618492940332
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": 0.0013498976094444444,
+            "mean": 0.0002707452016666667,
+            "min": 8.690166666666667e-07,
+            "n": 5,
+            "p50": 9.789905555555556e-07,
+            "sum": 0.0013537260083333333
+          },
+          "estimated_decode_cost_usd": {
+            "max": 0.22007173974609373,
+            "mean": 0.05594626778539306,
+            "min": 0.001865205693359871,
+            "n": 25,
+            "p50": 0.06626556391601562,
+            "sum": 1.398656694634827
+          },
+          "estimated_energy_cost_usd": {
+            "max": 0.00012010516997916665,
+            "mean": 2.3934537750862484e-05,
+            "min": 9.325799357233889e-07,
+            "n": 25,
+            "p50": 6.120462036147281e-06,
+            "sum": 0.0005983634437715622
+          },
+          "estimated_gpu_cost_usd": {
+            "max": 0.2201990543492794,
+            "mean": 0.06822346288705775,
+            "min": 0.0019528697224037992,
+            "n": 35,
+            "p50": 0.07617364838858709,
+            "sum": 2.3878212010470223
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": 0.009791666666666666,
+            "mean": 0.001876271290961498,
+            "min": 6.255279893860405e-06,
+            "n": 35,
+            "p50": 0.00018106313489503614,
+            "sum": 0.06566949518365242
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": 19836.896627727572,
+            "mean": 3591.577652265042,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1264696040573,
+            "sum": 125705.21782927649
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": {
+          "estimated_cache_value_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.00025078519555555553,
+            "variant_n_non_missing": 5
+          },
+          "estimated_carbon_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_kg": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002951447397176133,
+            "variant_n_non_missing": 25
+          },
+          "estimated_cold_start_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002707452016666667,
+            "variant_n_non_missing": 5
+          },
+          "estimated_decode_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.05594626778539306,
+            "variant_n_non_missing": 25
+          },
+          "estimated_energy_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 2.3934537750862484e-05,
+            "variant_n_non_missing": 25
+          },
+          "estimated_gpu_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.06822346288705775,
+            "variant_n_non_missing": 35
+          },
+          "estimated_migration_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_prefill_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.001876271290961498,
+            "variant_n_non_missing": 35
+          },
+          "sla_safe_goodput_per_dollar": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 3591.577652265042,
+            "variant_n_non_missing": 35
+          }
+        },
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": 19836.896627727572,
+            "mean": 3591.577652265042,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.1264696040573,
+            "sum": 125705.21782927649
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 0.8571,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 0.2857,
+          "estimated_cold_start_cost_usd": 0.8571,
+          "estimated_decode_cost_usd": 0.2857,
+          "estimated_energy_cost_usd": 0.2857,
+          "estimated_gpu_cost_usd": 0.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 0.0,
+          "sla_safe_goodput_per_dollar": 0.0
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 25,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    },
+    "G_full_plus_cache_prefix_prior": {
+      "applied_overlays": {
+        "cache_prefix_prior": true,
+        "cache_value_overlay": true,
+        "energy_carbon_overlay": true,
+        "gpu_price_overlay": true,
+        "ttft_prior": false
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": 0.0010082222222222222,
+            "mean": 0.00011181783702784056,
+            "min": 0.0,
+            "n": 30,
+            "p50": 1.4940812927402554e-05,
+            "sum": 0.0033545351108352165
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": 0.0014435416666666668,
+            "mean": 0.0002951447397176133,
+            "min": 1.2741922436797533e-05,
+            "n": 25,
+            "p50": 8.362441604693068e-05,
+            "sum": 0.007378618492940332
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": 0.0013498976094444444,
+            "mean": 0.0002707452016666667,
+            "min": 8.690166666666667e-07,
+            "n": 5,
+            "p50": 9.789905555555556e-07,
+            "sum": 0.0013537260083333333
+          },
+          "estimated_decode_cost_usd": {
+            "max": 0.22007173974609373,
+            "mean": 0.05594626778539306,
+            "min": 0.001865205693359871,
+            "n": 25,
+            "p50": 0.06626556391601562,
+            "sum": 1.398656694634827
+          },
+          "estimated_energy_cost_usd": {
+            "max": 0.00012010516997916665,
+            "mean": 2.3934537750862484e-05,
+            "min": 9.325799357233889e-07,
+            "n": 25,
+            "p50": 6.120462036147281e-06,
+            "sum": 0.0005983634437715622
+          },
+          "estimated_gpu_cost_usd": {
+            "max": 0.2201990543492794,
+            "mean": 0.06822346288705775,
+            "min": 0.0019528697224037992,
+            "n": 35,
+            "p50": 0.07617364838858709,
+            "sum": 2.3878212010470223
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": 0.0022403383333333333,
+            "mean": 0.0005570387283439701,
+            "min": 6.255279893860405e-06,
+            "n": 30,
+            "p50": 0.00013106761851621753,
+            "sum": 0.016711161850319105
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": 19836.896627727572,
+            "mean": 3597.7870338511307,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.2263525562437,
+            "sum": 125922.54618478962
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": {
+          "estimated_cache_value_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.00011181783702784056,
+            "variant_n_non_missing": 30
+          },
+          "estimated_carbon_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_kg": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002951447397176133,
+            "variant_n_non_missing": 25
+          },
+          "estimated_cold_start_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002707452016666667,
+            "variant_n_non_missing": 5
+          },
+          "estimated_decode_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.05594626778539306,
+            "variant_n_non_missing": 25
+          },
+          "estimated_energy_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 2.3934537750862484e-05,
+            "variant_n_non_missing": 25
+          },
+          "estimated_gpu_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.06822346288705775,
+            "variant_n_non_missing": 35
+          },
+          "estimated_migration_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_prefill_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0005570387283439701,
+            "variant_n_non_missing": 30
+          },
+          "sla_safe_goodput_per_dollar": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 3597.7870338511307,
+            "variant_n_non_missing": 35
+          }
+        },
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": 19836.896627727572,
+            "mean": 3597.7870338511307,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.2263525562437,
+            "sum": 125922.54618478962
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 0.1429,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 0.2857,
+          "estimated_cold_start_cost_usd": 0.8571,
+          "estimated_decode_cost_usd": 0.2857,
+          "estimated_energy_cost_usd": 0.2857,
+          "estimated_gpu_cost_usd": 0.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 0.1429,
+          "sla_safe_goodput_per_dollar": 0.0
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 30,
+              "n_measured": 0,
+              "n_missing": 5,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 25,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 30,
+              "n_measured": 0,
+              "n_missing": 5,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    },
+    "H_full_plus_both_priors": {
+      "applied_overlays": {
+        "cache_prefix_prior": true,
+        "cache_value_overlay": true,
+        "energy_carbon_overlay": true,
+        "gpu_price_overlay": true,
+        "ttft_prior": true
+      },
+      "metrics": {
+        "by_field_stats": {
+          "estimated_cache_value_usd": {
+            "max": 0.0017624999999999997,
+            "mean": 0.0003476295745952919,
+            "min": 0.0,
+            "n": 35,
+            "p50": 2.291662857341766e-05,
+            "sum": 0.012167035110835216
+          },
+          "estimated_carbon_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_carbon_kg": {
+            "max": 0.0014435416666666668,
+            "mean": 0.0002951447397176133,
+            "min": 1.2741922436797533e-05,
+            "n": 25,
+            "p50": 8.362441604693068e-05,
+            "sum": 0.007378618492940332
+          },
+          "estimated_cold_start_cost_usd": {
+            "max": 0.0013498976094444444,
+            "mean": 0.0002707452016666667,
+            "min": 8.690166666666667e-07,
+            "n": 5,
+            "p50": 9.789905555555556e-07,
+            "sum": 0.0013537260083333333
+          },
+          "estimated_decode_cost_usd": {
+            "max": 0.22007173974609373,
+            "mean": 0.05594626778539306,
+            "min": 0.001865205693359871,
+            "n": 25,
+            "p50": 0.06626556391601562,
+            "sum": 1.398656694634827
+          },
+          "estimated_energy_cost_usd": {
+            "max": 0.00012010516997916665,
+            "mean": 2.3934537750862484e-05,
+            "min": 9.325799357233889e-07,
+            "n": 25,
+            "p50": 6.120462036147281e-06,
+            "sum": 0.0005983634437715622
+          },
+          "estimated_gpu_cost_usd": {
+            "max": 0.2201990543492794,
+            "mean": 0.06822346288705775,
+            "min": 0.0019528697224037992,
+            "n": 35,
+            "p50": 0.07617364838858709,
+            "sum": 2.3878212010470223
+          },
+          "estimated_migration_cost_usd": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "estimated_prefill_cost_usd": {
+            "max": 0.009791666666666666,
+            "mean": 0.001876271290961498,
+            "min": 6.255279893860405e-06,
+            "n": 35,
+            "p50": 0.00018106313489503614,
+            "sum": 0.06566949518365242
+          },
+          "sla_safe_goodput_per_dollar": {
+            "max": 19836.896627727572,
+            "mean": 3597.7988316732444,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.2263525562437,
+            "sum": 125922.9591085636
+          }
+        },
+        "by_overlay_class_count": {
+          "cross_dataset_joined": 35,
+          "measured_same_record": 0,
+          "scenario_prior": 0
+        },
+        "deltas_vs_baseline": {
+          "estimated_cache_value_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0003476295745952919,
+            "variant_n_non_missing": 35
+          },
+          "estimated_carbon_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_carbon_kg": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002951447397176133,
+            "variant_n_non_missing": 25
+          },
+          "estimated_cold_start_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.0002707452016666667,
+            "variant_n_non_missing": 5
+          },
+          "estimated_decode_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.05594626778539306,
+            "variant_n_non_missing": 25
+          },
+          "estimated_energy_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 2.3934537750862484e-05,
+            "variant_n_non_missing": 25
+          },
+          "estimated_gpu_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.06822346288705775,
+            "variant_n_non_missing": 35
+          },
+          "estimated_migration_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": null,
+            "variant_n_non_missing": 0
+          },
+          "estimated_prefill_cost_usd": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 0.001876271290961498,
+            "variant_n_non_missing": 35
+          },
+          "sla_safe_goodput_per_dollar": {
+            "abs_delta_mean": null,
+            "baseline_mean": null,
+            "baseline_n_non_missing": 0,
+            "pct_delta_mean": null,
+            "variant_mean": 3597.7988316732444,
+            "variant_n_non_missing": 35
+          }
+        },
+        "headline_sla_safe_goodput_per_dollar_per_class": {
+          "cross_dataset_joined": {
+            "max": 19836.896627727572,
+            "mean": 3597.7988316732444,
+            "min": 0.0,
+            "n": 35,
+            "p50": 808.2263525562437,
+            "sum": 125922.9591085636
+          },
+          "measured_same_record": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          },
+          "scenario_prior": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "sum": null
+          }
+        },
+        "missing_rate_per_field": {
+          "estimated_cache_value_usd": 0.0,
+          "estimated_carbon_cost_usd": 1.0,
+          "estimated_carbon_kg": 0.2857,
+          "estimated_cold_start_cost_usd": 0.8571,
+          "estimated_decode_cost_usd": 0.2857,
+          "estimated_energy_cost_usd": 0.2857,
+          "estimated_gpu_cost_usd": 0.0,
+          "estimated_migration_cost_usd": 1.0,
+          "estimated_prefill_cost_usd": 0.0,
+          "sla_safe_goodput_per_dollar": 0.0
+        },
+        "n_records": 35,
+        "ranking_change_rate_vs_baseline": 0.0,
+        "summary": {
+          "by_overlay_class": {
+            "cross_dataset_joined": 35,
+            "measured_same_record": 0,
+            "scenario_prior": 0
+          },
+          "field_quality_breakdown": {
+            "estimated_cache_value_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_carbon_kg": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 25,
+              "n_total": 35
+            },
+            "estimated_cold_start_cost_usd": {
+              "n_derived": 5,
+              "n_measured": 0,
+              "n_missing": 30,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_decode_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_energy_cost_usd": {
+              "n_derived": 25,
+              "n_measured": 0,
+              "n_missing": 10,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_gpu_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_migration_cost_usd": {
+              "n_derived": 0,
+              "n_measured": 0,
+              "n_missing": 35,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "estimated_prefill_cost_usd": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            },
+            "sla_safe_goodput_per_dollar": {
+              "n_derived": 35,
+              "n_measured": 0,
+              "n_missing": 0,
+              "n_prior": 0,
+              "n_scenario_prior": 0,
+              "n_total": 35
+            }
+          },
+          "n": 35
+        },
+        "top1_change_rate_vs_baseline": 0.0
+      }
+    }
+  }
+}

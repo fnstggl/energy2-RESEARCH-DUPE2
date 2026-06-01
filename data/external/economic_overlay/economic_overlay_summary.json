@@ -1,0 +1,571 @@
+{
+  "doc_version": "economic_overlay_v1",
+  "global_summary": {
+    "by_overlay_class": {
+      "cross_dataset_joined": 35,
+      "measured_same_record": 0,
+      "scenario_prior": 0
+    },
+    "field_quality_breakdown": {
+      "estimated_cache_value_usd": {
+        "n_derived": 5,
+        "n_measured": 0,
+        "n_missing": 30,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "estimated_carbon_cost_usd": {
+        "n_derived": 0,
+        "n_measured": 0,
+        "n_missing": 35,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "estimated_carbon_kg": {
+        "n_derived": 0,
+        "n_measured": 0,
+        "n_missing": 10,
+        "n_prior": 0,
+        "n_scenario_prior": 25,
+        "n_total": 35
+      },
+      "estimated_cold_start_cost_usd": {
+        "n_derived": 5,
+        "n_measured": 0,
+        "n_missing": 30,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "estimated_decode_cost_usd": {
+        "n_derived": 25,
+        "n_measured": 0,
+        "n_missing": 10,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "estimated_energy_cost_usd": {
+        "n_derived": 25,
+        "n_measured": 0,
+        "n_missing": 10,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "estimated_gpu_cost_usd": {
+        "n_derived": 35,
+        "n_measured": 0,
+        "n_missing": 0,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "estimated_migration_cost_usd": {
+        "n_derived": 0,
+        "n_measured": 0,
+        "n_missing": 35,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "estimated_prefill_cost_usd": {
+        "n_derived": 30,
+        "n_measured": 0,
+        "n_missing": 5,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      },
+      "sla_safe_goodput_per_dollar": {
+        "n_derived": 35,
+        "n_measured": 0,
+        "n_missing": 0,
+        "n_prior": 0,
+        "n_scenario_prior": 0,
+        "n_total": 35
+      }
+    },
+    "n": 35
+  },
+  "gpu_price_overlay": "gpu_price_overlay_2026-06-01.jsonl",
+  "operator_policy_only_fields": [
+    "carbon_price_per_kg_usd",
+    "per_gpu_hour_price_usd (operator fleet-actual)",
+    "internal_chargeback_rate",
+    "energy_price_per_kwh_usd (when using non-PJM region)",
+    "memory_pressure_pricing_policy"
+  ],
+  "operator_policy_supplied": false,
+  "per_source_paths": {
+    "acmetrace_seren_ipmi": "data/external/economic_overlay/economic_overlay_samples/economic_overlay_acmetrace_seren_ipmi.jsonl",
+    "cara_test_flat": "data/external/economic_overlay/economic_overlay_samples/economic_overlay_cara_test_flat.jsonl",
+    "ejhusom_gemma_7b_workstation": "data/external/economic_overlay/economic_overlay_samples/economic_overlay_ejhusom_gemma_7b_workstation.jsonl",
+    "optimum_1xA100": "data/external/economic_overlay/economic_overlay_samples/economic_overlay_optimum_1xA100.jsonl",
+    "swissai_qwen3_32b": "data/external/economic_overlay/economic_overlay_samples/economic_overlay_swissai_qwen3_32b.jsonl"
+  },
+  "per_source_summaries": {
+    "acmetrace_seren_ipmi": {
+      "by_overlay_class": {
+        "cross_dataset_joined": 5,
+        "measured_same_record": 0,
+        "scenario_prior": 0
+      },
+      "field_quality_breakdown": {
+        "estimated_cache_value_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_kg": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 5,
+          "n_total": 5
+        },
+        "estimated_cold_start_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_decode_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_energy_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_gpu_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_migration_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_prefill_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "sla_safe_goodput_per_dollar": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        }
+      },
+      "n": 5
+    },
+    "cara_test_flat": {
+      "by_overlay_class": {
+        "cross_dataset_joined": 5,
+        "measured_same_record": 0,
+        "scenario_prior": 0
+      },
+      "field_quality_breakdown": {
+        "estimated_cache_value_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_kg": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_cold_start_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_decode_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_energy_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_gpu_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_migration_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_prefill_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "sla_safe_goodput_per_dollar": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        }
+      },
+      "n": 5
+    },
+    "ejhusom_gemma_7b_workstation": {
+      "by_overlay_class": {
+        "cross_dataset_joined": 5,
+        "measured_same_record": 0,
+        "scenario_prior": 0
+      },
+      "field_quality_breakdown": {
+        "estimated_cache_value_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_kg": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 5,
+          "n_total": 5
+        },
+        "estimated_cold_start_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_decode_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_energy_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_gpu_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_migration_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_prefill_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "sla_safe_goodput_per_dollar": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        }
+      },
+      "n": 5
+    },
+    "optimum_1xA100": {
+      "by_overlay_class": {
+        "cross_dataset_joined": 15,
+        "measured_same_record": 0,
+        "scenario_prior": 0
+      },
+      "field_quality_breakdown": {
+        "estimated_cache_value_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 15,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "estimated_carbon_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 15,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "estimated_carbon_kg": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 15,
+          "n_total": 15
+        },
+        "estimated_cold_start_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 15,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "estimated_decode_cost_usd": {
+          "n_derived": 15,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "estimated_energy_cost_usd": {
+          "n_derived": 15,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "estimated_gpu_cost_usd": {
+          "n_derived": 15,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "estimated_migration_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 15,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "estimated_prefill_cost_usd": {
+          "n_derived": 15,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        },
+        "sla_safe_goodput_per_dollar": {
+          "n_derived": 15,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 15
+        }
+      },
+      "n": 15
+    },
+    "swissai_qwen3_32b": {
+      "by_overlay_class": {
+        "cross_dataset_joined": 5,
+        "measured_same_record": 0,
+        "scenario_prior": 0
+      },
+      "field_quality_breakdown": {
+        "estimated_cache_value_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_carbon_kg": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_cold_start_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_decode_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_energy_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_gpu_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_migration_cost_usd": {
+          "n_derived": 0,
+          "n_measured": 0,
+          "n_missing": 5,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "estimated_prefill_cost_usd": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        },
+        "sla_safe_goodput_per_dollar": {
+          "n_derived": 5,
+          "n_measured": 0,
+          "n_missing": 0,
+          "n_prior": 0,
+          "n_scenario_prior": 0,
+          "n_total": 5
+        }
+      },
+      "n": 5
+    }
+  },
+  "pjm_live_window_used": "pjm_da_energy_price_7day.jsonl",
+  "production_claim": false,
+  "scenario_overlays_in_use": [
+    "pjm_energy_overlay",
+    "ercot_energy_overlay",
+    "caiso_energy_overlay",
+    "watttime_carbon_overlay",
+    "no_operator_policy_overlay"
+  ],
+  "shadow_only": true
+}
