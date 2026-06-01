@@ -1,0 +1,25 @@
+{
+  "configs": [
+    {
+      "audit_status": "ok",
+      "config": "tool_summary",
+      "decision_state": "promoted_for_schema_only",
+      "decision_tags": [
+        "promoted_for_schema_only"
+      ],
+      "manifest": {
+        "cached": true,
+        "dest": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/raw/tool_summary.parquet",
+        "downloaded_bytes": 8030,
+        "error": null,
+        "max_bytes": null,
+        "status": null,
+        "truncated": null,
+        "url": "https://huggingface.co/datasets/Lightcap/agent-runtime-telemetry-small/resolve/main/data/tool_summary.parquet"
+      },
+      "summary_path": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/tool_summary/processed/summary.json"
+    }
+  ],
+  "dataset_id": "Lightcap/agent-runtime-telemetry-small",
+  "wrote_at_s": 1780337610.6956177
+}

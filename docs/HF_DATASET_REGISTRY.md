@@ -55,6 +55,11 @@ maps onto exactly one of:
   residency; e.g. prefixbench.
 - `telemetry_trace` — real serving / scheduler telemetry (Tier 2). The
   highest-trust HF class.
+- `tool_runtime_trace` — real measured MCP / agent-runtime tool-call
+  execution telemetry (operation_id + tool_name + duration_ms + status +
+  error_type + timestamps), one row per tool call. Job-trace shape (akin
+  to `cluster_scheduler_trace`), but the "jobs" are tool calls inside an
+  agent runtime, not GPU jobs. e.g. Lightcap/agent-runtime-telemetry-small.
 - `mixed_or_unknown_trace` — uncertain; cannot be promoted until
   manually classified.
 
@@ -261,6 +266,8 @@ Rules (binding):
 | `ejhusom/llm-inference-energy-consumption` | **`codefeedback_codellama_7b_workstation`** | `latency_benchmark_trace` | Tier 4 | `promoted_for_performance_priors` (+ `constraint_aware_evaluation`, `training_priors`) | 5 | **3,109** | moderate | 2026-06-01 |
 | `ejhusom/llm-inference-energy-consumption` | **`codefeedback_codellama_70b_workstation`** | `latency_benchmark_trace` | Tier 4 | `promoted_for_training_priors` | 5 | 161 | weak | 2026-06-01 |
 | `metrum-ai/llm-perfdata` | **`multi_source_curated_v1`** | `latency_benchmark_trace` | Tier 4 | `promoted_for_training_priors` | 5 | 80 | weak | 2026-06-01 |
+| `Lightcap/agent-runtime-telemetry-small` | **`operations`** | **`tool_runtime_trace`** (new type) | **Tier 3** | **`promoted_for_backtest`** (+ `promoted_for_constraint_aware_evaluation`, `promoted_for_training_priors`) | 5 | **2,262** | moderate | 2026-06-01 |
+| `Lightcap/agent-runtime-telemetry-small` | **`tool_summary`** | **`tool_runtime_trace`** (new type) | **Tier 3** | `promoted_for_schema_only` | 5 | 32 | fixture_only | 2026-06-01 |
 
 > **CARA** is the first Tier 2 (public telemetry trace) entry in the
 > federated corpus. CARA **train_flat** + **train_queue_details** are
@@ -1136,6 +1143,107 @@ Rules (binding):
   gitignored — regenerable via
   `scripts/ingest_hf_metrum_llmperfdata.py`.
 
+#### `Lightcap/agent-runtime-telemetry-small` — inaugural `tool_runtime_trace`, Tier-3 cluster-scheduler-trace-family
+
+- **Why this dataset matters for Aurelius.** First public Hugging Face
+  dataset in the federated corpus that captures **real measured
+  MCP / agent-runtime tool-call execution telemetry** — one row per
+  tool call with measured `duration_ms`, terminal `status`, lifecycle
+  `stage`, `error_type` for failures, UTC `created_at` / `updated_at`
+  timestamps, plus content-addressed payload-size proxies
+  (`args_fingerprint` sha256, `args_count`, `kwargs_key_count`,
+  `result_payload_bytes`, `artifacts_bytes`). The export covers 2,262
+  operations across 22 distinct tools and 8 days of one runtime owned
+  by Faruk Alpay (Lightcap). License is **cc-by-4.0** so the bounded
+  normalised sample is redistributable.
+- **Closes the Round-5 defer.** PR-#141 Round-5 flagged Lightcap as
+  `defer_high_value_different_trace_class` because no existing canonical
+  type accepted tool-call execution telemetry without misclaiming
+  serving signals. This PR introduces the **new `tool_runtime_trace`
+  canonical type** in `aurelius/traces/hf_corpus/schemas.py`
+  (`ToolRuntimeRecord`) + `aurelius/traces/hf_corpus/promotion.py`
+  (allowed promotions = backtest + constraint_aware_evaluation +
+  training_priors; **NOT** `dynamic_calibration` — there is no queue /
+  replica / GPU-util signal to calibrate the safe utilization frontier
+  against). Trust tier: **Tier 3** (real measured execution telemetry,
+  job-trace shape — the "jobs" are tool calls, not GPU jobs).
+- **Two configs ingested.**
+  - `operations` — 2,262 × 33; promoted to
+    `promoted_for_backtest` (+ `constraint_aware_evaluation`,
+    `training_priors`) at moderate strength. The primary tool-runtime
+    evidence: real per-call `duration_ms` + `status` + `error_type` +
+    timestamps, with 22 distinct tools (largest = `surface_affinity`
+    632 calls, `workflow_run` 324, `alignment_manifest` 252,
+    `granite_timeseries_status` 181). Overall error rate ~5.48 %, with
+    8 distinct error types (`RuntimeError` 65, `ValueError` 27,
+    `DirectInputProvenanceError` 25, `RecoveredRunningOperation` 6,
+    `SurfaceAffinityError` 3, `InternalError` 2, `TimeoutError` 1,
+    `RemoteDisconnected` 1). Cancellation rate ~0.27 % (6 / 2,262).
+    Latency distribution: p50 = 60.25 ms, p90 = 6.62 s, p95 = 19.73 s,
+    p99 = 124.97 s, max = 900.59 s — a heavy-tailed real-production
+    shape with errors ~6× slower than success at p99
+    (518.16 s vs 120.93 s).
+  - `tool_summary` — 32 pre-aggregated `(tool_name, status)` buckets;
+    promoted to `promoted_for_schema_only` (fixture_only strength —
+    32 aggregate rows do not support per-call distributional analysis).
+    The per-bucket `avg_duration_ms` / `median_duration_ms` /
+    `p95_duration_ms` are recorded in
+    `statistical_rollups.json::per_tool_status_aggregates` so the
+    routing-quality consumer doesn't have to recompute from
+    `operations`. `field_quality=derived` on aggregate fields, as
+    documented in the limitations.
+- **What Aurelius can do with this dataset.** The constraint-aware
+  engine + routing-quality forecasters can now consume:
+  - **Per-tool error-rate priors** — `scenario_briefing` 100 % errors
+    (6/6), `optimize_schedule` 56 % errors (5/9), `train_model` 50 %
+    (1/2), `forecast_observables` 32 % (51/157), `state_decode` 32 %
+    (7/22). These are first-class deferral / fallback / retry-budget
+    priors for an agent orchestrator.
+  - **Per-tool tail-latency priors** — used as timeout-budget priors
+    for routing decisions. Stored in
+    `statistical_rollups.json::numeric_distributions.duration_ms.per_tool`.
+  - **Per-status latency cost-of-failure** — error operations p99
+    (518 s) is ~4.3× the success p99 (121 s) → choosing a failing tool
+    is expensive; routing-quality scorers should penalise tools with
+    high `error_rate × p99_duration_ms`.
+  - **args_fingerprint cache-reuse signal** — same `args_fingerprint`
+    sha256 across operations indicates same input → potential
+    same-result cache hit (proxy for prefix cache at the tool-call
+    grain).
+- **What this dataset is NOT.** Tool-runtime traces have **NO**
+  `model_id`, **NO** `input_tokens` / `output_tokens`, **NO** GPU type,
+  **NO** queue depth, **NO** replica count, **NO** KV-cache state,
+  **NO** TTFT / TPOT — they do NOT inform LLM serving frontier or
+  dynamic utilization frontier calibration. `duration_ms` is the
+  closed tool-runtime end-to-end wall clock (including any nested
+  LLM-call time inside the tool, but the LLM-call breakdown is not
+  exposed). Distinct from `Exgentic/agent-llm-traces`, which is
+  request_shape_trace with per-LLM-call spans + `gen_ai.*` semantic
+  conventions: Exgentic captures the LLM-call layer; Lightcap captures
+  the tool-call layer above it.
+- **Bounded ingest layout.** Two raw parquet (`operations.parquet`
+  270 KiB + `tool_summary.parquet` 8 KiB) live under
+  `data/external/hf/Lightcap__agent-runtime-telemetry-small/raw/` and
+  are **gitignored**. Per-config processed `summary.json`,
+  `schema_profile.json`, `schema_mapping.json`,
+  `statistical_rollups.json`, 5-row fixture (≤ 7 KiB), and the
+  committed `normalized_sample.jsonl` (operations: 2,262 rows ~ 3.0 MiB;
+  tool_summary: 32 rows ~ 32 KiB) ARE committed — well under the
+  100-MiB-per-file / 300-MiB-per-PR policy cap. cc-by-4.0 permits
+  redistribution. `analysis_sample.jsonl` is **gitignored** —
+  regenerable via `scripts/ingest_hf_lightcap_runtime_telemetry.py`.
+- **Honesty + scope guarantees.** No production claim; no scheduler /
+  controller / robust energy engine touched; no oracle as headline;
+  no Tier-1 promotion; explicit "NOT GPU TTFT/TPOT, NOT LLM serving
+  telemetry" caveat pinned in `limitations`; `field_quality` recorded
+  for every accepted column (real for measured `duration_ms` /
+  `status` / `error_type` / tokens-style payload-size proxies;
+  derived for `created_at_s` / `updated_at_s` / `duration_s` /
+  `is_error` / `is_cancelled`; derived for aggregate `duration_ms`
+  in `tool_summary`); raw parquets gitignored; payload bodies are
+  upstream-redacted (only fingerprints + counts + byte totals are
+  exported by Lightcap itself).
+
 ### 7.2 Datasets evaluated but rejected / blocked
 
 | dataset_id | trace_type | state | reason |
@@ -1186,7 +1294,7 @@ Rules (binding):
 | `ClarusC64/datacenter-power-load-coherence-risk-v0.1` | `mixed_or_unknown_trace` | `reject_synthetic_ai_safety_eval` (Round 5) | Same ClarusC64 family — datacenter power-load claim coherence vs. true outcome. AI-safety eval format, n<1K, no measured telemetry. |
 | `Phipper/pe-energy-infrastructure-training-data` | `mixed_or_unknown_trace` | `reject_out_of_scope` (Round 5) | Private-equity / energy-infrastructure finance training data (297 DPO pairs + 804 SFT conversations + 2,308 Opus-distilled reasoning traces across PE deal analysis / financial modeling / regulatory / strategy). Despite the `energy-infrastructure` tag, this is finance domain text — NO measured infrastructure or telemetry signal. |
 | `uohna/llm_inference_energy_combined.parquet` | `mixed_or_unknown_trace` | `reject_empty_dataset` (Round 5) | Empty dataset — only `.gitattributes` is committed in the repository tree; no actual parquet files. Despite the promising name, there is no data to ingest. |
-| `Lightcap/agent-runtime-telemetry-small` | `request_shape_trace` (claimed) | `defer_high_value_different_trace_class` (Round 5) | REAL MCP-style agent-runtime tool-call telemetry from local SQLite stores (cc-by-4.0; 8 parquet configs — operations 2,262 × 33 with real `duration_ms` + `status` + `error_type` + `tool_name` + UTC timestamps; operation_events 9,903; audit_records 14,053; tool_summary 32 tools with p95). HIGH information density for tool-call / agent-orchestration RELIABILITY priors — but the canonical Aurelius trace types are LLM-serving-focused; this carries NO model_id / NO input_tokens / NO GPU / NO queue / NO concurrency / NO cache fields. Deferred to a follow-on run that adds a new `tool_runtime_trace` canonical type OR maps tool-call durations into `request_shape_trace` as a routing-quality / failure-rate prior. Distinct from Exgentic (LLM call spans). |
+| ~~`Lightcap/agent-runtime-telemetry-small`~~ | ~~`request_shape_trace` (claimed)~~ → **`tool_runtime_trace` (new type)** | ~~`defer_high_value_different_trace_class` (Round 5)~~ → **ingested 2026-06-01** | see §7.1 (inaugural `tool_runtime_trace`; Tier-3 cluster-scheduler-trace family, cc-by-4.0). Round-5 defer cleared by introducing the new canonical type. |
 | `metrum-ai/llm-perf-dashboard` | `latency_benchmark_trace` | `defer_pending_inspection` (Round 5) | Companion dashboard dataset to `metrum-ai/llm-perfdata` (same author). Schema not yet inspected because the dashboard format is markdown / static-site oriented rather than tabular. Deferred to a follow-on run if the dashboard exports additional measurement rows beyond what llm-perfdata already covers. |
 | `ssakethch/h200-quantization-benchmarks` | `latency_benchmark_trace` | `defer_pending_full_schema_probe` (Round 5) | Benchmark results for 40 quantized + non-quantized instruction-tuned LLMs on NVIDIA H200 MIG (Multi-Instance GPU). Potentially high-value (first H200-MIG coverage + first 40-model breadth quantization comparison) but the dataset card declares no SPDX license. Deferred — without redistribution clarity, committing a normalised sample would violate the corpus license-and-gating gate. Re-audit if author adds a license. |
 | `crozai/vllm-benchmark-coding` | `request_shape_trace` | `duplicate_existing` (Round 5) | Coding-workload prompt fixtures designed for `vllm/benchmark_serving.py` — workload-shape only (prompt strings + token counts). NO measured TTFT / TPOT / throughput. `aurelius/traces/sharegpt_aiperf.py` and `hlarcher/inference-benchmarker` (already rejected) cover this role at higher density. |
@@ -1402,19 +1510,32 @@ Re-running `scripts/discover_hf_aurelius_datasets.py` rebuilds
   `data/external/hf_discovery/round5_broadened_discovery_audit_summary.json`
   under `economic_priority_summary` so that future runs don't
   re-run the same search.
-- **Lightcap follow-up (next-run priority).** Decide whether to
-  (a) add a new `tool_runtime_trace` canonical type that covers
-  MCP-style agent tool-call execution telemetry as a first-class
-  citizen, OR (b) flatten Lightcap's `operations.parquet` rows into
-  the existing `request_shape_trace` schema as a routing-quality /
-  tool-failure prior. Lightcap is REAL measured telemetry under
-  cc-by-4.0 with `duration_ms` + `status` + `error_type` +
-  `tool_name` + UTC timestamps across 2,262 operations and 14,053
-  audit rows — losing it because it doesn't fit the existing
-  LLM-serving-focused trace types is a real cost. Distinct from
-  `Exgentic/agent-llm-traces` which captures LLM-CALL spans (with
-  model + input/output_tokens); Lightcap captures TOOL-CALL
-  operations (no LLM-specific fields).
+- **Done 2026-06-01** — Lightcap follow-up resolved: chose option (a),
+  added a new `tool_runtime_trace` canonical type
+  (`aurelius/traces/hf_corpus/schemas.py::ToolRuntimeRecord`) +
+  promotion rules + Tier-3 trust-tier mapping. Ingested
+  `Lightcap/agent-runtime-telemetry-small` two configs (operations
+  2,262 rows moderate strength → `promoted_for_backtest` +
+  `constraint_aware_evaluation` + `training_priors`; tool_summary
+  32 aggregate rows fixture-only → `promoted_for_schema_only`). See
+  §2 (new canonical type added), §7.1 entry "Lightcap/agent-runtime-
+  telemetry-small — inaugural tool_runtime_trace, Tier-3 cluster-
+  scheduler-trace-family", and `scripts/{ingest,register}_hf_lightcap_runtime_telemetry.py`.
+- **Next: Lightcap operation_events + audit_records configs.** The
+  remaining Lightcap configs add lifecycle event granularity
+  (operation_events: 9,903 lifecycle transitions; audit_records:
+  14,053 MCP audit rows). They were NOT ingested in this PR to keep
+  scope tight, but both fit the new `tool_runtime_trace` type. The
+  audit_records config in particular would unlock per-stage state-
+  transition timing (request → dispatch → completion) for queue-
+  wait-style priors that the operations config does not expose.
+- **Next: cross-validate Lightcap tail-latency profile against any
+  future tool-runtime trace.** Lightcap's p99 of 125 s + max of
+  900 s tells the constraint-aware engine that real production
+  agent workloads have heavy tails that must be deferred / preempted
+  rather than retried. A second tool_runtime_trace source would
+  calibrate whether this tail shape is broadly representative or
+  Lightcap-specific.
 - **Cross-validate `metrum-ai/llm-perfdata` densest cells against
   matched corpus measurements.** Where metrum-ai records (gpu,
   engine) cells that also appear elsewhere — (A100, vLLM, FP16) →

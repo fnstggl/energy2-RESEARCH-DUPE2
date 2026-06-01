@@ -1,0 +1,132 @@
+{
+  "accepted_columns": [
+    "avg_duration_ms",
+    "first_seen_utc",
+    "last_seen_utc",
+    "median_duration_ms",
+    "operation_count",
+    "p95_duration_ms",
+    "status",
+    "tool_name"
+  ],
+  "columns": [
+    {
+      "aurelius_signal_category": "latency",
+      "field_quality": "derived",
+      "normalized_field": "duration_ms",
+      "notes": "Mean tool-call duration in ms for this (tool, status) bucket \u2014 derived from operations rows.",
+      "presence_rate": 1.0,
+      "raw_column_name": "avg_duration_ms",
+      "raw_dtype": [
+        "float",
+        "null"
+      ],
+      "usable_for": [
+        "latency_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "request_arrival",
+      "field_quality": "real",
+      "normalized_field": "created_at_iso",
+      "notes": "First operation timestamp per (tool, status) bucket.",
+      "presence_rate": 1.0,
+      "raw_column_name": "first_seen_utc",
+      "raw_dtype": [
+        "str"
+      ],
+      "usable_for": [
+        "workload_shape_only"
+      ]
+    },
+    {
+      "aurelius_signal_category": "request_completion",
+      "field_quality": "real",
+      "normalized_field": "updated_at_iso",
+      "notes": "Last operation timestamp per (tool, status) bucket.",
+      "presence_rate": 1.0,
+      "raw_column_name": "last_seen_utc",
+      "raw_dtype": [
+        "str"
+      ],
+      "usable_for": [
+        "workload_shape_only"
+      ]
+    },
+    {
+      "aurelius_signal_category": "latency",
+      "field_quality": "derived",
+      "normalized_field": "duration_ms",
+      "notes": "Median tool-call duration in ms \u2014 committed as the row-level duration_ms in tool_summary normalized sample.",
+      "presence_rate": 1.0,
+      "raw_column_name": "median_duration_ms",
+      "raw_dtype": [
+        "float",
+        "null"
+      ],
+      "usable_for": [
+        "latency_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "metadata_only",
+      "field_quality": "derived",
+      "normalized_field": "result_summary_key_count",
+      "notes": "Number of operations rolled into this (tool, status) bucket. Stored in statistical_rollups, not normalized sample.",
+      "presence_rate": 1.0,
+      "raw_column_name": "operation_count",
+      "raw_dtype": [
+        "int"
+      ],
+      "usable_for": [
+        "workload_shape_only"
+      ]
+    },
+    {
+      "aurelius_signal_category": "latency",
+      "field_quality": "derived",
+      "normalized_field": "duration_ms",
+      "notes": "p95 tool-call duration in ms \u2014 recorded in statistical_rollups.json for direct routing-quality use.",
+      "presence_rate": 1.0,
+      "raw_column_name": "p95_duration_ms",
+      "raw_dtype": [
+        "float",
+        "null"
+      ],
+      "usable_for": [
+        "latency_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "failure_timeout",
+      "field_quality": "real",
+      "normalized_field": "status",
+      "notes": "Bucket status (ok / error / cancelled).",
+      "presence_rate": 1.0,
+      "raw_column_name": "status",
+      "raw_dtype": [
+        "str"
+      ],
+      "usable_for": [
+        "routing_quality"
+      ]
+    },
+    {
+      "aurelius_signal_category": "metadata_only",
+      "field_quality": "real",
+      "normalized_field": "tool_name",
+      "notes": "Tool routing key.",
+      "presence_rate": 1.0,
+      "raw_column_name": "tool_name",
+      "raw_dtype": [
+        "str"
+      ],
+      "usable_for": [
+        "routing_quality"
+      ]
+    }
+  ],
+  "config_name": "tool_summary",
+  "dataset_id": "Lightcap/agent-runtime-telemetry-small",
+  "rejected_columns": []
+}
