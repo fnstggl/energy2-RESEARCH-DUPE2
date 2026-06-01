@@ -17,7 +17,6 @@ from aurelius.forecasting.cara_latency_features import (  # noqa: E402
     PREDICT_TIME_CATEGORICAL_FEATURES,
     PREDICT_TIME_NUMERIC_FEATURES,
     TARGETS,
-    LeakageError,
     bin_kv_util,
     bin_output_tokens,
     bin_prompt_tokens,
@@ -27,8 +26,8 @@ from aurelius.forecasting.cara_latency_features import (  # noqa: E402
     derive_gpu_type,
     derive_model_size,
     extract_target,
-    hour_of_day,
     holdout_by_group,
+    hour_of_day,
     random_holdout,
     time_holdout,
 )

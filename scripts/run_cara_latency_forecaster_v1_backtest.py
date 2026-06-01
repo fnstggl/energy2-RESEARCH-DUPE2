@@ -49,9 +49,8 @@ from aurelius.forecasting.cara_latency_features import (  # noqa: E402
 from aurelius.forecasting.cara_latency_forecaster import (  # noqa: E402
     GroupConstantQuantileBaseline,
     HistGradientBoostingQuantileForecaster,
-    SimpleRulePlacementScoreBaseline,
+    _percentile,  # noqa: E402
 )
-from aurelius.forecasting.cara_latency_forecaster import _percentile  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +98,8 @@ def build_counterfactual_lookup(
     queue_depth_bin) and return ``{(it, pb, qd): mean_latency, count}``.
     Also returns the per-instance overall median as fallback."""
     from aurelius.forecasting.cara_latency_features import (
-        bin_prompt_tokens, bin_queue_depth,
+        bin_prompt_tokens,
+        bin_queue_depth,
     )
 
     bucket_sums: dict = {}
@@ -134,7 +134,8 @@ def counterfactual_latency(
     ``chosen_it`` with the same (prompt_token_bin, queue_depth_bin). Falls
     back to the per-instance median when the bucket is empty."""
     from aurelius.forecasting.cara_latency_features import (
-        bin_prompt_tokens, bin_queue_depth,
+        bin_prompt_tokens,
+        bin_queue_depth,
     )
     pb = bin_prompt_tokens(row.get("num_prompt_tokens"))
     qd = bin_queue_depth(row.get("num_running"))
@@ -149,7 +150,7 @@ def counterfactual_latency(
 # ---------------------------------------------------------------------------
 
 
-def _build_X_for_candidates(rows, spec):
+def _build_x_for_candidates(rows, spec):
     """For each (row, candidate instance_type) pair, return X with the
     row's features but instance_type overridden to the candidate."""
     candidate_X_per_it: dict = {}
@@ -301,7 +302,7 @@ def main(argv=None) -> int:
         "backtest_ran_at_s": time.time(),
     }
 
-    candidate_X_per_it = _build_X_for_candidates(rows_holdout, spec)
+    candidate_X_per_it = _build_x_for_candidates(rows_holdout, spec)
 
     for target in TARGETS:
         y_train = extract_target(rows_train, target)

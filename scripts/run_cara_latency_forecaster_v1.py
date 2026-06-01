@@ -33,7 +33,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -45,7 +44,6 @@ import numpy as np  # noqa: E402
 
 from aurelius.forecasting.cara_latency_features import (  # noqa: E402
     LEAKAGE_TARGET_FIELDS,
-    PREDICT_TIME_CATEGORICAL_FEATURES,
     PREDICT_TIME_NUMERIC_FEATURES,
     TARGETS,
     build_feature_matrix,
@@ -57,7 +55,6 @@ from aurelius.forecasting.cara_latency_features import (  # noqa: E402
 )
 from aurelius.forecasting.cara_latency_forecaster import (  # noqa: E402
     ConservativeMultiplierCalibration,
-    FallbackToBaseline,
     GlobalConstantP95Baseline,
     GroupConstantQuantileBaseline,
     HistGradientBoostingQuantileForecaster,
@@ -65,9 +62,7 @@ from aurelius.forecasting.cara_latency_forecaster import (  # noqa: E402
     SimpleRulePlacementScoreBaseline,
     classify_gate_status,
     incremental_alpha_pct,
-    pinball_loss,
     quantile_metrics,
-    regression_metrics,
     subgroup_metrics,
 )
 

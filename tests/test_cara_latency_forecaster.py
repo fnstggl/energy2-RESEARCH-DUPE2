@@ -28,7 +28,6 @@ from aurelius.forecasting.cara_latency_forecaster import (  # noqa: E402
     subgroup_metrics,
 )
 
-
 # ---------- 1. Baselines fit + predict ----------------------------------
 
 
