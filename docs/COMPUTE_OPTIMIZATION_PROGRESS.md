@@ -3541,3 +3541,142 @@ distribution against `sammshen/lmcache-agentic-traces`. Remaining
 PR-#135 next-actions (optimum × AgentPerfBench cross-validation,
 energy × CO2 carbon-aware placement prior, MoE benchmark probe) still
 pending.
+
+## 2026-06-01 — hf-corpus: Lightcap follow-up + new `tool_runtime_trace` canonical type
+
+**Milestone.** Resolves the documented next-run priority in
+`docs/HF_DATASET_REGISTRY.md` §10
+"Lightcap follow-up (next-run priority)" — chose option (a) and
+introduced a new canonical trace type `tool_runtime_trace` to the
+federated corpus, then ingested `Lightcap/agent-runtime-telemetry-small`
+(cc-by-4.0) as the inaugural entry.
+
+**Why this matters for Aurelius' objective function.** Lightcap is the
+first public HF dataset in the corpus that captures real measured
+MCP / agent-runtime tool-call execution telemetry — one row per tool
+call with measured `duration_ms`, terminal `status`, lifecycle `stage`,
+`error_type` for failures, UTC `created_at` / `updated_at` timestamps,
+plus content-addressed payload-size proxies. The Aurelius objective
+function (routing quality, timeout risk, failure-rate, deferral / retry
+budgets) is fed directly by:
+
+- Per-tool error rates (22 tools, 5.48 % overall error rate, with
+  outliers like `scenario_briefing` 100 %, `optimize_schedule` 56 %).
+- Per-tool tail latency (overall p50=60 ms, p95=19.7 s, p99=125 s,
+  max=900 s — heavy-tailed real-production shape).
+- Per-status cost-of-failure (error operations p99=518 s, ~4.3× the
+  success p99=121 s — choosing a failing tool is expensive).
+- `args_fingerprint` sha256 = tool-call cache-reuse proxy.
+
+Trust tier: **Tier 3** (real measured execution telemetry, job-trace
+shape — the "jobs" are MCP tool calls, not GPU jobs). NOT serving
+telemetry: no model_id / no input_tokens / no GPU / no queue / no
+replica / no cache state / no TTFT / no TPOT.
+
+**Two configs ingested.**
+
+- `operations` (2,262 × 33; moderate strength) — promoted to
+  `promoted_for_backtest` (+ `promoted_for_constraint_aware_evaluation`,
+  `promoted_for_training_priors`).
+- `tool_summary` (32 aggregate rows; fixture_only strength) —
+  promoted to `promoted_for_schema_only`. Pre-rolled
+  per-(tool_name, status) `avg / median / p95` durations are recorded
+  in `statistical_rollups.json::per_tool_status_aggregates`.
+
+**Promotion rules.** `tool_runtime_trace` is allowed to promote to
+`backtest`, `constraint_aware_evaluation`, `training_priors`, and the
+sample-strength-gated `schema_only` — but explicitly **NOT** to
+`dynamic_calibration` (no queue / replica / GPU-util signal to
+calibrate the safe utilization frontier against).
+
+**Available signals (operations config).**
+`request_timestamps`, `arrivals`, `latency`, `duration_measured`,
+`tool_routing`, `tool_failure_label`, `tool_cancellation_label`,
+`args_fingerprint_for_cache_reuse`, `workload_shape`,
+`customer_traffic_mix`, `result_size_proxy`, `artifacts_size_proxy`.
+
+**Missing signals (operations config) — explicit.** `ttft`, `tpot`,
+`queue_state`, `gpu_utilization`, `replica_count`,
+`model_load_event`, `model_unload_event`, `cost_or_region`,
+`kv_block_hashes`, `migration_or_cache_loss_proxy`.
+
+**Output artefacts (all committed).**
+
+- `aurelius/traces/hf_corpus/schemas.py` — adds `tool_runtime_trace`
+  to `CANONICAL_TRACE_TYPES`, adds Tier-3 trust mapping, adds
+  `TOOL_RUNTIME_PAYLOAD_FIELDS` set (38 fields), adds
+  `ToolRuntimeRecord` dataclass with `__post_init__` validator, wires
+  it into `TRACE_TYPE_TO_RECORD_CLASS` and
+  `TRACE_TYPE_TO_PAYLOAD_FIELDS`.
+- `aurelius/traces/hf_corpus/promotion.py` — adds
+  `tool_runtime_trace` → `[backtest, constraint_aware_evaluation,
+  training_priors]` in `TRACE_TYPE_TO_ALLOWED_PROMOTIONS`.
+- `scripts/ingest_hf_lightcap_runtime_telemetry.py` — bounded ingester
+  (probes schema, normalises operations.parquet + tool_summary.parquet,
+  enumerates every column with field_quality + Aurelius signal
+  category, writes profile + mapping + summary + rollups + fixture +
+  bounded normalised sample).
+- `scripts/register_hf_lightcap_runtime_telemetry.py` — appends both
+  entries to
+  `data/external/hf_discovery/canonical_corpus_registry.json` via
+  `aurelius.traces.hf_corpus.promotion`; updates the Lightcap candidate
+  row in `data/external/hf_discovery/hf_dataset_candidates.json` and
+  stamps the `focused_audit_2026_06_01c` block.
+- `data/external/hf/Lightcap__agent-runtime-telemetry-small/<config>/processed/`
+  — `summary.json`, `schema_profile.json`, `schema_mapping.json`,
+  `statistical_rollups.json`, `normalized_sample.jsonl`
+  (operations: 3.0 MiB; tool_summary: 32 KiB; both under the
+  100-MiB-per-file / 300-MiB-per-PR policy cap).
+- `tests/fixtures/hf/Lightcap__agent-runtime-telemetry-small__<config>_sample.jsonl`
+  — 5-row deterministic fixtures (operations: 6.4 KiB,
+  tool_summary: 5.0 KiB).
+- `data/external/hf_discovery/lightcap_runtime_telemetry_ingest_summary.json` —
+  cross-config rollup with provenance + license + signals.
+- `docs/HF_DATASET_REGISTRY.md` — §2 (new canonical type), §7.1 entry
+  with full prose section, §7.2 entry updated to point to §7.1, §10
+  next-actions updated.
+
+**Test suite.** `tests/test_hf_lightcap_runtime_telemetry_ingest.py`
+(30 tests, all green) covers: no raw / analysis_sample.jsonl committed;
+per-config fixture ≤ 16 KiB; per-config schema_profile + schema_mapping
++ summary + statistical_rollups present; mapping classifies every
+accepted column with field_quality + aurelius_signal_category; no
+unknown / rejected columns; all 9 promotion gates pass for both
+configs; operations is promoted to backtest + constraint_aware_eval +
+training_priors; tool_summary is promoted_for_schema_only; the new
+`tool_runtime_trace` canonical type is registered;
+`ToolRuntimeRecord` validates field_quality + rejects bad trace_type;
+trust tier is `tier_3_cluster_scheduler_traces` (NOT Tier 1, NOT
+Tier 2); operations advertises the expected tool-runtime signals;
+operations does NOT falsely advertise GPU serving signals
+(ttft/tpot/queue/replica/GPU); limitations pin the
+"NOT GPU TTFT/TPOT, NOT LLM serving telemetry" caveat; committed
+normalised samples are bounded ≤ 100 MiB with matching sha256;
+canonical registry includes both configs; candidates JSON records the
+`focused_audit_2026_06_01c` block; promotion rules wire the new type.
+The full HF test suite (727 tests across all `test_hf_*.py`) remains
+green.
+
+**Honesty + scope guarantees.** No production claim; no scheduler /
+controller / robust energy engine touched; no oracle as headline; no
+Tier 1 promotion; explicit closed-tool-runtime-timing caveat in
+`limitations`; `field_quality` recorded for every accepted column
+(real for measured `duration_ms` / `status` / `error_type` /
+payload-size proxies; derived for `created_at_s` / `updated_at_s` /
+`duration_s` / `is_error` / `is_cancelled`; derived for the aggregate
+`duration_ms` carried in `tool_summary`); raw parquets gitignored;
+analysis_sample.jsonl gitignored; bounded normalised sample committed
+only because cc-by-4.0 permits redistribution.
+
+**Next (documented in `docs/HF_DATASET_REGISTRY.md` §10):**
+Ingest the remaining Lightcap configs (operation_events: 9,903
+lifecycle transitions; audit_records: 14,053 MCP audit rows) on a
+follow-on run — both fit the new `tool_runtime_trace` type; the
+audit_records config in particular would unlock per-stage state-
+transition timing for queue-wait-style priors. Cross-validate
+Lightcap's heavy tail (p99=125 s, max=900 s) against any future
+tool-runtime trace to calibrate whether this shape is broadly
+representative or Lightcap-specific. Remaining PR-#142
+next-actions (additional Exgentic shards, optimum × AgentPerfBench
+cross-validation, energy × CO2 carbon-aware placement prior, MoE
+benchmark probe) still pending.

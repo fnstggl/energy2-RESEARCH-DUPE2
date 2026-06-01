@@ -122,6 +122,19 @@ TRACE_TYPE_TO_ALLOWED_PROMOTIONS = {
     "request_shape_trace": [
         "promoted_for_training_priors",
     ],
+    # Tool-runtime traces are real measured tool-call execution telemetry
+    # (operation_id + duration_ms + status + error_type + timestamps).
+    # The shape matches cluster_scheduler_trace, so the same promotion
+    # set applies: backtest (per-call replay), constraint_aware_evaluation
+    # (routing / placement / deferral over tool-call mixes), and
+    # training_priors. NOT dynamic_calibration — there is no queue /
+    # replica / GPU-util signal to calibrate the safe utilization
+    # frontier against.
+    "tool_runtime_trace": [
+        "promoted_for_backtest",
+        "promoted_for_constraint_aware_evaluation",
+        "promoted_for_training_priors",
+    ],
     "mixed_or_unknown_trace": [],
 }
 

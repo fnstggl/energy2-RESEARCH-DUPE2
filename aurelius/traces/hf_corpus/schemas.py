@@ -43,6 +43,7 @@ CANONICAL_TRACE_TYPES = frozenset({
     "cluster_scheduler_trace",
     "cache_residency_trace",
     "telemetry_trace",
+    "tool_runtime_trace",
     "mixed_or_unknown_trace",
 })
 
@@ -70,6 +71,13 @@ TRUST_TIERS = {
 CANONICAL_TRACE_TYPE_TO_TRUST_TIER = {
     "telemetry_trace": "tier_2_public_telemetry_traces",
     "cluster_scheduler_trace": "tier_3_cluster_scheduler_traces",
+    # Tool-runtime traces are real measured execution telemetry of MCP /
+    # agent-runtime tool calls (operation_id + duration_ms + status +
+    # error_type + UTC timestamps), one row per tool call. The shape
+    # matches cluster_scheduler_trace (jobs / durations / statuses /
+    # stages) but the workload is tool execution, not GPU jobs. Same
+    # trust tier — real measurements, not benchmark, not synthetic.
+    "tool_runtime_trace": "tier_3_cluster_scheduler_traces",
     "latency_benchmark_trace": "tier_4_latency_benchmark_traces",
     "kernel_profile_trace": "tier_4_latency_benchmark_traces",
     "cache_residency_trace": "tier_4_latency_benchmark_traces",
@@ -254,6 +262,55 @@ CACHE_RESIDENCY_PAYLOAD_FIELDS = {
     "max_tokens_param",
     "top_p",
     "seed",
+}
+
+
+TOOL_RUNTIME_PAYLOAD_FIELDS = {
+    # Identity + routing keys.
+    "operation_id",
+    "request_id",
+    "tool_name",
+    "stage",
+    "status",
+    "operation_mode",
+    "backend_preference",
+    # Timestamps (real, measured) — UTC ISO strings + derived epoch
+    # seconds so the harness can join on either.
+    "created_at_iso",
+    "updated_at_iso",
+    "created_at_s",
+    "updated_at_s",
+    "duration_ms",
+    "duration_s",
+    # Failure / timeout classification (real).
+    "error_type",
+    "error_message_preview",
+    "error_message_sha256",
+    "is_error",
+    "is_cancelled",
+    # Payload-size proxies (measured byte / key counts; raw payload bodies
+    # are NOT redistributed — only fingerprints / counts / sha256 hashes).
+    "args_fingerprint",
+    "args_count",
+    "args_keys",
+    "kwargs_key_count",
+    "kwargs_keys",
+    "result_summary_key_count",
+    "result_summary_keys",
+    "result_type",
+    "result_operation",
+    "result_payload_key_count",
+    "result_payload_keys",
+    "result_payload_bytes",
+    "artifacts_bytes",
+    # Provenance / capability flags (real, recorded by the runtime).
+    "force_retrain",
+    "include_control_sensitivities",
+    "include_validation_protocols",
+    "has_input_provenance",
+    "has_source_binding",
+    "series_rows_count",
+    "scenario_rows_count",
 }
 
 
@@ -552,6 +609,69 @@ class TelemetryRecord(CanonicalCorpusRecord):
             )
 
 
+@dataclass(frozen=True)
+class ToolRuntimeRecord(CanonicalCorpusRecord):
+    """One row per MCP / agent-runtime tool call.
+
+    Real measured execution telemetry — operation_id + tool_name +
+    duration_ms + status + error_type + UTC timestamps — exported from a
+    live agent runtime. Distinct from RequestShapeRecord (LLM-call spans
+    with model + input/output tokens) and TelemetryRecord (full serving
+    stack with queue / GPU / replica fields). Tool-runtime traces do NOT
+    contain model_id, input/output_tokens, GPU type, queue depth,
+    replica count, cache state, or any LLM-serving signal; their value
+    is routing-quality + failure-rate + latency-tail priors for agent
+    workloads, not for serving-stack calibration.
+    """
+
+    operation_id: Optional[str] = None
+    request_id: Optional[str] = None
+    tool_name: Optional[str] = None
+    stage: Optional[str] = None
+    status: Optional[str] = None
+    operation_mode: Optional[str] = None
+    backend_preference: Optional[str] = None
+    created_at_iso: Optional[str] = None
+    updated_at_iso: Optional[str] = None
+    created_at_s: Optional[float] = None
+    updated_at_s: Optional[float] = None
+    duration_ms: Optional[float] = None
+    duration_s: Optional[float] = None
+    error_type: Optional[str] = None
+    error_message_preview: Optional[str] = None
+    error_message_sha256: Optional[str] = None
+    is_error: Optional[bool] = None
+    is_cancelled: Optional[bool] = None
+    args_fingerprint: Optional[str] = None
+    args_count: Optional[int] = None
+    args_keys: Optional[str] = None
+    kwargs_key_count: Optional[int] = None
+    kwargs_keys: Optional[str] = None
+    result_summary_key_count: Optional[int] = None
+    result_summary_keys: Optional[str] = None
+    result_type: Optional[str] = None
+    result_operation: Optional[str] = None
+    result_payload_key_count: Optional[int] = None
+    result_payload_keys: Optional[str] = None
+    result_payload_bytes: Optional[int] = None
+    artifacts_bytes: Optional[int] = None
+    force_retrain: Optional[bool] = None
+    include_control_sensitivities: Optional[bool] = None
+    include_validation_protocols: Optional[bool] = None
+    has_input_provenance: Optional[bool] = None
+    has_source_binding: Optional[bool] = None
+    series_rows_count: Optional[int] = None
+    scenario_rows_count: Optional[int] = None
+
+    def __post_init__(self):
+        self._validate_base(TOOL_RUNTIME_PAYLOAD_FIELDS)
+        if self.trace_type != "tool_runtime_trace":
+            raise HFCorpusSchemaError(
+                f"ToolRuntimeRecord trace_type must be 'tool_runtime_trace', "
+                f"got '{self.trace_type}'"
+            )
+
+
 TRACE_TYPE_TO_RECORD_CLASS = {
     "request_shape_trace": RequestShapeRecord,
     "latency_benchmark_trace": BenchmarkLatencyRecord,
@@ -559,6 +679,7 @@ TRACE_TYPE_TO_RECORD_CLASS = {
     "cluster_scheduler_trace": ClusterSchedulerRecord,
     "cache_residency_trace": CacheResidencyRecord,
     "telemetry_trace": TelemetryRecord,
+    "tool_runtime_trace": ToolRuntimeRecord,
 }
 
 
@@ -569,4 +690,5 @@ TRACE_TYPE_TO_PAYLOAD_FIELDS = {
     "cluster_scheduler_trace": CLUSTER_SCHEDULER_PAYLOAD_FIELDS,
     "cache_residency_trace": CACHE_RESIDENCY_PAYLOAD_FIELDS,
     "telemetry_trace": TELEMETRY_PAYLOAD_FIELDS,
+    "tool_runtime_trace": TOOL_RUNTIME_PAYLOAD_FIELDS,
 }

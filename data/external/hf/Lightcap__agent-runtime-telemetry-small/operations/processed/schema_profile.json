@@ -1,0 +1,799 @@
+{
+  "config_name": "operations",
+  "dataset_id": "Lightcap/agent-runtime-telemetry-small",
+  "example_values": {
+    "args_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "args_fingerprint": [
+      "'97fcdad9fe31227a9ec60e519ff7635ac71941c55b77e585c908db1fa6406030'",
+      "'97fcdad9fe31227a9ec60e519ff7635ac71941c55b77e585c908db1fa6406030'",
+      "'97fcdad9fe31227a9ec60e519ff7635ac71941c55b77e585c908db1fa6406030'"
+    ],
+    "args_keys": [
+      "'list'",
+      "'list'",
+      "'list'"
+    ],
+    "artifacts_bytes": [
+      "0",
+      "0",
+      "0"
+    ],
+    "backend_preference": [
+      "None",
+      "None",
+      "None"
+    ],
+    "created_at_iso": [
+      "'2026-04-16T14:32:58.190952+00:00'",
+      "'2026-04-16T14:33:05.279283+00:00'",
+      "'2026-04-16T14:33:10.171342+00:00'"
+    ],
+    "created_at_s": [
+      "1776349978.190952",
+      "1776349985.279283",
+      "1776349990.171342"
+    ],
+    "duration_ms": [
+      "6617.595752992202",
+      "4625.258790969383",
+      "14.148693007882684"
+    ],
+    "duration_s": [
+      "6.617595752992202",
+      "4.625258790969383",
+      "0.014148693007882684"
+    ],
+    "error_message_preview": [
+      "None",
+      "None",
+      "None"
+    ],
+    "error_message_sha256": [
+      "None",
+      "None",
+      "None"
+    ],
+    "error_type": [
+      "None",
+      "None",
+      "None"
+    ],
+    "force_retrain": [
+      "None",
+      "None",
+      "None"
+    ],
+    "has_input_provenance": [
+      "None",
+      "None",
+      "None"
+    ],
+    "has_source_binding": [
+      "None",
+      "None",
+      "None"
+    ],
+    "include_control_sensitivities": [
+      "None",
+      "None",
+      "None"
+    ],
+    "include_validation_protocols": [
+      "None",
+      "None",
+      "None"
+    ],
+    "is_cancelled": [
+      "False",
+      "False",
+      "False"
+    ],
+    "is_error": [
+      "False",
+      "False",
+      "False"
+    ],
+    "kwargs_key_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "kwargs_keys": [
+      "None",
+      "None",
+      "None"
+    ],
+    "operation_id": [
+      "'deploy-smoke-1776349977'",
+      "'37da9bf8a56344a28b7a606f84169988'",
+      "'eb315d0461ed4575aa40129b330078c3'"
+    ],
+    "operation_mode": [
+      "None",
+      "None",
+      "None"
+    ],
+    "request_id": [
+      "'6ba9736b3a0d47cda91d2f27c4236aae'",
+      "'a4a19c163d4749ddab861865a40697cc'",
+      "'bea462a4738f4a59a2f014b2a813be79'"
+    ],
+    "result_operation": [
+      "None",
+      "None",
+      "None"
+    ],
+    "result_payload_bytes": [
+      "19802",
+      "10400",
+      "23547"
+    ],
+    "result_payload_key_count": [
+      "7",
+      "15",
+      "3"
+    ],
+    "result_payload_keys": [
+      "'backend|data_input_contract|granite_timeseries|paths|platform|required_files|rollout_backend'",
+      "'accelerator|cache|dependencies|distribution|enabled|foundation_models|input_contract|isolation|model|model_router|notes",
+      "'execution_surface|surface_affinity|usage'"
+    ],
+    "result_summary_key_count": [
+      "3",
+      "4",
+      "3"
+    ],
+    "result_summary_keys": [
+      "'key_count|keys|type'",
+      "'key_count|keys|status|type'",
+      "'key_count|keys|type'"
+    ],
+    "result_type": [
+      "'object'",
+      "'object'",
+      "'object'"
+    ],
+    "scenario_rows_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "series_rows_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "stage": [
+      "'completed'",
+      "'completed'",
+      "'completed'"
+    ],
+    "status": [
+      "'ok'",
+      "'ok'",
+      "'ok'"
+    ],
+    "tool_name": [
+      "'host_diagnostics'",
+      "'granite_timeseries_status'",
+      "'surface_affinity'"
+    ],
+    "updated_at_iso": [
+      "'2026-04-16T14:33:04.812070+00:00'",
+      "'2026-04-16T14:33:09.906957+00:00'",
+      "'2026-04-16T14:33:10.189004+00:00'"
+    ],
+    "updated_at_s": [
+      "1776349984.81207",
+      "1776349989.906957",
+      "1776349990.189004"
+    ]
+  },
+  "file_size_bytes": 276568,
+  "inspected_row_count": 2262,
+  "missing_rates": {
+    "args_count": 0.0,
+    "args_fingerprint": 0.0,
+    "args_keys": 0.0,
+    "artifacts_bytes": 0.0,
+    "backend_preference": 0.8717948717948718,
+    "created_at_iso": 0.0,
+    "created_at_s": 0.0,
+    "duration_ms": 0.0026525198938992522,
+    "duration_s": 0.0026525198938992522,
+    "error_message_preview": 0.9425287356321839,
+    "error_message_sha256": 0.9425287356321839,
+    "error_type": 0.9425287356321839,
+    "force_retrain": 0.8890362511052167,
+    "has_input_provenance": 0.8921308576480991,
+    "has_source_binding": 0.9248452696728559,
+    "include_control_sensitivities": 0.9248452696728559,
+    "include_validation_protocols": 0.9248452696728559,
+    "is_cancelled": 0.0,
+    "is_error": 0.0,
+    "kwargs_key_count": 0.0,
+    "kwargs_keys": 0.7891246684350133,
+    "operation_id": 0.0,
+    "operation_mode": 0.8364279398762158,
+    "request_id": 0.0,
+    "result_operation": 0.8757736516357206,
+    "result_payload_bytes": 0.0,
+    "result_payload_key_count": 0.0,
+    "result_payload_keys": 0.05747126436781613,
+    "result_summary_key_count": 0.0,
+    "result_summary_keys": 0.05747126436781613,
+    "result_type": 0.05747126436781613,
+    "scenario_rows_count": 0.0,
+    "series_rows_count": 0.0,
+    "stage": 0.0,
+    "status": 0.0,
+    "tool_name": 0.0,
+    "updated_at_iso": 0.0,
+    "updated_at_s": 0.0
+  },
+  "normalized_columns": [
+    "args_count",
+    "args_fingerprint",
+    "args_keys",
+    "artifacts_bytes",
+    "backend_preference",
+    "created_at_iso",
+    "created_at_s",
+    "duration_ms",
+    "duration_s",
+    "error_message_preview",
+    "error_message_sha256",
+    "error_type",
+    "force_retrain",
+    "has_input_provenance",
+    "has_source_binding",
+    "include_control_sensitivities",
+    "include_validation_protocols",
+    "is_cancelled",
+    "is_error",
+    "kwargs_key_count",
+    "kwargs_keys",
+    "operation_id",
+    "operation_mode",
+    "request_id",
+    "result_operation",
+    "result_payload_bytes",
+    "result_payload_key_count",
+    "result_payload_keys",
+    "result_summary_key_count",
+    "result_summary_keys",
+    "result_type",
+    "scenario_rows_count",
+    "series_rows_count",
+    "stage",
+    "status",
+    "tool_name",
+    "updated_at_iso",
+    "updated_at_s"
+  ],
+  "normalized_dtypes": {
+    "args_count": [
+      "int"
+    ],
+    "args_fingerprint": [
+      "str"
+    ],
+    "args_keys": [
+      "str"
+    ],
+    "artifacts_bytes": [
+      "int"
+    ],
+    "backend_preference": [
+      "null",
+      "str"
+    ],
+    "created_at_iso": [
+      "str"
+    ],
+    "created_at_s": [
+      "float"
+    ],
+    "duration_ms": [
+      "float",
+      "null"
+    ],
+    "duration_s": [
+      "float",
+      "null"
+    ],
+    "error_message_preview": [
+      "null",
+      "str"
+    ],
+    "error_message_sha256": [
+      "null",
+      "str"
+    ],
+    "error_type": [
+      "null",
+      "str"
+    ],
+    "force_retrain": [
+      "bool",
+      "null"
+    ],
+    "has_input_provenance": [
+      "bool",
+      "null"
+    ],
+    "has_source_binding": [
+      "bool",
+      "null"
+    ],
+    "include_control_sensitivities": [
+      "bool",
+      "null"
+    ],
+    "include_validation_protocols": [
+      "bool",
+      "null"
+    ],
+    "is_cancelled": [
+      "bool"
+    ],
+    "is_error": [
+      "bool"
+    ],
+    "kwargs_key_count": [
+      "int"
+    ],
+    "kwargs_keys": [
+      "null",
+      "str"
+    ],
+    "operation_id": [
+      "str"
+    ],
+    "operation_mode": [
+      "null",
+      "str"
+    ],
+    "request_id": [
+      "str"
+    ],
+    "result_operation": [
+      "null",
+      "str"
+    ],
+    "result_payload_bytes": [
+      "int"
+    ],
+    "result_payload_key_count": [
+      "int"
+    ],
+    "result_payload_keys": [
+      "null",
+      "str"
+    ],
+    "result_summary_key_count": [
+      "int"
+    ],
+    "result_summary_keys": [
+      "null",
+      "str"
+    ],
+    "result_type": [
+      "null",
+      "str"
+    ],
+    "scenario_rows_count": [
+      "int"
+    ],
+    "series_rows_count": [
+      "int"
+    ],
+    "stage": [
+      "str"
+    ],
+    "status": [
+      "str"
+    ],
+    "tool_name": [
+      "str"
+    ],
+    "updated_at_iso": [
+      "str"
+    ],
+    "updated_at_s": [
+      "float"
+    ]
+  },
+  "presence_rates": {
+    "args_count": 1.0,
+    "args_fingerprint": 1.0,
+    "args_keys": 1.0,
+    "artifacts_bytes": 1.0,
+    "backend_preference": 0.1282051282051282,
+    "created_at_iso": 1.0,
+    "created_at_s": 1.0,
+    "duration_ms": 0.9973474801061007,
+    "duration_s": 0.9973474801061007,
+    "error_message_preview": 0.05747126436781609,
+    "error_message_sha256": 0.05747126436781609,
+    "error_type": 0.05747126436781609,
+    "force_retrain": 0.11096374889478337,
+    "has_input_provenance": 0.10786914235190097,
+    "has_source_binding": 0.07515473032714412,
+    "include_control_sensitivities": 0.07515473032714412,
+    "include_validation_protocols": 0.07515473032714412,
+    "is_cancelled": 1.0,
+    "is_error": 1.0,
+    "kwargs_key_count": 1.0,
+    "kwargs_keys": 0.21087533156498675,
+    "operation_id": 1.0,
+    "operation_mode": 0.16357206012378425,
+    "request_id": 1.0,
+    "result_operation": 0.1242263483642794,
+    "result_payload_bytes": 1.0,
+    "result_payload_key_count": 1.0,
+    "result_payload_keys": 0.9425287356321839,
+    "result_summary_key_count": 1.0,
+    "result_summary_keys": 0.9425287356321839,
+    "result_type": 0.9425287356321839,
+    "scenario_rows_count": 1.0,
+    "series_rows_count": 1.0,
+    "stage": 1.0,
+    "status": 1.0,
+    "tool_name": 1.0,
+    "updated_at_iso": 1.0,
+    "updated_at_s": 1.0
+  },
+  "raw_columns": [
+    "args_count",
+    "args_fingerprint",
+    "args_keys",
+    "artifacts_bytes",
+    "backend_preference",
+    "created_at_utc",
+    "duration_ms",
+    "error_message_preview",
+    "error_message_sha256",
+    "error_type",
+    "force_retrain",
+    "has_input_provenance",
+    "has_source_binding",
+    "include_control_sensitivities",
+    "include_validation_protocols",
+    "kwargs_key_count",
+    "kwargs_keys",
+    "operation_id",
+    "operation_mode",
+    "request_id",
+    "result_operation",
+    "result_payload_bytes",
+    "result_payload_key_count",
+    "result_payload_keys",
+    "result_summary_key_count",
+    "result_summary_keys",
+    "result_type",
+    "scenario_rows_count",
+    "series_rows_count",
+    "stage",
+    "status",
+    "tool_name",
+    "updated_at_utc"
+  ],
+  "raw_dtypes": {
+    "args_count": [
+      "int"
+    ],
+    "args_fingerprint": [
+      "str"
+    ],
+    "args_keys": [
+      "str"
+    ],
+    "artifacts_bytes": [
+      "int"
+    ],
+    "backend_preference": [
+      "str"
+    ],
+    "created_at_utc": [
+      "str"
+    ],
+    "duration_ms": [
+      "float",
+      "null"
+    ],
+    "error_message_preview": [
+      "str"
+    ],
+    "error_message_sha256": [
+      "str"
+    ],
+    "error_type": [
+      "str"
+    ],
+    "force_retrain": [
+      "bool",
+      "null"
+    ],
+    "has_input_provenance": [
+      "bool",
+      "null"
+    ],
+    "has_source_binding": [
+      "bool",
+      "null"
+    ],
+    "include_control_sensitivities": [
+      "bool",
+      "null"
+    ],
+    "include_validation_protocols": [
+      "bool",
+      "null"
+    ],
+    "kwargs_key_count": [
+      "int"
+    ],
+    "kwargs_keys": [
+      "str"
+    ],
+    "operation_id": [
+      "str"
+    ],
+    "operation_mode": [
+      "str"
+    ],
+    "request_id": [
+      "str"
+    ],
+    "result_operation": [
+      "str"
+    ],
+    "result_payload_bytes": [
+      "int"
+    ],
+    "result_payload_key_count": [
+      "int"
+    ],
+    "result_payload_keys": [
+      "str"
+    ],
+    "result_summary_key_count": [
+      "int"
+    ],
+    "result_summary_keys": [
+      "str"
+    ],
+    "result_type": [
+      "str"
+    ],
+    "scenario_rows_count": [
+      "int"
+    ],
+    "series_rows_count": [
+      "int"
+    ],
+    "stage": [
+      "str"
+    ],
+    "status": [
+      "str"
+    ],
+    "tool_name": [
+      "str"
+    ],
+    "updated_at_utc": [
+      "str"
+    ]
+  },
+  "raw_example_values": {
+    "args_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "args_fingerprint": [
+      "'97fcdad9fe31227a9ec60e519ff7635ac71941c55b77e585c908db1fa6406030'",
+      "'97fcdad9fe31227a9ec60e519ff7635ac71941c55b77e585c908db1fa6406030'",
+      "'97fcdad9fe31227a9ec60e519ff7635ac71941c55b77e585c908db1fa6406030'"
+    ],
+    "args_keys": [
+      "'list'",
+      "'list'",
+      "'list'"
+    ],
+    "artifacts_bytes": [
+      "0",
+      "0",
+      "0"
+    ],
+    "backend_preference": [
+      "''",
+      "''",
+      "''"
+    ],
+    "created_at_utc": [
+      "'2026-04-16T14:32:58.190952+00:00'",
+      "'2026-04-16T14:33:05.279283+00:00'",
+      "'2026-04-16T14:33:10.171342+00:00'"
+    ],
+    "duration_ms": [
+      "6617.595752992202",
+      "4625.258790969383",
+      "14.148693007882684"
+    ],
+    "error_message_preview": [
+      "''",
+      "''",
+      "''"
+    ],
+    "error_message_sha256": [
+      "''",
+      "''",
+      "''"
+    ],
+    "error_type": [
+      "''",
+      "''",
+      "''"
+    ],
+    "force_retrain": [
+      "None",
+      "None",
+      "None"
+    ],
+    "has_input_provenance": [
+      "None",
+      "None",
+      "None"
+    ],
+    "has_source_binding": [
+      "None",
+      "None",
+      "None"
+    ],
+    "include_control_sensitivities": [
+      "None",
+      "None",
+      "None"
+    ],
+    "include_validation_protocols": [
+      "None",
+      "None",
+      "None"
+    ],
+    "kwargs_key_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "kwargs_keys": [
+      "''",
+      "''",
+      "''"
+    ],
+    "operation_id": [
+      "'deploy-smoke-1776349977'",
+      "'37da9bf8a56344a28b7a606f84169988'",
+      "'eb315d0461ed4575aa40129b330078c3'"
+    ],
+    "operation_mode": [
+      "''",
+      "''",
+      "''"
+    ],
+    "request_id": [
+      "'6ba9736b3a0d47cda91d2f27c4236aae'",
+      "'a4a19c163d4749ddab861865a40697cc'",
+      "'bea462a4738f4a59a2f014b2a813be79'"
+    ],
+    "result_operation": [
+      "''",
+      "''",
+      "''"
+    ],
+    "result_payload_bytes": [
+      "19802",
+      "10400",
+      "23547"
+    ],
+    "result_payload_key_count": [
+      "7",
+      "15",
+      "3"
+    ],
+    "result_payload_keys": [
+      "'backend|data_input_contract|granite_timeseries|paths|platform|required_files|rollout_backend'",
+      "'accelerator|cache|dependencies|distribution|enabled|foundation_models|input_contract|isolation|model|model_router|notes",
+      "'execution_surface|surface_affinity|usage'"
+    ],
+    "result_summary_key_count": [
+      "3",
+      "4",
+      "3"
+    ],
+    "result_summary_keys": [
+      "'key_count|keys|type'",
+      "'key_count|keys|status|type'",
+      "'key_count|keys|type'"
+    ],
+    "result_type": [
+      "'object'",
+      "'object'",
+      "'object'"
+    ],
+    "scenario_rows_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "series_rows_count": [
+      "0",
+      "0",
+      "0"
+    ],
+    "stage": [
+      "'completed'",
+      "'completed'",
+      "'completed'"
+    ],
+    "status": [
+      "'ok'",
+      "'ok'",
+      "'ok'"
+    ],
+    "tool_name": [
+      "'host_diagnostics'",
+      "'granite_timeseries_status'",
+      "'surface_affinity'"
+    ],
+    "updated_at_utc": [
+      "'2026-04-16T14:33:04.812070+00:00'",
+      "'2026-04-16T14:33:09.906957+00:00'",
+      "'2026-04-16T14:33:10.189004+00:00'"
+    ]
+  },
+  "raw_presence_rates": {
+    "args_count": 1.0,
+    "args_fingerprint": 1.0,
+    "args_keys": 1.0,
+    "artifacts_bytes": 1.0,
+    "backend_preference": 1.0,
+    "created_at_utc": 1.0,
+    "duration_ms": 1.0,
+    "error_message_preview": 1.0,
+    "error_message_sha256": 1.0,
+    "error_type": 1.0,
+    "force_retrain": 1.0,
+    "has_input_provenance": 1.0,
+    "has_source_binding": 1.0,
+    "include_control_sensitivities": 1.0,
+    "include_validation_protocols": 1.0,
+    "kwargs_key_count": 1.0,
+    "kwargs_keys": 1.0,
+    "operation_id": 1.0,
+    "operation_mode": 1.0,
+    "request_id": 1.0,
+    "result_operation": 1.0,
+    "result_payload_bytes": 1.0,
+    "result_payload_key_count": 1.0,
+    "result_payload_keys": 1.0,
+    "result_summary_key_count": 1.0,
+    "result_summary_keys": 1.0,
+    "result_type": 1.0,
+    "scenario_rows_count": 1.0,
+    "series_rows_count": 1.0,
+    "stage": 1.0,
+    "status": 1.0,
+    "tool_name": 1.0,
+    "updated_at_utc": 1.0
+  },
+  "raw_row_count": 2262,
+  "source_files_inspected": [
+    "data/operations.parquet"
+  ]
+}

@@ -5698,10 +5698,14 @@
       "trust_level": "tier_6_synthetic_benchmark_data"
     },
     {
+      "audit_decision": "ingested_as_tool_runtime_trace",
+      "audit_note_2026_06_01c": "Round-5 defer cleared: Lightcap ingested 2026-06-01 as the inaugural tool_runtime_trace canonical type (new). operations config (2,262 rows \u00d7 33 cols) -> promoted_for_backtest + promoted_for_constraint_aware_evaluation + promoted_for_training_priors. tool_summary config (32 aggregated rows) -> promoted_for_schema_only. Trust tier: Tier 3 (tier_3_cluster_scheduler_traces \u2014 real measured execution telemetry, job-trace shape, but the 'jobs' are MCP tool calls, not GPU jobs). Routing-quality + failure-rate + tail-latency priors for agent workloads. NO GPU / NO model / NO LLM-serving signal \u2014 closed tool-runtime e2e timing only.",
+      "audit_round": "focused_audit_2026_06_01c",
       "aurelius_use_case": "Round-5 discovery audit \u2014 see reason.",
       "available_signals": [],
       "available_splits": [],
       "candidate_trace_type": "request_shape_trace",
+      "canonical_trace_type": "tool_runtime_trace",
       "classification_evidence": {},
       "configs": [],
       "dataset_id": "Lightcap/agent-runtime-telemetry-small",
@@ -5723,11 +5727,11 @@
       "not_recommended_uses": [],
       "overall_priority_score": 1.0,
       "production_similarity_score": 1,
-      "recommended_action": "defer_high_value_different_trace_class",
+      "recommended_action": "ingest_now_bounded",
       "round5_audit_reason": "REAL MCP-style agent-runtime tool-call telemetry exported from local SQLite stores (Faruk Alpay). 8 parquet configs: operations (2,262 \u00d7 33, real duration_ms + status + error_type + tool_name + UTC timestamps), operation_events (9,903 lifecycle events), audit_records (14,053 audit rows), tool_summary (32 tools with avg/median/p95 duration_ms). cc-by-4.0 (redistributable with attribution). HIGH information density for tool-call / agent-orchestration RELIABILITY priors \u2014 but the canonical Aurelius trace types are LLM-serving-focused; tool-call telemetry has NO model_id / NO input_tokens / NO GPU / NO queue / NO concurrency / NO cache fields. Deferred to a follow-on run that adds a (new) `tool_runtime_trace` canonical type OR maps tool-call durations into the existing request_shape_trace as a routing-quality / failure-rate prior. Not a duplicate of Exgentic \u2014 Exgentic captures LLM-CALL spans with model + tokens; Lightcap captures TOOL-CALL operations with no LLM-specific fields. See HF_DATASET_REGISTRY \u00a710 for the follow-up action.",
       "schema_available": true,
       "schema_quality_score": 1,
-      "trust_level": "tier_6_synthetic_benchmark_data"
+      "trust_level": "tier_3_cluster_scheduler_traces"
     },
     {
       "aurelius_use_case": "Round-5 discovery audit \u2014 see reason.",
@@ -5895,7 +5899,30 @@
       }
     }
   },
-  "last_updated_at_s": 1780308684.0275779,
+  "focused_audit_2026_06_01c": {
+    "configs_ingested": [
+      "Lightcap/agent-runtime-telemetry-small@operations (2,262 rows, moderate strength)",
+      "Lightcap/agent-runtime-telemetry-small@tool_summary (32 aggregated rows, fixture_only strength \u2192 promoted_for_schema_only)"
+    ],
+    "datasets": [
+      "Lightcap/agent-runtime-telemetry-small"
+    ],
+    "headline_promotion_state": "promoted_for_backtest",
+    "headline_promotion_tags": [
+      "promoted_for_backtest",
+      "promoted_for_constraint_aware_evaluation",
+      "promoted_for_training_priors"
+    ],
+    "license": "cc-by-4.0",
+    "modifies_controllers_or_defaults": false,
+    "modifies_robust_energy_engine": false,
+    "new_canonical_type": "tool_runtime_trace",
+    "production_claim": false,
+    "ran_at_s": 1780337610.8697526,
+    "scope": "Inaugural tool_runtime_trace canonical-type ingest (Lightcap/agent-runtime-telemetry-small). Clears Round-5 'defer_high_value_different_trace_class' block by adding the new canonical type to aurelius/traces/hf_corpus/schemas.py + promotion.py.",
+    "trust_tier": "tier_3_cluster_scheduler_traces"
+  },
+  "last_updated_at_s": 1780337610.8697517,
   "production_claim": false,
   "query_groups_used": [
     "latency_benchmark",

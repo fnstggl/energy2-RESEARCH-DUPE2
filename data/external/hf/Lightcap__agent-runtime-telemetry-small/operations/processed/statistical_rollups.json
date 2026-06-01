@@ -1,0 +1,558 @@
+{
+  "numeric_distributions": {
+    "args_count": {
+      "count": 2262,
+      "max": 4,
+      "mean": 0.2480106100795756,
+      "min": 0,
+      "p50": 0,
+      "p90": 1,
+      "p95": 1,
+      "p99": 4
+    },
+    "artifacts_bytes": {
+      "count": 2262,
+      "max": 11374,
+      "mean": 1591.4641909814325,
+      "min": 0,
+      "p50": 0,
+      "p90": 4147,
+      "p95": 10240,
+      "p99": 11072
+    },
+    "duration_ms": {
+      "overall": {
+        "count": 2256,
+        "max": 900586.0521879513,
+        "mean": 5267.718763112983,
+        "min": 1.816206960938871,
+        "p50": 60.246117995120585,
+        "p90": 6617.595752992202,
+        "p95": 19731.780214002356,
+        "p99": 124971.68382606469
+      },
+      "per_status": {
+        "cancelled": {
+          "count": 0
+        },
+        "error": {
+          "count": 124,
+          "max": 900586.0521879513,
+          "mean": 25399.14728386811,
+          "min": 8.279407978989184,
+          "p50": 421.6983231017366,
+          "p90": 25375.210241996683,
+          "p95": 82284.04924203642,
+          "p99": 518160.0061809877
+        },
+        "ok": {
+          "count": 2132,
+          "max": 396090.80099500716,
+          "mean": 4096.847685920845,
+          "min": 1.816206960938871,
+          "p50": 58.59179503750056,
+          "p90": 5753.402558970265,
+          "p95": 19101.779914926738,
+          "p99": 120934.91215410177
+        }
+      },
+      "per_tool": {
+        "alignment_manifest": {
+          "count": 252,
+          "max": 707.4279169974034,
+          "mean": 43.618926199159766,
+          "min": 13.838034006766975,
+          "p50": 24.549192981794477,
+          "p90": 54.59430406335741,
+          "p95": 64.60206303745508,
+          "p99": 375.5095360102132
+        },
+        "backend_status": {
+          "count": 64,
+          "max": 3342.8592580603436,
+          "mean": 852.2679845206085,
+          "min": 19.098324002698064,
+          "p50": 637.6208330038935,
+          "p90": 1991.0417509963736,
+          "p95": 2457.7517398865893,
+          "p99": 3072.3295010393485
+        },
+        "bind_time_series_source": {
+          "count": 87,
+          "max": 20094.027094892226,
+          "mean": 336.3231204761408,
+          "min": 16.192858922295272,
+          "p50": 51.34031502529979,
+          "p90": 375.5705099320039,
+          "p95": 535.1204589969711,
+          "p99": 741.8966670011287
+        },
+        "chatgpt_agent_protocol": {
+          "count": 63,
+          "max": 1299.6876020915806,
+          "mean": 173.198493845467,
+          "min": 27.30952191632241,
+          "p50": 55.61612197197974,
+          "p90": 525.3291670014733,
+          "p95": 705.7382910279557,
+          "p99": 997.8398740058765
+        },
+        "forecast_observables": {
+          "count": 154,
+          "max": 402947.3658479983,
+          "mean": 26798.909489507165,
+          "min": 8.279407978989184,
+          "p50": 4175.370185053907,
+          "p90": 125759.95977199636,
+          "p95": 129205.70303907152,
+          "p99": 149100.3945559496
+        },
+        "foundry_agent_instructions": {
+          "count": 74,
+          "max": 754.1352080006618,
+          "mean": 106.55740515820169,
+          "min": 15.462817042134702,
+          "p50": 46.46957910154015,
+          "p90": 362.12487499869894,
+          "p95": 498.19191699498333,
+          "p99": 676.9696660048794
+        },
+        "granite_timeseries_forecast": {
+          "count": 58,
+          "max": 8014.9321630597115,
+          "mean": 4694.743640001904,
+          "min": 14.212099020369351,
+          "p50": 5147.658348025288,
+          "p90": 6547.026489046402,
+          "p95": 7013.801714987494,
+          "p99": 7452.101873001084
+        },
+        "granite_timeseries_status": {
+          "count": 181,
+          "max": 5720.475470065139,
+          "mean": 4546.827761551079,
+          "min": 341.33058300358243,
+          "p50": 4651.399185997434,
+          "p90": 4746.745783020742,
+          "p95": 4818.803803995252,
+          "p99": 5159.447479061782
+        },
+        "host_diagnostics": {
+          "count": 48,
+          "max": 54867.04556993209,
+          "mean": 6707.165849476951,
+          "min": 422.49666700081434,
+          "p50": 4818.215397070162,
+          "p90": 7798.955330974422,
+          "p95": 13141.536897979677,
+          "p99": 54867.04556993209
+        },
+        "ising_state_decode": {
+          "count": 3,
+          "max": 25949.63591400301,
+          "mean": 16735.46817433089,
+          "min": 54.38227200647816,
+          "p50": 24202.38633698318,
+          "p90": 25949.63591400301,
+          "p95": 25949.63591400301,
+          "p99": 25949.63591400301
+        },
+        "ising_state_status": {
+          "count": 2,
+          "max": 14.290778955910355,
+          "mean": 14.228063984774053,
+          "min": 14.165349013637751,
+          "p50": 14.165349013637751,
+          "p90": 14.290778955910355,
+          "p95": 14.290778955910355,
+          "p99": 14.290778955910355
+        },
+        "optimize_schedule": {
+          "count": 9,
+          "max": 755.0718329948722,
+          "mean": 494.7637292215303,
+          "min": 21.43031300511211,
+          "p50": 539.2898329955642,
+          "p90": 655.3394169968669,
+          "p95": 755.0718329948722,
+          "p99": 755.0718329948722
+        },
+        "record_operational_evidence": {
+          "count": 102,
+          "max": 678.9696669948171,
+          "mean": 49.21628315716197,
+          "min": 14.132512966170907,
+          "p50": 20.110746030695736,
+          "p90": 48.69254003278911,
+          "p95": 255.14657504390925,
+          "p99": 545.4487499955576
+        },
+        "reference_signal_fusion": {
+          "count": 89,
+          "max": 423.7310200696811,
+          "mean": 110.99079296678264,
+          "min": 67.48082500416785,
+          "p50": 91.19113103952259,
+          "p90": 175.8466319879517,
+          "p95": 210.77150595374405,
+          "p99": 317.15855502989143
+        },
+        "scenario_briefing": {
+          "count": 6,
+          "max": 77334.05991899781,
+          "mean": 25582.732482328236,
+          "min": 20.79186902847141,
+          "p50": 37.05038595944643,
+          "p90": 76037.89860196412,
+          "p95": 77334.05991899781,
+          "p99": 77334.05991899781
+        },
+        "state_decode": {
+          "count": 22,
+          "max": 32230.72597500868,
+          "mean": 17368.754041356045,
+          "min": 90.79640393611044,
+          "p50": 13325.74217801448,
+          "p90": 31688.590085948817,
+          "p95": 31717.805239954032,
+          "p99": 32230.72597500868
+        },
+        "state_decoder_status": {
+          "count": 40,
+          "max": 1273.84708810132,
+          "mean": 770.0320965970604,
+          "min": 11.820612009614706,
+          "p50": 805.4887589532882,
+          "p90": 1101.846512989141,
+          "p95": 1120.7415179815143,
+          "p99": 1273.84708810132
+        },
+        "surface_affinity": {
+          "count": 632,
+          "max": 957.7319169984548,
+          "mean": 51.8258578675366,
+          "min": 1.816206960938871,
+          "p50": 42.96964895911515,
+          "p90": 61.70098204165697,
+          "p95": 68.77536803949624,
+          "p99": 485.9082910043071
+        },
+        "train_model": {
+          "count": 2,
+          "max": 442.57848197594285,
+          "mean": 254.32512996485457,
+          "min": 66.07177795376629,
+          "p50": 66.07177795376629,
+          "p90": 442.57848197594285,
+          "p95": 442.57848197594285,
+          "p99": 442.57848197594285
+        },
+        "training_stage_plan": {
+          "count": 39,
+          "max": 616.0930840051151,
+          "mean": 72.43459706399172,
+          "min": 11.356799979694188,
+          "p50": 22.015570080839097,
+          "p90": 44.555954984389246,
+          "p95": 470.51683299650904,
+          "p99": 616.0930840051151
+        },
+        "validation_protocols": {
+          "count": 8,
+          "max": 751.5678339987062,
+          "mean": 592.3694584998884,
+          "min": 400.12612500140676,
+          "p50": 636.1817910001264,
+          "p90": 685.6802090042038,
+          "p95": 751.5678339987062,
+          "p99": 751.5678339987062
+        },
+        "workflow_run": {
+          "count": 321,
+          "max": 900586.0521879513,
+          "mean": 17287.56955063149,
+          "min": 8.73990694526583,
+          "p50": 5588.666942901909,
+          "p90": 30301.829942967743,
+          "p95": 31684.705124003813,
+          "p99": 396090.80099500716
+        }
+      }
+    },
+    "kwargs_key_count": {
+      "count": 2262,
+      "max": 15,
+      "mean": 1.894341290893015,
+      "min": 0,
+      "p50": 0,
+      "p90": 12,
+      "p95": 14,
+      "p99": 15
+    },
+    "result_payload_bytes": {
+      "count": 2262,
+      "max": 630011,
+      "mean": 84397.17152961981,
+      "min": 0,
+      "p50": 70465,
+      "p90": 158073,
+      "p95": 188897,
+      "p99": 522414
+    },
+    "result_payload_key_count": {
+      "count": 2262,
+      "max": 25,
+      "mean": 10.626878868258178,
+      "min": 0,
+      "p50": 9,
+      "p90": 18,
+      "p95": 24,
+      "p99": 24
+    }
+  },
+  "overall_failure_rates": {
+    "cancelled_count": 6,
+    "cancelled_rate": 0.002652519893899204,
+    "count": 2262,
+    "error_count": 124,
+    "error_rate": 0.05481874447391689
+  },
+  "per_tool_failure_rates": {
+    "alignment_manifest": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 252,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "backend_status": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 64,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "bind_time_series_source": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 87,
+      "error_count": 8,
+      "error_rate": 0.09195402298850575
+    },
+    "chatgpt_agent_protocol": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 63,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "forecast_observables": {
+      "cancelled_count": 3,
+      "cancelled_rate": 0.01910828025477707,
+      "count": 157,
+      "error_count": 51,
+      "error_rate": 0.3248407643312102
+    },
+    "foundry_agent_instructions": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 74,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "granite_timeseries_forecast": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 58,
+      "error_count": 8,
+      "error_rate": 0.13793103448275862
+    },
+    "granite_timeseries_status": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 181,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "host_diagnostics": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 48,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "ising_state_decode": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 3,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "ising_state_status": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 2,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "optimize_schedule": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 9,
+      "error_count": 5,
+      "error_rate": 0.5555555555555556
+    },
+    "record_operational_evidence": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 102,
+      "error_count": 3,
+      "error_rate": 0.029411764705882353
+    },
+    "reference_signal_fusion": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 89,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "scenario_briefing": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 6,
+      "error_count": 6,
+      "error_rate": 1.0
+    },
+    "state_decode": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 22,
+      "error_count": 7,
+      "error_rate": 0.3181818181818182
+    },
+    "state_decoder_status": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 40,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "surface_affinity": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 632,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "train_model": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 2,
+      "error_count": 1,
+      "error_rate": 0.5
+    },
+    "training_stage_plan": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 39,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "validation_protocols": {
+      "cancelled_count": 0,
+      "cancelled_rate": 0.0,
+      "count": 8,
+      "error_count": 0,
+      "error_rate": 0.0
+    },
+    "workflow_run": {
+      "cancelled_count": 3,
+      "cancelled_rate": 0.009259259259259259,
+      "count": 324,
+      "error_count": 35,
+      "error_rate": 0.10802469135802469
+    }
+  },
+  "raw_row_count": 2262,
+  "subgroup_counts": {
+    "error_type": {
+      "DirectInputProvenanceError": 25,
+      "InternalError": 2,
+      "RecoveredRunningOperation": 6,
+      "RemoteDisconnected": 1,
+      "RuntimeError": 65,
+      "SurfaceAffinityError": 3,
+      "TimeoutError": 1,
+      "ValueError": 27
+    },
+    "stage": {
+      "affinity_rejected": 3,
+      "completed": 2132,
+      "failed": 121,
+      "startup_reconciled": 6
+    },
+    "status": {
+      "cancelled": 6,
+      "error": 124,
+      "ok": 2132
+    },
+    "tool_name": {
+      "alignment_manifest": 252,
+      "backend_status": 64,
+      "bind_time_series_source": 87,
+      "chatgpt_agent_protocol": 63,
+      "forecast_observables": 157,
+      "foundry_agent_instructions": 74,
+      "granite_timeseries_forecast": 58,
+      "granite_timeseries_status": 181,
+      "host_diagnostics": 48,
+      "ising_state_decode": 3,
+      "ising_state_status": 2,
+      "optimize_schedule": 9,
+      "record_operational_evidence": 102,
+      "reference_signal_fusion": 89,
+      "scenario_briefing": 6,
+      "state_decode": 22,
+      "state_decoder_status": 40,
+      "surface_affinity": 632,
+      "train_model": 2,
+      "training_stage_plan": 39,
+      "validation_protocols": 8,
+      "workflow_run": 324
+    },
+    "tool_name__status": {
+      "alignment_manifest|ok": 252,
+      "backend_status|ok": 64,
+      "bind_time_series_source|error": 8,
+      "bind_time_series_source|ok": 79,
+      "chatgpt_agent_protocol|ok": 63,
+      "forecast_observables|cancelled": 3,
+      "forecast_observables|error": 51,
+      "forecast_observables|ok": 103,
+      "foundry_agent_instructions|ok": 74,
+      "granite_timeseries_forecast|error": 8,
+      "granite_timeseries_forecast|ok": 50,
+      "granite_timeseries_status|ok": 181,
+      "host_diagnostics|ok": 48,
+      "ising_state_decode|ok": 3,
+      "ising_state_status|ok": 2,
+      "optimize_schedule|error": 5,
+      "optimize_schedule|ok": 4,
+      "record_operational_evidence|error": 3,
+      "record_operational_evidence|ok": 99,
+      "reference_signal_fusion|ok": 89,
+      "scenario_briefing|error": 6,
+      "state_decoder_status|ok": 40,
+      "state_decode|error": 7,
+      "state_decode|ok": 15,
+      "surface_affinity|ok": 632,
+      "train_model|error": 1,
+      "train_model|ok": 1,
+      "training_stage_plan|ok": 39,
+      "validation_protocols|ok": 8,
+      "workflow_run|cancelled": 3,
+      "workflow_run|error": 35,
+      "workflow_run|ok": 286
+    }
+  }
+}

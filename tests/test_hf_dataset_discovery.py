@@ -32,6 +32,7 @@ def test_canonical_trace_types_includes_all_documented():
     expected = {
         "request_shape_trace", "latency_benchmark_trace", "kernel_profile_trace",
         "cluster_scheduler_trace", "cache_residency_trace", "telemetry_trace",
+        "tool_runtime_trace",
         "mixed_or_unknown_trace",
     }
     assert expected == set(CANONICAL_TRACE_TYPES)
