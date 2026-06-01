@@ -1,0 +1,113 @@
+{
+  "analysis_sample_bytes": 15069502,
+  "analysis_sample_path": "data/external/hf/Qinghao__AcmeTrace/seren_ipmi_gpu_power_head/processed/analysis_sample.jsonl",
+  "analysis_sample_rows": 79999,
+  "analysis_sample_sha256": "1c91731228008eeeba31819c465c25a4ff1a3effd7e8e9e182afec36c9c47b5f",
+  "available_signals": [
+    "gpu_utilization",
+    "ipmi_telemetry",
+    "power_telemetry",
+    "request_timestamps"
+  ],
+  "canonical_trace_type": "telemetry_trace",
+  "committed_sample_bytes": 945,
+  "committed_sample_rows": 5,
+  "config_name": "seren_ipmi_gpu_power_head",
+  "dataset_id": "Qinghao/AcmeTrace",
+  "derived_fields": [
+    "value_mean,value_min,value_max,value_p50,value_p90,value_p95,value_p99,host_count"
+  ],
+  "field_quality": {
+    "sample_ts": "real",
+    "value_mean,value_min,value_max,value_p50,value_p90,value_p95,value_p99,host_count": "derived"
+  },
+  "fixture_sample_bytes": 945,
+  "fixture_sample_path": "tests/fixtures/hf/Qinghao__AcmeTrace__seren_ipmi_gpu_power_head_sample.jsonl",
+  "fixture_sample_rows": 5,
+  "gated": false,
+  "git_sha": "030737e25fbed75379ad225529e477e597d9e9d9",
+  "ingestion_timestamp_s": 1780287027.639773,
+  "license": "cc-by-4.0",
+  "limitations": [
+    "Bounded head-sample of Seren GPU_AB_Power.csv (~16 MiB cap; full file is ~277 MiB).",
+    "Real IPMI-collected per-server-model GPU power consumption (Watts) (README \u00a72).",
+    "Useful for energy/carbon-aware scheduling priors and dynamic-frontier energy cost calibration.",
+    "Head sample is contiguous-time; not a statistical sample of the full week's diurnal pattern."
+  ],
+  "missing_signals": [
+    "arrivals",
+    "autoscaling_proxy",
+    "cache_reuse",
+    "capacity_proxy",
+    "cost_or_region",
+    "customer_traffic_mix",
+    "dcgm_telemetry",
+    "kv_block_hashes",
+    "latency",
+    "migration_or_cache_loss_proxy",
+    "model_load_event",
+    "model_unload_event",
+    "prefix_reuse",
+    "queue_state",
+    "replica_count",
+    "routing_proxy",
+    "sla_label",
+    "timeout_label",
+    "tpot",
+    "ttft",
+    "workload_shape"
+  ],
+  "normalized_schema": [
+    "host_count",
+    "sample_ts",
+    "value_max",
+    "value_mean",
+    "value_min",
+    "value_p50",
+    "value_p90",
+    "value_p95",
+    "value_p99"
+  ],
+  "provenance": "Qinghao/AcmeTrace@seren_ipmi_gpu_power_head#data/utilization/ipmi/GPU_AB_Power.csv#bytes=16777216#git=030737e",
+  "proxy_fields": [],
+  "raw_download_manifest": {
+    "cached": false,
+    "dest": "/home/user/energy2/data/external/hf/Qinghao__AcmeTrace/raw/GPU_AB_Power.csv",
+    "downloaded_bytes": 16777216,
+    "error": null,
+    "max_bytes": 16777216,
+    "status": 206,
+    "truncated": false,
+    "url": "https://huggingface.co/datasets/Qinghao/AcmeTrace/resolve/main/data/utilization/ipmi/GPU_AB_Power.csv"
+  },
+  "raw_file_size_committed": false,
+  "raw_schema": [
+    "CPU_Power",
+    "Memory_Power",
+    "PSU1_PIN",
+    "PSU2_PIN",
+    "PSU3_PIN",
+    "PSU4_PIN",
+    "PSU5_PIN",
+    "PSU6_PIN",
+    "PSU_IN_SUM",
+    "Sys_Total_Power",
+    "Time",
+    "node"
+  ],
+  "real_fields": [
+    "sample_ts"
+  ],
+  "sample_sha256": "7dfccde66cf7ce0f49a550c289f0b9ba6f5976d447bbbd07e540ba7b3edbe46d",
+  "sampling_method": "head",
+  "schema_mapping_path": "data/external/hf/Qinghao__AcmeTrace/seren_ipmi_gpu_power_head/processed/schema_mapping.json",
+  "schema_profile_path": "data/external/hf/Qinghao__AcmeTrace/seren_ipmi_gpu_power_head/processed/schema_profile.json",
+  "source_url": "https://huggingface.co/datasets/Qinghao/AcmeTrace",
+  "statistical_rollups_path": "data/external/hf/Qinghao__AcmeTrace/seren_ipmi_gpu_power_head/processed/statistical_rollups.json",
+  "statistical_sample_strength": "strong",
+  "stratification_keys": [],
+  "subgroup_counts": {},
+  "summary_path_relative": "data/external/hf/Qinghao__AcmeTrace/seren_ipmi_gpu_power_head/processed/summary.json",
+  "synthetic_fields": [],
+  "unknown_columns": []
+}

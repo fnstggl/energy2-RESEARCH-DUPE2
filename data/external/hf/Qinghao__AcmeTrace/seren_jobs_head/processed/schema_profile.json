@@ -1,0 +1,179 @@
+{
+  "config_name": "seren_jobs_head",
+  "dataset_id": "Qinghao/AcmeTrace",
+  "dtypes": {
+    "cpu_num": [
+      "int_str"
+    ],
+    "duration": [
+      "int_str"
+    ],
+    "end_time": [
+      "str"
+    ],
+    "gpu_num": [
+      "int_str"
+    ],
+    "gpu_time": [
+      "float_str",
+      "null"
+    ],
+    "job_id": [
+      "int_str"
+    ],
+    "node_num": [
+      "int_str"
+    ],
+    "queue": [
+      "int_str"
+    ],
+    "start_time": [
+      "str"
+    ],
+    "state": [
+      "str"
+    ],
+    "submit_time": [
+      "str"
+    ],
+    "type": [
+      "str"
+    ],
+    "user": [
+      "str"
+    ]
+  },
+  "example_values": {
+    "cpu_num": [
+      "'128'",
+      "'128'",
+      "'128'"
+    ],
+    "duration": [
+      "'117'",
+      "'2693'",
+      "'35019'"
+    ],
+    "end_time": [
+      "'2023-03-01 00:20:51+08:00'",
+      "'2023-03-01 01:09:04+08:00'",
+      "'2023-03-01 10:27:32+08:00'"
+    ],
+    "gpu_num": [
+      "'8'",
+      "'8'",
+      "'8'"
+    ],
+    "gpu_time": [
+      "'936.0'",
+      "'21544.0'",
+      "'280152.0'"
+    ],
+    "job_id": [
+      "'5778432'",
+      "'5778469'",
+      "'5778565'"
+    ],
+    "node_num": [
+      "'1'",
+      "'1'",
+      "'1'"
+    ],
+    "queue": [
+      "'32'",
+      "'13'",
+      "'2'"
+    ],
+    "start_time": [
+      "'2023-03-01 00:18:54+08:00'",
+      "'2023-03-01 00:24:11+08:00'",
+      "'2023-03-01 00:43:53+08:00'"
+    ],
+    "state": [
+      "'FAILED'",
+      "'COMPLETED'",
+      "'FAILED'"
+    ],
+    "submit_time": [
+      "'2023-03-01 00:18:22+08:00'",
+      "'2023-03-01 00:23:58+08:00'",
+      "'2023-03-01 00:43:51+08:00'"
+    ],
+    "type": [
+      "'Other'",
+      "'Other'",
+      "'Other'"
+    ],
+    "user": [
+      "'u5907'",
+      "'u5907'",
+      "'u8742'"
+    ]
+  },
+  "file_size_bytes": 33554432,
+  "inspected_row_count": 79999,
+  "missing_rates": {
+    "cpu_num": 0.0,
+    "duration": 0.0,
+    "end_time": 0.0,
+    "gpu_num": 0.0,
+    "gpu_time": 0.4185177314716434,
+    "job_id": 0.0,
+    "node_num": 0.0,
+    "queue": 0.0,
+    "start_time": 0.0,
+    "state": 0.0,
+    "submit_time": 0.0,
+    "type": 0.0,
+    "user": 0.0
+  },
+  "presence_rates": {
+    "cpu_num": 1.0,
+    "duration": 1.0,
+    "end_time": 1.0,
+    "gpu_num": 1.0,
+    "gpu_time": 0.5814822685283566,
+    "job_id": 1.0,
+    "node_num": 1.0,
+    "queue": 1.0,
+    "start_time": 1.0,
+    "state": 1.0,
+    "submit_time": 1.0,
+    "type": 1.0,
+    "user": 1.0
+  },
+  "profiled_columns": [
+    "cpu_num",
+    "duration",
+    "end_time",
+    "gpu_num",
+    "gpu_time",
+    "job_id",
+    "node_num",
+    "queue",
+    "start_time",
+    "state",
+    "submit_time",
+    "type",
+    "user"
+  ],
+  "raw_column_count": 13,
+  "raw_columns": [
+    "cpu_num",
+    "duration",
+    "end_time",
+    "gpu_num",
+    "gpu_time",
+    "job_id",
+    "node_num",
+    "queue",
+    "start_time",
+    "state",
+    "submit_time",
+    "type",
+    "user"
+  ],
+  "source_files_inspected": [
+    "data/job_trace/trace_seren.csv"
+  ]
+}

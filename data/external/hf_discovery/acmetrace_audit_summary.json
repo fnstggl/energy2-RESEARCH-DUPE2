@@ -1,0 +1,239 @@
+{
+  "audited_at_s": 1780287027.6909802,
+  "discovery_only_records": [
+    {
+      "candidate_trace_type": "cluster_scheduler_trace",
+      "dataset_id": "HuggingAGree/AcmeTrace",
+      "gated": false,
+      "kind": "duplicate_existing",
+      "license_observed": "cc-by-4.0 (README + LICENSE inherited from Qinghao mirror)",
+      "reason": "Re-upload of Qinghao/AcmeTrace (same 75 files, same SHA-equivalent content). Discovery-only; no separate ingest. The Qinghao/AcmeTrace configs are the canonical entries."
+    },
+    {
+      "candidate_trace_type": "telemetry_trace",
+      "dataset_id": "osteele/llm-calibration-db",
+      "gated": true,
+      "kind": "gated_blocked",
+      "license_observed": "mit (per HF tags)",
+      "reason": "HF gated:manual \u2014 requires manual approval from the dataset owner. HF_TOKEN is not authorised. Marked gated_blocked; revisit if/when access is granted. Schema (per HF tags) includes calibration_runs, layer_timing, memory_calibration, telemetry_samples, system_load_snapshots, inference_overhead \u2014 would qualify as Tier 4 latency_benchmark_trace + Tier 2 telemetry candidate if accessible."
+    },
+    {
+      "candidate_trace_type": "request_shape_trace",
+      "dataset_id": "jaytonde05/iris-prefix-cache-benchmark",
+      "gated": false,
+      "kind": "reject_low_value",
+      "license_observed": "apache-2.0",
+      "reason": "Schema is a single `prompt: string` column with 20 rows (57 KB total). No measured TTFT, no cache-hit telemetry, no GPU/queue/SLA signals \u2014 just synthetic test prompts for users to run their own benchmark. The existing jaytonde05/prefixbench config already covers the synthetic prefix-cache role with 4 jsonl files and a richer schema. Rejected as a request_shape_trace duplicate of low information density."
+    }
+  ],
+  "doc_version": "acmetrace_audit_summary_v1",
+  "failed": [],
+  "git_sha": "030737e25fbed75379ad225529e477e597d9e9d9",
+  "ingested": [
+    {
+      "analysis_sample_rows": 62413,
+      "available_signals": [
+        "arrivals",
+        "capacity_proxy",
+        "customer_traffic_mix",
+        "latency",
+        "queue_state",
+        "request_timestamps",
+        "timeout_label",
+        "workload_shape"
+      ],
+      "canonical_trace_type": "cluster_scheduler_trace",
+      "config_name": "kalos_jobs",
+      "dataset_id": "Qinghao/AcmeTrace",
+      "elapsed_s": 4,
+      "license": "cc-by-4.0",
+      "limitations": [
+        "Full ingest of trace_kalos.csv (~8.6 MB, hundreds of thousands of jobs).",
+        "Real Shanghai AI Lab Kalos cluster scheduler trace (NSDI'24 'Characterization of LLM Development in the Datacenter').",
+        "Job-level scheduler trace \u2014 no per-token TTFT/TPOT, no serving telemetry. Maps onto cluster_scheduler_trace (Tier 3).",
+        "All durations / queues / GPU-seconds are derived columns per the README schema notes.",
+        "User identifiers are hashed; no PII."
+      ],
+      "missing_signals": [
+        "autoscaling_proxy",
+        "cache_reuse",
+        "cost_or_region",
+        "dcgm_telemetry",
+        "gpu_utilization",
+        "ipmi_telemetry",
+        "kv_block_hashes",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "power_telemetry",
+        "prefix_reuse",
+        "replica_count",
+        "routing_proxy",
+        "sla_label",
+        "tpot",
+        "ttft"
+      ],
+      "promotion_state": "promoted_for_backtest",
+      "promotion_tags": [
+        "promoted_for_backtest",
+        "promoted_for_constraint_aware_evaluation",
+        "promoted_for_training_priors"
+      ],
+      "statistical_sample_strength": "strong"
+    },
+    {
+      "analysis_sample_rows": 79999,
+      "available_signals": [
+        "arrivals",
+        "capacity_proxy",
+        "customer_traffic_mix",
+        "latency",
+        "queue_state",
+        "request_timestamps",
+        "timeout_label",
+        "workload_shape"
+      ],
+      "canonical_trace_type": "cluster_scheduler_trace",
+      "config_name": "seren_jobs_head",
+      "dataset_id": "Qinghao/AcmeTrace",
+      "elapsed_s": 5,
+      "license": "cc-by-4.0",
+      "limitations": [
+        "Bounded head-sample of trace_seren.csv (~32 MiB cap; full file is ~94 MiB).",
+        "Real Shanghai AI Lab Seren cluster scheduler trace (NSDI'24).",
+        "Job-level scheduler trace \u2014 no per-token TTFT/TPOT. Tier 3 cluster_scheduler_trace.",
+        "Head sample preserves arrival order; subgroup_counts disclose per-state coverage so reviewers can assess statistical power before drawing tail conclusions."
+      ],
+      "missing_signals": [
+        "autoscaling_proxy",
+        "cache_reuse",
+        "cost_or_region",
+        "dcgm_telemetry",
+        "gpu_utilization",
+        "ipmi_telemetry",
+        "kv_block_hashes",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "power_telemetry",
+        "prefix_reuse",
+        "replica_count",
+        "routing_proxy",
+        "sla_label",
+        "tpot",
+        "ttft"
+      ],
+      "promotion_state": "promoted_for_backtest",
+      "promotion_tags": [
+        "promoted_for_backtest",
+        "promoted_for_constraint_aware_evaluation",
+        "promoted_for_training_priors"
+      ],
+      "statistical_sample_strength": "strong"
+    },
+    {
+      "analysis_sample_rows": 6680,
+      "available_signals": [
+        "dcgm_telemetry",
+        "gpu_utilization",
+        "request_timestamps"
+      ],
+      "canonical_trace_type": "telemetry_trace",
+      "config_name": "kalos_gpu_util_head",
+      "dataset_id": "Qinghao/AcmeTrace",
+      "elapsed_s": 20,
+      "license": "cc-by-4.0",
+      "limitations": [
+        "Bounded head-sample of Kalos GPU_UTIL.csv (~32 MiB cap; full file is ~843 MiB).",
+        "Real DCGM-collected GPU utilisation per server IP at 15-second sampling (README \u00a72).",
+        "Per-column streams are per-host GPU-utilisation percentages \u2014 one of the strongest Tier-2 public telemetry signals identified so far.",
+        "Head sample is contiguous-time; statistical-power for full-cluster utilisation distribution requires the full 843 MB file (deferred).",
+        "Treat as PRIOR for dynamic-frontier calibration; pilot telemetry remains the only Tier-1 calibration source."
+      ],
+      "missing_signals": [
+        "arrivals",
+        "autoscaling_proxy",
+        "cache_reuse",
+        "capacity_proxy",
+        "cost_or_region",
+        "customer_traffic_mix",
+        "ipmi_telemetry",
+        "kv_block_hashes",
+        "latency",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "power_telemetry",
+        "prefix_reuse",
+        "queue_state",
+        "replica_count",
+        "routing_proxy",
+        "sla_label",
+        "timeout_label",
+        "tpot",
+        "ttft",
+        "workload_shape"
+      ],
+      "promotion_state": "promoted_for_constraint_aware_evaluation",
+      "promotion_tags": [
+        "promoted_for_constraint_aware_evaluation",
+        "promoted_for_backtest"
+      ],
+      "statistical_sample_strength": "moderate"
+    },
+    {
+      "analysis_sample_rows": 79999,
+      "available_signals": [
+        "gpu_utilization",
+        "ipmi_telemetry",
+        "power_telemetry",
+        "request_timestamps"
+      ],
+      "canonical_trace_type": "telemetry_trace",
+      "config_name": "seren_ipmi_gpu_power_head",
+      "dataset_id": "Qinghao/AcmeTrace",
+      "elapsed_s": 4,
+      "license": "cc-by-4.0",
+      "limitations": [
+        "Bounded head-sample of Seren GPU_AB_Power.csv (~16 MiB cap; full file is ~277 MiB).",
+        "Real IPMI-collected per-server-model GPU power consumption (Watts) (README \u00a72).",
+        "Useful for energy/carbon-aware scheduling priors and dynamic-frontier energy cost calibration.",
+        "Head sample is contiguous-time; not a statistical sample of the full week's diurnal pattern."
+      ],
+      "missing_signals": [
+        "arrivals",
+        "autoscaling_proxy",
+        "cache_reuse",
+        "capacity_proxy",
+        "cost_or_region",
+        "customer_traffic_mix",
+        "dcgm_telemetry",
+        "kv_block_hashes",
+        "latency",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "prefix_reuse",
+        "queue_state",
+        "replica_count",
+        "routing_proxy",
+        "sla_label",
+        "timeout_label",
+        "tpot",
+        "ttft",
+        "workload_shape"
+      ],
+      "promotion_state": "promoted_for_dynamic_calibration",
+      "promotion_tags": [
+        "promoted_for_dynamic_calibration",
+        "promoted_for_constraint_aware_evaluation",
+        "promoted_for_backtest"
+      ],
+      "statistical_sample_strength": "strong"
+    }
+  ],
+  "modifies_controllers_or_defaults": false,
+  "modifies_robust_energy_engine": false,
+  "production_claim": false,
+  "stage": "hf_focused_audit_acmetrace_v1"
+}

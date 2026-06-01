@@ -196,6 +196,10 @@ Rules (binding):
 | `lzzmm/BurstGPT` | **`burstgpt_1_full`** | `request_shape_trace` | Tier 5 | `promoted_for_training_priors` | 5 | 59,999 | strong | 2026-06-01 |
 | `lsliwko/google-cluster-data-2019-sorted-by-timestamp` | **`instance_events_shard0`** | `cluster_scheduler_trace` | **Tier 3** | `promoted_for_backtest` (+ `promoted_for_constraint_aware_evaluation`, `promoted_for_training_priors`) | 5 | 60,000 | strong | 2026-06-01 |
 | `jaytonde05/prefixbench` | **`prefixbench_all`** | `cache_residency_trace` | Tier 4 | `promoted_for_cache_residency_evaluation` (+ `promoted_for_training_priors`) | 5 | 4,000 | moderate | 2026-06-01 |
+| `Qinghao/AcmeTrace` | **`kalos_jobs`** | `cluster_scheduler_trace` | **Tier 3** | `promoted_for_backtest` (+ `promoted_for_constraint_aware_evaluation`, `promoted_for_training_priors`) | 5 | **62,413** | strong | 2026-06-01 |
+| `Qinghao/AcmeTrace` | **`seren_jobs_head`** | `cluster_scheduler_trace` | **Tier 3** | `promoted_for_backtest` (+ `promoted_for_constraint_aware_evaluation`, `promoted_for_training_priors`) | 5 | **79,999** | strong | 2026-06-01 |
+| `Qinghao/AcmeTrace` | **`kalos_gpu_util_head`** | `telemetry_trace` | **Tier 2** | `promoted_for_constraint_aware_evaluation` (+ `promoted_for_backtest`; `dynamic_calibration` downgraded — needs `strong` strength) | 5 | 6,680 | moderate | 2026-06-01 |
+| `Qinghao/AcmeTrace` | **`seren_ipmi_gpu_power_head`** | `telemetry_trace` | **Tier 2** | **`promoted_for_dynamic_calibration`** (+ `constraint_aware_evaluation`, `backtest`) | 5 | **79,999** | strong | 2026-06-01 |
 
 > **CARA** is the first Tier 2 (public telemetry trace) entry in the
 > federated corpus. CARA **train_flat** + **train_queue_details** are
@@ -250,6 +254,99 @@ Rules (binding):
 > `data/external/hf_discovery/telemetry_gap_normalized_sample_commit_summary.json`;
 > tests at `tests/test_hf_gap_normalized_samples.py` (29 tests, all green).
 
+> **AcmeTrace focused audit 2026-06-01.** Four short-term-mission datasets
+> from §10 (`Qinghao/AcmeTrace`, `HuggingAGree/AcmeTrace`,
+> `osteele/llm-calibration-db`, `jaytonde05/iris-prefix-cache-benchmark`)
+> were focus-audited. Outcome:
+>
+> - **`Qinghao/AcmeTrace`** — bounded-ingested into four configs
+>   (`kalos_jobs` full, `seren_jobs_head` 32 MiB cap, `kalos_gpu_util_head`
+>   32 MiB cap, `seren_ipmi_gpu_power_head` 16 MiB cap). Real Shanghai AI
+>   Lab Kalos + Seren cluster scheduler trace (NSDI'24
+>   *Characterization of LLM Development in the Datacenter*). Job-level
+>   trace carries **real** `queue_wait` (derived per README) and **real**
+>   `state ∈ {COMPLETED, CANCELLED, FAILED, TIMEOUT, NODE_FAIL}` failure /
+>   timeout labels — the first HF Tier-3 cluster_scheduler_trace promoted
+>   to `promoted_for_backtest` via this pipeline. DCGM-collected per-host
+>   GPU utilisation (15-second sampling) gives a Tier-2 telemetry signal;
+>   IPMI per-host GPU power telemetry (79,999 rows strong-strength) is
+>   the first non-CARA HF dataset promoted to
+>   **`promoted_for_dynamic_calibration`**. License: CC-BY-4.0.
+> - **`HuggingAGree/AcmeTrace`** — re-upload of (1) with the same 75
+>   files. Marked `duplicate_existing` (discovery-only; no separate
+>   ingest tree).
+> - **`osteele/llm-calibration-db`** — HF `gated:manual` (requires
+>   manual approval from the dataset owner). Marked `gated_blocked`;
+>   would qualify as Tier-4 latency_benchmark_trace + Tier-2 telemetry
+>   candidate (calibration_runs / layer_timing / memory_calibration /
+>   telemetry_samples / system_load_snapshots / inference_overhead per
+>   the HF card) once access is granted. Revisit when authorised.
+> - **`jaytonde05/iris-prefix-cache-benchmark`** — 20 synthetic prompts
+>   only (57 KB total), single `prompt: string` column. No measured
+>   TTFT, cache-hit, GPU, queue, or SLA signals. Marked
+>   `reject_low_value` — the existing `jaytonde05/prefixbench` config
+>   already covers the synthetic prefix-cache role with a richer schema.
+>
+> Audit script: `scripts/ingest_hf_acmetrace.py`. Registry update
+> script: `scripts/register_hf_acmetrace.py`. Candidates-update script:
+> `scripts/update_hf_candidates_acmetrace.py`. Rollup at
+> `data/external/hf_discovery/acmetrace_audit_summary.json`. Tests:
+> `tests/test_hf_acmetrace_ingest.py` (46 tests, all green).
+
+#### AcmeTrace — Tier-3 cluster jobs + Tier-2 GPU/IPMI telemetry
+
+- **Provenance.** Shanghai AI Lab Acme traces (Kalos + Seren clusters)
+  from the NSDI'24 paper "Characterization of Large Language Model
+  Development in the Datacenter" — the most important publicly-released
+  GPU-cluster trace with both job-level queue/failure data AND
+  per-host DCGM+IPMI telemetry.
+- **Available signals (`kalos_jobs` / `seren_jobs_head`):** arrivals,
+  request_timestamps, queue_state (real queue_wait — derived from
+  start_time-submit_time per README §1 note 3), timeout_label
+  (FAILED/TIMEOUT/NODE_FAIL states), capacity_proxy (gpu_num + node_num
+  + cpu_num), customer_traffic_mix (hashed user), workload_shape, latency
+  (derived end_time-start_time).
+- **Available signals (`kalos_gpu_util_head` / `seren_ipmi_gpu_power_head`):**
+  request_timestamps (15-second DCGM/IPMI sample interval),
+  gpu_utilization, dcgm_telemetry (Kalos), ipmi_telemetry +
+  power_telemetry (Seren GPU_AB_Power.csv).
+- **Missing signals:** TTFT, TPOT, ITL (no per-token timing — this is
+  job-level not request-level); cache_reuse / prefix_reuse /
+  kv_block_hashes (no KV cache instrumentation in the released trace);
+  sla_label, model_load_event, model_unload_event, replica_count,
+  cost_or_region.
+- **Recommended Aurelius uses:**
+  - **Constraint-aware scheduler backtests** — queue-wait and gpu-time
+    distributions per workload type for SLA-aware vs FIFO packing
+    comparison (cluster_scheduler_trace, Tier 3).
+  - **Performance-surface priors** — GPU utilisation distributions per
+    host at 15-second resolution feed the static utilisation frontier
+    prior (telemetry_trace, Tier 2).
+  - **Energy / carbon-aware scheduling priors** — IPMI per-host GPU
+    power consumption (W) is a direct input to the energy-cost objective
+    in the dynamic frontier estimator (telemetry_trace, Tier 2; first
+    non-CARA HF dataset promoted to `promoted_for_dynamic_calibration`).
+  - **Cluster failure-mode priors** — termination_state distribution
+    (FAILED / TIMEOUT / NODE_FAIL) calibrates the failure_timeout risk
+    prior in constraint_aware_engine.
+- **Prohibited uses:**
+  - LLM serving TTFT/TPOT calibration (no per-token timing; use CARA
+    `train_flat`+`train_queue_details` instead).
+  - Cache-hit / prefix-cache calibration (not measured here; use
+    SwissAI `qwen3_32b_bucket_reuse_analysis` instead).
+  - Production-truth SLA calibration (still benchmark/research-class
+    — Tier 1 pilot telemetry remains the only production calibration
+    source).
+- **Bounded ingest layout:** all 4 raw downloads
+  (`trace_kalos.csv`, `trace_seren.csv` head 32 MiB,
+  `GPU_UTIL.csv` head 32 MiB, `GPU_AB_Power.csv` head 16 MiB) live
+  under `data/external/hf/Qinghao__AcmeTrace/raw/` and are
+  **gitignored**. Per-config processed summaries + schema profiles +
+  schema mappings + statistical rollups + 5-row fixtures ARE committed
+  (~141 KB total). Per-config `analysis_sample.jsonl` (66 MB total
+  across 4 files) is gitignored — regenerable from the bounded raw
+  download via `scripts/ingest_hf_acmetrace.py`.
+
 #### AgentPerfBench / trace_replay
 
 - **Available signals:** ttft, tpot, itl, e2e_latency,
@@ -291,6 +388,9 @@ Rules (binding):
 |---|---|---|---|
 | `lmsys/chatbot_arena_conversations` | `request_shape_trace` | `gated_blocked` | HF gated:auto — requires Terms-of-Use acceptance even with HF_TOKEN |
 | `anon8231489123/ShareGPT_Vicuna_unfiltered` | `request_shape_trace` | `candidate` (frontier_value=3) | text-only conversations; no infrastructure signals; existing ShareGPT ingester in `aurelius/traces/sharegpt_aiperf.py` already covers this role |
+| `HuggingAGree/AcmeTrace` | `cluster_scheduler_trace` | `duplicate_existing` | re-upload of `Qinghao/AcmeTrace` (same 75 files); the Qinghao mirror is the canonical ingest target |
+| `osteele/llm-calibration-db` | `latency_benchmark_trace` (+ telemetry candidate) | `gated_blocked` | HF `gated:manual` — requires manual approval from the dataset owner; `HF_TOKEN` is not authorised. Revisit if access granted. |
+| `jaytonde05/iris-prefix-cache-benchmark` | `request_shape_trace` | `reject_low_value` | 20 synthetic prompts only (single `prompt: string` column, 57 KB total); no measured TTFT / cache-hit / GPU / queue / SLA. Existing `jaytonde05/prefixbench` already covers the synthetic prefix-cache role. |
 | ~~`jaytonde05/prefixbench`~~ | ~~`candidate`~~ → **ingested 2026-06-01** | see §7.1 | — |
 | ~~`semianalysisai/cc-traces-weka-no-subagents-051226`~~ | ~~`candidate`~~ → **ingested 2026-06-01** | see §7.1 | — |
 
@@ -350,22 +450,31 @@ Re-running `scripts/discover_hf_aurelius_datasets.py` rebuilds
 
 ## 10. Next actions (documented for the next run)
 
-- Re-run `scripts/audit_cara_swissai_telemetry.py` against CARA
-  `train.jsonl` + `train_queue_details.jsonl` with a larger per-file
-  budget (50-100 MiB) so the analysis sample reaches `strong` strength
-  and CARA can be promoted to
-  `promoted_for_dynamic_calibration`.
-- Add a `cache_residency_trace` ingest path for
-  `jaytonde05/prefixbench` (flatten nested `metadata.prefix_group`).
-- Inspect (without ingesting) the SemiAnalysis WEKA traces under a
-  manually approved bounded budget; the dataset's KV-block-hash
-  structure could populate the first real Tier 3-4 cache-residency
-  evidence inside the federated corpus.
+- Expand the AcmeTrace `kalos_gpu_util_head` analysis sample beyond
+  the current 6.7k-row (32 MiB) bound — the wide DCGM CSV (~2,344 host
+  columns per row) only delivers `moderate` strength at 32 MiB. The
+  full ~843 MiB file would push this to `strong` and unlock
+  `promoted_for_dynamic_calibration` for the Kalos DCGM telemetry
+  alongside the already-promoted IPMI power telemetry.
+- Ingest the remaining AcmeTrace utilisation streams once budget allows:
+  `kalos/FB_USED.csv` (1.15 GB — KV-cache memory pressure proxy),
+  `kalos/PIPE_TENSOR_ACTIVE.csv` (972 MB — tensor-pipeline utilisation
+  proxy), and `seren/CPU_D_Power.csv` (CPU power → energy-aware
+  scheduler priors). Use the same wide-utilisation aggregation path
+  in `scripts/ingest_hf_acmetrace.py`.
+- Cross-validate the AcmeTrace Kalos+Seren job traces against the
+  existing Tier-3 traces (Alibaba GPU / Philly / MIT Supercloud) —
+  publish a cross-trace queue-wait distribution comparison under
+  `docs/CROSS_TRACE_FRONTIER_GENERALIZATION_AUDIT.md`.
+- Revisit `osteele/llm-calibration-db` once manual gate approval is
+  obtained — the dataset's `telemetry_samples` + `system_load_snapshots`
+  + `inference_overhead_measurements` parquet files are exactly the
+  Tier-2 telemetry shape Aurelius needs.
 - Add a synthetic `telemetry_trace` smoke fixture so the dynamic-
-  calibration evaluator has a positive test path before any real
-  telemetry trace lands.
+  calibration evaluator has a positive test path that does not require
+  any real telemetry trace to be present in CI.
 - Look for Odyn benchmarks (the seed was searched but the corresponding
-  HF dataset namespace was not found in the May 2026 snapshot).
+  HF dataset namespace was not found in the May/June 2026 snapshot).
 
 ## 11. License + auth
 

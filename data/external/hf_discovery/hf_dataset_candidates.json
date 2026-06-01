@@ -1,6 +1,131 @@
 {
-  "candidate_count": 45,
+  "candidate_count": 48,
   "candidates": [
+    {
+      "aurelius_use_case": "Real Shanghai AI Lab Kalos + Seren cluster scheduler trace (NSDI'24 'Characterization of LLM Development in the Datacenter'). Job-level: real queue_wait, real timeout/failure labels, GPU/CPU request counts, workload type. DCGM-collected per-host GPU utilisation + IPMI per-host GPU power telemetry. First HF Tier 3 cluster_scheduler_trace AND first HF Tier 2 GPU power telemetry trace promoted to dynamic_calibration.",
+      "available_signals": [
+        "request_timestamps",
+        "arrivals",
+        "queue_state",
+        "timeout_label",
+        "capacity_proxy",
+        "customer_traffic_mix",
+        "workload_shape",
+        "latency",
+        "gpu_utilization",
+        "dcgm_telemetry",
+        "ipmi_telemetry",
+        "power_telemetry"
+      ],
+      "available_splits": [
+        {
+          "approx_rows": 62413,
+          "config": "kalos_jobs",
+          "split": "csv_full"
+        },
+        {
+          "approx_rows": 79999,
+          "config": "seren_jobs_head",
+          "split": "csv_head"
+        },
+        {
+          "approx_rows": 6680,
+          "config": "kalos_gpu_util_head",
+          "split": "dcgm_15s_head"
+        },
+        {
+          "approx_rows": 79999,
+          "config": "seren_ipmi_gpu_power_head",
+          "split": "ipmi_15s_head"
+        }
+      ],
+      "candidate_trace_type": "cluster_scheduler_trace",
+      "classification_evidence": {
+        "cluster_scheduler_trace": [
+          "scheduler_trace",
+          "job_queue",
+          "queue_wait",
+          "gpu_count",
+          "submit_time"
+        ],
+        "telemetry_trace": [
+          "dcgm",
+          "prometheus_export",
+          "ipmi_power"
+        ]
+      },
+      "configs": [
+        "kalos_jobs",
+        "seren_jobs_head",
+        "kalos_gpu_util_head",
+        "seren_ipmi_gpu_power_head"
+      ],
+      "dataset_id": "Qinghao/AcmeTrace",
+      "dataset_url": "https://huggingface.co/datasets/Qinghao/AcmeTrace",
+      "discovery_timestamp_s": 1780287174.1200607,
+      "downloads": 212,
+      "estimated_size": [
+        "80GB_full_with_utilization"
+      ],
+      "feature_names": [
+        "job_id",
+        "user",
+        "node_num",
+        "gpu_num",
+        "cpu_num",
+        "type",
+        "state",
+        "submit_time",
+        "start_time",
+        "end_time",
+        "duration",
+        "queue",
+        "gpu_time",
+        "mem_per_pod_GB",
+        "shared_mem_per_pod",
+        "fail_time",
+        "stop_time",
+        "Time",
+        "<per_server_ip_utilization_or_power>"
+      ],
+      "focused_audit_2026_06_01": true,
+      "frontier_value_score": 5,
+      "gated_status": "public",
+      "ingestion_feasibility_score": 4,
+      "last_modified": "2024-03-12T19:03:08.000Z",
+      "license": "cc-by-4.0",
+      "likes": 9,
+      "matched_keywords": [
+        "manual_seed::nsdi24_llm_datacenter_characterization",
+        "manual_seed::shanghai_ai_lab_acme",
+        "schema::queue_wait_real",
+        "schema::dcgm_gpu_utilization_per_host",
+        "schema::ipmi_power_per_host"
+      ],
+      "missing_signals": [
+        "ttft",
+        "tpot",
+        "cache_reuse",
+        "prefix_reuse",
+        "kv_block_hashes",
+        "sla_label",
+        "model_load_event",
+        "model_unload_event",
+        "replica_count",
+        "cost_or_region"
+      ],
+      "not_recommended_uses": [
+        "TTFT/TPOT calibration (no per-token timing)",
+        "Cache-hit / prefix-cache calibration (not measured)",
+        "Production-truth SLA calibration (still benchmark/research-class)"
+      ],
+      "overall_priority_score": 9.5,
+      "production_similarity_score": 4,
+      "recommended_action": "ingest_now_bounded",
+      "schema_available": true,
+      "schema_quality_score": 5,
+      "trust_level": "tier_3_cluster_scheduler_traces"
+    },
     {
       "aurelius_use_case": "Performance-surface priors; throughput/latency risk priors; batch-size + concurrency priors; model/GPU/engine comparison.",
       "available_signals": [
@@ -245,6 +370,8 @@
       "feature_names": [
         "prompt"
       ],
+      "focused_audit_2026_06_01": true,
+      "focused_audit_decision": "reject_low_value confirmed \u2014 20 prompts only, no measured telemetry. Existing jaytonde05/prefixbench already covers the synthetic prefix-cache role with 4 jsonl files.",
       "frontier_value_score": 1,
       "gated_status": "public",
       "ingestion_feasibility_score": 5,
@@ -3319,6 +3446,67 @@
       "trust_level": "tier_5_request_shape_traces"
     },
     {
+      "aurelius_use_case": "Empirical GPU training timing measurements + telemetry samples across GPU architectures + model families (per HF card). Would be a Tier 4 latency benchmark + Tier 2 telemetry candidate IF the manual gate is approved. HF_TOKEN is not authorised for this dataset. Revisit if/when access is granted.",
+      "available_signals": [],
+      "available_splits": [],
+      "candidate_trace_type": "latency_benchmark_trace",
+      "classification_evidence": {
+        "latency_benchmark_trace": [
+          "tag::benchmarking",
+          "tag::performance",
+          "tag::calibration"
+        ],
+        "telemetry_trace": [
+          "siblings::telemetry_samples.parquet",
+          "siblings::system_load_snapshots.parquet"
+        ]
+      },
+      "configs": [
+        "calibration_runs",
+        "calibration_stats",
+        "dtype_calibration",
+        "inference_overhead",
+        "inference_overhead_measurements",
+        "layer_timing",
+        "memory_calibration",
+        "system_load_snapshots",
+        "telemetry_samples"
+      ],
+      "dataset_id": "osteele/llm-calibration-db",
+      "dataset_url": "https://huggingface.co/datasets/osteele/llm-calibration-db",
+      "discovery_timestamp_s": 1780287174.1200662,
+      "downloads": 18,
+      "estimated_size": [
+        "n<1K"
+      ],
+      "feature_names": [
+        "<not_inspectable_until_manual_gate_approved>"
+      ],
+      "focused_audit_2026_06_01": true,
+      "frontier_value_score": 3,
+      "gated_status": "gated_manual",
+      "ingestion_feasibility_score": 1,
+      "last_modified": "2026-03-11T11:10:35.000Z",
+      "license": "mit",
+      "likes": 0,
+      "matched_keywords": [
+        "manual_seed::llm_training_calibration",
+        "tag::gpu",
+        "tag::calibration",
+        "tag::performance"
+      ],
+      "missing_signals": [],
+      "not_recommended_uses": [
+        "ingest until manual gate approval recorded"
+      ],
+      "overall_priority_score": 2.0,
+      "production_similarity_score": 3,
+      "recommended_action": "gated_blocked",
+      "schema_available": false,
+      "schema_quality_score": 3,
+      "trust_level": "tier_4_latency_benchmark_traces"
+    },
+    {
       "aurelius_use_case": "Workload replay shape; eval/batch frontier scenarios; request mix modelling; prompt/output distribution priors.",
       "available_signals": [],
       "available_splits": [
@@ -4287,6 +4475,49 @@
       "schema_available": false,
       "schema_quality_score": 1,
       "trust_level": "tier_5_request_shape_traces"
+    },
+    {
+      "aurelius_use_case": "Re-upload of Qinghao/AcmeTrace with the same 75 files. Discovery-only \u2014 no separate ingest. Qinghao/AcmeTrace is the canonical entry.",
+      "available_signals": [],
+      "available_splits": [],
+      "candidate_trace_type": "cluster_scheduler_trace",
+      "classification_evidence": {
+        "cluster_scheduler_trace": [
+          "scheduler_trace",
+          "submit_time"
+        ]
+      },
+      "configs": [
+        "mirror"
+      ],
+      "dataset_id": "HuggingAGree/AcmeTrace",
+      "dataset_url": "https://huggingface.co/datasets/HuggingAGree/AcmeTrace",
+      "discovery_timestamp_s": 1780287174.1200635,
+      "downloads": 169,
+      "estimated_size": [
+        "mirror_of_Qinghao_AcmeTrace"
+      ],
+      "feature_names": [],
+      "focused_audit_2026_06_01": true,
+      "frontier_value_score": 1,
+      "gated_status": "public",
+      "ingestion_feasibility_score": 4,
+      "last_modified": "2026-04-27T03:56:58.000Z",
+      "license": "cc-by-4.0",
+      "likes": 0,
+      "matched_keywords": [
+        "manual_seed::mirror_of_qinghao_acmetrace"
+      ],
+      "missing_signals": [],
+      "not_recommended_uses": [
+        "re-ingestion (use Qinghao/AcmeTrace)"
+      ],
+      "overall_priority_score": 1.0,
+      "production_similarity_score": 1,
+      "recommended_action": "duplicate_existing",
+      "schema_available": true,
+      "schema_quality_score": 5,
+      "trust_level": "tier_3_cluster_scheduler_traces"
     }
   ],
   "client": "live_hf_api (HF_TOKEN_set)",
@@ -4296,6 +4527,13 @@
     "asdwb/cara_latency_prediction",
     "eth-easl/swissai-serving-trace"
   ],
+  "focused_audit_2026_06_01": [
+    "HuggingAGree/AcmeTrace",
+    "Qinghao/AcmeTrace",
+    "jaytonde05/iris-prefix-cache-benchmark",
+    "osteele/llm-calibration-db"
+  ],
+  "last_updated_at_s": 1780287174.1208394,
   "production_claim": false,
   "query_groups_used": [
     "latency_benchmark",

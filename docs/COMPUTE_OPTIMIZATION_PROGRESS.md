@@ -3111,3 +3111,93 @@ Tests: 30 new + 289 existing CARA + HF + frontier tests still pass.
 TTFT p95/p99 not exposed by adapter for control, p50 prior optional,
 MAX clamp is binding safety floor, default does not apply to scorer,
 no executor imports.
+
+## 2026-06-01 — AcmeTrace focused HF audit (`feature/hf-corpus-aurelius-discovery-v3`)
+
+HF discovery / data-engine PR. No scheduler change, no controller
+default touched, no production claim. Focused audit of the 4 short-term-
+mission datasets from `docs/HF_DATASET_REGISTRY.md` §10
+(Qinghao/AcmeTrace, HuggingAGree/AcmeTrace, osteele/llm-calibration-db,
+jaytonde05/iris-prefix-cache-benchmark).
+
+**Headline:** `Qinghao/AcmeTrace` is the strongest HF cluster-trace
+candidate identified so far — real Shanghai AI Lab Kalos + Seren
+production cluster traces from NSDI'24 with measured queue_wait
+(derived per README), real `state ∈ {COMPLETED, CANCELLED, FAILED,
+TIMEOUT, NODE_FAIL}` failure/timeout labels, DCGM-collected per-host
+GPU utilisation, AND IPMI per-host GPU power telemetry — all under
+CC-BY-4.0.
+
+**What landed**
+
+- `scripts/ingest_hf_acmetrace.py` — focused bounded ingest of 4
+  AcmeTrace configs:
+  - `kalos_jobs` — full `trace_kalos.csv` (~8.6 MB), 62,413 jobs,
+    cluster_scheduler_trace (Tier 3) → `promoted_for_backtest` +
+    `constraint_aware_evaluation` + `training_priors`.
+  - `seren_jobs_head` — head 32 MiB of `trace_seren.csv` (~94 MB),
+    79,999 jobs, cluster_scheduler_trace (Tier 3) →
+    `promoted_for_backtest`.
+  - `kalos_gpu_util_head` — head 32 MiB of Kalos `GPU_UTIL.csv`
+    (~843 MB), 6,680 15-second DCGM samples,
+    telemetry_trace (Tier 2) →
+    `promoted_for_constraint_aware_evaluation`
+    (`dynamic_calibration` downgraded — needs strong strength).
+  - `seren_ipmi_gpu_power_head` — head 16 MiB of Seren
+    `GPU_AB_Power.csv` (~277 MB), 79,999 IPMI samples,
+    telemetry_trace (Tier 2) →
+    **`promoted_for_dynamic_calibration`** — the first non-CARA HF
+    dataset promoted to dynamic_calibration via this pipeline.
+- `scripts/register_hf_acmetrace.py` — registers 4 AcmeTrace configs
+  in `canonical_corpus_registry.json` (now 25 entries).
+- `scripts/update_hf_candidates_acmetrace.py` — adds Qinghao /
+  HuggingAGree / osteele / iris-prefix-cache to
+  `hf_dataset_candidates.json` (now 48 candidates) with focused-audit
+  decisions: `ingest_now_bounded` / `duplicate_existing` /
+  `gated_blocked` / `reject_low_value` respectively.
+- `data/external/hf_discovery/acmetrace_audit_summary.json` —
+  per-config rollup of ingest + promotion decisions + 3 discovery-only
+  records (HuggingAGree duplicate, osteele gated:manual, iris
+  20-prompts low-value).
+- `docs/HF_DATASET_REGISTRY.md` §7 + §10 updated with the AcmeTrace
+  table rows, the discovery-only reject/duplicate/gated entries, the
+  AcmeTrace signal table, and the next-actions list (full-file expansion
+  to push DCGM telemetry to `strong`).
+- `tests/test_hf_acmetrace_ingest.py` — 46 new tests covering: no raw /
+  no analysis_sample committed; schema_profile + schema_mapping +
+  summary + rollups present; promotion gates pass for all 4 configs;
+  signal coverage recorded; trust tier assignment; license + gating
+  recorded; statistical sample strength sufficient for promotion tags
+  awarded; discovery-only datasets have no processed/ tree (anti-spam).
+
+**Outcomes for the other 3 mission datasets**
+
+- `HuggingAGree/AcmeTrace` — re-upload of Qinghao mirror, same 75
+  files. Marked `duplicate_existing`; discovery-only, no separate
+  ingest tree.
+- `osteele/llm-calibration-db` — `gated:manual` (requires manual
+  approval from the dataset owner). Marked `gated_blocked`. Would be
+  a Tier-4 latency_benchmark_trace + Tier-2 telemetry candidate once
+  approved.
+- `jaytonde05/iris-prefix-cache-benchmark` — 20 synthetic prompts
+  (single `prompt: string`, 57 KB total). No measured TTFT, cache-hit,
+  GPU, queue, or SLA. Marked `reject_low_value`; `jaytonde05/prefixbench`
+  already covers the synthetic prefix-cache role.
+
+**Tests:** 46 new (all green) + 219 existing HF tests still green +
+67 frontier-discovery / dynamic-calibration tests still green.
+
+**Honesty invariants:** raw + analysis samples gitignored
+(`data/external/hf/*/raw/*` + `data/external/hf/*/*/processed/analysis_sample.jsonl`);
+no HF token committed anywhere; trust tier remains Tier 2 / Tier 3
+(NOT Tier 1 pilot telemetry); benchmark traces never treated as
+production telemetry; every promoted entry carries `license`,
+`gated`, `provenance`, `field_quality`, `limitations`; no oracle as
+headline; no scheduler / controller / robust energy engine touched.
+
+**Next:** expand AcmeTrace `kalos_gpu_util_head` beyond 32 MiB
+(full ~843 MB) to push the DCGM telemetry to `strong` strength and
+unlock `promoted_for_dynamic_calibration`; ingest the remaining
+utilisation streams (FB_USED, PIPE_TENSOR_ACTIVE, CPU power);
+cross-validate AcmeTrace Kalos/Seren queue distributions against
+existing Tier-3 traces (Alibaba GPU / Philly / MIT).
