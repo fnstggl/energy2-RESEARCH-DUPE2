@@ -424,7 +424,7 @@ class HFClient:
     def readme(self, dataset_id: str) -> str:
         """Best-effort README fetch via the raw content URL. Bounded to
         128 KiB to avoid pulling large docs into memory."""
-        url = (f"https://huggingface.co/datasets/"
+        url = ("https://huggingface.co/datasets/"
                + urllib.parse.quote(dataset_id, safe='/')
                + "/raw/main/README.md")
         req = urllib.request.Request(
