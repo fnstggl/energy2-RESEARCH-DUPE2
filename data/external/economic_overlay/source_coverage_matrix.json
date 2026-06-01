@@ -1,0 +1,492 @@
+{
+  "doc_version": "economic_overlay_v1",
+  "production_claim": false,
+  "scenario_overlays_defined": [
+    "pjm_energy_overlay",
+    "ercot_energy_overlay",
+    "caiso_energy_overlay",
+    "watttime_carbon_overlay",
+    "no_operator_policy_overlay"
+  ],
+  "shadow_only": true,
+  "sources": [
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "missing",
+      "field_quality": "measured",
+      "gpu_type_coverage": "A10 / A100 / H100 / V100 / T4 (Lambda Labs)",
+      "id": "asdwb/cara_latency_prediction",
+      "join_keys": [
+        "gpu_type (via instance_type)",
+        "timestamp",
+        "model"
+      ],
+      "limitations": [
+        "no region",
+        "no $/hr",
+        "no per-request energy",
+        "no carbon"
+      ],
+      "model_coverage": "served LLMs (per-trace)",
+      "price_coverage": "missing",
+      "prohibited_uses": [
+        "production cost calibration",
+        "operator chargeback truth"
+      ],
+      "promotes": [
+        "TTFT/TPOT/e2e priors",
+        "queue-wait priors",
+        "KV utilization signal"
+      ],
+      "raw_fields": [
+        "actual_ttft",
+        "actual_tpot",
+        "actual_e2e_latency",
+        "num_waiting",
+        "num_running",
+        "kv_cache_utilization",
+        "instance_type",
+        "num_prompt_tokens",
+        "actual_output_tokens",
+        "prediction_timestamp"
+      ],
+      "region_coverage": "missing",
+      "role": "operational_trace",
+      "timestamp_coverage": "per-request, ms-resolution"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "derived (power \u00d7 duration)",
+      "field_quality": "measured",
+      "gpu_type_coverage": "Kalos A100 nodes, Seren A100 nodes",
+      "id": "Qinghao/AcmeTrace",
+      "join_keys": [
+        "gpu_type (Kalos GPU model)",
+        "timestamp",
+        "cluster"
+      ],
+      "limitations": [
+        "job-level, not request-level",
+        "no public $/hr for Shanghai cluster",
+        "single cluster \u2014 not multi-region"
+      ],
+      "model_coverage": "internal LLM training workloads",
+      "price_coverage": "missing",
+      "prohibited_uses": [
+        "LLM serving TTFT/TPOT calibration",
+        "multi-region routing priors"
+      ],
+      "promotes": [
+        "energy/request derived",
+        "power_draw prior",
+        "cluster failure-mode prior"
+      ],
+      "raw_fields": [
+        "queue_wait (derived)",
+        "end_time - start_time",
+        "state",
+        "gpu_utilization (DCGM 15s)",
+        "ipmi_gpu_power_w",
+        "gpu_num",
+        "node_num"
+      ],
+      "region_coverage": "single Shanghai cluster (Kalos + Seren)",
+      "role": "operational_trace",
+      "timestamp_coverage": "per-job + 15s DCGM/IPMI samples"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "measured (codecarbon kWh per request)",
+      "field_quality": "measured",
+      "gpu_type_coverage": "A100-80GB / A10G / T4 / 32vCPU-C7i",
+      "id": "optimum-benchmark/llm-perf-leaderboard",
+      "join_keys": [
+        "gpu_type",
+        "model",
+        "quantization"
+      ],
+      "limitations": [
+        "batch_size=1, no concurrency",
+        "no real arrival/queue trace",
+        "no declared license \u2014 conservative policy"
+      ],
+      "model_coverage": "36-93 distinct models per config",
+      "price_coverage": "missing",
+      "prohibited_uses": [
+        "concurrent-serving priors",
+        "queue/arrival modelling"
+      ],
+      "promotes": [
+        "energy_kwh per (model, gpu) prior",
+        "TTFT/TPOT per (model, gpu, quant) prior"
+      ],
+      "raw_fields": [
+        "prefill latency p50/p90/p95/p99",
+        "decode latency p50/p90/p95/p99",
+        "throughput tok/s",
+        "energy_kwh_cpu",
+        "energy_kwh_gpu",
+        "energy_kwh_total",
+        "peak_vram_mb",
+        "model_id"
+      ],
+      "region_coverage": "missing",
+      "role": "operational_trace",
+      "timestamp_coverage": "per-benchmark snapshot"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "missing",
+      "field_quality": "measured",
+      "gpu_type_coverage": "unknown (SwissAI internal)",
+      "id": "eth-easl/swissai-serving-trace",
+      "join_keys": [
+        "model_family",
+        "timestamp"
+      ],
+      "limitations": [
+        "reuse_percentage is a CACHE PROXY, not measured block-level hit rate",
+        "no economic signal"
+      ],
+      "model_coverage": "Qwen3-32B / Llama3-70B / Qwen3-80B / Apertus-70B",
+      "price_coverage": "missing",
+      "prohibited_uses": [
+        "operator chargeback truth",
+        "energy/carbon calibration"
+      ],
+      "promotes": [
+        "cache_reuse_pct input for cache_value formula"
+      ],
+      "raw_fields": [
+        "reuse_percentage",
+        "bucket_*_reuse",
+        "model_family",
+        "request_timestamps"
+      ],
+      "region_coverage": "single SwissAI cluster",
+      "role": "operational_trace",
+      "timestamp_coverage": "ms-resolution"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "measured (CodeCarbon kWh per request)",
+      "field_quality": "measured",
+      "gpu_type_coverage": "consumer/laptop (RTX 3060, RTX 4070) + workstation",
+      "id": "ejhusom/llm-inference-energy-consumption",
+      "join_keys": [
+        "gpu_type (hardware tier)",
+        "model (gemma/codellama)"
+      ],
+      "limitations": [
+        "concurrency=1, no batching/queue",
+        "Ollama engine only",
+        "no carbon intensity"
+      ],
+      "model_coverage": "gemma:7b / codellama:7b / codellama:70b",
+      "price_coverage": "missing",
+      "prohibited_uses": [
+        "server-class cluster calibration",
+        "vLLM/SGLang generalisation"
+      ],
+      "promotes": [
+        "energy_kwh per request prior (consumer tier)"
+      ],
+      "raw_fields": [
+        "total_duration_ns",
+        "prompt_eval_duration_ns",
+        "eval_duration_ns",
+        "load_duration_ns",
+        "energy_kwh_cpu",
+        "energy_kwh_gpu",
+        "energy_kwh_total"
+      ],
+      "region_coverage": "missing",
+      "role": "operational_trace",
+      "timestamp_coverage": "per-request"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "missing",
+      "field_quality": "measured",
+      "gpu_type_coverage": "T4 / V100 / L4 / A100 / A10 / H100 / RTXPRO6000 / P100 / L40S",
+      "id": "afhubbard/gpu-prices",
+      "join_keys": [
+        "gpu_type (normalized family)",
+        "region",
+        "provider",
+        "is_spot",
+        "timestamp"
+      ],
+      "limitations": [
+        "PUBLIC LIST PRICE != operator's actual invoice / negotiated reserved rate",
+        "no spot history depth \u2014 single snapshot",
+        "license CC-BY-4.0 \u2014 attribution required"
+      ],
+      "model_coverage": "n/a (pricing, not workload)",
+      "price_coverage": "measured (public list price)",
+      "prohibited_uses": [
+        "operator chargeback truth",
+        "negotiated-rate-as-headline",
+        "production savings claim"
+      ],
+      "promotes": [
+        "gpu_price_usd_per_hour prior across providers"
+      ],
+      "raw_fields": [
+        "timestamp",
+        "provider",
+        "instance_type",
+        "gpu_type",
+        "gpu_count",
+        "gpu_memory_gb",
+        "region",
+        "price_per_hour",
+        "is_spot",
+        "availability_zone"
+      ],
+      "region_coverage": "12+ public clouds \u00d7 N regions each",
+      "role": "economic_overlay",
+      "timestamp_coverage": "twice-daily snapshots, 2026-01-12 .. 2026-06-01 (76 days)"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "measured ($/MWh \u2192 $/kWh)",
+      "field_quality": "measured",
+      "gpu_type_coverage": "n/a",
+      "id": "PJM Data Miner \u2014 DA LMP",
+      "join_keys": [
+        "timestamp (nearest hourly)",
+        "region"
+      ],
+      "limitations": [
+        "DA LMP, not RT spread",
+        "us-east zonal only; not the operator's actual tariff or contracted rate",
+        "requires PJM_API_KEY in env at fetch time"
+      ],
+      "model_coverage": "n/a",
+      "price_coverage": "measured (live PJM Data Miner DA LMP)",
+      "prohibited_uses": [
+        "operator utility-bill truth",
+        "applying to non-PJM regions"
+      ],
+      "promotes": [
+        "electricity_price_usd_per_kwh measured input"
+      ],
+      "raw_fields": [
+        "timestamp",
+        "region",
+        "price_per_mwh",
+        "currency",
+        "source"
+      ],
+      "region_coverage": "us-east (PJM zonal hub) ONLY in this PR",
+      "role": "economic_overlay_live",
+      "timestamp_coverage": "hourly, 7-day rolling window in this PR"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "scenario_prior",
+      "field_quality": "scenario_prior",
+      "gpu_type_coverage": "n/a",
+      "id": "ERCOT \u2014 SCENARIO_PRIOR in this PR",
+      "join_keys": [],
+      "limitations": [
+        "NOT a live ERCOT fetch in this PR \u2014 credentials ERCOT_PASSWORD/ERCOT_ID_TOKEN absent. Scenario scalar midpoint only."
+      ],
+      "model_coverage": "n/a",
+      "price_coverage": "scenario_prior",
+      "prohibited_uses": [
+        "any production claim",
+        "tariff truth"
+      ],
+      "promotes": [
+        "pjm_energy_overlay parity check"
+      ],
+      "raw_fields": [
+        "scenario_midpoint_price_per_kwh_usd"
+      ],
+      "region_coverage": "us-south (ERCOT) scenario only",
+      "role": "economic_overlay_scenario",
+      "timestamp_coverage": "scalar scenario"
+    },
+    {
+      "carbon_coverage": "missing",
+      "energy_coverage": "scenario_prior",
+      "field_quality": "scenario_prior",
+      "gpu_type_coverage": "n/a",
+      "id": "CAISO \u2014 SCENARIO_PRIOR in this PR",
+      "join_keys": [],
+      "limitations": [
+        "No CAISO credentials configured; live fetch implemented in aurelius/ingestion/grid_apis/caiso.py but not wired here."
+      ],
+      "model_coverage": "n/a",
+      "price_coverage": "scenario_prior",
+      "prohibited_uses": [
+        "tariff truth"
+      ],
+      "promotes": [
+        "west-coast-region overlay parity"
+      ],
+      "raw_fields": [
+        "scenario_midpoint_price_per_kwh_usd"
+      ],
+      "region_coverage": "us-west (CAISO) scenario only",
+      "role": "economic_overlay_scenario",
+      "timestamp_coverage": "scalar scenario"
+    },
+    {
+      "carbon_coverage": "scenario_prior",
+      "energy_coverage": "n/a",
+      "field_quality": "scenario_prior",
+      "gpu_type_coverage": "n/a",
+      "id": "WattTime \u2014 SCENARIO_PRIOR in this PR",
+      "join_keys": [],
+      "limitations": [
+        "WattTime auth currently failing in env; live WattTimeCarbonProvider not exercised here."
+      ],
+      "model_coverage": "n/a",
+      "price_coverage": "n/a",
+      "prohibited_uses": [
+        "operator carbon truth",
+        "production carbon arbitrage claim"
+      ],
+      "promotes": [
+        "carbon_intensity_g_per_kwh scenario_prior"
+      ],
+      "raw_fields": [
+        "scenario_midpoint_g_co2_per_kwh"
+      ],
+      "region_coverage": "us-east MOER scenario",
+      "role": "economic_overlay_scenario",
+      "timestamp_coverage": "scalar scenario"
+    }
+  ],
+  "term_computability_matrix": {
+    "estimated_cache_value_usd": {
+      "computable_when": "all four inputs present",
+      "inputs": [
+        "cache_reuse_pct",
+        "estimated_prefill_seconds",
+        "gpu_price_usd_per_hour",
+        "gpu_count"
+      ],
+      "sources": [
+        "SwissAI/CC-traces/CARA reuse_pct + Optimum/CARA ttft + afhubbard/gpu-prices"
+      ]
+    },
+    "estimated_carbon_cost_usd": {
+      "computable_when": "OPERATOR-POLICY-ONLY \u2014 never computable from public data alone",
+      "inputs": [
+        "estimated_carbon_kg",
+        "carbon_price_per_kg_usd"
+      ],
+      "sources": [
+        "estimated_carbon_kg AND OperatorPricingPolicy.carbon_price_per_kg_usd"
+      ]
+    },
+    "estimated_carbon_kg": {
+      "computable_when": "energy_kwh present AND carbon intensity non-missing",
+      "inputs": [
+        "energy_kwh",
+        "carbon_intensity_g_per_kwh"
+      ],
+      "sources": [
+        "energy_kwh AND WattTime scenario_prior (live blocked by env in this PR)"
+      ]
+    },
+    "estimated_cold_start_cost_usd": {
+      "computable_when": "model_load_duration_s present (often missing in public traces)",
+      "inputs": [
+        "model_load_duration_s",
+        "gpu_price_usd_per_hour"
+      ],
+      "sources": [
+        "AcmeTrace/Google Cluster model_load events (proxy) + afhubbard/gpu-prices"
+      ]
+    },
+    "estimated_decode_cost_usd": {
+      "computable_when": "tpot AND output_tokens AND gpu_price present",
+      "inputs": [
+        "estimated_decode_seconds",
+        "gpu_price_usd_per_hour"
+      ],
+      "sources": [
+        "Optimum/CARA tpot + output_tokens + afhubbard/gpu-prices"
+      ]
+    },
+    "estimated_energy_cost_usd": {
+      "computable_when": "energy_kwh present (measured/derived) AND price overlay non-missing",
+      "inputs": [
+        "energy_kwh",
+        "electricity_price_usd_per_kwh"
+      ],
+      "sources": [
+        "Optimum/ejhusom kWh OR power\u00d7duration derived AND PJM live OR scenario_prior OR operator policy"
+      ]
+    },
+    "estimated_gpu_cost_usd": {
+      "computable_when": "trace has e2e_latency_s (or ttft+tpot+out) AND gpu_type is mappable to public listing",
+      "inputs": [
+        "estimated_gpu_seconds",
+        "gpu_price_usd_per_hour",
+        "gpu_count"
+      ],
+      "sources": [
+        "any operational trace + afhubbard/gpu-prices OR OperatorPricingPolicy.gpu_hour_price_per_type"
+      ]
+    },
+    "estimated_memory_pressure_cost_usd": {
+      "computable_when": "OPERATOR-POLICY-ONLY \u2014 public list price does not bill memory pressure separately",
+      "inputs": [
+        "peak_vram_gb",
+        "gpu_memory_gb (SKU spec)",
+        "operator_policy"
+      ],
+      "sources": [
+        "Optimum peak_vram + afhubbard gpu_memory_gb + OPERATOR memory-pressure policy"
+      ]
+    },
+    "estimated_migration_cost_usd": {
+      "computable_when": "cache_loss_pct present AND prefill seconds present",
+      "inputs": [
+        "cache_loss_pct",
+        "estimated_prefill_seconds",
+        "gpu_price_usd_per_hour"
+      ],
+      "sources": [
+        "CC-traces migration_or_cache_loss_proxy + Optimum ttft + afhubbard/gpu-prices"
+      ]
+    },
+    "estimated_prefill_cost_usd": {
+      "computable_when": "ttft present AND gpu_price overlay non-missing",
+      "inputs": [
+        "estimated_prefill_seconds",
+        "gpu_price_usd_per_hour"
+      ],
+      "sources": [
+        "Optimum/CARA ttft + afhubbard/gpu-prices"
+      ]
+    },
+    "estimated_sla_safe_goodput": {
+      "computable_when": "sla_s + e2e_latency_s present",
+      "inputs": [
+        "sla_s",
+        "e2e_latency_s",
+        "useful tokens or requests"
+      ],
+      "sources": [
+        "CARA/Optimum sla_s + e2e_latency_s + output_tokens"
+      ]
+    },
+    "estimated_sla_safe_goodput_per_dollar": {
+      "computable_when": "sla_safe_goodput computable AND total cost > 0",
+      "inputs": [
+        "estimated_sla_safe_goodput",
+        "all cost terms above"
+      ],
+      "sources": [
+        "composition of the above"
+      ]
+    }
+  }
+}
