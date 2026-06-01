@@ -237,6 +237,7 @@ Rules (binding):
 | `optimum-benchmark/llm-perf-leaderboard` | **`pytorch_cuda_torchao_1xA10`** | `latency_benchmark_trace` | Tier 4 | `promoted_for_training_priors` | 5 | 15 | weak | 2026-06-01 |
 | `optimum-benchmark/llm-perf-leaderboard` | **`pytorch_cpu_unquantized_32vCPU_C7i`** | `latency_benchmark_trace` | Tier 4 | `promoted_for_performance_priors` (+ `constraint_aware_evaluation`, `training_priors`) | 5 | **1,128** | strong | 2026-06-01 |
 | `Exgentic/agent-llm-traces` | **`swebench_claude_code_shard12`** | `request_shape_trace` | Tier 5 | `promoted_for_training_priors` | 5 | **2,294** | moderate | 2026-06-01 |
+| `ssong1/llmperf-bedrock` | **`bedrock_claude_instant_v1`** | `latency_benchmark_trace` | Tier 4 | `promoted_for_performance_priors` (+ `constraint_aware_evaluation`, `training_priors`) | 5 | **350** | moderate | 2026-06-01 |
 
 > **CARA** is the first Tier 2 (public telemetry trace) entry in the
 > federated corpus. CARA **train_flat** + **train_queue_details** are
@@ -751,6 +752,96 @@ Rules (binding):
   ARE committed. Per-config `analysis_sample.jsonl` is gitignored —
   regenerable via `scripts/ingest_hf_agent_llm_traces.py`.
 
+#### ssong1/llmperf-bedrock — Tier-4 closed-managed-API LLMPerf priors (Round 3)
+
+- **Provenance.** [`ssong1/llmperf-bedrock`](https://huggingface.co/datasets/ssong1/llmperf-bedrock)
+  — Apache-2.0 Ray LLMPerf (`token_benchmark_ray.py`) benchmark output
+  against AWS Bedrock's `anthropic.claude-instant-v1` endpoint, January
+  2024. Client ran from an on-premise Kubernetes bastion (per dataset
+  card). 4 (input_tokens, output_tokens, concurrency, region) cells ×
+  ~50-100 requests per cell = **350 individual requests** committed +
+  4 per-run quantile summaries.
+- **Why it fills a gap.** Every existing Tier-4 latency benchmark in
+  the corpus (AgentPerfBench, Odyn, Memoriant, Intellistream,
+  optimum-benchmark) measures **GPU-direct serving** — vLLM / Triton /
+  Ray Serve on a known accelerator. The Aurelius **routing** + **deferral**
+  objective also needs a **closed managed-API** latency prior (Bedrock,
+  Anthropic API, OpenAI API, AzureOpenAI) where the GPU is opaque and
+  TTFT/ITL include provider scheduling + closed-source batching + AWS
+  network. `ssong1/llmperf-bedrock` is the first such dataset in the
+  federated corpus.
+- **Available signals (per-request, real):** `ttft_ms`, `itl_ms`
+  (= LLMPerf `inter_token_latency_s` × 1000), `e2e_latency_ms`,
+  `request_output_throughput_tps`, `number_input_tokens`,
+  `number_output_tokens`, `number_total_tokens`, `error_code` +
+  `error_msg` + `failure` (derived from `error_code != null`).
+- **Per-run roll-ups** (from upstream `*_summary.json`): TTFT / ITL /
+  e2e quantiles `p25 / p50 / p75 / p90 / p95 / p99`, output-throughput
+  quantiles, `num_completed_requests`, `num_completed_requests_per_min`,
+  `error_rate`. Stored under `statistical_rollups.json#per_run_aggregated`.
+- **Missing signals:** `tpot`, `queue_state`, `queue_wait`, `kv_cache_size`,
+  `memory_pressure`, `gpu_type`, `gpu_utilization`, `batch_size`,
+  `engine_version`, `timeout_label`, `autoscaling`, `replica_count`,
+  `kernel_duration`, `cache_hit`. `concurrency` is fixed at 1 across
+  all four runs in this snapshot — there is **no contention / queue
+  signal**.
+- **Recommended Aurelius uses:**
+  - **Managed-API TTFT / ITL / e2e routing priors** — per `(model,
+    region, prompt_kind, input_len, output_len)` cell the corpus now
+    has a real measured quantile distribution that the routing /
+    deferral / placement engine can consume as a closed-API SLO prior.
+  - Constraint-aware evaluation cross-reference — compare GPU-direct
+    AgentPerfBench / optimum-benchmark numbers against this Bedrock
+    snapshot to measure the "managed-API tax" for the same prompt size.
+  - **Region-pricing-vs-latency study** — the `apne1` (ap-northeast-1)
+    run has p50 TTFT 0.584 s vs. `default` region 1.219 s for the
+    identical model + prompt size; a real-data prior for the
+    regional-latency-vs-egress-cost tradeoff in the Aurelius
+    residency/routing engine.
+- **Prohibited uses:**
+  - **GPU-direct serving latency calibration.** TTFT here includes
+    Bedrock provider scheduling + AWS network from an on-premise
+    bastion. Treating it as GPU-execution TTFT would inflate every
+    GPU-direct prior by 1+ network hops.
+  - **Queue / concurrency risk calibration.** All 4 runs use
+    `num_concurrent_requests = 1`. The Aurelius queue-risk module
+    (`aurelius/forecasting/cara_queue_features.py`) MUST NOT consume
+    this dataset.
+  - **Cross-model latency generalisation.** Bedrock has retired
+    `claude-instant-v1` (2024-07). Do not extrapolate to Claude 3 /
+    3.5 / 4.x, other Bedrock-hosted providers (AI21, Titan,
+    Llama-via-Bedrock), or other managed APIs (Anthropic direct,
+    OpenAI, AzureOpenAI, Vertex).
+  - **Production dynamic-frontier calibration.** Tier-4 benchmark —
+    pilot telemetry remains the only Tier-1 calibration source.
+  - **Treating `error_rate = 0.0` as a production SLA guarantee.**
+    No failures occurred in this 350-request snapshot; the dataset
+    has zero timeout signal.
+- **Bounded ingest layout:** the 8 raw `*_summary.json` +
+  `*_individual_responses.json` files (~150 KiB total) live under
+  `data/external/hf/ssong1__llmperf-bedrock/raw/` and are **gitignored**.
+  Committed: per-config `summary.json`, `schema_profile.json`,
+  `schema_mapping.json`, `statistical_rollups.json`, 5-row fixture
+  (5.4 KiB) and 350-row `committed_normalized_sample.jsonl` (373 KiB —
+  Apache-2.0 → redistribution-safe).
+- **Round-3 discovery audit summary.**
+  `data/external/hf_discovery/round3_broadened_discovery_audit_summary.json`
+  records the ingest + 8 negative-result candidates from the same
+  Round-3 broadened search (`DistServe/2025-05-06T14-…` and
+  `DistServe/test-amd-ci-profiler` — `license_unspecified_low_priority`
+  for vLLM CUDA-kernel profiling JSONs whose dataset cards declare no
+  SPDX license; `DistServe/test-sample` — out-of-scope image data;
+  `deepanjalimishra99/datacenter-traces` — out-of-scope DynamoRIO
+  drmemtrace; `intellistream/sage-control-plane-llm-workloads` —
+  `insufficient_sample_no_license` (3 rows of workload config); the
+  three previously audited duplicates / gated cases re-noted for
+  completeness).
+- **Tests:** `tests/test_hf_llmperf_bedrock_ingest.py` (24 tests, all
+  green) — including a hard assert that no GPU / queue / batch_size
+  signals leak into `available_signals` (this is API-only data) and
+  that the closed-API caveat + `concurrency=1` caveat are pinned in
+  the `limitations` list.
+
 ### 7.2 Datasets evaluated but rejected / blocked
 
 | dataset_id | trace_type | state | reason |
@@ -780,6 +871,14 @@ Rules (binding):
 | `Nathan-Maine/dgx-spark-kv-cache-benchmark` | `latency_benchmark_trace` | `duplicate_existing` | Same KV cache benchmark CSV as `memoriant/dgx-spark-kv-cache-benchmark` (already ingested as Tier-4 `v3_corrected`). Apache-2.0; near-duplicate of the same upstream Nathan-Maine work. |
 | `fabric/inference-benchmarker` | `request_shape_trace` | `duplicate_existing` | ShareGPT-derived prompt fixtures used to drive the upstream huggingface/inference-benchmarker tool — identical role to `hlarcher/inference-benchmarker` (already rejected) and to the existing `sharegpt_aiperf` request-shape ingester. |
 | `optimum-benchmark/llm-perf-leaderboard@openvino_cpu_unquantized_32vCPU_C7i` | `latency_benchmark_trace` (sub-config) | `reject_failure_only_no_measurements` | Every row is an isolated-process crash (`RuntimeError: Isolated process exited with non-zero code -6` in `report.traceback`); ZERO measured `report.prefill.latency.*` / `report.decode.latency.*` columns in the CSV header. The 9 working `optimum-benchmark` configs already cover the pytorch-cpu C7i baseline for cross-backend comparison. Re-add if a future openvino sub-run produces real latency. |
+| `DistServe/2025-05-06T14-automatic-profiling` | `kernel_profile_trace` | `license_unspecified_low_priority` | vLLM CUDA-kernel profiling output for DeepSeek-R1-Distill-Llama-8B on H100, swept across batch_size × prompt_length (43 JSON files). Each file contains per-kernel `cuda_time_us` + per-layer breakdown (`LlamaDecoderLayer` / `RMSNorm` / `VocabParallelEmbedding`) + full vLLM `engine_args` context. **HIGH research value** as a kernel_profile_trace prior — but the dataset card declares no SPDX license. Without license clarity, committing a normalised sample would violate the corpus license-and-gating-recorded gate. Deferred; revisit if DistServe org adds a license. |
+| `DistServe/test-amd-ci-profiler` | `kernel_profile_trace` | `license_unspecified_low_priority` | Companion DistServe AMD CI profiler output. Same license issue as the H100 profiling dump. Deferred pending license. |
+| `DistServe/test-sample` | `mixed_or_unknown_trace` | `reject_out_of_scope` | `modality:imagefolder` + n<1K. Not an Aurelius-relevant trace; image data. |
+| `deepanjalimishra99/datacenter-traces` | `mixed_or_unknown_trace` | `reject_out_of_scope` | DynamoRIO drmemtrace lz4-compressed binary memory traces from SPECrate / lectern / multiple workloads (bc, blender, etc.). Microarchitectural memory-trace data, NOT LLM serving / scheduler / GPU telemetry. Out of scope for Aurelius' constraint-aware LLM-serving decisions. License `mit` but data type is wrong. |
+| `intellistream/sage-control-plane-llm-workloads` | `mixed_or_unknown_trace` | `insufficient_sample_no_license` | 3 rows of workload-configuration metadata (`workload_id`, `request_count`, `rate_per_second`, `arrival_pattern`, `model_distribution`, `priority_distribution`, `prompt_len_range`, `output_len_range`, `slo_deadlines`). Aurelius-relevant fields present, but 3 rows is below the fixture-only threshold AND no declared license. |
+| `hlarcher/inference-benchmarker` (re-audit) | `request_shape_trace` | `duplicate_existing` (Round 3 re-confirm) | Re-confirmed in Round 3 — ShareGPT-derived prompt fixtures used to drive the huggingface/inference-benchmarker tool. Existing `sharegpt_aiperf` ingester covers this role. |
+| `Nathan-Maine/dgx-spark-kv-cache-benchmark` (re-audit) | `latency_benchmark_trace` | `duplicate_existing` (Round 3 re-confirm) | Re-confirmed in Round 3 — same KV cache benchmark as `memoriant/dgx-spark-kv-cache-benchmark` (already promoted_for_training_priors). |
+| `ssong1/llmperf-bedrock` | — | ~~candidate~~ → **ingested 2026-06-01** | see §7.1 (Tier-4 closed-managed-API LLMPerf priors, Round 3). |
 
 ### 7.3 Datasets known in repo (non-HF or other ingest paths)
 
@@ -930,7 +1029,33 @@ Re-running `scripts/discover_hf_aurelius_datasets.py` rebuilds
   `kshitijthakkar/large-moe-inference-benchmark` once the HF
   auto-conversion completes — these would be the first MoE-specific
   serving latency priors in the corpus (current latency benchmarks
-  are dense-only).
+  are dense-only). **Round-3 re-check 2026-06-01**: still gated:manual;
+  HF_TOKEN not authorised. Path forward unchanged.
+- **Done 2026-06-01** — Round-3 broadened discovery: ingested
+  `ssong1/llmperf-bedrock` as the first Tier-4 **closed managed-API**
+  `latency_benchmark_trace` in the corpus (Apache-2.0, 350 individual
+  LLMPerf requests against AWS Bedrock claude-instant-v1, p25/p50/p75/
+  p90/p95/p99 TTFT + ITL + e2e quantiles per run). Fills the
+  managed-API vs. GPU-direct routing-prior gap. See §7.1 entry
+  "ssong1/llmperf-bedrock — Tier-4 closed-managed-API LLMPerf priors".
+- **Round 3 negative-result snapshot.** Two `DistServe` profiling
+  dumps + two out-of-scope (`DistServe/test-sample` image data,
+  `deepanjalimishra99/datacenter-traces` DynamoRIO drmemtrace) + one
+  insufficient-sample (`intellistream/sage-control-plane-llm-workloads`
+  3-row workload-config metadata) were rejected. Records persist in
+  `data/external/hf_discovery/round3_broadened_discovery_audit_summary.json`
+  + `data/external/hf_discovery/hf_dataset_candidates.json` so they
+  won't be re-discovered in future runs.
+- Cross-validate `ssong1/llmperf-bedrock` p50 TTFT (region=default
+  1.219 s vs region=ap-northeast-1 0.584 s for identical model + prompt)
+  against any future managed-API benchmark to calibrate the
+  regional-egress-vs-latency tradeoff in the Aurelius residency /
+  routing engine.
+- If the DistServe org adds an SPDX license to either profiling dump,
+  promote one of them (target: `H100_llama8b_pp1_tp1/profiling_bs10_pl128.json`
+  — smallest representative file) as a Tier-4 `kernel_profile_trace`.
+  Per-kernel `cuda_time_us` + `LlamaDecoderLayer` breakdown is exactly
+  the GPU-direct counterpart to the closed-API Bedrock prior.
 
 ## 11. License + auth
 

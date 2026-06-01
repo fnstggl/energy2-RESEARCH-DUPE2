@@ -1,0 +1,167 @@
+{
+  "accepted_columns": [
+    "end_to_end_latency_s",
+    "error_code",
+    "error_msg",
+    "inter_token_latency_s",
+    "number_input_tokens",
+    "number_output_tokens",
+    "number_total_tokens",
+    "request_output_throughput_token_per_s",
+    "ttft_s"
+  ],
+  "columns": [
+    {
+      "aurelius_signal_category": "latency",
+      "dtypes": [
+        "float"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "ttft_ms",
+      "notes": "Time to first token measured by Ray LLMPerf client. Closed-API: includes Bedrock provider + AWS network.",
+      "presence_rate": 1.0,
+      "raw_column_name": "ttft_s",
+      "units": "seconds (\u00d71000 \u2192 ms in normalised)",
+      "usable_for": [
+        "latency_prior",
+        "constraint_aware_evaluation"
+      ]
+    },
+    {
+      "aurelius_signal_category": "latency",
+      "dtypes": [
+        "float"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "itl_ms",
+      "notes": "Mean per-request ITL (= (e2e - ttft) / (output_tokens - 1)). LLMPerf computes this as the actual streaming ITL of the individual request.",
+      "presence_rate": 1.0,
+      "raw_column_name": "inter_token_latency_s",
+      "units": "seconds (\u00d71000 \u2192 ms in normalised)",
+      "usable_for": [
+        "latency_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "latency",
+      "dtypes": [
+        "float"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "e2e_latency_ms",
+      "notes": "End-to-end request latency (closed-API).",
+      "presence_rate": 1.0,
+      "raw_column_name": "end_to_end_latency_s",
+      "units": "seconds (\u00d71000 \u2192 ms in normalised)",
+      "usable_for": [
+        "latency_prior",
+        "constraint_aware_evaluation"
+      ]
+    },
+    {
+      "aurelius_signal_category": "throughput",
+      "dtypes": [
+        "float"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "request_output_throughput_tps",
+      "notes": "Per-request output-token throughput.",
+      "presence_rate": 1.0,
+      "raw_column_name": "request_output_throughput_token_per_s",
+      "units": "tokens / second",
+      "usable_for": [
+        "throughput_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "tokens",
+      "dtypes": [
+        "int"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "number_input_tokens",
+      "notes": "Actual input-token count of the request.",
+      "presence_rate": 1.0,
+      "raw_column_name": "number_input_tokens",
+      "units": "tokens",
+      "usable_for": [
+        "workload_shape_only",
+        "latency_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "tokens",
+      "dtypes": [
+        "int"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "number_output_tokens",
+      "notes": "Actual output-token count of the request.",
+      "presence_rate": 1.0,
+      "raw_column_name": "number_output_tokens",
+      "units": "tokens",
+      "usable_for": [
+        "workload_shape_only",
+        "throughput_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "tokens",
+      "dtypes": [
+        "int"
+      ],
+      "field_quality": "real",
+      "missing_rate": 0.0,
+      "normalized_field": "number_total_tokens",
+      "notes": "input + output tokens.",
+      "presence_rate": 1.0,
+      "raw_column_name": "number_total_tokens",
+      "units": "tokens",
+      "usable_for": [
+        "workload_shape_only"
+      ]
+    },
+    {
+      "aurelius_signal_category": "failure_timeout",
+      "dtypes": [
+        "NoneType"
+      ],
+      "field_quality": "real",
+      "missing_rate": 1.0,
+      "normalized_field": "error_code",
+      "notes": "Always null in this dataset (error_rate=0.0). Schema supports failure labels, but this snapshot has no failures.",
+      "presence_rate": 0.0,
+      "raw_column_name": "error_code",
+      "units": null,
+      "usable_for": [
+        "latency_prior"
+      ]
+    },
+    {
+      "aurelius_signal_category": "failure_timeout",
+      "dtypes": [
+        "str"
+      ],
+      "field_quality": "real",
+      "missing_rate": 1.0,
+      "normalized_field": "error_msg",
+      "notes": "Empty string when no error. No failures in this snapshot.",
+      "presence_rate": 0.0,
+      "raw_column_name": "error_msg",
+      "units": null,
+      "usable_for": [
+        "latency_prior"
+      ]
+    }
+  ],
+  "config_name": "bedrock_claude_instant_v1",
+  "dataset_id": "ssong1/llmperf-bedrock",
+  "rejected_columns": [],
+  "unknown_columns": []
+}

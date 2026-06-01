@@ -3340,14 +3340,92 @@
       "summary_path_relative": "data/external/hf/semianalysisai__cc-traces-weka-no-subagents-051226/traces_head/processed/summary.json",
       "synthetic_fields": [],
       "trust_tier": "tier_5_request_shape_traces"
+    },
+    {
+      "analysis_sample_bytes": 381462,
+      "analysis_sample_rows": 350,
+      "available_signals": [
+        "ttft",
+        "itl",
+        "e2e_latency",
+        "throughput",
+        "concurrency",
+        "input_tokens",
+        "output_tokens",
+        "model_id",
+        "engine",
+        "failure_label"
+      ],
+      "canonical_trace_type": "latency_benchmark_trace",
+      "committed_sample_bytes": 5374,
+      "committed_sample_rows": 5,
+      "config_name": "bedrock_claude_instant_v1",
+      "dataset_id": "ssong1/llmperf-bedrock",
+      "derived_fields": [
+        "failure"
+      ],
+      "fixture_sample_bytes": 5374,
+      "fixture_sample_rows": 5,
+      "gated": false,
+      "ingestion_timestamp_s": 1780316224.1629407,
+      "license": "apache-2.0",
+      "limitations": [
+        "ssong1/llmperf-bedrock: Apache-2.0 LLMPerf benchmark output against AWS Bedrock (closed managed-API).",
+        "CLOSED-API timing \u2014 TTFT/ITL/e2e include Bedrock provider scheduling + closed-source batching + AWS network. NOT a GPU-direct serving latency prior. Treat as managed-API SLO prior only.",
+        "Single model (bedrock/anthropic.claude-instant-v1, retired 2024-07). Do NOT extrapolate to newer Claude models or other Bedrock-hosted providers (e.g. AI21 / Titan / Llama-via-Bedrock).",
+        "Only 4 (input_len, output_len, concurrency, region) cells \u00d7 ~50-100 requests each (350 individual requests total). Stratification is by run_id; cross-cell extrapolation is weak.",
+        "Concurrency is fixed at 1 across all runs \u2014 NO queue/contention signal. The Aurelius queue-risk and batch-frontier modules MUST NOT consume this dataset.",
+        "Client ran from an on-premise Kubernetes bastion (per dataset card) \u2014 TTFT includes the bastion\u2192AWS network RTT, which biases TTFT absolute values upward by 1+ network hops.",
+        "Results dated 2024-01-19 \u2014 Bedrock has since changed its serving stack; treat absolute latency numbers as historical priors.",
+        "Per-request `error_rate=0.0` across all 4 runs \u2014 NO failure data to calibrate timeout-risk from this dataset.",
+        "Benchmark-only \u2014 Tier 4. Not pilot telemetry."
+      ],
+      "missing_signals": [
+        "tpot",
+        "queue_state",
+        "queue_wait",
+        "kv_cache_size",
+        "memory_pressure",
+        "gpu_type",
+        "gpu_utilization",
+        "batch_size",
+        "engine_version",
+        "timeout_label",
+        "autoscaling",
+        "replica_count",
+        "kernel_duration",
+        "cache_hit"
+      ],
+      "promotion_evaluated_at_s": 1780316224.1632607,
+      "promotion_reasons": [],
+      "promotion_state": "promoted_for_performance_priors",
+      "promotion_tags": [
+        "promoted_for_performance_priors",
+        "promoted_for_constraint_aware_evaluation",
+        "promoted_for_training_priors"
+      ],
+      "provenance": "ssong1/llmperf-bedrock@bedrock_claude_instant_v1#raw_data/*_individual_responses.json#git=1efab21",
+      "proxy_fields": [],
+      "sample_sha256": "3fea776ff4c8fc45e54075b8d99ec72ada4fd15dcf3df0106d17244251cc1dbc",
+      "sampling_method": "full_bounded",
+      "schema_mapping_path": "data/external/hf/ssong1__llmperf-bedrock/bedrock_claude_instant_v1/processed/schema_mapping.json",
+      "schema_profile_path": "data/external/hf/ssong1__llmperf-bedrock/bedrock_claude_instant_v1/processed/schema_profile.json",
+      "source_url": "https://huggingface.co/datasets/ssong1/llmperf-bedrock",
+      "statistical_sample_strength": "moderate",
+      "stratification_keys": [
+        "run_id"
+      ],
+      "summary_path_relative": "data/external/hf/ssong1__llmperf-bedrock/bedrock_claude_instant_v1/processed/summary.json",
+      "synthetic_fields": [],
+      "trust_tier": "tier_4_latency_benchmark_traces"
     }
   ],
-  "entry_count": 42,
+  "entry_count": 43,
   "modifies_controllers_or_defaults": false,
   "modifies_robust_energy_engine": false,
   "production_claim": false,
   "stage": "federated_benchmark_corpus_v1",
   "trust_hierarchy_note": "Tier 1 (real pilot telemetry) remains the only production calibration source. Promotion here is research-class only.",
   "uses_oracle_as_headline": false,
-  "written_at_s": 1780308650.5537772
+  "written_at_s": 1780316224.164198
 }

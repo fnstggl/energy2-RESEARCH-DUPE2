@@ -1,0 +1,136 @@
+{
+  "audited_at_s": 1780316224.1718328,
+  "discovery_only_records": [
+    {
+      "candidate_trace_type": "kernel_profile_trace",
+      "dataset_id": "DistServe/2025-05-06T14-automatic-profiling",
+      "gated": false,
+      "kind": "license_unspecified_low_priority",
+      "license_observed": null,
+      "reason": "vLLM CUDA-kernel-level profiling output for DeepSeek-R1-Distill-Llama-8B on H100, swept across batch_size \u00d7 prompt_length (43 JSON files). Each file contains per-kernel cuda_time_us + per-layer breakdown (LlamaDecoderLayer / RMSNorm / VocabParallelEmbedding) + full vLLM engine_args context. HIGH research value as a kernel_profile_trace prior \u2014 but the dataset card has NO declared license and the repo has no LICENSE file. Without license clarity, committing a normalised sample would violate the corpus license-and-gating-recorded gate. Deferred; revisit if DistServe org adds an SPDX license."
+    },
+    {
+      "candidate_trace_type": "kernel_profile_trace",
+      "dataset_id": "DistServe/test-amd-ci-profiler",
+      "gated": false,
+      "kind": "license_unspecified_low_priority",
+      "license_observed": null,
+      "reason": "Companion DistServe AMD CI profiler output. Same license issue as the 2025-05-06 profiling dump \u2014 no SPDX license on the dataset card. Deferred pending license clarity."
+    },
+    {
+      "candidate_trace_type": "mixed_or_unknown_trace",
+      "dataset_id": "DistServe/test-sample",
+      "gated": false,
+      "kind": "reject_out_of_scope",
+      "license_observed": null,
+      "reason": "DistServe test sample \u2014 modality:imagefolder + n<1K. Not an Aurelius-relevant trace; image data. Rejected as out-of-scope."
+    },
+    {
+      "candidate_trace_type": "mixed_or_unknown_trace",
+      "dataset_id": "deepanjalimishra99/datacenter-traces",
+      "gated": false,
+      "kind": "reject_out_of_scope",
+      "license_observed": "mit",
+      "reason": "DynamoRIO drmemtrace lz4-compressed binary memory traces from SPECrate/lectern + multiple workloads (bc, blender, etc.). Microarchitectural memory-trace data, NOT LLM serving / scheduler / GPU telemetry. Useful for hardware architecture simulation but out of scope for Aurelius' constraint-aware LLM-serving decisions. Rejected as out-of-scope."
+    },
+    {
+      "candidate_trace_type": "mixed_or_unknown_trace",
+      "dataset_id": "intellistream/sage-control-plane-llm-workloads",
+      "gated": false,
+      "kind": "insufficient_sample_no_license",
+      "license_observed": null,
+      "reason": "3 rows of workload-configuration metadata (workload_id, request_count, rate_per_second, arrival_pattern, model_distribution, priority_distribution, prompt_len_range, output_len_range, slo_deadlines). Aurelius-relevant fields present, but 3 rows is below the fixture-only threshold AND no declared license. Rejected as insufficient sample + license unspecified."
+    },
+    {
+      "candidate_trace_type": "latency_benchmark_trace",
+      "dataset_id": "Nathan-Maine/dgx-spark-kv-cache-benchmark",
+      "gated": false,
+      "kind": "duplicate_existing",
+      "license_observed": "apache-2.0",
+      "reason": "Already audited in PR #134; same KV-cache quantization benchmark as memoriant/dgx-spark-kv-cache-benchmark (promoted_for_training_priors). Re-noting in Round 3 for completeness."
+    },
+    {
+      "candidate_trace_type": "request_shape_trace",
+      "dataset_id": "hlarcher/inference-benchmarker",
+      "gated": false,
+      "kind": "duplicate_existing",
+      "license_observed": "apache-2.0",
+      "reason": "Already audited in PR #134 \u2014 ShareGPT-derived prompt fixtures used to drive huggingface/inference-benchmarker. Workload-shape only; existing sharegpt_aiperf ingester covers this role. Re-confirmed in Round 3."
+    },
+    {
+      "candidate_trace_type": "latency_benchmark_trace",
+      "dataset_id": "kshitijthakkar/moe-inference-benchmark",
+      "gated": true,
+      "kind": "gated_blocked",
+      "license_observed": "apache-2.0",
+      "reason": "HF gated:manual. Features list (model_id, prompt, tokens_generated, time_seconds, tokens_per_second, total_params, active_params, error) is exactly the MoE-specific latency-benchmark schema we want as a first MoE-specific prior. HF_TOKEN is NOT authorised. Confirmed gated_blocked in Round 3. Revisit if manual approval is granted."
+    }
+  ],
+  "doc_version": "round3_broadened_discovery_audit_summary_v1",
+  "failed": [],
+  "git_sha": "1efab214fde16dc41d088a75488f781bc18560a5",
+  "ingested": [
+    {
+      "analysis_sample_rows": 350,
+      "available_signals": [
+        "ttft",
+        "itl",
+        "e2e_latency",
+        "throughput",
+        "concurrency",
+        "input_tokens",
+        "output_tokens",
+        "model_id",
+        "engine",
+        "failure_label"
+      ],
+      "canonical_trace_type": "latency_benchmark_trace",
+      "committed_normalized_sample_bytes": 381462,
+      "committed_normalized_sample_rows": 350,
+      "config_name": "bedrock_claude_instant_v1",
+      "dataset_id": "ssong1/llmperf-bedrock",
+      "fixture_sample_rows": 5,
+      "gated": false,
+      "license": "apache-2.0",
+      "limitations": [
+        "ssong1/llmperf-bedrock: Apache-2.0 LLMPerf benchmark output against AWS Bedrock (closed managed-API).",
+        "CLOSED-API timing \u2014 TTFT/ITL/e2e include Bedrock provider scheduling + closed-source batching + AWS network. NOT a GPU-direct serving latency prior. Treat as managed-API SLO prior only.",
+        "Single model (bedrock/anthropic.claude-instant-v1, retired 2024-07). Do NOT extrapolate to newer Claude models or other Bedrock-hosted providers (e.g. AI21 / Titan / Llama-via-Bedrock).",
+        "Only 4 (input_len, output_len, concurrency, region) cells \u00d7 ~50-100 requests each (350 individual requests total). Stratification is by run_id; cross-cell extrapolation is weak.",
+        "Concurrency is fixed at 1 across all runs \u2014 NO queue/contention signal. The Aurelius queue-risk and batch-frontier modules MUST NOT consume this dataset.",
+        "Client ran from an on-premise Kubernetes bastion (per dataset card) \u2014 TTFT includes the bastion\u2192AWS network RTT, which biases TTFT absolute values upward by 1+ network hops.",
+        "Results dated 2024-01-19 \u2014 Bedrock has since changed its serving stack; treat absolute latency numbers as historical priors.",
+        "Per-request `error_rate=0.0` across all 4 runs \u2014 NO failure data to calibrate timeout-risk from this dataset.",
+        "Benchmark-only \u2014 Tier 4. Not pilot telemetry."
+      ],
+      "missing_signals": [
+        "tpot",
+        "queue_state",
+        "queue_wait",
+        "kv_cache_size",
+        "memory_pressure",
+        "gpu_type",
+        "gpu_utilization",
+        "batch_size",
+        "engine_version",
+        "timeout_label",
+        "autoscaling",
+        "replica_count",
+        "kernel_duration",
+        "cache_hit"
+      ],
+      "promotion_reasons": [],
+      "promotion_state": "promoted_for_performance_priors",
+      "promotion_tags": [
+        "promoted_for_performance_priors",
+        "promoted_for_constraint_aware_evaluation",
+        "promoted_for_training_priors"
+      ],
+      "statistical_sample_strength": "moderate"
+    }
+  ],
+  "modifies_controllers_or_defaults": false,
+  "modifies_robust_energy_engine": false,
+  "production_claim": false,
+  "scope": "Round 3 broadened HF discovery \u2014 bounded ingest of ssong1/llmperf-bedrock (Tier-4 closed-managed-API LLMPerf TTFT/ITL/e2e priors) + 8 negative-result discovery records covering DistServe profiling (license unspecified), DynamoRIO drmemtrace (out of scope), intellistream sage-control-plane (insufficient sample), Nathan-Maine + hlarcher (already audited duplicates), kshitijthakkar MoE benchmarks (gated_blocked)."
+}
