@@ -4462,3 +4462,135 @@ join gap on its own; it only makes one of the few candidates that
 explicit operator consent. (iii) Pilot telemetry (Tier 1) remains
 the only path to production calibration; no HF dataset closes that
 gate.
+
+### Done 2026-06-02 — RedistributionGate: first consumer wires the operator ledger into the sample-commit decision
+
+**Scope.** The previous milestone (`Operator redistribution policy
+framework`) added a deny-by-default consent record + an audit
+script, but left the *consumer side* unwritten: the ledger's
+`permits_redistribution(...)` API was unused by any sample-commit
+path. An operator who recorded a grant entry in
+`operator_redistribution_policy.json` would observe no behavioural
+effect. This PR closes that loop. No HF ingestion. No scheduler /
+controller / robust-energy-engine change. No production claim. No
+Tier 1 promotion. No new HF data downloaded. No new candidate-
+registry entry. No committed normalised sample. With the committed
+default policy file shipping ZERO grants, the gate produces the
+same permitted / denied outcomes on every existing candidate as the
+pre-existing hard-coded license verdicts — behaviour is unchanged
+on every dataset already in the federated corpus.
+
+**Why now.** The previous PR's "Next" section explicitly identified
+this as the next milestone: *"the downstream ingestion script (a
+future PR) consults `OperatorPolicyLedger.permits_redistribution(
+dataset_id, "committed_normalized_sample")` before committing a
+normalised sample."* Without a consumer, the policy framework was
+a structural file with no executable path. The gate is the
+canonical consumer.
+
+**What landed.**
+
+- `aurelius/ingestion/redistribution_gate.py` — new module (~230
+  lines). Defines `PERMISSIVE_LICENSE_TAGS` (the closed allow-list:
+  apache-2.0, mit, cc-by-{4,3,2}.0, cc0-1.0, cdla-permissive-{2,1}.0,
+  odc-by-1.0, bsd-{3,2}-clause), `classify_license(license_str) ->
+  status_code`, `RedistributionGateDecision` (frozen dataclass), and
+  `decide_redistribution(*, dataset_id, license_str, scope, ledger,
+  now_iso=None)` — the canonical decision function. Pure-Python; no
+  HF API, no `HF_TOKEN` read, no I/O beyond reading the ledger
+  parameter. Closed-set reason codes
+  (`permitted_declared_permissive_license`,
+  `permitted_operator_grant`,
+  `denied_declared_non_permissive_license`, …) so callers can route
+  on tokens, not free-form detail.
+- `scripts/audit_hf_redistribution_gate.py` — new standalone audit
+  script. Walks every entry in `hf_dataset_candidates.json` through
+  `decide_redistribution` under the committed default policy.
+  Writes `data/external/hf_discovery/redistribution_gate_audit.json`
+  with per-candidate decision + rollup counts. Read-only; does NOT
+  mutate the candidate registry; does NOT call the HF API; does NOT
+  read `HF_TOKEN`.
+- `data/external/hf_discovery/redistribution_gate_audit.json` — new
+  audit snapshot. 99 candidates, 42 permitted (apache-2.0 × 26,
+  mit × 8, cc-by-4.0 × 4, cc0-1.0 × 2, cc-by-2.0 × 1, cdla-2 × 1),
+  57 denied (45 `no_grant_recorded` for license=None including the
+  4 Round-8 license-blocked candidates, 12
+  `denied_declared_non_permissive_license` for "other" / "openrail"
+  / bare "cc" / custom research licenses).
+- `tests/test_hf_redistribution_gate.py` — 34 new tests. Coverage:
+  every canonical permissive tag classifies correctly;
+  None/""/whitespace map to `unspecified_no_committed_sample`;
+  non-permissive declared licenses map to
+  `declared_non_permissive`; permissive license → permit (ledger
+  NOT consulted, verified by passing an empty ledger); declared
+  non-permissive → deny EVEN with an operator grant (pins that
+  operator grants cannot override upstream restrictions);
+  license=None with valid in-scope grant → permit with grant
+  provenance recorded; license=None with `granted=false` →
+  `grant_explicitly_denies`; license=None with expired grant →
+  `grant_expired`; license=None with scope-not-in-allowed →
+  `requested_scope_not_in_allowed_scopes`; the 4 Round-8 license-
+  blocked candidates remain denied with `no_grant_recorded` under
+  the default policy; audit JSON has the right doc_version + safety
+  flags; rollup counts sum to candidate count; audit payload is
+  deterministic for fixed inputs (same `now_iso` + `git_sha`); no
+  HF_TOKEN literal in any of the new files; no raw data committed
+  under `hf_discovery/`; gate module has no top-level I/O (verified
+  by introspection of `decide_redistribution`'s signature);
+  classify_license agrees with every license verdict in the
+  pre-existing `commit_hf_gap_normalized_samples.py` TARGETS table
+  (pins backwards compatibility on the four already-committed
+  normalised samples); policy module's public API surface is pinned.
+- `docs/HF_DATASET_REGISTRY.md` — new §12.7 "RedistributionGate —
+  first consumer of the ledger" documenting the gate, the closed
+  permissive allow-list, the audit JSON, the safety invariants
+  pinned by tests, and the backwards-compatibility guarantee with
+  the existing `commit_hf_gap_normalized_samples.py`.
+- `docs/COMPUTE_OPTIMIZATION_PROGRESS.md` — this entry.
+
+**Result.** All 34 new tests pass; all 24 existing operator-policy
+tests still pass; all 895 existing HF tests still pass (231 in the
+discovery / promotion / corpus / audit / gap-normalised-samples
+suites plus 665 in the per-dataset ingest suites). Ruff clean on the
+new files and the rest of `aurelius/ingestion/`. Default policy file
+ships with zero grants → every existing ingest / discovery /
+commit script produces identical outcomes. The four Round-8
+license-blocked candidates remain DENIED under the gate, identical
+to their status in the §12.4 default-policy snapshot:
+
+| Dataset | Gate decision | reason_code |
+|---|---|---|
+| `anon-betterbench/betterbench-inference-logs` | denied | `no_grant_recorded` |
+| `dadadada1/Inference-Performance-Dataset` | denied | `no_grant_recorded` |
+| `ohdoking/energy_consumption_by_model_and_gpu` | denied | `no_grant_recorded` |
+| `sasha/co2_models` | denied | `no_grant_recorded` |
+
+**Honesty + scope guarantees.** No production claim. No scheduler /
+controller / robust-energy-engine touched. No oracle as headline.
+No Tier 1 promotion. No new HF data downloaded. No new candidate-
+registry entry. No committed normalised sample. No `HF_TOKEN` leak.
+No raw data committed. The gate module is pure-Python, has no
+top-level I/O, and never reads the environment or the HF API. The
+closed permissive allow-list is in code, pinned by tests, and the
+gate refuses to consult the ledger when the upstream owner has
+declared a restrictive license — the invariant "operator grants
+record consent under license=None, never override declared
+restrictions" is structurally enforced.
+
+**Next.** (i) Wire the gate in to replace the hard-coded TARGETS
+table in `scripts/commit_hf_gap_normalized_samples.py`. The
+backwards-compatibility test (`test_classify_license_agrees_with_
+commit_script_targets`) already pins that the gate agrees with the
+four existing verdicts; the wiring PR would mainly be a refactor
+that removes the duplicated license string. (ii) Wire the gate in
+to the per-dataset ingestion scripts that today carry their own
+hard-coded `license_redistribution_status` string. (iii) If/when an
+operator decides to opt one of the four Round-8 license-blocked
+candidates in, they add a grant entry to
+`operator_redistribution_policy.json`; the audit JSON re-run will
+flip that dataset's row to `permitted_operator_grant` with the
+grant's identity recorded. (iv) The Rounds 5-8 negative result on
+economic signals stands — this milestone does not close the
+operational × economic join gap on its own. (v) Pilot telemetry
+(Tier 1) remains the only path to production calibration; no HF
+dataset closes that gate.
