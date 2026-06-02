@@ -100,6 +100,8 @@
   "git_sha": "dcac2beef6ffe0ff47081ad23574f2d96ca953da",
   "ingestion_timestamp_s": 1780351887.7166264,
   "license": null,
+  "license_redistribution_source": "HF card frontmatter has no `license:` field; recorded as unspecified",
+  "license_redistribution_status": "unspecified_no_committed_sample",
   "limitations": [
     "ssakethch/h200-quantization-benchmarks: benchmark results for 40 quantized + non-quantized instruction-tuned LLMs on NVIDIA H200 SXM (141 GB HBM3e) MIG-partitioned instances via vLLM. Trust Tier 4 (latency_benchmark_trace) \u2014 NOT pilot telemetry.",
     "LICENSE = unspecified (no `license:` field in the HF dataset card YAML front-matter). Recorded license=None. Bounded normalised sample is NOT committed for this dataset (license_redistribution_status=unspecified). 5-row schema-test fixture is committed as fair-use schema evidence only.",
@@ -248,6 +250,11 @@
     "median_itl_ms",
     "p99_itl_ms"
   ],
+  "redistribution_gate_operator_grant_dataset_id": null,
+  "redistribution_gate_permitted": false,
+  "redistribution_gate_reason_code": "no_grant_recorded",
+  "redistribution_gate_reason_detail": "license=None for 'ssakethch/h200-quantization-benchmarks'; no operator grant recorded \u2014 default policy denies. no operator grant recorded for 'ssakethch/h200-quantization-benchmarks'; default policy is deny_all",
+  "redistribution_gate_scope": "committed_normalized_sample",
   "sample_sha256": "02415b853817bb8aa47880b7fbff759d6f39b024ab6c9bb456161f3524be7eaa",
   "sampling_method": "full_bounded",
   "schema_mapping_path": "data/external/hf/ssakethch__h200-quantization-benchmarks/throughput/processed/schema_mapping.json",

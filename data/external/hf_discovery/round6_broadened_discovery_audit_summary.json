@@ -74,7 +74,7 @@
       "reason": "SAGE agent capability benchmark (tool selection, task planning, timing judgement, ~11K QA samples). Evaluates agent accuracy / correctness, NOT serving / scheduling / infrastructure cost. No measured latency / queue / GPU / energy. Rejected \u2014 capability-only benchmark adds nothing to the Aurelius constraint-aware decision engine."
     }
   ],
-  "doc_version": "round6_broadened_discovery_audit_summary_v1",
+  "doc_version": "round6_broadened_discovery_audit_summary_v2",
   "economic_priority_summary": {
     "datasets_with_economic_only_signals": [],
     "datasets_with_operational_and_economic_signals": [],
@@ -125,6 +125,7 @@
       "fixture_sample_rows": 5,
       "gated": false,
       "license": null,
+      "license_redistribution_status": "unspecified_no_committed_sample",
       "limitations": [
         "ssakethch/h200-quantization-benchmarks: benchmark results for 40 quantized + non-quantized instruction-tuned LLMs on NVIDIA H200 SXM (141 GB HBM3e) MIG-partitioned instances via vLLM. Trust Tier 4 (latency_benchmark_trace) \u2014 NOT pilot telemetry.",
         "LICENSE = unspecified (no `license:` field in the HF dataset card YAML front-matter). Recorded license=None. Bounded normalised sample is NOT committed for this dataset (license_redistribution_status=unspecified). 5-row schema-test fixture is committed as fair-use schema evidence only.",
@@ -166,6 +167,9 @@
         "promoted_for_constraint_aware_evaluation",
         "promoted_for_training_priors"
       ],
+      "redistribution_gate_operator_grant_dataset_id": null,
+      "redistribution_gate_permitted": false,
+      "redistribution_gate_reason_code": "no_grant_recorded",
       "statistical_sample_strength": "strong",
       "subgroup_counts": {
         "quant=awq|request_rate=1.0": 14,
@@ -199,6 +203,9 @@
   "modifies_controllers_or_defaults": false,
   "modifies_robust_energy_engine": false,
   "production_claim": false,
+  "redistribution_gate_policy_default": "deny_all",
+  "redistribution_gate_policy_grant_count": 0,
+  "redistribution_gate_scope": "committed_normalized_sample",
   "scope": "Round 6 broadened HF discovery \u2014 bounded ingest of ssakethch/h200-quantization-benchmarks (Tier-4 latency_benchmark_trace; first measured-source H200 SXM vLLM benchmark in the federated corpus) plus discovery-only rejection records for the 8 remaining round-5 candidates.",
   "uses_oracle_as_headline": false
 }

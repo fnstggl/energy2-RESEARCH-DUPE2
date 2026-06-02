@@ -399,7 +399,7 @@ def test_round6_audit_summary_exists_and_lists_ingested_dataset() -> None:
     path = DISC_DIR / "round6_broadened_discovery_audit_summary.json"
     assert path.exists()
     d = json.loads(path.read_text())
-    assert d["doc_version"] == "round6_broadened_discovery_audit_summary_v1"
+    assert d["doc_version"] == "round6_broadened_discovery_audit_summary_v2"
     assert d["production_claim"] is False
     assert d["modifies_robust_energy_engine"] is False
     assert d["uses_oracle_as_headline"] is False
