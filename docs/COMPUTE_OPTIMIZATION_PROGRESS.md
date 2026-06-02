@@ -4896,3 +4896,211 @@ the canonical gate so future license-tag changes only need a
 one-line constant edit. (iv) Pilot telemetry (Tier 1) remains
 the only path to production calibration; no HF dataset closes
 that gate.
+
+### Done 2026-06-02 — RedistributionGate: fourth consumer wires `scripts/ingest_hf_h200_quantization.py` through the gate
+
+**Status.** Merged. Audit-only — no scheduler change, no controller
+change, no robust-energy-engine touch, no production claim, no
+oracle as headline, no new HF data downloaded, no new committed
+normalised sample. Branch: `claude/cool-lamport-eANln`.
+
+**Why now.** The third-consumer PR (#154) wired the canonical
+`decide_redistribution` gate into the first per-dataset ingestion
+script (`scripts/ingest_hf_agent_llm_traces.py`,
+`cdla-permissive-2.0`). Its "Next" section explicitly listed the
+four remaining per-dataset ingestion scripts to wire in follow-up
+PRs and identified `scripts/ingest_hf_h200_quantization.py` as the
+first of those four, because it is the only `license = None` (HF
+card has no `license:` front-matter field) script and therefore
+the cleanest deny-by-default test of the wiring. This PR is that
+follow-up.
+
+**Mission.** Lift the raw HF license tag (`None`) to a module
+constant, route the license-redistribution verdict through the
+canonical gate, record the gate-derived fields on the per-dataset
+summary, bump the round-6 audit summary `doc_version` from
+`round6_broadened_discovery_audit_summary_v1` to
+`round6_broadened_discovery_audit_summary_v2`, and pin the wiring
+with a new gate-wiring test file. The pre-existing script-level
+skip-reason string (`license_unspecified_no_redistribution_promise`)
+is preserved verbatim — downstream tests pin it and the gate
+fields are additive.
+
+**Behavioural equivalence on the already-committed artefacts.**
+Under the committed default policy
+(`policy_default = "deny_all"`, zero grants):
+
+| Dataset | license_tag | Gate verdict | reason_code | committed_normalized_sample |
+|---|---|---|---|---|
+| `ssakethch/h200-quantization-benchmarks` (`throughput`) | `None` | denied | `no_grant_recorded` | none (unchanged: 0 rows, 0 bytes, reason `license_unspecified_no_redistribution_promise`) |
+
+`committed_normalized_sample_rows`, `committed_normalized_sample_bytes`,
+and `committed_normalized_sample_reason_skipped` in the per-dataset
+summary.json are byte-for-byte identical to the v1 values. The only
+fields that change are the new additive gate-derived ones plus the
+new canonical `license_redistribution_status` field (which
+`classify_license(None)` returns as
+`"unspecified_no_committed_sample"`).
+
+**Files changed.**
+
+- `scripts/ingest_hf_h200_quantization.py` — the per-dataset
+  ingestion script. Top-level changes:
+  - The `LICENSE: Optional[str] = None` constant is renamed to
+    `LICENSE_TAG: Optional[str] = None` (matches the §12.9 shape).
+    The old `LICENSE` name is preserved as a back-compat alias
+    (`LICENSE: Optional[str] = LICENSE_TAG`) so any out-of-tree
+    audit reading the module attribute continues to work.
+  - New module constants `LICENSE_SOURCE` (human-curated
+    provenance: "HF card frontmatter has no \`license:\` field;
+    recorded as unspecified"), `GATE_SCOPE`
+    (`"committed_normalized_sample"`),
+    `COMMITTED_NORMALIZED_SAMPLE_SKIP_REASON`
+    (`"license_unspecified_no_redistribution_promise"` — the
+    pre-existing script-level reason kept verbatim), and
+    `POLICY_PATH` pointing to
+    `data/external/hf_discovery/operator_redistribution_policy.json`.
+  - New imports: `OperatorPolicyLedger` from
+    `aurelius.ingestion.operator_redistribution_policy`,
+    `RedistributionGateDecision` and `decide_redistribution` from
+    `aurelius.ingestion.redistribution_gate`.
+  - New module-level function `_load_ledger(policy_path=POLICY_PATH)`
+    loads the operator policy ledger from disk or falls back to
+    `OperatorPolicyLedger.empty()` when the file is absent (fresh-
+    checkout self-sufficiency rail — identical to the §12.9 shape).
+  - New module-level pure function `evaluate_redistribution(*,
+    ledger, license_tag=LICENSE_TAG, dataset_id=DATASET_ID,
+    scope=GATE_SCOPE, now_iso=None)` returns the canonical
+    `RedistributionGateDecision` for the supplied tag under the
+    supplied ledger. Exposed so tests can drive the gate path
+    without invoking the CSV download / normalisation pipeline.
+  - `ingest()` gains a keyword-only `ledger: Optional[OperatorPolicyLedger] = None`
+    parameter; defaults to `_load_ledger()` when not supplied so
+    callers without the wiring still work.
+  - `ingest()` now calls `evaluate_redistribution(ledger=ledger)`
+    and records the gate's outputs
+    (`gate_decision.license_status`,
+    `gate_decision.reason_code`,
+    `gate_decision.reason_detail`,
+    `gate_decision.permitted`,
+    `gate_decision.operator_grant_dataset_id`). The `"license"`
+    field now references the `LICENSE_TAG` constant so future tag
+    changes are a one-line edit.
+  - `_write_round6_audit_summary()` gains a keyword-only
+    `ledger: Optional[OperatorPolicyLedger] = None` parameter and
+    bumps `doc_version` from
+    `round6_broadened_discovery_audit_summary_v1` to
+    `round6_broadened_discovery_audit_summary_v2`. The rollup
+    `round6_broadened_discovery_audit_summary.json` gains
+    `redistribution_gate_scope`,
+    `redistribution_gate_policy_default`, and
+    `redistribution_gate_policy_grant_count` at the top level,
+    plus `license_redistribution_status`,
+    `redistribution_gate_reason_code`,
+    `redistribution_gate_permitted`, and
+    `redistribution_gate_operator_grant_dataset_id` on the single
+    ingested row.
+  - `main()` loads the default policy ledger once via
+    `_load_ledger()` and passes it through to both `ingest()` and
+    `_write_round6_audit_summary()` (mirrors the §12.9 shape,
+    means one ledger load per script invocation, not three).
+- `data/external/hf/ssakethch__h200-quantization-benchmarks/throughput/processed/summary.json` —
+  the committed summary regenerated through the gate.
+  `license_redistribution_status = unspecified_no_committed_sample`,
+  `license_redistribution_source =
+  "HF card frontmatter has no \`license:\` field; recorded as
+  unspecified"`,
+  `redistribution_gate_reason_code = no_grant_recorded`,
+  `redistribution_gate_permitted = false`,
+  `redistribution_gate_operator_grant_dataset_id = null`,
+  `redistribution_gate_scope = committed_normalized_sample`, and the
+  free-form `redistribution_gate_reason_detail` audit string are
+  new. Every other field — including
+  `committed_normalized_sample_rows = 0`,
+  `committed_normalized_sample_bytes = 0`,
+  `committed_normalized_sample_path = null`,
+  `committed_normalized_sample_reason_skipped =
+  "license_unspecified_no_redistribution_promise"`, and the full
+  `available_signals` / `missing_signals` / `field_quality` /
+  `limitations` lists — is byte-for-byte unchanged from the v1
+  hard-coded write.
+- `data/external/hf_discovery/round6_broadened_discovery_audit_summary.json` —
+  audit summary regenerated under the wiring. `doc_version` bumps
+  to `round6_broadened_discovery_audit_summary_v2`. The top level
+  gains the gate scope + default-policy + grant-count fields. The
+  single per-dataset row gains
+  `license_redistribution_status`,
+  `redistribution_gate_reason_code`,
+  `redistribution_gate_permitted`, and
+  `redistribution_gate_operator_grant_dataset_id`.
+- `tests/test_hf_h200_quantization_gate_wiring.py` — new file with
+  20 tests pinning every dimension of the wiring (see "Result"
+  below).
+- `tests/test_hf_h200_quantization_ingest.py` — the single existing
+  pin on `doc_version == "round6_broadened_discovery_audit_summary_v1"`
+  bumped to `_v2`. All other 33 pre-existing tests unchanged.
+- `docs/HF_DATASET_REGISTRY.md` — new §12.10
+  "RedistributionGate — fourth consumer wires per-dataset
+  ingestion (h200-quantization-benchmarks)" documenting the
+  refactor, the equivalence table on the already-committed
+  artefacts, the new summary / audit-summary fields, the
+  permissive-tag + operator-grant smoke tests, and the forbidden
+  duplications pinned by the tests. The §12.10 "Next" enumerates
+  the three remaining per-dataset ingestion scripts to wire in
+  follow-up PRs.
+- `docs/COMPUTE_OPTIMIZATION_PROGRESS.md` — this entry.
+
+**Result.** All 20 new tests pass. All 34 pre-existing tests in
+`tests/test_hf_h200_quantization_ingest.py` still pass on the
+updated committed artefacts (including
+`test_no_committed_normalized_sample_under_unspecified_license`,
+which pins
+`committed_normalized_sample_reason_skipped =
+"license_unspecified_no_redistribution_promise"`, and
+`test_round6_audit_summary_exists_and_lists_ingested_dataset`,
+which now pins `doc_version =
+round6_broadened_discovery_audit_summary_v2`). All 34 pre-existing
+tests in `tests/test_hf_redistribution_gate.py` still pass. All
+24 pre-existing tests in
+`tests/test_hf_operator_redistribution_policy.py` still pass. All
+27 pre-existing tests in
+`tests/test_hf_gap_commit_script_gate_wiring.py` (the second
+consumer's pin) still pass. All 17 pre-existing tests in
+`tests/test_hf_agent_llm_traces_gate_wiring.py` (the third
+consumer's pin) still pass. All 959 tests in the broader HF suite
+(`tests/test_hf_*.py`) pass. The round-6 audit summary records
+the identical `analysis_sample_rows = 275` it recorded under the
+v1 script.
+
+**Honesty + scope guarantees.** No production claim. No
+scheduler / controller / robust-energy-engine touched. No oracle
+as headline. No Tier 1 promotion. No new HF data downloaded. No
+new candidate-registry entry. No new committed normalised sample
+(the existing artefacts are unchanged byte-for-byte in their
+behavioural fields). No `HF_TOKEN` leak. No raw data committed.
+The script's downloader path is unchanged (still requires
+`HF_TOKEN` for re-ingest); only the redistribution classifier
+moved from inline to the canonical gate.
+
+**Next.** (i) Extend the same pattern to the remaining three
+per-dataset ingestion scripts (`ingest_hf_llm_energy_consumption.py`,
+`ingest_hf_latency_benchmarks.py`,
+`ingest_hf_optimum_benchmark.py`) — each is a self-contained PR
+because each has its own summary-writer shape and license tag
+(declared CC-BY-SA-4.0 / mixed Apache-2.0 + `None` / `None`),
+and bundling them obscures the per-script "v1 hard-coded ≡
+gate" backstop. (ii) If/when an operator decides to opt one of
+the four Round-8 license-blocked candidates (or
+`jaytonde05/prefixbench`, or the H200 dataset under a future
+`license: mit` change) in, they add a grant entry to
+`operator_redistribution_policy.json`; the fourth consumer (and
+every future per-script consumer) will flip the affected
+dataset's row to `permitted_operator_grant` with the grant's
+identity recorded on the next run. (iii) The Rounds 5-8 negative
+result on economic signals stands — this milestone does not
+close the operational × economic join gap on its own; it makes
+the per-script redistribution classifier consistent with the
+canonical gate so future license-tag changes only need a
+one-line constant edit. (iv) Pilot telemetry (Tier 1) remains
+the only path to production calibration; no HF dataset closes
+that gate.

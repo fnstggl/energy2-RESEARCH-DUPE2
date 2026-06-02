@@ -24,6 +24,44 @@ rejection / deferral records:
 * ``crozai/vllm-benchmark-coding`` — ShareGPT-derived workload input, duplicate
 * ``intellistream/sage-agent-benchmark`` — agent capability eval, no infra
 
+Redistribution decision (wired through the canonical gate)
+----------------------------------------------------------
+
+This script is the fourth consumer of
+:func:`aurelius.ingestion.redistribution_gate.decide_redistribution`
+(after ``scripts/audit_hf_redistribution_gate.py``,
+``scripts/commit_hf_gap_normalized_samples.py``, and
+``scripts/ingest_hf_agent_llm_traces.py``). The previous shape
+hard-coded ``committed_normalized_sample_reason_skipped =
+"license_unspecified_no_redistribution_promise"`` into the summary
+writer and emitted NO canonical ``license_redistribution_status`` /
+``redistribution_gate_*`` fields at all. The new shape records the
+raw HF license tag (here: ``None`` — the upstream README has no
+``license:`` front-matter field) plus a human-curated provenance
+string (``LICENSE_SOURCE``), and asks the gate for both the canonical
+status label and the commit decision.
+
+Under the default policy (committed
+``operator_redistribution_policy.json`` ships zero grants and
+``policy_default = "deny_all"``) the gate classifies ``license=None``
+as ``unspecified_no_committed_sample`` and DENIES the committed
+normalised sample with ``reason_code =
+no_grant_recorded``. The script's pre-existing
+``committed_normalized_sample_reason_skipped`` string is preserved
+(downstream tests pin it), the new canonical
+``license_redistribution_status`` /
+``redistribution_gate_reason_code`` / ``redistribution_gate_permitted``
+/ ``redistribution_gate_operator_grant_dataset_id`` /
+``redistribution_gate_reason_detail`` /
+``redistribution_gate_scope`` fields are additive, and no normalised
+sample is committed — identical to the v1 behaviour. The existing
+test ``test_classify_license_agrees_with_commit_script_targets`` in
+``tests/test_hf_redistribution_gate.py`` pins the
+``unspecified_no_committed_sample`` verdict on every ``license=None``
+tag the gap commit script ships; the new test file
+``tests/test_hf_h200_quantization_gate_wiring.py`` pins the same for
+this script.
+
 NO production claims. NO scheduler / controller / robust-energy-engine changes.
 """
 
@@ -48,12 +86,20 @@ from typing import Any, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from aurelius.ingestion.operator_redistribution_policy import (  # noqa: E402
+    OperatorPolicyLedger,
+)
+from aurelius.ingestion.redistribution_gate import (  # noqa: E402
+    RedistributionGateDecision,
+    decide_redistribution,
+)
 from aurelius.traces.hf_corpus import promotion  # noqa: E402
 
 REPO_ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HF_DIR = REPO_ROOT / "data" / "external" / "hf"
 DISC_DIR = REPO_ROOT / "data" / "external" / "hf_discovery"
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures" / "hf"
+POLICY_PATH = DISC_DIR / "operator_redistribution_policy.json"
 
 FIXTURE_MAX_BYTES = 16 * 1024
 COMMITTED_NORMALIZED_MAX_BYTES = 100 * 1024
@@ -63,7 +109,32 @@ DATASET_ID = "ssakethch/h200-quantization-benchmarks"
 SAFE_NAME = "ssakethch__h200-quantization-benchmarks"
 CONFIG = "throughput"
 RAW_FILE = "data/throughput.csv"
-LICENSE: Optional[str] = None  # README front-matter has no `license:` field
+
+# Raw HF license tag + human-curated provenance for the canonical
+# redistribution gate. The gate (not this script) classifies the tag
+# into a ``permissive_*`` / ``unspecified_no_committed_sample`` /
+# ``declared_non_permissive`` status code. Keeping the raw tag separate
+# from the canonical status here means a future HF tag change (e.g.
+# the dataset owner adding ``license: mit`` to the card YAML) only
+# needs a single edit; the gate handles the rest.
+LICENSE_TAG: Optional[str] = None  # README front-matter has no `license:` field
+LICENSE_SOURCE = (
+    "HF card frontmatter has no `license:` field; recorded as unspecified"
+)
+GATE_SCOPE = "committed_normalized_sample"
+
+# Pre-existing script-level reason for skipping the committed
+# normalised sample under ``license = None``. Kept verbatim — downstream
+# tests pin this exact string. The new ``redistribution_gate_*`` fields
+# are additive and carry the canonical gate verdict alongside.
+COMMITTED_NORMALIZED_SAMPLE_SKIP_REASON = (
+    "license_unspecified_no_redistribution_promise"
+)
+
+# Back-compat alias — referenced by a small number of out-of-tree
+# tools that read the script as a module attribute table. The
+# canonical name for new code is ``LICENSE_TAG``.
+LICENSE: Optional[str] = LICENSE_TAG
 GATED = False
 
 logger = logging.getLogger("aurelius.hf_h200_quantization_ingest")
@@ -143,6 +214,56 @@ def _git_sha() -> str:
         return out.decode().strip()
     except Exception:  # noqa: BLE001
         return ""
+
+
+# ---------------------------------------------------------------------------
+# Redistribution gate — wire the canonical gate, do not classify here
+# ---------------------------------------------------------------------------
+
+
+def _load_ledger(policy_path: Path = POLICY_PATH) -> OperatorPolicyLedger:
+    """Load the operator policy ledger from disk, or fall back to empty.
+
+    The committed default file ships zero grants under
+    ``policy_default=deny_all``; an absent file is identical in
+    behaviour. We use ``empty()`` as the fallback so the script
+    remains self-sufficient in a fresh checkout that may not yet have
+    the committed JSON pulled (the gate still produces correct deny
+    decisions for ``license = None`` datasets instead of crashing).
+    """
+
+    if policy_path.exists():
+        return OperatorPolicyLedger.load(policy_path)
+    return OperatorPolicyLedger.empty()
+
+
+def evaluate_redistribution(
+    *,
+    ledger: OperatorPolicyLedger,
+    license_tag: Optional[str] = LICENSE_TAG,
+    dataset_id: str = DATASET_ID,
+    scope: str = GATE_SCOPE,
+    now_iso: Optional[str] = None,
+) -> RedistributionGateDecision:
+    """Ask the canonical gate whether the committed normalised sample of
+    this dataset may be redistributed under the supplied license tag.
+
+    Pure function — no I/O. Exposed so tests can drive the gate path
+    without invoking the CSV download / normalisation pipeline. The
+    defaults reflect the dataset-level constants this script ships;
+    tests override them to verify the wiring (e.g. swap ``license_tag``
+    from ``None`` to ``"mit"`` and check that the gate permits, or
+    inject an operator grant and check that the gate flips to
+    ``permitted_operator_grant``).
+    """
+
+    return decide_redistribution(
+        dataset_id=dataset_id,
+        license_str=license_tag,
+        scope=scope,
+        ledger=ledger,
+        now_iso=now_iso,
+    )
 
 
 def _percentiles(vals: list[float]) -> dict:
@@ -599,9 +720,15 @@ ROUND6_DISCOVERY_ONLY: list[dict] = [
 # ---------------------------------------------------------------------------
 
 
-def ingest(*, output_root: Path = HF_DIR) -> dict:
+def ingest(
+    *,
+    output_root: Path = HF_DIR,
+    ledger: Optional[OperatorPolicyLedger] = None,
+) -> dict:
     t0 = time.time()
     git_sha = _git_sha()
+    if ledger is None:
+        ledger = _load_ledger()
 
     base = output_root / SAFE_NAME
     raw_dir = base / "raw"
@@ -684,14 +811,41 @@ def ingest(*, output_root: Path = HF_DIR) -> dict:
     fixture_sha = _sha256(fixture_path)
     fixture_size = fixture_path.stat().st_size
 
-    # 6. License is UNKNOWN → no committed normalised analysis sample.
-    committed_norm_path = None
-    committed_norm_rows = 0
-    committed_norm_bytes = 0
-    committed_norm_sha = None
-    committed_norm_reason_skipped = (
-        "license_unspecified_no_redistribution_promise"
-    )
+    # 6. Ask the canonical redistribution gate whether the committed
+    #    normalised sample may be redistributed under the supplied
+    #    license tag. Under the default deny-all/zero-grants ledger and
+    #    the dataset's ``license = None`` tag this returns
+    #    ``permitted = False``, ``license_status =
+    #    "unspecified_no_committed_sample"``, and ``reason_code =
+    #    "no_grant_recorded"`` — identical to the v1 behaviour pinned
+    #    by ``test_classify_license_agrees_with_commit_script_targets``
+    #    in ``tests/test_hf_redistribution_gate.py``. The script never
+    #    classifies the tag itself.
+    gate_decision = evaluate_redistribution(ledger=ledger)
+    if gate_decision.permitted:
+        # The gate permits — but this round-6 ingester does not yet
+        # write a committed normalised sample even when the gate
+        # permits (the bounded CSV is small enough that future PRs may
+        # opt in, but the v1 behaviour is fixture-only). Future work:
+        # commit the normalised sample under the permitted path. For
+        # now record the gate verdict alongside the unchanged
+        # committed_normalized_sample_* zeros so a future maintainer
+        # can see the gate permits and the script chose not to act.
+        committed_norm_path = None
+        committed_norm_rows = 0
+        committed_norm_bytes = 0
+        committed_norm_sha = None
+        committed_norm_reason_skipped = COMMITTED_NORMALIZED_SAMPLE_SKIP_REASON
+    else:
+        committed_norm_path = None
+        committed_norm_rows = 0
+        committed_norm_bytes = 0
+        committed_norm_sha = None
+        # Pre-existing script-level reason kept verbatim — downstream
+        # tests pin this string. The canonical gate verdict is
+        # recorded additively in the new ``redistribution_gate_*``
+        # fields below.
+        committed_norm_reason_skipped = COMMITTED_NORMALIZED_SAMPLE_SKIP_REASON
 
     # 7. Schema profile.
     dtypes: dict[str, list[str]] = {}
@@ -895,7 +1049,16 @@ def ingest(*, output_root: Path = HF_DIR) -> dict:
         "dataset_id": DATASET_ID,
         "config_name": CONFIG,
         "source_url": f"https://huggingface.co/datasets/{DATASET_ID}",
-        "license": LICENSE,
+        "license": LICENSE_TAG,
+        "license_redistribution_status": gate_decision.license_status,
+        "license_redistribution_source": LICENSE_SOURCE,
+        "redistribution_gate_reason_code": gate_decision.reason_code,
+        "redistribution_gate_reason_detail": gate_decision.reason_detail,
+        "redistribution_gate_permitted": gate_decision.permitted,
+        "redistribution_gate_operator_grant_dataset_id": (
+            gate_decision.operator_grant_dataset_id
+        ),
+        "redistribution_gate_scope": GATE_SCOPE,
         "gated": GATED,
         "canonical_trace_type": "latency_benchmark_trace",
         "raw_committed": False,
@@ -1138,13 +1301,19 @@ def _update_candidate_registry(path: Path, ingested_summary: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_round6_audit_summary(ingest_out: dict) -> Path:
+def _write_round6_audit_summary(
+    ingest_out: dict,
+    *,
+    ledger: Optional[OperatorPolicyLedger] = None,
+) -> Path:
     out = DISC_DIR / "round6_broadened_discovery_audit_summary.json"
     out.parent.mkdir(parents=True, exist_ok=True)
+    if ledger is None:
+        ledger = _load_ledger()
     summary = ingest_out["summary"]
     decision = ingest_out["decision"]
     payload = {
-        "doc_version": "round6_broadened_discovery_audit_summary_v1",
+        "doc_version": "round6_broadened_discovery_audit_summary_v2",
         "audited_at_s": time.time(),
         "scope": (
             "Round 6 broadened HF discovery — bounded ingest of "
@@ -1158,10 +1327,21 @@ def _write_round6_audit_summary(ingest_out: dict) -> Path:
         "modifies_controllers_or_defaults": False,
         "uses_oracle_as_headline": False,
         "git_sha": _git_sha(),
+        "redistribution_gate_scope": GATE_SCOPE,
+        "redistribution_gate_policy_default": ledger.policy_default,
+        "redistribution_gate_policy_grant_count": len(ledger.grants),
         "ingested": [{
             "dataset_id": summary["dataset_id"],
             "config_name": summary["config_name"],
             "license": summary["license"],
+            "license_redistribution_status":
+                summary["license_redistribution_status"],
+            "redistribution_gate_reason_code":
+                summary["redistribution_gate_reason_code"],
+            "redistribution_gate_permitted":
+                summary["redistribution_gate_permitted"],
+            "redistribution_gate_operator_grant_dataset_id":
+                summary["redistribution_gate_operator_grant_dataset_id"],
             "gated": summary["gated"],
             "canonical_trace_type": summary["canonical_trace_type"],
             "analysis_sample_rows": summary["analysis_sample_rows"],
@@ -1235,7 +1415,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
     )
 
-    out = ingest()
+    # Load the operator policy ledger once; pass it to both ingest()
+    # and the round-6 audit summary writer so every consumer sees the
+    # same redistribution-gate verdict and the same per-script
+    # default-policy + grant-count rollup metadata. The ledger is
+    # loaded from the canonical
+    # ``data/external/hf_discovery/operator_redistribution_policy.json``;
+    # ``_load_ledger`` falls back to ``OperatorPolicyLedger.empty()``
+    # when the file is absent.
+    ledger = _load_ledger()
+
+    out = ingest(ledger=ledger)
     logger.info(
         "%s@%s :: rows=%d strength=%s promotion=%s tags=%s",
         DATASET_ID, CONFIG,
@@ -1255,7 +1445,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     _update_candidate_registry(candidates_path, out["summary"])
     logger.info("Updated candidate registry at %s", candidates_path)
 
-    audit_path = _write_round6_audit_summary(out)
+    audit_path = _write_round6_audit_summary(out, ledger=ledger)
     logger.info("Wrote audit summary %s", audit_path)
     return 0
 
