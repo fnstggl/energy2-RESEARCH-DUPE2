@@ -1,0 +1,70 @@
+{
+  "audited_at_iso": "2026-06-02T00:00:00Z",
+  "default_policy_is_unchanged_from_pre_milestone": true,
+  "default_scope_evaluated": "committed_normalized_sample",
+  "doc_version": "operator_policy_status_v1",
+  "git_sha": "108fe48d330dc8038b9e8b229ab63af5414cec19",
+  "ingests_new_hf_data": false,
+  "license_blocked_candidate_count": 4,
+  "license_blocked_denied_under_default_policy": 4,
+  "license_blocked_permitted_under_default_policy": 0,
+  "modifies_controllers_or_defaults": false,
+  "modifies_robust_energy_engine": false,
+  "per_dataset": [
+    {
+      "dataset_id": "anon-betterbench/betterbench-inference-logs",
+      "default_permitted": false,
+      "default_reason_code": "no_grant_recorded",
+      "default_reason_detail": "no operator grant recorded for 'anon-betterbench/betterbench-inference-logs'; default policy is deny_all",
+      "default_scope_evaluated": "committed_normalized_sample",
+      "grant_recorded": false,
+      "license_observed": null,
+      "recommended_action": "inspect_manually_license_blocked",
+      "what_an_operator_would_need_to_do_to_unblock": "Add a grant entry to data/external/hf_discovery/operator_redistribution_policy.json with dataset_id='anon-betterbench/betterbench-inference-logs', granted=true, a non-empty granted_by, granted_at_iso, allowed_scopes including 'committed_normalized_sample' (or another supported scope), and explicit notes describing the redistribution rationale. The default policy_default remains 'deny_all'; this PR does NOT grant any dataset by default."
+    },
+    {
+      "dataset_id": "dadadada1/Inference-Performance-Dataset",
+      "default_permitted": false,
+      "default_reason_code": "no_grant_recorded",
+      "default_reason_detail": "no operator grant recorded for 'dadadada1/Inference-Performance-Dataset'; default policy is deny_all",
+      "default_scope_evaluated": "committed_normalized_sample",
+      "grant_recorded": false,
+      "license_observed": null,
+      "recommended_action": "inspect_manually_license_blocked",
+      "what_an_operator_would_need_to_do_to_unblock": "Add a grant entry to data/external/hf_discovery/operator_redistribution_policy.json with dataset_id='dadadada1/Inference-Performance-Dataset', granted=true, a non-empty granted_by, granted_at_iso, allowed_scopes including 'committed_normalized_sample' (or another supported scope), and explicit notes describing the redistribution rationale. The default policy_default remains 'deny_all'; this PR does NOT grant any dataset by default."
+    },
+    {
+      "dataset_id": "ohdoking/energy_consumption_by_model_and_gpu",
+      "default_permitted": false,
+      "default_reason_code": "no_grant_recorded",
+      "default_reason_detail": "no operator grant recorded for 'ohdoking/energy_consumption_by_model_and_gpu'; default policy is deny_all",
+      "default_scope_evaluated": "committed_normalized_sample",
+      "grant_recorded": false,
+      "license_observed": null,
+      "recommended_action": "inspect_manually_license_blocked",
+      "what_an_operator_would_need_to_do_to_unblock": "Add a grant entry to data/external/hf_discovery/operator_redistribution_policy.json with dataset_id='ohdoking/energy_consumption_by_model_and_gpu', granted=true, a non-empty granted_by, granted_at_iso, allowed_scopes including 'committed_normalized_sample' (or another supported scope), and explicit notes describing the redistribution rationale. The default policy_default remains 'deny_all'; this PR does NOT grant any dataset by default."
+    },
+    {
+      "dataset_id": "sasha/co2_models",
+      "default_permitted": false,
+      "default_reason_code": "no_grant_recorded",
+      "default_reason_detail": "no operator grant recorded for 'sasha/co2_models'; default policy is deny_all",
+      "default_scope_evaluated": "committed_normalized_sample",
+      "grant_recorded": false,
+      "license_observed": null,
+      "recommended_action": "inspect_manually_license_blocked",
+      "what_an_operator_would_need_to_do_to_unblock": "Add a grant entry to data/external/hf_discovery/operator_redistribution_policy.json with dataset_id='sasha/co2_models', granted=true, a non-empty granted_by, granted_at_iso, allowed_scopes including 'committed_normalized_sample' (or another supported scope), and explicit notes describing the redistribution rationale. The default policy_default remains 'deny_all'; this PR does NOT grant any dataset by default."
+    }
+  ],
+  "policy_default": "deny_all",
+  "policy_doc_version": "operator_redistribution_policy_v1",
+  "policy_grant_count": 0,
+  "production_claim": false,
+  "scope": "Read-only audit of the operator redistribution policy decision for every HF candidate whose recommended_action is inspect_manually_license_blocked. Does NOT mutate the candidate registry. Does NOT call the HF API. Does NOT download data. Does NOT read HF_TOKEN.",
+  "supported_scopes": [
+    "bounded_ingestion",
+    "committed_normalized_sample",
+    "schema_only"
+  ],
+  "uses_oracle_as_headline": false
+}

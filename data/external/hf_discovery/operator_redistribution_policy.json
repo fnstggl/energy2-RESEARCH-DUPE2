@@ -1,0 +1,28 @@
+{
+  "_purpose": "Operator-recorded explicit redistribution consent for license=None HF datasets. See aurelius/ingestion/operator_redistribution_policy.py and docs/HF_DATASET_REGISTRY.md (Operator Redistribution Policy section).",
+  "_default_behaviour": "deny_all. With zero grants below, every license=None HF dataset remains BLOCKED for ingestion — same behaviour as before this policy file landed.",
+  "_supported_scopes": [
+    "committed_normalized_sample",
+    "bounded_ingestion",
+    "schema_only"
+  ],
+  "_grant_schema": {
+    "dataset_id": "HF dataset id, e.g. 'sasha/co2_models'",
+    "granted": "bool — true to grant, false to record an explicit deny",
+    "granted_by": "string — operator identifier (required when granted=true)",
+    "granted_at_iso": "string — ISO-8601 UTC timestamp (required when granted=true)",
+    "allowed_scopes": "list[string] — subset of _supported_scopes the operator consents to",
+    "notes": "string — operator rationale, redistribution source, contact",
+    "expires_at_iso": "string|null — optional ISO-8601 expiry; if present and in the past, the grant is denied"
+  },
+  "_safety_invariants": [
+    "policy_default must remain 'deny_all'",
+    "every grant must be per-dataset (no wildcards)",
+    "granted=true requires non-empty granted_by AND granted_at_iso",
+    "allowed_scopes must be a subset of _supported_scopes",
+    "expired grants are denied"
+  ],
+  "doc_version": "operator_redistribution_policy_v1",
+  "grants": [],
+  "policy_default": "deny_all"
+}

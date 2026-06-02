@@ -4356,3 +4356,109 @@ license=None dataset — would unblock the category in general.
 (iii) Continue Round-9+ HF discovery only when a new high-priority
 candidate surfaces. Pilot telemetry (Tier 1) remains the only path
 to production calibration — no HF dataset closes that gate.
+
+### Done 2026-06-02 — Operator redistribution policy framework (license=None datasets)
+
+**Scope.** Structural milestone explicitly deferred by the Round-8
+audit ("OR ingest via operator-policy permission-flow once that
+milestone lands"). Adds a deny-by-default policy framework that lets
+an operator deliberately, per-dataset, record explicit redistribution
+consent for a `license = None` HF dataset, with provenance, expiry,
+and an explicit scope. No HF ingestion in this PR. No scheduler /
+controller / robust-energy-engine change. No production claim. No
+Tier 1 promotion. No new HF data downloaded.
+
+**Why now.** Round-8 surfaced FOUR HF candidates with REAL
+operational / economic / infrastructure measurements that the
+discovery pipeline could not promote because `license = None` on the
+HF card. The conservative redistribution rule (no committed
+normalised sample without a declared permissive license) is correct
+as a default, but it left no path for an operator who has
+independently verified redistribution permission to opt in. This PR
+adds the structural opt-in path WITHOUT changing the default.
+
+**What landed.**
+
+- `aurelius/ingestion/operator_redistribution_policy.py` — new module
+  (~290 lines). Defines `OperatorGrant`, `OperatorPolicyLedger`,
+  `PolicyDecision`, the closed `SUPPORTED_SCOPES =
+  {committed_normalized_sample, bounded_ingestion, schema_only}`, and
+  the closed set of reason codes. Pure-Python, no HF API, no
+  `HF_TOKEN` read, no I/O beyond reading the policy JSON.
+- `aurelius/ingestion/__init__.py` — refactored to lazy-import
+  `EnergyPriceIngester` and `JobLogIngester` via `__getattr__` so the
+  new lightweight policy module is importable in environments without
+  pandas. Backwards compatible: `from aurelius.ingestion import
+  EnergyPriceIngester` still works.
+- `data/external/hf_discovery/operator_redistribution_policy.json` —
+  committed policy file. `doc_version =
+  operator_redistribution_policy_v1`, `policy_default = "deny_all"`,
+  `grants = []`. ZERO grants by default — every license-blocked
+  dataset stays denied.
+- `scripts/audit_hf_operator_policy_status.py` — new standalone audit
+  script. Reads the candidate registry + the policy file, emits
+  `data/external/hf_discovery/operator_policy_status.json` with the
+  current decision for every candidate whose `recommended_action ==
+  inspect_manually_license_blocked`. Read-only; does NOT mutate the
+  candidate registry.
+- `data/external/hf_discovery/operator_policy_status.json` — committed
+  audit snapshot. Records 4 license-blocked candidates, 0 permitted
+  under the default policy, 4 denied, 0 grants in the ledger. Each
+  row carries `default_reason_code = no_grant_recorded` and the
+  exact text an operator would need to add to the policy file to
+  unblock.
+- `docs/HF_DATASET_REGISTRY.md` — new §12 "Operator redistribution
+  policy (license=None datasets)" documenting the framework, safety
+  invariants, supported scopes, and how an operator would record a
+  grant.
+- `tests/test_hf_operator_redistribution_policy.py` — 24 tests
+  covering: default policy file invariants (`doc_version`,
+  `policy_default = "deny_all"`, zero grants); loader rejection of
+  wrong `doc_version`, widened `policy_default`, non-object root,
+  non-array `grants`, duplicate `dataset_id`, unsupported scopes,
+  `granted = true` without `granted_by`; decision API denials
+  (unknown dataset, unsupported scope, explicit false grant, expired
+  grant, scope-not-allowed); decision API permits only with a
+  complete valid grant; the four Round-8 license-blocked candidates
+  are explicitly denied under the default policy; audit script
+  determinism; audit-script safety flags; no HF token in any of the
+  files touched by this PR; no raw data committed.
+
+**Result.** All 24 new tests pass; the existing 103 HF tests
+(`test_hf_dataset_discovery.py`, `test_hf_bounded_ingestion.py`,
+`test_hf_corpus_promotion.py`, `test_hf_round7_audit.py`,
+`test_hf_round8_audit.py`) still pass. Default policy file ships with
+zero grants → behaviour of every existing ingestion / discovery script
+is unchanged. The four Round-8 license-blocked candidates remain
+DENIED under the default policy:
+
+| Dataset | Default decision | Reason |
+|---|---|---|
+| `anon-betterbench/betterbench-inference-logs` | denied | `no_grant_recorded` |
+| `dadadada1/Inference-Performance-Dataset` | denied | `no_grant_recorded` |
+| `ohdoking/energy_consumption_by_model_and_gpu` | denied | `no_grant_recorded` |
+| `sasha/co2_models` | denied | `no_grant_recorded` |
+
+**Honesty + scope guarantees.** No production claim. No scheduler /
+controller / robust-energy-engine touched. No oracle as headline. No
+Tier 1 promotion. No new HF data downloaded. No new candidate-
+registry entry. No committed normalised sample. No HF_TOKEN leak.
+No raw data committed. The policy default cannot be widened by
+editing the policy file alone — the loader refuses any
+`policy_default` other than `"deny_all"`. This is a structural piece
+of safety infrastructure that adds an *opt-in path* without changing
+the *default posture*.
+
+**Next.** (i) If/when an operator decides to opt one of the four
+Round-8 license-blocked candidates in, they add a grant entry to
+`operator_redistribution_policy.json` and the downstream ingestion
+script (a future PR) consults
+`OperatorPolicyLedger.permits_redistribution(dataset_id,
+"committed_normalized_sample")` before committing a normalised
+sample. (ii) The Rounds 5-8 negative result on economic signals
+stands — this milestone does not close the operational × economic
+join gap on its own; it only makes one of the few candidates that
+*could* close part of that gap (`sasha/co2_models`) reachable under
+explicit operator consent. (iii) Pilot telemetry (Tier 1) remains
+the only path to production calibration; no HF dataset closes that
+gate.
