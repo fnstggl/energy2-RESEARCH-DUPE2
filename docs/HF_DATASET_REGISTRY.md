@@ -2274,3 +2274,98 @@ operator must opt in **per dataset**.
   policy framework only changes whether a future operator can opt
   into ingesting one of the four already-identified license-blocked
   candidates.
+
+### 12.7 RedistributionGate — first consumer of the ledger
+
+The Round-8 policy framework (§12.1–§12.6) added a deny-by-default
+consent record and an audit script, but it left the *consumer side*
+unwritten: the ledger's `permits_redistribution(...)` API was unused
+by any sample-commit path. An operator who recorded a grant would
+see no behavioural effect.
+
+The `RedistributionGate` milestone closes that loop. The module
+`aurelius/ingestion/redistribution_gate.py` defines one canonical
+decision function — `decide_redistribution(*, dataset_id, license_str,
+scope, ledger, now_iso=None)` — that fuses the two permitted paths
+into a single auditable `RedistributionGateDecision`:
+
+1. **Declared permissive license** on the HF card (apache-2.0, mit,
+   cc-by-4.0 / cc-by-3.0 / cc-by-2.0, cc0-1.0, cdla-permissive-2.0,
+   cdla-permissive-1.0, odc-by-1.0, bsd-3-clause, bsd-2-clause) →
+   PERMIT. The ledger is NOT consulted. `reason_code =
+   permitted_declared_permissive_license`.
+2. **Declared but not in the closed permissive allow-list** (`"other"`,
+   `"openrail"`, bare `"cc"`, GPL, custom research licenses, …) →
+   DENY. The ledger is NOT consulted. Operator grants cannot override
+   an upstream owner's declared restrictive license. `reason_code =
+   denied_declared_non_permissive_license`.
+3. **License is None / empty / whitespace** → consult the ledger.
+   Propagate the ledger's decision verbatim. With the committed
+   default policy file shipping zero grants, every license=None
+   dataset DENIES with `reason_code = no_grant_recorded`.
+
+The closed permissive allow-list is in
+`PERMISSIVE_LICENSE_TAGS`. Each tag maps to the same canonical
+`license_status` label already used by
+`scripts/commit_hf_gap_normalized_samples.py` (e.g.
+`permissive_apache_2_0`, `permissive_mit`,
+`permissive_cc_by_4_0`) so the two paths agree on the permissive
+cases — wiring the gate in to replace the hard-coded TARGETS table
+in a future PR cannot regress the four already-committed normalised
+samples.
+
+**Audit artifact.** `data/external/hf_discovery/redistribution_gate_audit.json`
+(written by `scripts/audit_hf_redistribution_gate.py`) records the
+gate decision for every candidate in the discovery registry. Under
+the committed default policy with zero grants:
+
+| Bucket | Candidates | Outcome |
+|---|---|---|
+| `permissive_apache_2_0` | 26 | permitted |
+| `permissive_mit` | 8 | permitted |
+| `permissive_cc_by_4_0` | 4 | permitted |
+| `permissive_cc0_1_0` | 2 | permitted |
+| `permissive_cc_by_2_0` | 1 | permitted |
+| `permissive_cdla_2` | 1 | permitted |
+| `declared_non_permissive` | 12 | denied (`denied_declared_non_permissive_license`) |
+| `unspecified_no_committed_sample` | 45 | denied (`no_grant_recorded`) |
+| **Total** | **99** | **42 permitted, 57 denied** |
+
+The four Round-8 license-blocked candidates
+(`sasha/co2_models`, `ohdoking/energy_consumption_by_model_and_gpu`,
+`dadadada1/Inference-Performance-Dataset`,
+`anon-betterbench/betterbench-inference-logs`) all sit in the
+`no_grant_recorded` bucket — identical to the §12.4 default-policy
+status snapshot and to the pre-gate behaviour. If/when an operator
+records a `committed_normalized_sample` grant for one of them, the
+gate flips that dataset to permitted *without* widening any other
+candidate's decision.
+
+**Safety invariants pinned by tests** (`tests/test_hf_redistribution_gate.py`):
+
+- `classify_license(None) == classify_license("") == classify_license(" ") ==
+  "unspecified_no_committed_sample"` — empty/missing licenses never
+  drift into the permissive bucket via whitespace normalisation.
+- An operator grant for a declared restrictive license (e.g.
+  `"other"`) is IGNORED — the gate denies before consulting the
+  ledger. This pins the invariant that operator grants record
+  consent under `license=None` only, never override an upstream
+  restriction.
+- Every permissive-licensed candidate in the discovery registry
+  remains permitted; if a future PR widens or shrinks
+  `PERMISSIVE_LICENSE_TAGS`, the audit-rollup test fails.
+- The audit JSON is deterministic for fixed inputs
+  (`now_iso`, `git_sha`, candidate registry, policy file) — a
+  changed audit JSON in a diff means a real input changed.
+- The new module + script + audit JSON contain no `hf_<token>`
+  literal, no `os.environ.get("HF_TOKEN")` call, no
+  `huggingface_hub` import.
+
+**Backwards compatibility.** The existing
+`scripts/commit_hf_gap_normalized_samples.py` is unchanged in this
+milestone. The gate exists side-by-side with its hard-coded TARGETS
+table; both produce identical outcomes on the permissive cases.
+Future PRs may wire the gate in to replace the TARGETS table; until
+they do, neither default-policy outcome changes and the
+`telemetry_gap_normalized_sample_commit_summary.json` artifact in
+§12.4 remains valid.
