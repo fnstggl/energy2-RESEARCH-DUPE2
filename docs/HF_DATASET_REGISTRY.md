@@ -2122,3 +2122,155 @@ Re-running `scripts/discover_hf_aurelius_datasets.py` rebuilds
   `license_and_gating_recorded` gate.
 - This PR does NOT commit any HF token to git, settings.json, env
   examples, or test fixtures.
+
+## 12. Operator redistribution policy (license=None datasets)
+
+> **Default behaviour: deny-all.** With the committed policy file
+> shipping zero grants, every `license = None` HF dataset remains
+> blocked from ingestion — same posture as before this section landed.
+> The framework adds the *structural* ability for an operator to
+> deliberately opt in per-dataset, with provenance, expiry, and an
+> explicit scope; it does NOT relax the default.
+
+### 12.1 Why the policy exists
+
+Rounds 5-8 of the broadened HF discovery audit (see §7) surfaced a
+recurring failure category: real per-run / per-prompt LLM-serving or
+energy-attribution measurements published on Hugging Face with
+`license = None` on the dataset card YAML. Round-8 alone catalogued
+four such candidates carrying together-rare operational + economic +
+infrastructure signals:
+
+- `sasha/co2_models` — first HF candidate in Rounds 5-8 with
+  simultaneous operational (`duration`, `num_queries`), economic
+  (`emissions`, `energy`, `region`), and infrastructure (`gpu_model`,
+  `gpu_count`) signals on the same row. CV (ViT / BEiT / ResNet) not
+  LLM-serving, but the region × GPU × energy join keys are reusable as
+  an energy / region prior.
+- `ohdoking/energy_consumption_by_model_and_gpu` — per-prompt
+  CodeCarbon energy + CO2 + runtime across 8 NVIDIA GPU classes
+  (RTX 3070/3090/4090, A4000/A5000/A6000, RTX 2000/4000 Ada) + CPU
+  baseline.
+- `dadadada1/Inference-Performance-Dataset` — H100 token-level LLM
+  inference with `decode_jitter_std`, `stall_ratio_95p`,
+  `sync_cost_ratio` — token-level jitter / stall / sync-cost telemetry
+  not present anywhere else in the corpus.
+- `anon-betterbench/betterbench-inference-logs` — 1.8M parquet rows
+  with `start_time` + `inference_time` (Tier-5 request-shape with
+  timestamped arrival).
+
+Under the conservative committed redistribution rule, `license = None`
+blocks the federated corpus's committed normalised sample. The
+discovery pipeline currently records these as
+`inspect_manually_license_blocked` and stops there.
+
+### 12.2 What the policy module adds
+
+`aurelius/ingestion/operator_redistribution_policy.py` defines the
+`OperatorPolicyLedger` data structure and a decision API. The
+canonical policy file is committed at
+`data/external/hf_discovery/operator_redistribution_policy.json` with
+zero grants and `policy_default = "deny_all"`. A standalone audit
+script at `scripts/audit_hf_operator_policy_status.py` emits
+`data/external/hf_discovery/operator_policy_status.json` documenting
+the current per-dataset decision for every license-blocked candidate.
+
+The decision API exposes:
+
+```
+ledger.permits_redistribution(dataset_id, scope, *, now_iso=None)
+    -> PolicyDecision(permitted, reason_code, reason_detail,
+                      matched_grant_dataset_id)
+```
+
+A grant entry permits a request **only if** every check passes:
+
+1. `granted = true`,
+2. `granted_by` non-empty,
+3. `granted_at_iso` non-empty,
+4. `expires_at_iso` absent or in the future at the moment of the
+   decision,
+5. requested `scope` listed in the grant's `allowed_scopes` array, and
+6. requested `scope` itself in the closed set
+   `SUPPORTED_SCOPES = {committed_normalized_sample, bounded_ingestion,
+   schema_only}`.
+
+Otherwise the decision is `permitted = False` with one of the closed
+reason codes (`no_grant_recorded`, `grant_explicitly_denies`,
+`grant_missing_provenance`, `grant_expired`,
+`requested_scope_not_in_allowed_scopes`,
+`requested_scope_not_in_supported_scopes`).
+
+### 12.3 Safety invariants
+
+- The loader rejects any policy file with `policy_default` other than
+  `"deny_all"` — the policy file cannot be edited to silently widen
+  redistribution.
+- Duplicate `dataset_id` entries are rejected at load time.
+- `granted = true` with empty `granted_by` or empty `granted_at_iso`
+  is rejected at load time.
+- Unsupported scopes in `allowed_scopes` are rejected at load time.
+- No HF API call, no `HF_TOKEN` read, no data download.
+- The committed policy file ships with zero grants, so behaviour of
+  every existing ingestion / discovery script is unchanged.
+
+### 12.4 Default-policy status snapshot
+
+Under the policy file committed in this PR:
+
+| Dataset (Round-8 license-blocked) | Default decision | Reason |
+|---|---|---|
+| `anon-betterbench/betterbench-inference-logs` | denied | `no_grant_recorded` |
+| `dadadada1/Inference-Performance-Dataset` | denied | `no_grant_recorded` |
+| `ohdoking/energy_consumption_by_model_and_gpu` | denied | `no_grant_recorded` |
+| `sasha/co2_models` | denied | `no_grant_recorded` |
+
+Reproduce:
+
+```
+python3 scripts/audit_hf_operator_policy_status.py \
+  --now-iso 2026-06-02T00:00:00Z
+```
+
+Output: `data/external/hf_discovery/operator_policy_status.json`.
+
+### 12.5 How an operator would unblock one dataset
+
+An operator who has independently verified that they may redistribute
+a particular `license = None` HF dataset (because they own it, have an
+explicit redistribution permission from the owner, or operate under an
+internal data-use agreement) can edit the policy file and add a single
+grant entry:
+
+```json
+{
+  "dataset_id": "sasha/co2_models",
+  "granted": true,
+  "granted_by": "<operator identifier, e.g. infra-eng@example.org>",
+  "granted_at_iso": "2026-06-02T00:00:00Z",
+  "allowed_scopes": ["committed_normalized_sample"],
+  "notes": "Owner email-confirmed redistribution permission on YYYY-MM-DD; archived under data-clearance/<ticket>.",
+  "expires_at_iso": "2027-06-02T00:00:00Z"
+}
+```
+
+`policy_default` must remain `deny_all` — the loader refuses any other
+value. The framework intentionally has no "allow everything" mode; an
+operator must opt in **per dataset**.
+
+### 12.6 What the policy does NOT do
+
+- It does NOT call out to the HF API or contact the dataset owner.
+- It does NOT relax any existing safety rule. Even with an operator
+  grant, downstream ingestion scripts continue to enforce the bounded
+  sampling, schema profile, fixture, checksum, and analysis-tier
+  rules in §5.
+- It does NOT promote any new dataset into the canonical corpus on
+  its own — promotion still requires schema_profile + schema_mapping
+  + tests + a recommended Aurelius use case + an analysis-sample
+  policy record.
+- It does NOT close the operational × economic join gap by itself.
+  The Rounds 5-8 negative result on economic signals stands; the
+  policy framework only changes whether a future operator can opt
+  into ingesting one of the four already-identified license-blocked
+  candidates.
