@@ -26,6 +26,8 @@
   "gated": false,
   "ingestion_timestamp_s": 1780345334.3430226,
   "license": "cc-by-4.0",
+  "license_redistribution_source": "HF card frontmatter license: cc-by-4.0 (Faruk Alpay / Lightcap \u2014 agent-runtime-telemetry-small)",
+  "license_redistribution_status": "permissive_cc_by_4_0",
   "limitations": [
     "Pre-aggregated per-(tool_name, status) bucket summary from Faruk Alpay's Lightcap tool-runtime (tool_summary.parquet, 32 rows, 22 distinct tools).",
     "Derived aggregate latency \u2014 the normalized sample's duration_ms is the per-bucket MEDIAN computed by the upstream exporter; field_quality=derived. The exact avg / median / p95 per (tool, status) live in statistical_rollups.json::per_tool_status_aggregates.",
@@ -116,6 +118,11 @@
     "status",
     "tool_name"
   ],
+  "redistribution_gate_operator_grant_dataset_id": null,
+  "redistribution_gate_permitted": true,
+  "redistribution_gate_reason_code": "permitted_declared_permissive_license",
+  "redistribution_gate_reason_detail": "declared HF license 'cc-by-4.0' maps to 'permissive_cc_by_4_0'; ledger not consulted",
+  "redistribution_gate_scope": "committed_normalized_sample",
   "rejected_columns": [],
   "sample_sha256": "338faf456bc8b0086dc03a5b7e2af0c36a1b87358aaafc13c0c2e7ddbe7f422d",
   "sampling_method": "full_bounded",

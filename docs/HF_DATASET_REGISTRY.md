@@ -3663,3 +3663,169 @@ datasets do not need to re-prove the permit path; they only
 need to wire through the gate. (iv) Pilot telemetry (Tier 1)
 remains the only path to production calibration; no HF dataset
 closes that gate.
+
+### 12.15 RedistributionGate — ninth consumer wires per-dataset ingestion (Lightcap/agent-runtime-telemetry-small)
+
+The eighth-consumer milestone (§12.14) wired the canonical
+`decide_redistribution` gate into `scripts/ingest_hf_acmetrace.py`.
+This milestone extends the same shape to
+`scripts/ingest_hf_lightcap_runtime_telemetry.py`, the inaugural
+`tool_runtime_trace` ingester (the corpus's first canonical type
+landed in §5e06dfc / PR #143 + #147 follow-up). Lightcap is also
+**the first ninth-consumer dataset that commits a real cc-by-4.0
+analysis-tier normalised sample** — operations (2,262 rows),
+tool_summary (32 rows), operation_events (9,903 rows), and
+audit_records (14,053 rows) are all redistributed under the
+permissive cc-by-4.0 tag. So the wiring's invariant is stronger
+than for the eighth consumer (AcmeTrace ships fixtures only;
+Lightcap ships fixtures **plus** the four `normalized_sample.jsonl`
+files), and the new wiring tests pin sha256 equality on both the
+fixtures and the normalised samples.
+
+**Shape of the change.** Identical to §12.14: the script's
+hard-coded `"license": "cc-by-4.0"` literal inside `audit_one`'s
+`summary` dict (single occurrence — every Lightcap config shares
+the same upstream license) lifts to a module-level
+`LICENSE_TAG = "cc-by-4.0"` constant with a sibling
+`LICENSE_SOURCE` provenance string and `GATE_SCOPE =
+"committed_normalized_sample"`. `audit_one` now accepts an
+`OperatorPolicyLedger` keyword arg and calls a new
+`evaluate_redistribution(...)` helper that wraps
+`decide_redistribution`. The same `_load_ledger(path)` helper used
+in the AcmeTrace wiring loads the canonical
+`data/external/hf_discovery/operator_redistribution_policy.json`
+or falls back to `OperatorPolicyLedger.empty()` on fresh checkouts.
+
+**Permit verdict on every Lightcap config.** Under the committed
+default policy (deny-all, zero grants) the four configs all carry
+the same gate verdict:
+
+| Config | License tag | `license_redistribution_status` | `redistribution_gate_reason_code` | `redistribution_gate_permitted` |
+|---|---|---|---|---|
+| `operations` | `cc-by-4.0` | `permissive_cc_by_4_0` | `permitted_declared_permissive_license` | `True` |
+| `tool_summary` | `cc-by-4.0` | `permissive_cc_by_4_0` | `permitted_declared_permissive_license` | `True` |
+| `operation_events` | `cc-by-4.0` | `permissive_cc_by_4_0` | `permitted_declared_permissive_license` | `True` |
+| `audit_records` | `cc-by-4.0` | `permissive_cc_by_4_0` | `permitted_declared_permissive_license` | `True` |
+
+The ledger is NOT consulted on any of the four rows — the gate
+short-circuits because cc-by-4.0 is on the closed permissive
+allow-list (`PERMISSIVE_LICENSE_TAGS`). `operator_grant_dataset_id`
+is `None` on every row. The pre-wiring committed normalised
+samples (~5.7 MiB total across the four configs) remain
+byte-for-byte unchanged; the new wiring tests pin every sha256.
+
+**Refresh helper.** `scripts/refresh_hf_lightcap_gate_metadata.py`
+is the in-place maintenance helper that rewrites the four
+`data/external/hf/Lightcap__agent-runtime-telemetry-small/<config>/
+processed/summary.json` files and the rollup
+`data/external/hf_discovery/lightcap_runtime_telemetry_ingest_summary.json`
+so they carry the new redistribution-gate fields without
+re-downloading the source parquet files (the raw downloads are
+gitignored). The helper is pure-Python; it imports the ingest
+module via `importlib.util.spec_from_file_location`, calls
+`ingest._load_ledger()` once, and threads the verdict through the
+ingest module's `evaluate_redistribution`. Run once after this PR
+lands; subsequent live ingests write the same fields directly
+through the ninth-consumer code path.
+
+**Top-level audit summary v2.** The rollup
+`data/external/hf_discovery/lightcap_runtime_telemetry_ingest_summary.json`
+now carries:
+
+- `doc_version = "lightcap_runtime_telemetry_ingest_summary_v2"`
+  (v1 had no explicit `doc_version` key);
+- `redistribution_gate_scope = "committed_normalized_sample"`;
+- `redistribution_gate_policy_default = "deny_all"`;
+- `redistribution_gate_policy_grant_count = 0`;
+- four `configs` rows, each carrying the per-row gate triple
+  (`license_redistribution_status`,
+  `redistribution_gate_reason_code`,
+  `redistribution_gate_permitted`,
+  `redistribution_gate_operator_grant_dataset_id`) plus the
+  v1 fields (`audit_status`, `manifest`, `summary_path`,
+  `decision_state`, `decision_tags`).
+
+A new `git_sha` field records the commit at write time so a future
+reader can correlate the gate snapshot with the policy file
+contents at that moment.
+
+**Tests landed.** 43 new tests in
+`tests/test_hf_lightcap_gate_wiring.py` cover:
+
+1. **Module constants** — `DATASET_ID`, `LICENSE_TAG`,
+   `LICENSE_SOURCE`, `GATE_SCOPE` live at module level.
+2. **Canonical-gate imports** — script imports
+   `decide_redistribution` + `OperatorPolicyLedger`; does NOT
+   redeclare `PERMISSIVE_LICENSE_TAGS`; does NOT hard-code the
+   literal `"permissive_cc_by_4_0"` outside docstrings.
+3. **`evaluate_redistribution` pure-function path** —
+   returns `RedistributionGateDecision`; permits on default
+   `cc-by-4.0`; denies when swapped to `None`; denies when
+   swapped to `cc-by-nc-4.0`; operator opt-out grant CANNOT
+   revoke a permissive verdict.
+4. **Per-config `summary.json` carries the gate triple** — the
+   four configs each pin the seven new fields and match
+   `gate_module.classify_license(license)`.
+5. **Audit-summary v2** — `doc_version` is v2, top-level gate
+   triple is recorded, v1 invariants (`dataset_id`, `wrote_at_s`,
+   `configs`) are preserved.
+6. **Per-row gate fields on every config row** — exactly 4
+   lightcap rows, each carrying the gate triple + the v1
+   `decision_state` / `decision_tags` / `manifest` /
+   `summary_path` fields.
+7. **`audit_one` accepts `ledger=` keyword** — signature is
+   pinned so a future refactor cannot revert to the v1
+   no-ledger shape.
+8. **`_load_ledger` fresh-checkout fallback** — returns
+   `OperatorPolicyLedger.empty()` when the policy file is
+   absent.
+9. **No `hf_<token>` literal** in either the ingest script or
+   the refresh helper.
+10. **Fixture bytes are byte-for-byte unchanged** — the four
+    `tests/fixtures/hf/Lightcap__.../<config>_sample.jsonl`
+    files match the recorded `sample_sha256`.
+11. **Normalised-sample bytes are byte-for-byte unchanged** —
+    the four `data/external/hf/Lightcap__.../<config>/
+    processed/normalized_sample.jsonl` files match the
+    recorded `normalized_sample_sha256`. This is the
+    stronger invariant absent from the eighth-consumer
+    wiring (AcmeTrace ships fixtures only).
+12. **Refresh helper safety rails** — does not add extra
+    configs; uses `ingest.LICENSE_TAG` / `ingest.GATE_SCOPE` /
+    `ingest.DATASET_ID` rather than redeclaring; writes the
+    v2 doc_version literal.
+
+The pre-existing 60 tests in
+`tests/test_hf_lightcap_runtime_telemetry_ingest.py` continue to
+pass on the same committed artifacts, confirming the wiring is
+strictly additive on the schema / promotion / signals layer.
+
+**Honesty + scope guarantees.** No production claim. No
+scheduler / controller / robust-energy-engine touched. No
+oracle as headline. No Tier 1 promotion. No new HF data
+downloaded. No new candidate-registry entry. The on-disk
+fixture, normalised-sample, analysis-sample, schema, and
+rollup artefacts are byte-for-byte identical to v1; only the
+summary.json metadata and the audit summary metadata gain the
+new gate-derived fields. No `HF_TOKEN` leak. No raw data
+committed. The script's downloader path is unchanged.
+
+**Next.** (i) Four per-dataset ingestion scripts remain unwired
+after this milestone:
+`scripts/ingest_hf_aurelius_dataset.py`,
+`scripts/ingest_hf_gap_datasets.py`,
+`scripts/ingest_hf_llmperf_bedrock.py`,
+`scripts/ingest_hf_metrum_llmperfdata.py`. Each is a candidate
+for a follow-up PR once its canonical-corpus rows need to be
+re-emitted. `scripts/ingest_hf_llmperf_bedrock.py` (apache-2.0)
+and `scripts/ingest_hf_metrum_llmperfdata.py` (mit) are the
+simplest single-target single-permissive-license wirings;
+`scripts/ingest_hf_gap_datasets.py` is the most complex
+(multi-target, multi-license, ships its own license-classification
+table). (ii) The cc-by-4.0 path of the gate's permissive
+allow-list is now exercised on BOTH a fixtures-only consumer
+(AcmeTrace) and a normalised-sample-committed consumer
+(Lightcap) — the gate's permissive short-circuit is proven
+behaviourally equivalent across both consumption modes.
+(iii) Pilot telemetry (Tier 1) remains the only path to
+production calibration; no HF dataset closes that gate.

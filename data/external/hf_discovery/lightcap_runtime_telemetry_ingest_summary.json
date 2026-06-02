@@ -1,14 +1,33 @@
 {
   "configs": [
     {
+      "analysis_sample_rows": 2262,
       "audit_status": "ok",
+      "available_signals": [
+        "args_fingerprint_for_cache_reuse",
+        "arrivals",
+        "artifacts_size_proxy",
+        "customer_traffic_mix",
+        "duration_measured",
+        "latency",
+        "request_timestamps",
+        "result_size_proxy",
+        "tool_cancellation_label",
+        "tool_failure_label",
+        "tool_routing",
+        "workload_shape"
+      ],
+      "canonical_trace_type": "tool_runtime_trace",
       "config": "operations",
+      "config_name": "operations",
       "decision_state": "promoted_for_backtest",
       "decision_tags": [
         "promoted_for_backtest",
         "promoted_for_constraint_aware_evaluation",
         "promoted_for_training_priors"
       ],
+      "license": "cc-by-4.0",
+      "license_redistribution_status": "permissive_cc_by_4_0",
       "manifest": {
         "cached": false,
         "dest": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/raw/operations.parquet",
@@ -19,15 +38,42 @@
         "truncated": false,
         "url": "https://huggingface.co/datasets/Lightcap/agent-runtime-telemetry-small/resolve/main/data/operations.parquet"
       },
+      "missing_signals": [
+        "cost_or_region",
+        "gpu_utilization",
+        "kv_block_hashes",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "queue_state",
+        "replica_count",
+        "tpot",
+        "ttft"
+      ],
+      "redistribution_gate_operator_grant_dataset_id": null,
+      "redistribution_gate_permitted": true,
+      "redistribution_gate_reason_code": "permitted_declared_permissive_license",
+      "statistical_sample_strength": "moderate",
       "summary_path": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/operations/processed/summary.json"
     },
     {
+      "analysis_sample_rows": 32,
       "audit_status": "ok",
+      "available_signals": [
+        "latency",
+        "request_timestamps",
+        "tool_failure_label",
+        "tool_routing"
+      ],
+      "canonical_trace_type": "tool_runtime_trace",
       "config": "tool_summary",
+      "config_name": "tool_summary",
       "decision_state": "promoted_for_schema_only",
       "decision_tags": [
         "promoted_for_schema_only"
       ],
+      "license": "cc-by-4.0",
+      "license_redistribution_status": "permissive_cc_by_4_0",
       "manifest": {
         "cached": false,
         "dest": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/raw/tool_summary.parquet",
@@ -38,17 +84,57 @@
         "truncated": false,
         "url": "https://huggingface.co/datasets/Lightcap/agent-runtime-telemetry-small/resolve/main/data/tool_summary.parquet"
       },
+      "missing_signals": [
+        "args_fingerprint_for_cache_reuse",
+        "arrivals",
+        "artifacts_size_proxy",
+        "cost_or_region",
+        "customer_traffic_mix",
+        "duration_measured",
+        "gpu_utilization",
+        "kv_block_hashes",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "queue_state",
+        "replica_count",
+        "result_size_proxy",
+        "tool_cancellation_label",
+        "tpot",
+        "ttft",
+        "workload_shape"
+      ],
+      "redistribution_gate_operator_grant_dataset_id": null,
+      "redistribution_gate_permitted": true,
+      "redistribution_gate_reason_code": "permitted_declared_permissive_license",
+      "statistical_sample_strength": "fixture_only",
       "summary_path": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/tool_summary/processed/summary.json"
     },
     {
+      "analysis_sample_rows": 9903,
       "audit_status": "ok",
+      "available_signals": [
+        "args_fingerprint_for_cache_reuse",
+        "arrivals",
+        "duration_measured",
+        "latency",
+        "request_timestamps",
+        "result_size_proxy",
+        "tool_cancellation_label",
+        "tool_failure_label",
+        "workload_shape"
+      ],
+      "canonical_trace_type": "tool_runtime_trace",
       "config": "operation_events",
+      "config_name": "operation_events",
       "decision_state": "promoted_for_backtest",
       "decision_tags": [
         "promoted_for_backtest",
         "promoted_for_constraint_aware_evaluation",
         "promoted_for_training_priors"
       ],
+      "license": "cc-by-4.0",
+      "license_redistribution_status": "permissive_cc_by_4_0",
       "manifest": {
         "cached": true,
         "dest": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/raw/operation_events.parquet",
@@ -59,17 +145,53 @@
         "truncated": null,
         "url": "https://huggingface.co/datasets/Lightcap/agent-runtime-telemetry-small/resolve/main/data/operation_events.parquet"
       },
+      "missing_signals": [
+        "artifacts_size_proxy",
+        "cost_or_region",
+        "customer_traffic_mix",
+        "gpu_utilization",
+        "kv_block_hashes",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "queue_state",
+        "replica_count",
+        "tool_routing",
+        "tpot",
+        "ttft"
+      ],
+      "redistribution_gate_operator_grant_dataset_id": null,
+      "redistribution_gate_permitted": true,
+      "redistribution_gate_reason_code": "permitted_declared_permissive_license",
+      "statistical_sample_strength": "moderate",
       "summary_path": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/operation_events/processed/summary.json"
     },
     {
+      "analysis_sample_rows": 14053,
       "audit_status": "ok",
+      "available_signals": [
+        "args_fingerprint_for_cache_reuse",
+        "arrivals",
+        "customer_traffic_mix",
+        "duration_measured",
+        "latency",
+        "request_timestamps",
+        "result_size_proxy",
+        "tool_failure_label",
+        "tool_routing",
+        "workload_shape"
+      ],
+      "canonical_trace_type": "tool_runtime_trace",
       "config": "audit_records",
+      "config_name": "audit_records",
       "decision_state": "promoted_for_backtest",
       "decision_tags": [
         "promoted_for_backtest",
         "promoted_for_constraint_aware_evaluation",
         "promoted_for_training_priors"
       ],
+      "license": "cc-by-4.0",
+      "license_redistribution_status": "permissive_cc_by_4_0",
       "manifest": {
         "cached": true,
         "dest": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/raw/audit_records.parquet",
@@ -80,9 +202,32 @@
         "truncated": null,
         "url": "https://huggingface.co/datasets/Lightcap/agent-runtime-telemetry-small/resolve/main/data/audit_records.parquet"
       },
+      "missing_signals": [
+        "artifacts_size_proxy",
+        "cost_or_region",
+        "gpu_utilization",
+        "kv_block_hashes",
+        "migration_or_cache_loss_proxy",
+        "model_load_event",
+        "model_unload_event",
+        "queue_state",
+        "replica_count",
+        "tool_cancellation_label",
+        "tpot",
+        "ttft"
+      ],
+      "redistribution_gate_operator_grant_dataset_id": null,
+      "redistribution_gate_permitted": true,
+      "redistribution_gate_reason_code": "permitted_declared_permissive_license",
+      "statistical_sample_strength": "strong",
       "summary_path": "/home/user/energy2/data/external/hf/Lightcap__agent-runtime-telemetry-small/audit_records/processed/summary.json"
     }
   ],
   "dataset_id": "Lightcap/agent-runtime-telemetry-small",
-  "wrote_at_s": 1780345335.9794562
+  "doc_version": "lightcap_runtime_telemetry_ingest_summary_v2",
+  "git_sha": "a0cf0326184d0a4c61979a55bf250f4b86cc3547",
+  "redistribution_gate_policy_default": "deny_all",
+  "redistribution_gate_policy_grant_count": 0,
+  "redistribution_gate_scope": "committed_normalized_sample",
+  "wrote_at_s": 1780437999.548439
 }

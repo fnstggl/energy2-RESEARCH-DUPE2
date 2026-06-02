@@ -58,15 +58,24 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from aurelius.ingestion.operator_redistribution_policy import (  # noqa: E402
+    OperatorPolicyLedger,
+)
+from aurelius.ingestion.redistribution_gate import (  # noqa: E402
+    RedistributionGateDecision,
+    decide_redistribution,
+)
 from aurelius.traces.hf_corpus import promotion  # noqa: E402
 
 REPO_ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HF_DIR = REPO_ROOT / "data" / "external" / "hf"
 DISC_DIR = REPO_ROOT / "data" / "external" / "hf_discovery"
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures" / "hf"
+POLICY_PATH = DISC_DIR / "operator_redistribution_policy.json"
 
 DATASET_ID = "Lightcap/agent-runtime-telemetry-small"
 SAFE_DATASET = DATASET_ID.replace("/", "__")
@@ -77,7 +86,89 @@ MAX_COMMITTED_NORMALIZED_BYTES = 100 * 1024 * 1024  # 100 MiB per the policy
 PER_DATASET_TIMEOUT_S = 30 * 60
 PROGRESS_INTERVAL_S = 30
 
+# ── Redistribution-gate metadata ───────────────────────────────────────────
+# Raw HF license tag + human-curated provenance for the canonical
+# redistribution gate. The gate (not this script) classifies the tag
+# into a ``permissive_*`` / ``unspecified_no_committed_sample`` /
+# ``declared_non_permissive`` status code. Keeping the raw tag at
+# module level means a future HF tag change (e.g. the dataset owner
+# re-licensing to apache-2.0) is a one-line edit; the gate handles
+# the rest.
+#
+# All four Lightcap/agent-runtime-telemetry-small configs (operations,
+# tool_summary, operation_events, audit_records) share the same
+# upstream license tag — cc-by-4.0 — declared on the dataset card
+# YAML by Faruk Alpay. The gate classifies that tag as
+# ``permissive_cc_by_4_0`` and permits redistribution; the ledger is
+# NOT consulted because cc-by-4.0 is on the closed permissive
+# allow-list (PERMISSIVE_LICENSE_TAGS in
+# ``aurelius/ingestion/redistribution_gate.py``).
+LICENSE_TAG: Optional[str] = "cc-by-4.0"
+LICENSE_SOURCE = (
+    "HF card frontmatter license: cc-by-4.0 "
+    "(Faruk Alpay / Lightcap — agent-runtime-telemetry-small)"
+)
+GATE_SCOPE = "committed_normalized_sample"
+
 logger = logging.getLogger("aurelius.hf_lightcap_runtime_ingest")
+
+
+# ── Redistribution gate — wire the canonical gate, do not classify here ────
+
+
+def _load_ledger(policy_path: Path = POLICY_PATH) -> OperatorPolicyLedger:
+    """Load the operator policy ledger from disk, or fall back to empty.
+
+    The committed default file ships zero grants under
+    ``policy_default=deny_all``; an absent file is identical in
+    behaviour. We use ``empty()`` as the fallback so the script
+    remains self-sufficient in a fresh checkout that may not yet have
+    the committed JSON pulled — the gate still produces correct
+    decisions (permit for ``cc-by-4.0``
+    Lightcap/agent-runtime-telemetry-small) instead of crashing.
+    """
+
+    if policy_path.exists():
+        return OperatorPolicyLedger.load(policy_path)
+    return OperatorPolicyLedger.empty()
+
+
+def evaluate_redistribution(
+    *,
+    ledger: OperatorPolicyLedger,
+    license_tag: Optional[str] = LICENSE_TAG,
+    dataset_id: str = DATASET_ID,
+    scope: str = GATE_SCOPE,
+    now_iso: Optional[str] = None,
+) -> RedistributionGateDecision:
+    """Ask the canonical gate whether the bounded normalised sample of
+    Lightcap/agent-runtime-telemetry-small may be redistributed under
+    the supplied license tag.
+
+    Pure function — no I/O. Exposed so tests can drive the gate path
+    without invoking the parquet download / normalisation pipeline.
+    The defaults reflect the module-level constants this script ships;
+    tests override them to verify the wiring (e.g. swap ``license_tag``
+    to ``None`` and confirm the gate denies under the empty ledger,
+    or swap to ``"cc-by-nc-4.0"`` and confirm the gate denies as
+    declared_non_permissive).
+
+    Under the default-empty ledger and the dataset's declared
+    cc-by-4.0 license tag, this returns
+    ``permitted=True``,
+    ``license_status="permissive_cc_by_4_0"``,
+    ``reason_code="permitted_declared_permissive_license"`` — the gate
+    ledger is NOT consulted because the license is on the closed
+    permissive allow-list.
+    """
+
+    return decide_redistribution(
+        dataset_id=dataset_id,
+        license_str=license_tag,
+        scope=scope,
+        ledger=ledger,
+        now_iso=now_iso,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1590,8 +1681,21 @@ CONFIG_ROLLUPS = {
 
 
 def audit_one(target: dict, *, token: str | None,
-              force_redownload: bool) -> dict:
+              force_redownload: bool,
+              ledger: OperatorPolicyLedger | None = None) -> dict:
     config = target["config_name"]
+    if ledger is None:
+        ledger = _load_ledger()
+    # Resolve the gate verdict once per config so the wiring is provable
+    # via committed summary.json fields; no behavioural change — the
+    # script already commits the normalised sample for permissive
+    # cc-by-4.0, and the gate confirms that decision in the canonical
+    # closed-set vocabulary.
+    gate_decision = evaluate_redistribution(
+        ledger=ledger,
+        license_tag=LICENSE_TAG,
+        dataset_id=DATASET_ID,
+    )
     hb = _Heartbeat(f"{DATASET_ID}@{config}")
     hb.update(phase="setup", force=True)
 
@@ -1781,7 +1885,29 @@ def audit_one(target: dict, *, token: str | None,
         "dataset_id": DATASET_ID,
         "config_name": config,
         "source_url": f"https://huggingface.co/datasets/{DATASET_ID}",
-        "license": "cc-by-4.0",
+        "license": LICENSE_TAG,
+        # Redistribution-gate metadata (ninth consumer of the canonical
+        # gate). The gate classifies the per-config license tag —
+        # cc-by-4.0 → ``permissive_cc_by_4_0`` → permit; the ledger is
+        # NOT consulted (the closed permissive allow-list
+        # short-circuits). These fields are ADDITIVE — the on-disk
+        # fixture, analysis sample, and normalised sample paths are
+        # unchanged. The script does NOT read the gate verdict to
+        # decide whether to write its samples (the existing
+        # normalised_sample.jsonl was already committed under the
+        # existing cc-by-4.0 declaration); the gate fields here
+        # document the canonical permit verdict so a future audit can
+        # prove the script consulted the gate rather than carrying its
+        # own classifier.
+        "license_redistribution_status": gate_decision.license_status,
+        "license_redistribution_source": LICENSE_SOURCE,
+        "redistribution_gate_reason_code": gate_decision.reason_code,
+        "redistribution_gate_reason_detail": gate_decision.reason_detail,
+        "redistribution_gate_permitted": gate_decision.permitted,
+        "redistribution_gate_operator_grant_dataset_id": (
+            gate_decision.operator_grant_dataset_id
+        ),
+        "redistribution_gate_scope": GATE_SCOPE,
         "gated": False,
         "raw_schema": list(profile["raw_columns"]),
         "normalized_schema": list(profile["normalized_columns"]),
@@ -1860,6 +1986,14 @@ def main(argv: list[str] | None = None) -> int:
     DISC_DIR.mkdir(parents=True, exist_ok=True)
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Load the operator policy ledger once and thread it through every
+    # audit_one call so the top-level audit summary records the canonical
+    # ``redistribution_gate_policy_default`` and
+    # ``redistribution_gate_policy_grant_count`` — the same shape
+    # ``acmetrace_audit_summary.json`` carries after the eighth-consumer
+    # PR (#162).
+    ledger = _load_ledger()
+
     _install_timeout(PER_DATASET_TIMEOUT_S)
     try:
         per_config: list[dict] = []
@@ -1868,11 +2002,13 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             logger.info("=== %s :: %s ===", DATASET_ID, tgt["config_name"])
             result = audit_one(tgt, token=token,
-                                force_redownload=args.force_redownload)
+                                force_redownload=args.force_redownload,
+                                ledger=ledger)
             d = result.get("decision") or {}
             logger.info("  %s -> state=%s tags=%s",
                         tgt["config_name"], d.get("state"),
                         d.get("promotion_tags"))
+            sm = result.get("summary") or {}
             per_config.append({
                 "config": tgt["config_name"],
                 "audit_status": result.get("audit_status"),
@@ -1880,12 +2016,38 @@ def main(argv: list[str] | None = None) -> int:
                 "summary_path": result.get("summary_path"),
                 "decision_state": d.get("state"),
                 "decision_tags": d.get("promotion_tags"),
+                # Ninth-consumer gate-derived fields. The audit summary
+                # mirrors the same closed-set fields the per-config
+                # summary.json carries so reviewers can pivot on either
+                # source without re-running the gate.
+                "license": sm.get("license"),
+                "license_redistribution_status":
+                    sm.get("license_redistribution_status"),
+                "redistribution_gate_reason_code":
+                    sm.get("redistribution_gate_reason_code"),
+                "redistribution_gate_permitted":
+                    sm.get("redistribution_gate_permitted"),
+                "redistribution_gate_operator_grant_dataset_id":
+                    sm.get(
+                        "redistribution_gate_operator_grant_dataset_id"
+                    ),
             })
 
         summary_out = {
+            "doc_version": (
+                "lightcap_runtime_telemetry_ingest_summary_v2"
+            ),
             "dataset_id": DATASET_ID,
             "wrote_at_s": time.time(),
             "configs": per_config,
+            # Top-level redistribution-gate provenance — one record per
+            # audit summary so future readers can confirm the ledger
+            # state at the moment of ingestion without re-loading the
+            # JSON. The committed default file ships zero grants under
+            # ``policy_default=deny_all``; tests pin both values.
+            "redistribution_gate_scope": GATE_SCOPE,
+            "redistribution_gate_policy_default": ledger.policy_default,
+            "redistribution_gate_policy_grant_count": len(ledger.grants),
         }
         out_path = (DISC_DIR /
                     "lightcap_runtime_telemetry_ingest_summary.json")
