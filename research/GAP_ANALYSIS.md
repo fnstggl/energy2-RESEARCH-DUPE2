@@ -8,6 +8,133 @@
 
 ---
 
+## Run 2026-06-20-j — Preemptive SRPT serving-queue simulator
+
+### Q1. What currently limits Aurelius most?
+
+**Long-request starvation is bounded but not eliminated, and the serving runtime
+has no SRPT/aging hook.** Run -j adds preemptive SRPT to the simulator (guaranteeing
+monotonic forward progress for every request), but empirically the long_p99 regression
+(+223.4%) nearly matches non-preemptive SRTF (+223.5%) at ρ=0.85 because short-job
+arrival rate continuously outcompetes long jobs even with preemption. The primary
+bottleneck is now: (a) no hybrid aging+preemptive discipline that combines bounded
+wait with preemptive short_p90 benefit, and (b) the serving runtime still uses FIFO.
+
+### Q2. What theoretically offers the largest gain?
+
+**Hybrid Aging+Preemptive SRPT:** use key(r,t) = remaining_s / (1 + α·wait_s) as
+the preemption priority. This combines: (1) SRPT's immediate server reclamation for
+newly arriving short jobs, and (2) aging's bounded-wait guarantee that long jobs
+accumulate priority as they wait. Expected to recover 50–80% of the SRTF goodput
+advantage (+200–250% vs FIFO) while capping long_p99 regression to Aging-SRTF levels
+(+113% vs FIFO). Blueprint: run -i aging key + run -j preemption mechanics.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live SRTF prior** — all serving backtests
+   (run -g, -i, -j) use oracle prior (actual tokens as predicted). 30%-CV robustness
+   documented for SRTF (run -g); not yet re-tested for preemptive SRPT.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving-queue ordering uses FIFO** — SRPT preemptive proven +322.2% goodput/$
+   in simulator; not yet wired into runtime.
+2. **No hybrid aging+preemptive** — SRPT preemptive eliminates unbounded starvation
+   theoretically but empirically long_p99 still regresses +223% at ρ=0.85.
+3. **OutputLengthForecastBundle not driving ordering** — oracle prior only.
+
+### Q5. Which workloads benefit least?
+
+**Batch / energy-shifting workloads** — confirmed through multiple runs. SRTF,
+aging-SRTF, and SRPT preemptive all benefit only in per-request serving queues
+under contention. BurstGPT fixture (51 rows) still too small for starvation analysis.
+
+### Q6. Which research direction appears strongest?
+
+**Hybrid Aging+Preemptive SRPT:** combining the aging key from run -i with the
+preemption mechanics from run -j. Preemption alone does not eliminate starvation
+in high-utilization traces; aging+preemptive together should close the long_p99 gap.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Wire SRPT preemptive (or aging-SRTF α=0.01) into the serving runtime path.
+2. Cross-validate on full BurstGPT (1.4M rows).
+3. Replace oracle prior with OutputLengthForecastBundle.p50.
+
+### Q8. What is the shortest path to another +50% gain?
+
+SRPT preemptive already shows +322.2% goodput/$ vs FIFO in the simulator (Azure LLM
+2024, ρ=0.85). Realizing this in the serving runtime would achieve >+50% vs FIFO at
+simulator fidelity, contingent on live output-length prediction quality.
+
+### Q9. What would need to be true to achieve +300%?
+
+The +300% target is vs SLA-aware (not FIFO). Run -j's +322% result is vs FIFO, not
+SLA-aware; SRTF perfect achieves +323.5% vs FIFO in the same setup. Achieving +300%
+vs SLA-aware requires: live output-length prior + serving-path SRPT with aging +
+heterogeneous GPU routing on LLM traces + measured queue-wait labels + pilot telemetry.
+The simulator confirms the ceiling; the gap is in deploying it.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Preemption = anti-starvation** — at ρ=0.85 with heavy-tailed short-job
+   arrivals, forward-progress guarantee alone does not prevent long_p99 regression
+   of +223%. The assumption that preemption eliminates starvation holds in theory
+   but not empirically with this trace/utilization combination.
+2. **Oracle prior** — SRPT preemptive uses actual service times as predicted; a
+   real prior with 30%-CV noise will degrade preemption accuracy.
+3. **Preemption cost** — the simulator models preemption as zero-overhead. Real
+   KV-cache eviction cost for preemption in LLM serving adds latency overhead.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **FIFO baseline** — unchanged from runs -g/-i/-j. All goodput/$ deltas are vs FIFO.
+2. **BurstGPT fixture too small** — 51 rows (high variance); SRTF and Aging-SRTF
+   produce identical results on this fixture. Full 1.4M-row needed.
+3. **No preemption cost model** — zero-overhead preemption is optimistic for real
+   LLM serving (KV-cache eviction adds latency and GPU memory pressure).
+4. **Simulator fidelity** — discrete-event M/G/c with synthetic time-warp;
+   real serving systems have batching, speculative decoding, CUDA graph overhead.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT full dataset** (1.4M rows, CC-BY-4.0) — highest priority for
+   cross-trace SRPT preemptive + aging-SRTF validation.
+2. **ShareGPT** — output token cross-validation for OutputLengthForecastBundle.
+3. **Vidur profiling CSVs** — GPU penalty calibration.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Implement Hybrid Aging+Preemptive SRPT: preemption key = remaining_s / (1 + α·wait_s).
+   Compare long_p99 regression: expect hybrid to land between Aging-SRTF (+113%) and
+   SRPT preemptive (+223%) at the same goodput/$ as SRPT.
+2. Cross-validate SRPT preemptive on full BurstGPT (1.4M rows).
+
+**Short-term (2–3 runs):**
+3. Wire SRPT preemptive (or hybrid) into serving runtime driven by OutputLengthForecastBundle.p50.
+4. Add preemption overhead cost model to the simulator (KV-cache eviction latency).
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Wire SRPT preemptive or aging-SRTF into serving runtime | High | Medium | Both quantified [runs -i/-j]; not yet in runtime |
+| 2 | Hybrid Aging+Preemptive SRPT (key = rem/(1+α·wait)) | High | Low effort | Not started — combines run -i + run -j mechanics |
+| 3 | Full BurstGPT cross-validation (1.4M rows) | Medium | Low | run_burstgpt_srpt_preemptive_backtest() ready |
+| 4 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High | Low | Infrastructure built (shadow) |
+| 5 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
+| 6 | GPU routing on LLM serving trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 7 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 8 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
+| 9 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+
+---
+
 ## Run 2026-06-20-i — Aging-SRTF anti-starvation + BurstGPT cross-validation
 
 ### Q1. What currently limits Aurelius most?
@@ -122,22 +249,6 @@ optimization, pilot telemetry.
 **Short-term (2–3 runs):**
 3. Cross-validate on full BurstGPT (1.4M rows).
 4. Wire aging_srtf (α=0.01) into serving runtime path with OutputLengthForecastBundle.p50.
-
----
-
-## Future Opportunity Ranking (Expected Value × Feasibility)
-
-| rank | opportunity | EV | feasibility | status |
-|---|---|---|---|---|
-| 1 | Preemptive SRPT variant in simulator | High | Medium | Not started — blueprint: FlowPrefill arXiv:2602.16603 |
-| 2 | Wire aging_srtf (α=0.01) into serving runtime | High | Medium | Quantified [run -i]; not yet in runtime |
-| 3 | Full BurstGPT cross-validation (1.4M rows) | Medium | Low | run_burstgpt_aging_backtest() ready |
-| 4 | Wire OutputLengthForecastBundle.p50 as live SRTF prior | High | Low | Infrastructure built (shadow) |
-| 5 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
-| 6 | GPU routing on LLM serving trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
-| 7 | BOute MOBO routing co-optimisation | High | High effort | Not started |
-| 8 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
-| 9 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
 
 ---
 
