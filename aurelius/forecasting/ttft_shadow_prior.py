@@ -81,8 +81,12 @@ class TTFTShadowPrior:
     (model_size, gpu_type) → (gpu_type,) → global median if a subgroup is
     unseen.
 
-    Records ``subgroup_counts`` for the eval script's INSUFFICIENT_SAMPLE
-    flagging.
+    When ``model_size`` is None but ``gpu_type`` is provided, ``predict()``
+    falls through directly to the GPU-only lookup (``by_gpu``), enabling
+    GPU-type peer comparison in the scheduler even when model size is unknown.
+
+    Records ``subgroup_counts`` (per finest subgroup) and ``by_gpu_counts``
+    (total rows per GPU type) for INSUFFICIENT_SAMPLE flagging.
     """
 
     table: dict = field(default_factory=dict)            # (m, g, bin) -> p50
@@ -90,6 +94,7 @@ class TTFTShadowPrior:
     by_gpu: dict = field(default_factory=dict)           # (g,) -> p50
     global_p50: float = float("nan")
     subgroup_counts: dict = field(default_factory=dict)
+    by_gpu_counts: dict = field(default_factory=dict)    # gpu_type -> total rows
     fit_row_count: int = 0
     model_version: str = "cara_ttft_p50_shadow_prior_v1"
 
@@ -133,14 +138,21 @@ class TTFTShadowPrior:
         self.by_gpu = {
             k[0]: float(np.median(v)) for k, v in groups_g.items() if v
         }
+        self.by_gpu_counts = {
+            k[0]: int(len(v)) for k, v in groups_g.items() if v
+        }
         self.global_p50 = float(np.median(ttft)) if ttft else float("nan")
         self.fit_row_count = len(ttft)
         return self
 
     def predict(self, *, model_size: Optional[str], gpu_type: Optional[str],
                 prompt_tokens: Optional[float]) -> Optional[float]:
-        if model_size is None or gpu_type is None:
+        if gpu_type is None:
             return None
+        if model_size is None:
+            # No model-size context: fall through to GPU-only lookup so callers
+            # can compare GPU types even when model size is unknown.
+            return self.by_gpu.get(gpu_type)
         key3 = f"{model_size}|{gpu_type}|{_bin_label(prompt_tokens)}"
         v = self.table.get(key3)
         if v is not None:
@@ -157,6 +169,9 @@ class TTFTShadowPrior:
         return self.global_p50
 
     def subgroup_n(self, *, model_size, gpu_type, prompt_tokens) -> int:
+        if model_size is None and gpu_type is not None:
+            # GPU-only lookup: use total rows across all model sizes for this GPU.
+            return int(self.by_gpu_counts.get(gpu_type, 0))
         key = f"{model_size}|{gpu_type}|{_bin_label(prompt_tokens)}"
         return int(self.subgroup_counts.get(key, 0))
 
@@ -166,6 +181,7 @@ class TTFTShadowPrior:
             "fit_row_count": self.fit_row_count,
             "global_p50_s": self.global_p50,
             "by_gpu": self.by_gpu,
+            "by_gpu_counts": self.by_gpu_counts,
             "by_model_gpu": self.by_model_gpu,
             "subgroup_counts": self.subgroup_counts,
             "table_p50_s": self.table,
@@ -231,6 +247,7 @@ def load_prior(path) -> TTFTShadowPrior:
         table=payload.get("table_p50_s") or {},
         by_model_gpu=payload.get("by_model_gpu") or {},
         by_gpu=payload.get("by_gpu") or {},
+        by_gpu_counts=payload.get("by_gpu_counts") or {},
         global_p50=float(payload.get("global_p50_s") or float("nan")),
         subgroup_counts=payload.get("subgroup_counts") or {},
         fit_row_count=int(payload.get("fit_row_count") or 0),
