@@ -339,7 +339,57 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 7. Experiment History
 
-### Run 2026-06-20-e (this run)
+### Run 2026-06-20-f (this run) — MODULE INTEGRATION + ECONOMIC VALIDATION
+
+**Goal:** Stop building shadow modules. Wire the three existing research modules
+(`WorkloadAdmissionGate`, `OutputLengthForecastBundle`, `GpuPlacementScorer`)
+into the actual public replay path and measure whether they improve real public
+benchmark KPIs. No new papers, no new modules, no synthetic-only main evidence.
+
+- **Phase 1 (audit):** Confirmed all three modules were shadow/dead code in the
+  default replay path. `GpuPlacementScorer` is wired into `JobScheduler` (run -d)
+  but `JobScheduler` is only used by the canonical *energy* backtest — the public
+  LLM traces (Azure 2024 / BurstGPT) run a *different* aggregate per-tick
+  autoscaling replay (`aurelius/traces/backtest.py`) that never constructs a
+  `JobScheduler`. So GPU placement never touched the public LLM replay.
+- **Data:** Downloaded the real BurstGPT trace (1,429,738 requests, CC-BY-4.0).
+  Azure-2024 full week is SAS-gated (HTTP 401) → used the committed 5,880-request
+  sample (as the canonical Azure runner itself does). Real CAISO/PJM/ERCOT price
+  CSVs present.
+- **Phase 3 (baseline):** `research/results/baseline_public_backtest_2026-06-20.*`.
+  Canonical energy: constraint_aware 0.337 goodput/$ (0 misses, 692 migrations).
+  Serving traces tie at native load; constraint_aware beats sla_aware only under
+  saturation (BurstGPT +22% at 300×).
+- **Phase 4 (integration):** Added `aurelius/traces/module_backtest.py` — reuses
+  the LOCKED `backtest.py`/`serving.py`/`economics.py` verbatim, adds additive
+  provisioning variants (`ca_admission`, `ca_outlen`, `ca_outlen_p90`, `ca_all`).
+  A disabled gate is byte-identical to the locked constraint_aware baseline
+  (asserted by `tests/test_module_backtest.py`). GPU placement evaluated on the
+  real-price routing backtest.
+- **Phase 6/7 results** (`research/results/module_integration_public_backtest_2026-06-20.*`,
+  BurstGPT 100/300/600× = robust evidence):
+  - **WorkloadAdmissionGate → NEUTRAL.** goodput/$ Δ +0.19% / −0.34% / −0.29%.
+    The constraint_aware baseline already provisions to a safe rho (0.65), so the
+    gate rarely fires; deferral nets to ~0.
+  - **OutputLengthForecastBundle → HURT.** goodput/$ Δ −7.1% / −11.3% / −11.2%
+    (p50) and worse for p90 tail-sizing. The autoscaler already reads the
+    realized per-tick mean (clairvoyant); a forecast can only under-/over-size.
+    The module's designed SRTF per-request ordering lever is *absent* from the
+    aggregate replay physics.
+  - **GpuPlacementScorer → proxy moved, real KPI regressed.** Routing proxy
+    +54.7pp jobs on the fast GPU, penalty 0.43→0.15, but real goodput/$ −0.0004
+    overall and **−7.3% on the latency_critical subset** (routes to pricier H100
+    without monetized TTFT benefit in this model).
+  - One isolated Azure `ca_outlen` +23% at 150× is an 11-tick small-sample
+    artifact, contradicted by the well-sampled BurstGPT −7…−11% for the same
+    module.
+- **Phase 8 (decision):** No module improves SLA-safe goodput/$ on the robust
+  public replay. **Do NOT enable any module in runtime.** Keep all three
+  shadow-only. Merge the backtest infrastructure + report only.
+- **Final status: INFRASTRUCTURE ONLY.** No runtime decision path changed; no
+  benchmark/SLA/price/workload definition changed; modules stay `enabled=False`.
+
+### Run 2026-06-20-e (previous run)
 - **Phase 1 (audit):** Repository audit completed. Run -d wired `GpuPlacementScorer`
   into the scheduler but left GPU routing unvalidated on any price-data trace because
   the canonical benchmark had no `region_gpu_types` metadata. This run targets the

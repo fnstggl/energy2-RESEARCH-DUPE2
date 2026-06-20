@@ -180,6 +180,22 @@
 
 ---
 
+## 5b. Module-Integration Validation (run 2026-06-20-f)
+
+Public-replay economic validation of the three shadow research modules. Runners:
+`scripts/run_baseline_public_backtest.py`, `scripts/run_module_integration_backtest.py`
+(see `research/PUBLIC_BACKTEST_COMMANDS.md`). Results:
+`research/results/{baseline,module_integration}_public_backtest_2026-06-20.*`.
+
+| module | decision surface | public-replay verdict | enabled in runtime? |
+|---|---|---|---|
+| WorkloadAdmissionGate | serving autoscaling replay (defer best-effort) | **NEUTRAL** (BurstGPT ±0.34%) | No — shadow-only |
+| OutputLengthForecastBundle | autoscaler decode-length sizing | **HURT** (BurstGPT −7…−11%) | No — shadow-only |
+| GpuPlacementScorer | JobScheduler GPU routing (real prices) | **proxy moved, real KPI regressed** (lc goodput/$ −7.3%) | No — shadow-only |
+
+Verdict: no module improves SLA-safe goodput/$ on the robust public replay
+(BurstGPT, real 1.43M trace). All remain `enabled=False`. INFRASTRUCTURE ONLY.
+
 ## 6. Benchmark Integrity Rules (from `docs/RESULTS.md`)
 
 1. SLA-safe goodput/$ = `sla_compliant_goodput / (gpu_infra_cost + energy_cost + network_cost)`.

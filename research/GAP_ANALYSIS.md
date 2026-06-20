@@ -8,6 +8,37 @@
 
 ---
 
+## Run 2026-06-20-f — module integration + economic validation
+
+This run pivoted from building shadow modules to **validating** the three
+existing ones on real public replay. Key gap-analysis answers:
+
+- **Q1 (biggest limit):** The decision-surface mismatch. The public LLM-serving
+  benchmark (Azure 2024 / BurstGPT) is an *aggregate per-tick autoscaling*
+  replay; it exposes a provisioning decision, not the per-request placement /
+  ordering / GPU-routing decisions the three modules were built for. The modules
+  had no genuine lever there.
+- **Q3 (weakest):** `OutputLengthForecastBundle` — the autoscaler already reads
+  the realized per-tick mean (clairvoyant), so a forecast can only under- or
+  over-size. Its real benefit (SRTF per-request ordering) is not modeled by the
+  aggregate physics. Measured **−7…−11%** goodput/$ on BurstGPT.
+- **Q4 (suboptimal decisions):** None of the three modules improved any public
+  KPI. `WorkloadAdmissionGate` is neutral because the baseline is already
+  SLA-safe; `GpuPlacementScorer` moves the routing proxy (+54.7pp) but regresses
+  the real latency_critical goodput/$ (−7.3%).
+- **Q11 (benchmark weakness):** Azure-2024 full week is SAS-gated (401); the
+  committed 5,880-row sample yields only 11–32 ticks at saturating scales →
+  noisy. BurstGPT (real 1.43M trace) is the robust evidence.
+- **Q13 (next):** Do not enable any module. To ever validate output-length SRTF
+  or GPU routing, build a *per-request discrete-event* serving harness with
+  per-region GPU labels — the aggregate replay structurally cannot show their
+  benefit. Until then, keep all three shadow-only.
+
+**Decision: INFRASTRUCTURE ONLY** — backtest infra + report merged; no runtime
+decision change; modules stay `enabled=False`.
+
+---
+
 ## Run 2026-06-20-e
 
 ### Q1. What currently limits Aurelius most?
