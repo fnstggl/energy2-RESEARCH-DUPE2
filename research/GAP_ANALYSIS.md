@@ -8,6 +8,145 @@
 
 ---
 
+## Run 2026-06-20-e
+
+### Q1. What currently limits Aurelius most?
+
+**Output length forecasting not yet driving scheduling decisions.** The
+`OutputLengthForecastBundle` is implemented in shadow mode but its p50
+predictor is not wired into the scheduler's greedy sort key. Without length
+priors, all jobs are treated as equal priority in the request queue, losing
+the SRTF-like gain of short-first ordering (+32% p90 per arXiv:2604.06970).
+
+**Secondary:** The GPU routing benchmark (`run_gpu_routing_backtest()`) is
+now fully instrumented but the quantitative goodput/$ delta on real canonical
+price data has not been obtained because the canonical CSV files are not
+present in the repo (data files are gitignored). The benchmark infra is
+ready; it fires whenever the CSVs are mounted.
+
+### Q2. What theoretically offers the largest gain?
+
+**Semi-clairvoyant SRTF scheduling via output length p50** — the next
+single-run implementation that can produce a measurable delta. The
+`OutputLengthForecastBundle` (run -b) is built; wiring `p50` into the
+scheduler sort key is a 1–2 file change. Expected gain: +15–32% p90
+short-request goodput on LLM-serving traces (arXiv:2604.06970).
+
+**Second:** Running the GPU routing benchmark with real price data — the
+benchmark harness is now complete; this is a data-availability task.
+
+### Q3. Which forecasts are weakest?
+
+1. **GPU-type-specific TTFT penalty calibration** — `penalty_floor=0.05` /
+   `penalty_ceil=0.50` are heuristic constants not tuned from goodput/$ data.
+   Vidur profiling CSVs would enable data-driven calibration.
+2. **Output token length** — forecaster built; not yet driving scheduling.
+3. **TTFT p99 tail** — still at baseline_fallback (67% fallback on time holdout).
+4. **Queue wait** — derived proxy only; no real measured wait labels.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Request ordering without length priors** — greedy sort is by deadline/
+   priority only; output length p50 not used as SRTF weight.
+2. **Batch admission timing** — `WorkloadAdmissionGate` implemented but not
+   connected to any trace replay.
+3. **GPU penalty calibration** — heuristic floor/ceil; not from goodput data.
+
+### Q5. Which workloads benefit least?
+
+**GPU packing / training scheduling** — unchanged. The GPU placement scorer
+applies only to `latency_critical` LLM-serving jobs. Training / packing
+workloads are unaffected by all new infrastructure in runs -c through -e.
+
+### Q6. Which research direction appears strongest?
+
+**SRTF-like scheduling via output token length priors** is the highest-EV
+next step. Infrastructure is complete; integration is low-complexity and
+directly measurable on BurstGPT and Azure 2024 traces.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Wire `OutputLengthForecastBundle.p50` as the secondary scheduler sort key
+   after SLA class (actual_output_tokens reserved as label-only).
+2. Run on BurstGPT and Azure LLM 2024 with simulated length priors (use
+   `num_predicted_output_tokens` from CARA as the shadow prior).
+3. If short requests are served first, p90 TTFT drops → more SLA-safe goodput.
+Estimated complexity: 1 run of low-medium scope (sort key + benchmark replay).
+
+### Q8. What is the shortest path to another +50% gain?
+
+1. Output length SRTF scheduling (+15–32%).
+2. GPU routing on real price data (quantified from +routing_improvement_pp).
+3. Admission gate cluster simulator integration (+3–8% from KV overflow reduction).
+Combined: +50% plausible within 2–3 runs.
+
+### Q9. What would need to be true to achieve +300%?
+
+Unchanged. Requires: accurate output length prediction, heterogeneous GPU
+placement (wired + benchmarked), measured queue-wait labels, agentic PDGraph,
+joint carbon + placement optimization, pilot telemetry.
+
+### Q10. Which assumptions might be wrong?
+
+1. **TTFT spread from CARA generalizes to production** — CARA is a research
+   cluster. H100/T4 relative TTFT under production token distributions and
+   serving frameworks (vLLM, TensorRT-LLM) may differ.
+2. **Synthetic region_gpu_types match fleet reality** — the assignment
+   us-east→H100, us-west→A100, us-south→T4 is a reasonable approximation
+   but actual cloud region GPU fleets are heterogeneous within a region.
+3. **SRTF gain transfers from LLM serving to the canonical energy trace** —
+   the canonical trace uses `runtime_hours` (not output token count) as the
+   job length signal. SRTF gains may be smaller outside pure LLM serving.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Canonical CSVs not in repo** — `run_gpu_routing_backtest()` fires only
+   when `data/caiso_us_west_dam.csv` etc. are present. Real quantitative delta
+   not yet obtained.
+2. **No per-region GPU-type labels in public traces** — BurstGPT, Azure 2024,
+   Alibaba GenAI all lack GPU-type metadata. Synthetic assignment is an
+   approximation.
+3. **BurstGPT short duration (34 min)** — GPU routing benefit may be
+   dominated by model prewarm cost in a 34-minute window.
+
+### Q12. Which public datasets should be added?
+
+1. **Vidur profiling CSVs** — measured kernel latency on A100/H100/A40/T4 for
+   LLM model sizes; enables data-driven penalty_floor/ceil calibration.
+2. **ShareGPT** — output token counts for length predictor cross-dataset validation.
+3. **Mooncake FAST25 traces** — KV prefix reuse cross-validation (unchanged).
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Wire `OutputLengthForecastBundle` p50 into the greedy scheduler sort key
+   (after SLA class) as an SRTF prior; use `num_predicted_output_tokens` from
+   CARA as the shadow prior value. Reserve `actual_output_tokens` as label-only.
+2. Evaluate on BurstGPT and Azure 2024 traces.
+
+**Short-term (2–3 runs):**
+3. Wire `WorkloadAdmissionGate` into cluster simulator for Azure 2024 replay.
+4. Obtain or mount canonical CSV files; run `run_gpu_routing_backtest()` with
+   real price data to produce the quantitative GPU routing goodput/$ table.
+5. Vidur CSV ingestion for penalty calibration.
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Output token p50 → SRTF scheduler sort key | High | Low effort | Infrastructure built (shadow) |
+| 2 | GPU routing benchmark on real price data | High | Low effort | Benchmark infra complete [run -e] |
+| 3 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
+| 4 | Vidur CSV ingestion for GPU penalty calibration | Low-Med | Low | Not started |
+| 5 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 6 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
+| 7 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+| 8 | Hermes PDGraph agentic routing | High | High effort | Not started |
+
+---
+
 ## Run 2026-06-20-d
 
 ### Q1. What currently limits Aurelius most?
