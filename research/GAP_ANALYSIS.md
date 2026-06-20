@@ -8,6 +8,148 @@
 
 ---
 
+## Run 2026-06-20-b
+
+### Q1. What currently limits Aurelius most?
+
+**Pilot telemetry** remains the top bottleneck. The output length forecaster
+infrastructure is now built, but verifying calibration gain requires running
+on actual CARA data (currently gitignored). Two components now exist and are
+unit-tested; their real-world MAE improvement needs the CARA analysis_sample
+JSONL to quantify.
+
+**Secondary:** The output length predictor and admission gate are both
+implemented but not yet wired into any backtest simulation. The gap between
+"component built" and "goodput/$ quantified" requires simulator integration.
+
+### Q2. What theoretically offers the largest gain?
+
+**Semi-clairvoyant scheduling via calibrated output length** (arXiv:2604.06970
++ arXiv:2602.11812). The infrastructure is now in place:
+- `BiasCalibrationForecaster` debiases `num_predicted_output_tokens`
+- `HGBOutputLengthForecaster` predicts actual output length at p50/p90/p95
+- The p50 prediction can be used as a SRTF-like scheduling weight
+
+Expected impact when wired: 32% p90 short-request improvement + tail latency
+reduction from admission gate, potentially +15-30% SLA-safe goodput/$.
+
+### Q3. Which forecasts are weakest?
+
+1. **Output token length** — forecaster built (shadow); calibration not yet
+   validated on real CARA data; bias magnitude unknown until data is loaded.
+2. **TTFT p99 tail** — still at baseline_fallback (67% fallback on time holdout).
+3. **Queue wait** — derived proxy only (CARA research cluster runs cool).
+4. **Cold-start latency / migration cost** — blocked_by_missing_labels.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Request ordering without length priors** — the scheduler currently uses
+   FIFO / SLA-class ordering; it does not use `num_predicted_output_tokens` or
+   the new calibrated p50 estimate. Wiring the p50 as a scheduling weight would
+   enable SRTF-like behaviour for short requests.
+2. **Batch admission timing** — admission gate (implemented) not yet wired in.
+3. **Heterogeneous GPU routing** — TTFT 9× spread across GPU types not exploited.
+
+### Q5. Which workloads benefit least?
+
+**GPU packing / training scheduling** — unchanged from prior run. CA is near
+frontier on Alibaba GPU, MIT Supercloud, Philly. Job duration prediction
+remains the missing lever here.
+
+### Q6. Which research direction appears strongest?
+
+**Calibrated output length → SRTF scheduling** is now the clearest path.
+The infrastructure gap is closed; the remaining work is:
+1. Run calibration on CARA train/test split (requires data script)
+2. Wire p50 into scheduler request ordering
+3. Evaluate on Azure LLM 2024 + BurstGPT with simulated prior quality
+
+Second: **Heterogeneous GPU placement scorer** — TTFT spread across GPU types
+is 9×, and the `HGBOutputLengthForecaster` pattern gives a direct blueprint.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Wire the `BiasCalibrationForecaster` into the dynamic routing path.
+2. Use calibrated p50 as a secondary scoring dimension (after SLA class) in
+   the greedy scheduler — prefer shorter predicted outputs at equal cost.
+3. Evaluate on BurstGPT (currently +1.77%) where length-aware routing is most
+   likely to improve margin.
+Estimated complexity: 1 run of medium scope (no new data needed).
+
+### Q8. What is the shortest path to another +50% gain?
+
+1. Complete CARA output length backtest to validate calibration quality.
+2. Wire calibrated p50 into scheduler → expected +15-30% on LLM-serving traces.
+3. Add heterogeneous GPU placement scorer → +5-15% from TTFT spread exploitation.
+4. Admission gate → cluster sim integration → +3-8% from KV overflow prevention.
+Combined: +50% total is plausible within 3-4 runs.
+
+### Q9. What would need to be true to achieve +300%?
+
+Unchanged from prior run. Requires: accurate output length prediction,
+heterogeneous GPU placement, measured queue-wait labels, agentic PDGraph,
+joint carbon + placement optimization, pilot telemetry.
+
+### Q10. Which assumptions might be wrong?
+
+1. **CARA `num_predicted_output_tokens` bias is correctable** — the calibration
+   model assumes a stable scale + offset correction. If the engine uses multiple
+   prediction algorithms or model-dependent biases, a single Huber regression
+   may not capture the full correction. Per-model-size variant may help.
+2. **HGB output length generalisation** — trained only on CARA (5 instance types,
+   Qwen 2.5 model family). Generalization to other model families is unverified.
+3. **p50 as SRTF prior** — the scheduling gain depends on the ratio of
+   prediction accuracy to the natural variance. If actual output token variance
+   within each bin is large relative to between-bin variance, the SRTF gain
+   may be smaller than the 32% figure from arXiv:2604.06970.
+
+### Q11. Which benchmark weaknesses exist?
+
+Unchanged from prior run. Key: Azure LLM 2024 has no output token labels;
+BurstGPT has no output token labels. The calibration forecaster can only be
+validated on CARA (which has both fields).
+
+### Q12. Which public datasets should be added?
+
+1. **Mooncake FAST25 traces** — still highest priority for KV prefix reuse.
+2. **Vidur profiling CSVs** — provides kernel latency priors for heterogeneous
+   GPU placement scorer (now ranked #3 opportunity).
+3. **ShareGPT conversation traces** — has output token counts; could serve as
+   a second validation dataset for the output length predictor.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Run CARA output length calibration backtest — compute MAE of:
+   (a) raw `num_predicted_output_tokens` vs actual
+   (b) `BiasCalibrationForecaster` calibrated vs actual
+   (c) `HGBOutputLengthForecaster` p50 vs actual
+   This is the missing validation gate for the new module.
+2. Wire p50 output length into scheduler scoring and evaluate on BurstGPT.
+
+**Short-term (2-3 runs):**
+3. Heterogeneous GPU placement scorer using HGB TTFT forecasts.
+4. Admission gate → cluster simulator integration.
+5. Mooncake trace ingestion.
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Output token calibration → SRTF scheduling | High | Medium | Infrastructure built |
+| 2 | Admission gate → simulator integration | Medium | Medium | Implemented (unconnected) |
+| 3 | Heterogeneous GPU placement scorer | High | Medium | build_now |
+| 4 | BOute MOBO routing co-optimisation | High | High effort | Not Started |
+| 5 | Mooncake trace ingestion | Low-Med | High | Not Started |
+| 6 | TTFT p50 shadow integration | Medium | Low | shadow_ready |
+| 7 | Hermes PDGraph agentic routing | High | High effort | Not Started |
+| 8 | Carbon-power MILP joint optimization | Medium | High effort | Not Started |
+| 9 | CARA train.jsonl TPOT expansion | Medium | Low | build_after_data |
+
+---
+
 ## Run 2026-06-20
 
 ### Q1. What currently limits Aurelius most?
