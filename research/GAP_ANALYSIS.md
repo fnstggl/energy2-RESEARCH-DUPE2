@@ -8,6 +8,139 @@
 
 ---
 
+## Run 2026-06-20-i — Aging-SRTF anti-starvation + BurstGPT cross-validation
+
+### Q1. What currently limits Aurelius most?
+
+**Long-request starvation under non-preemptive SRTF is quantified and partially
+mitigated but not eliminated.** Run -i shows that aging-SRTF (α=0.05) cuts the
+long_p99 regression by 55% while retaining +22.4% goodput/$ vs FIFO, and
+α=0.01 retains +70.7% goodput/$ vs FIFO with 49% starvation reduction. The
+remaining limits are: (a) the serving runtime has no aging_srtf hook yet, and
+(b) non-preemptive scheduling still starves long requests under heavy short-job
+streams — preemptive SRPT would eliminate rather than bound this.
+
+### Q2. What theoretically offers the largest gain?
+
+**Preemptive SRPT (Shortest Remaining Processing Time):** when a shorter job
+arrives, preempt the current job at an operator boundary. The preempted job
+resumes with remaining_service = initial − elapsed. FlowPrefill (arXiv:2602.16603)
+shows this is feasible with minimal overhead. This would eliminate (not just bound)
+long-request starvation while preserving the full SRTF short-request gain.
+
+**Second:** Wire aging_srtf (α=0.01) into the serving runtime path driven by
+OutputLengthForecastBundle.p50 — the live oracle prior.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live SRTF prior** — the serving backtest
+   used a perfect oracle prior. The real prior has 30%-CV forecast error. Run -g
+   showed robustness at 30% CV noise; alpha sensitivity data suggests similar
+   robustness for aging-SRTF.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving-queue ordering uses FIFO** — aging_srtf proven better in simulator;
+   not yet wired into runtime.
+2. **No preemption** — non-preemptive SJF still starves long jobs; aging bounds
+   it but does not eliminate it. Preemptive SRPT is the next step.
+3. **OutputLengthForecastBundle not driving ordering** — still uses oracle prior.
+
+### Q5. Which workloads benefit least?
+
+**Batch / energy-shifting workloads** — confirmed through multiple runs. SRTF
+and aging benefit only in per-request serving queues under contention.
+
+**Small-scale BurstGPT sample** — 51 requests too few to characterize starvation
+or confirm goodput/$ generalization. Full 1.4M-row dataset needed.
+
+### Q6. Which research direction appears strongest?
+
+**Preemptive SRPT + aging** would eliminate the starvation problem entirely while
+preserving the short-request benefit. FlowPrefill (arXiv:2602.16603) provides the
+blueprint. This is a simulator-only change, directly measurable in run -i's framework.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Wire aging_srtf (α=0.01) into the serving runtime path → retains +70.7%
+   goodput/$ vs FIFO with bounded starvation.
+2. Replace oracle prior with OutputLengthForecastBundle.p50 → live prior.
+3. Re-run `run_aging_srtf_backtest()` end-to-end with live prior.
+
+### Q8. What is the shortest path to another +50% gain?
+
+The serving-queue aging-SRTF result (α=0.01) already shows +70.7% goodput/$ vs
+FIFO in simulation. Realizing even a fraction of this in the serving runtime, combined
+with the forecast-prior integration, would achieve +50% vs FIFO at the simulator
+fidelity level.
+
+### Q9. What would need to be true to achieve +300%?
+
+Unchanged — the +300% target is vs SLA-aware (not FIFO). The aging-SRTF results
+are vs FIFO, not SLA-aware, so they do not directly claim the target. Requires:
+live output-length prior, serving-path SRTF/SRPT with aging, heterogeneous GPU
+routing on LLM traces, measured queue-wait labels, agentic PDGraph, joint carbon
+optimization, pilot telemetry.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Oracle prior over-estimates real gain** — aging-SRTF uses the perfect
+   prior (actual tokens as predicted). With 30%-CV noise (run -g), pure SRTF
+   short_p90 was −99.5% (vs −99.6% perfect). Expected similar robustness for aging.
+2. **Aging parity time** — 87-second parity for p99 requests at α=0.05 was
+   calibrated analytically; real optimal α depends on actual request mix and
+   service time distribution.
+3. **Non-preemptive assumption** — SRPT (preemptive) changes the starvation math
+   fundamentally; the aging bound holds only for non-preemptive scheduling.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **FIFO baseline** — goodput/$ gains are vs FIFO, not vs SLA-aware. Still the
+   right comparison for understanding ordering discipline value.
+2. **BurstGPT sample too small** — 51 rows, 51 non-failures; need 1.4M-row full
+   dataset for meaningful cross-trace confirmation.
+3. **No live forecast integration** — perfect oracle prior used throughout; 30%-CV
+   robustness is documented (run -g) but not re-tested for aging.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT full dataset** (1.4M rows, CC-BY-4.0) — highest priority for
+   cross-trace aging-SRTF validation. `run_burstgpt_aging_backtest()` is ready.
+2. **ShareGPT** — output token cross-validation for OutputLengthForecastBundle.
+3. **Vidur profiling CSVs** — GPU penalty calibration.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Add preemptive SRPT variant to `simulate_queue` (discipline="srpt_preemptive"):
+   remaining_service = initial_service_s − elapsed_s; preempt at server event.
+2. Re-run `run_aging_srtf_backtest()` with preemptive SRPT — expected to recover
+   the long_p99 regression to near-FIFO levels while preserving SRTF short_p90.
+
+**Short-term (2–3 runs):**
+3. Cross-validate on full BurstGPT (1.4M rows).
+4. Wire aging_srtf (α=0.01) into serving runtime path with OutputLengthForecastBundle.p50.
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Preemptive SRPT variant in simulator | High | Medium | Not started — blueprint: FlowPrefill arXiv:2602.16603 |
+| 2 | Wire aging_srtf (α=0.01) into serving runtime | High | Medium | Quantified [run -i]; not yet in runtime |
+| 3 | Full BurstGPT cross-validation (1.4M rows) | Medium | Low | run_burstgpt_aging_backtest() ready |
+| 4 | Wire OutputLengthForecastBundle.p50 as live SRTF prior | High | Low | Infrastructure built (shadow) |
+| 5 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
+| 6 | GPU routing on LLM serving trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 7 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 8 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
+| 9 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+
+---
+
 ## Run 2026-06-20-h — module integration + economic validation
 
 This run pivoted from building shadow modules to **validating** the three
