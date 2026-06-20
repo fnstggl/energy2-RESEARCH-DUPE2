@@ -24,6 +24,13 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Request-level SRTF [run 2026-06-20-g]:** On the real Azure LLM 2024 serving
+queue (discrete-event M/G/c, ρ=0.85), shortest-predicted-job-first cuts
+short-request p90 latency by **−99.6%** and mean response by **−62%** vs FIFO,
+for **+323% SLA-safe goodput/$** — at the documented cost of a long-request
+p99 regression. Robust to a 30%-CV forecast prior. Directional simulator
+result; baseline is FIFO, not SLA-aware. See `docs/SRTF_SERVING_BACKTEST_RESULTS.md`.
+
 ---
 
 ## 2. Current Best Results (Benchmark Leaderboard)
@@ -281,11 +288,32 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
     limited GPU capacity at the same time, as in LLM serving traces).
   - `aurelius/benchmarks/srtf_backtest.py` A/B benchmark module added.
   - 37 new tests; 0 regressions.
+- **Evaluated on real Azure LLM 2024 serving queue [run 2026-06-20-g]:**
+  - **Negative finding (batch scheduler):** `srtf_contention_backtest.py` shows
+    the merged greedy `JobScheduler` sort key is inert even at 4.6× capacity
+    contention (Δ ≤ 0.05%). Root cause: the greedy batch path has NO queue-wait
+    semantics — it falls back to `earliest_start` rather than making a job wait,
+    so order never changes a completion time. The Erlang-C serving model is also
+    aggregate (no per-request ordering). The merged sort key lives in the wrong
+    layer for serving workloads.
+  - **Large positive finding (request-level queue):** `srtf_serving_backtest.py`
+    — a discrete-event non-preemptive M/G/c simulator over the REAL Azure LLM
+    2024 trace (5,880 requests, real heavy-tailed output lengths) at ρ=0.85,
+    c=4. SRTF (shortest-predicted-first) vs FIFO:
+    - short-request **p90 latency: −99.6%** (696s → 3.0s)
+    - **mean response: −62.2%** (344s → 130s)
+    - **SLA-safe goodput/$: +323%** (discipline-invariant denominator)
+    - 30%-CV forecast prior: short-p90 still −99.5% (robust to forecast error;
+      no actual-length leakage — ordering uses predicted, physics uses actual)
+    - **Honest cost:** long-request p99 REGRESSES (733s → 2189s) — non-preemptive
+      SJF starves long jobs; mitigation = aging / SPRT preemption / hybrid bands.
+    - See `docs/SRTF_SERVING_BACKTEST_RESULTS.md`. 38 new tests; 0 regressions.
 - **Next steps:**
-  1. Evaluate SRTF on BurstGPT and Azure LLM 2024 (LLM serving, queue
-     contention present) — expected +15–32% p90 short-request improvement.
-  2. Wire `OutputLengthForecastBundle.p50` as shadow prior value (replaces
-     `runtime_hours × SRTF_TOKENS_PER_HOUR` proxy with calibrated estimate).
+  1. Expose an SRTF/SPRPT ordering option in the SERVING path (not the batch
+     scheduler) driven by `OutputLengthForecastBundle.p50`, with an aging /
+     preemption guard to bound long-request starvation; re-run this backtest
+     end-to-end as the value-realization step.
+  2. Add an aging term so long requests cannot be starved beyond a TTL.
 
 ### 4.5 Probabilistic Demand Modeling
 
@@ -357,7 +385,7 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | SRTF on LLM serving traces (BurstGPT / Azure 2024) | High (+32% p90 short-request per arXiv:2604.06970) | Low | **Sort key wired [run -f]** — canonical energy 0% (expected) | Evaluate on BurstGPT + Azure 2024 with queue contention |
+| 1 | SRTF/SPRPT ordering in the SERVING path + aging guard | High (Azure 2024 queue: −99.6% short-p90, +323% goodput/$ vs FIFO [run -g]) | Medium | **Quantified [run -g]** — value proven in serving simulator; not yet wired into serving runtime | Expose ordering option in serving path driven by OutputLengthForecastBundle.p50 + aging/preemption to bound long-tail starvation |
 | 2 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated, expected) | Evaluate on BurstGPT where TTFT is the binding constraint |
 | 3 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
 | 4 | Wire OutputLengthForecastBundle.p50 as SRTF shadow prior | High (replaces runtime_hours proxy with calibrated token estimate) | Low | Infrastructure built (shadow) | Replace SRTF_TOKENS_PER_HOUR proxy with p50 from OutputLengthForecastBundle |
@@ -372,7 +400,55 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 7. Experiment History
 
-### Run 2026-06-20-f (this run)
+### Run 2026-06-20-g (this run)
+- **Phase 1 (audit):** Run -f wired the SRTF sort key into the batch
+  `JobScheduler` and showed it neutral on the energy trace, hypothesizing the
+  gain needs queue contention. This run tests that hypothesis on the REAL
+  Azure LLM 2024 serving trace and looks for actual measurable improvement.
+- **Phase 2 (research):** Re-grounded on arXiv:2604.06970 (SRTF +32% p90
+  short-request), arXiv:2410.01035 (TRAIL/SPRPT), arXiv:2604.07931 (ELIS robust
+  length prediction). Key methodological insight: the +32% figure is a
+  *request-level queue-discipline* result; it requires a discrete-event queue,
+  not an aggregate Erlang-C model or a batch placement scheduler.
+- **Phase 3 (benchmarks):** 38 new tests (27 serving + 11 contention); 0
+  regressions across scheduler / canonical / gpu-routing / azure-ingestion
+  suites (64 passed, 1 skipped on the regression slice).
+- **Phase 4 (implementation):**
+  - `aurelius/benchmarks/srtf_contention_backtest.py` (NEW): probes the merged
+    batch scheduler under a binding power cap. **Negative finding:** Δ ≤ 0.05%
+    even at 4.6× contention — the greedy batch path has no queue-wait semantics
+    (falls back to `earliest_start`), so order never changes completion time.
+  - `aurelius/benchmarks/srtf_serving_backtest.py` (NEW): discrete-event
+    non-preemptive M/G/c simulator over the real Azure LLM 2024 request stream
+    (5,880 real requests, real output-length distribution). FIFO vs
+    shortest-predicted-first; perfect + 30%-CV-forecast priors; leakage guard
+    (ordering=predicted, physics=actual); discipline-invariant goodput/$
+    denominator (total GPU busy-seconds).
+  - `tests/test_srtf_serving_backtest.py` (27), `tests/test_srtf_contention_backtest.py` (11).
+  - `docs/SRTF_SERVING_BACKTEST_RESULTS.md` — full results + caveats.
+- **Benchmark results (real Azure LLM 2024, ρ=0.85, c=4, SLA=10s):**
+  - short-request p90 response: 696.2s → 3.03s (**−99.6%**)
+  - mean response: 343.9s → 129.9s (**−62.2%**)
+  - SLA-safe goodput/$: 13,336 → 56,481 (**+323.5%**)
+  - 30%-CV forecast prior: short-p90 still −99.5% (robust)
+  - long-request p99: 732.7s → 2188.7s (**REGRESSES** — non-preemptive SJF
+    starvation; documented cost, asserted in tests)
+  - holds across ρ ∈ {0.80, 0.85, 0.92}: short-p90 −99.5%+, goodput/$ +252–324%
+- **Decision:** Positive (research infrastructure — does NOT change runtime
+  decisions). Two artifacts: (a) negative finding locating where the merged
+  sort key is inert; (b) large positive finding quantifying where SRTF actually
+  pays off on a real serving trace. Honest caveats recorded: FIFO (not
+  SLA-aware) baseline; regime-dependent magnitude; simulator/public-trace
+  directional, not production savings; long-tail regression is the cost.
+- **Next recommended direction:**
+  1. Expose SRTF/SPRPT ordering in the SERVING runtime path (not the batch
+     scheduler) driven by `OutputLengthForecastBundle.p50`, with an
+     aging/preemption guard bounding long-request starvation; re-run this
+     backtest end-to-end to realize the value.
+  2. Add SRPT (preemptive) variant to the simulator and quantify the long-tail
+     recovery vs the non-preemptive starvation cost.
+
+### Run 2026-06-20-f (previous run)
 - **Phase 1 (audit):** Repository audit. Run -e built the GPU routing benchmark
   harness and stated that canonical CSV files were "not present." This run
   discovered those CSV files ARE present (`data/caiso_us_west_dam.csv` etc.),
