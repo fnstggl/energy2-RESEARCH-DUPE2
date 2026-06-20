@@ -31,6 +31,14 @@ for **+323% SLA-safe goodput/$** — at the documented cost of a long-request
 p99 regression. Robust to a 30%-CV forecast prior. Directional simulator
 result; baseline is FIFO, not SLA-aware. See `docs/SRTF_SERVING_BACKTEST_RESULTS.md`.
 
+**Aging-SRTF anti-starvation [run 2026-06-20-i]:** SRTF-with-Aging
+(key(r,t) = predicted_tokens / (1 + α·wait_s)) reduces long-request p99
+starvation by **55%** vs pure SRTF while retaining **+22.4% goodput/$** vs FIFO
+(α=0.05) or **+70.7% goodput/$** vs FIFO (α=0.01, recommended sweet spot).
+Short_p90 improvement preserved at 70-78% vs FIFO (vs 99.6% for pure SRTF).
+Research basis: Astraea (arXiv:2512.14142), FlowPrefill (arXiv:2602.16603),
+Equinox (arXiv:2508.16646). 37 new tests. See `docs/SRTF_AGING_BACKTEST_RESULTS.md`.
+
 ---
 
 ## 2. Current Best Results (Benchmark Leaderboard)
@@ -267,6 +275,29 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ### 4.4 Semi-Clairvoyant Scheduling
 
+#### Aging-SRTF Anti-Starvation Guard [NEW — run 2026-06-20-i]
+- **Status:** Implemented + benchmarked on Azure LLM 2024 (5880 requests)
+- **Expected upside:** Medium–High — resolves the key production barrier from
+  run -g (long-request starvation). Recommended α=0.01 gives +70.7% goodput/$
+  vs FIFO with 49% starvation reduction.
+- **Research basis:** Astraea (arXiv:2512.14142), FlowPrefill (arXiv:2602.16603),
+  Equinox (arXiv:2508.16646).
+- **Implementation:** `simulate_queue(..., discipline="aging_srtf", aging_alpha=...)`
+  in `aurelius/benchmarks/srtf_serving_backtest.py`. O(|ready|) per dispatch
+  (re-evaluates all waiting requests at current time t). 37 tests passing.
+- **Key results (Azure LLM 2024, ρ=0.85, SLA=10s):**
+  - α=0.01: +70.7% gp/$, short_p90 −78.1%, long_p99 +113.8% (49% less starvation)
+  - α=0.05: +22.4% gp/$, short_p90 −70.7%, long_p99 +101.7% (55% less starvation)
+- **New loaders/benchmarks:** `load_burstgpt_serving_requests()`,
+  `run_aging_srtf_backtest()`, `run_burstgpt_aging_backtest()`.
+- **BurstGPT:** Sample too small (51 rows) for robust starvation analysis;
+  full 1.4M-row dataset needed for cross-trace confirmation.
+- **Next steps:**
+  1. Add preemptive SRPT variant to simulator (FlowPrefill-style).
+  2. Cross-validate on full BurstGPT (1.4M rows).
+  3. Wire aging_srtf into the serving runtime path driven by
+     OutputLengthForecastBundle.p50.
+
 #### Output Length Prediction for Token-Magnitude Priors
 - **Status:** Sort key wired into scheduler [run 2026-06-20-f]
 - **Expected upside:** High — "Scheduling the Unschedulable" (arXiv:
@@ -385,20 +416,96 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | SRTF/SPRPT ordering in the SERVING path + aging guard | High (Azure 2024 queue: −99.6% short-p90, +323% goodput/$ vs FIFO [run -g]) | Medium | **Quantified [run -g]** — value proven in serving simulator; not yet wired into serving runtime | Expose ordering option in serving path driven by OutputLengthForecastBundle.p50 + aging/preemption to bound long-tail starvation |
-| 2 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated, expected) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 3 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 4 | Wire OutputLengthForecastBundle.p50 as SRTF shadow prior | High (replaces runtime_hours proxy with calibrated token estimate) | Low | Infrastructure built (shadow) | Replace SRTF_TOKENS_PER_HOUR proxy with p50 from OutputLengthForecastBundle |
-| 5 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 6 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 7 | TTFT p50 shadow integration (already shadow_ready) | Medium | Low-Medium | shadow_ready | Wire into routing decision |
-| 8 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 9 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
-| 10 | TPOT forecasting after CARA train.jsonl expansion | Medium | Low | build_after_data_expansion | Expand CARA to train.jsonl (392 MB) |
+| 1 | Wire aging_srtf into SERVING runtime path (α=0.01) | High (+70.7% gp/$ vs FIFO in sim) | Medium | **Quantified [run -i]** — serving simulator; not yet in serving runtime | Expose aging_srtf ordering in serving path driven by OutputLengthForecastBundle.p50; α=0.01 recommended |
+| 2 | Preemptive SRPT variant in simulator | High (eliminates long-tail regression entirely) | Medium | Not Started | Add preemption to simulator; service = initial − elapsed |
+| 3 | Full BurstGPT (1.4M rows) cross-validation | Medium (confirms generalization) | Low | Not Started | Download full BurstGPT_1.csv; run run_burstgpt_aging_backtest() at scale |
+| 4 | Wire OutputLengthForecastBundle.p50 as aging-SRTF prior | High (replaces oracle prior with live forecast) | Low | Infrastructure built (shadow) | Replace perfect-prior in aging_srtf with OutputLengthForecastBundle.p50 |
+| 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 8 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 9 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 10 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-20-i — AGING-SRTF ANTI-STARVATION GUARD + BURSTGPT CROSS-VALIDATION
+
+**Goal:** Address the #1 production barrier from run -g: long-request starvation
+under non-preemptive SRTF (p99: 733s → 2373s, +223.5% regression vs FIFO). Add
+the aging-SRTF discipline (key(r,t) = predicted_tokens / (1 + α·wait_s)) to
+bound starvation while preserving as much of the SRTF short-request benefit as
+possible. Cross-validate on BurstGPT for generalization.
+
+- **Phase 1 (audit):** Read ROADMAP, GAP_ANALYSIS. Confirmed #1 opportunity:
+  implement aging guard for SRTF. All three shadow modules (WorkloadAdmissionGate,
+  OutputLengthForecastBundle, GpuPlacementScorer) remain unconnected to the
+  aggregate LLM benchmark path per run -h's finding.
+
+- **Phase 3 (research — 3 new papers):**
+  1. **Astraea** (arXiv:2512.14142, Dec 2025) — state-aware scheduling for LLM
+     agents with aging-based starvation prevention: a request in the
+     lowest-priority queue is promoted to highest priority when its response-ratio
+     exceeds a predefined aging threshold. Maps directly to our aging key formula.
+  2. **Equinox** (arXiv:2508.16646, Aug 2025) — holistic fair scheduling for LLMs
+     via a dual-counter framework: User Fairness Counter (latency, weighted tokens)
+     + Resource Fairness Counter (throughput, GPU utilization). MoPE predictions
+     enable proactive fairness-aware scheduling with up to 1.3× throughput, 60%
+     latency improvement. Validates the aging-SRTF direction.
+  3. **FlowPrefill** (arXiv:2602.16603, Feb 2026) — decouples preemption from
+     prefill scheduling granularity to mitigate head-of-line blocking. Operator-
+     level preemption enables SLO-aware prioritization for newly arriving high-
+     priority requests. Maps to the preemptive SRPT variant needed to eliminate
+     (vs bound) long-tail starvation.
+  Also found: arXiv:2601.22996 (Competitive Non-Clairvoyant KV-Cache Scheduling,
+  Feng et al. Jan 2026 — GSA with geometric phase structure and competitive ratio
+  61.92; maps to admission gate memory management).
+
+- **Phase 4 (implementation):**
+  - `aurelius/benchmarks/srtf_serving_backtest.py` extended:
+    - `AGING_ALPHA_DEFAULT = 0.05`; `DEFAULT_BURSTGPT_FIXTURE`; `DEFAULT_BURSTGPT_SLA_S = 30.0`
+    - `simulate_queue(discipline="aging_srtf", aging_alpha)` — O(|ready|) dispatch,
+      re-evaluates effective key for all waiting requests at dispatch time t.
+    - `_summarize()` extended: adds `long_p90_response_s`, `long_p99_response_s`.
+    - `load_burstgpt_serving_requests()` — BurstGPT CSV loader.
+    - `SRTFAgingReport` — FIFO / SRTF-perfect / aging_SRTF comparison dataclass.
+    - `_run_aging_backtest_on_trace()` — internal shared helper.
+    - `run_aging_srtf_backtest()` — Azure LLM 2024 multi-discipline benchmark.
+    - `run_burstgpt_aging_backtest()` — BurstGPT cross-validation benchmark.
+  - `tests/test_srtf_aging_backtest.py` (NEW) — 37 tests, all passing.
+
+- **Phase 7 (benchmark results — public trace replay):**
+
+  **Azure LLM 2024 (5880 requests, ρ=0.85, SLA=10s, c=4):**
+  | KPI | FIFO | SRTF-perfect | Aging-SRTF (α=0.05) |
+  |---|---:|---:|---:|
+  | SLA-safe goodput/$ | 13,336 | 56,481 (+323.5%) | 16,317 (+22.4%) |
+  | short_p90 response (s) | 696.16 | 3.03 (+99.6% impr.) | 204.02 (+70.7% impr.) |
+  | long_p99 response (s) | 733.55 | 2,373 (+223.5% regr.) | 1,479 (+101.7% regr.) |
+
+  **Alpha sensitivity (α=0.01 sweet spot):** +70.7% gp/$ vs FIFO, 49% starvation
+  reduction (long_p99: +113.8% vs FIFO rather than +223.5%), short_p90 +78.1%.
+
+  **BurstGPT (51-request sample):** Sample too small for starvation characterization;
+  SRTF direction confirmed (+56.6% short_p90). Full 1.4M-row dataset needed.
+
+- **Decision:** FRONTIER IMPROVEMENT (simulator). The aging-SRTF discipline
+  quantifies the full fairness–efficiency trade-off curve for the first time on a
+  real LLM serving trace. At α=0.01: +70.7% goodput/$ vs FIFO, 49% starvation
+  reduction. Implementation is simulator-only (shadow); not wired into serving runtime.
+  See `docs/SRTF_AGING_BACKTEST_RESULTS.md`.
+
+- **Run category:** FRONTIER IMPROVEMENT (serving-queue simulator; both the
+  quantification of the trade-off curve and the aging-SRTF discipline are new).
+
+- **Next recommended direction:**
+  1. Add preemptive SRPT variant: when shorter job arrives, preempt at operator
+     boundary (FlowPrefill-style) — eliminates rather than bounds starvation.
+  2. Cross-validate on full BurstGPT (1.4M rows) using run_burstgpt_aging_backtest().
+  3. Wire aging_srtf (α=0.01) into the serving runtime path driven by
+     OutputLengthForecastBundle.p50 as the predicted_tokens prior.
 
 ### Run 2026-06-20-h — MODULE INTEGRATION + ECONOMIC VALIDATION
 
