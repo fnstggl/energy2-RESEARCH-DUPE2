@@ -8,6 +8,133 @@
 
 ---
 
+## Run 2026-06-20-g
+
+### Q1. What currently limits Aurelius most?
+
+**The proven SRTF value lives in a layer Aurelius does not yet schedule.** Run
+-g proved (on the real Azure LLM 2024 queue) that shortest-predicted-job-first
+cuts short-request p90 latency by −99.6% and lifts SLA-safe goodput/$ by +323%
+vs FIFO — but only in a request-level serving queue. The merged batch
+`JobScheduler` sort key (run -f) is inert for this (no queue-wait semantics),
+and the serving path has no per-request ordering hook yet. Wiring SRTF into the
+serving runtime (with an anti-starvation guard) is the gap.
+
+**Secondary:** long-request starvation under non-preemptive SJF (p99 733s →
+2189s) needs an aging/preemption mitigation before any runtime use.
+
+### Q2. What theoretically offers the largest gain?
+
+**SRTF/SPRPT ordering in the serving request queue.** Quantified, not
+hypothetical: +252–324% SLA-safe goodput/$ across ρ∈{0.80,0.85,0.92} on the
+real trace, robust to a 30%-CV forecast prior. The remaining work is exposing
+the ordering hook in the serving path + an aging guard.
+
+### Q3. Which forecasts are weakest?
+
+1. **Output length p50 as the live SRTF prior** — the serving backtest used a
+   simulated prior; the real `OutputLengthForecastBundle.p50` must drive the
+   ordering for the value to transfer. (Robustness is encouraging: 30%-CV noise
+   barely dented the gain.)
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving-queue ordering is FIFO** — the single largest measured gap
+   (request-level SRTF not yet in the serving path).
+2. **No anti-starvation aging** — needed before SRTF can go live.
+3. **GPU penalty calibration** — heuristic floor/ceil (unchanged).
+
+### Q5. Which workloads benefit least?
+
+**Batch / energy-shifting workloads** — confirmed again. The batch scheduler has
+no queue contention to exploit; SRTF is a serving-queue phenomenon. Light-load
+serving (ρ=0.10) also benefits little — the win scales with contention.
+
+### Q6. Which research direction appears strongest?
+
+**Serving-path SRTF + aging guard**, then SRPT (preemptive) to recover the
+long-tail. The simulator is built and the value is quantified; this is now an
+implementation task, not a research question.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Expose an ordering hook in the serving path keyed on
+   `OutputLengthForecastBundle.p50`.
+2. Add an aging term (a request's effective key decreases with wait time) so no
+   request waits beyond a TTL — bounds the long-tail regression.
+3. Re-run `srtf_serving_backtest` end-to-end with the live prior.
+
+### Q8. What is the shortest path to another +50% gain?
+
+The serving-queue SRTF result already shows >+250% goodput/$ vs FIFO in
+simulation; even discounting heavily for the FIFO-not-SLA-aware baseline and
+regime sensitivity, realizing a fraction of it in the serving runtime is the
+highest-leverage move available.
+
+### Q9. What would need to be true to achieve +300%?
+
+The +300% target is vs SLA-aware (not FIFO). The serving SRTF result is vs FIFO,
+so it is **not** a +300%-vs-SLA-aware claim. Reaching the aspirational target
+still requires the full stack: live output-length prior, serving-path SRTF with
+aging, heterogeneous GPU placement on serving traces, measured queue-wait
+labels, agentic PDGraph, joint carbon+placement, pilot telemetry.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Service-time model** `TTFT_BASE + tokens·TPOT` — a documented proxy; real
+   continuous-batching throughput is load-dependent (batch size effects) and may
+   compress the short/long gap.
+2. **Time-warp realism** — the public sample is downsampled; warping to ρ=0.85
+   preserves shape but not absolute burst micro-structure.
+3. **Non-preemptive SJF is the right discipline** — SRPT (preemptive) or a
+   hybrid may dominate by recovering the long-tail; not yet measured.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **FIFO baseline** — weaker than SLA-aware; the headline % is vs FIFO.
+2. **Single trace (Azure 2024)** — BurstGPT replay through the same simulator
+   would cross-validate (BurstGPT carries real request+response tokens too).
+3. **No preemption modeled** — the long-tail cost may be overstated relative to
+   a preemptive implementation.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT through the serving simulator** — cross-trace validation of the
+   SRTF serving result (real request/response tokens available).
+2. **Vidur profiling CSVs** — load-dependent service-time calibration.
+3. **ShareGPT** — output-length cross-dataset validation for the prior.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Expose SRTF/SPRPT ordering in the serving path driven by
+   `OutputLengthForecastBundle.p50`, with an aging/preemption guard.
+2. Add a preemptive SRPT variant to `srtf_serving_backtest` and measure the
+   long-tail recovery vs the non-preemptive starvation cost.
+
+**Short-term (2–3 runs):**
+3. Cross-validate on BurstGPT through the same simulator.
+4. Wire the live output-length prior and re-run end-to-end.
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Serving-path SRTF/SPRPT + aging guard | High | Medium | **Value quantified [run -g]** (+323% goodput/$ vs FIFO, Azure 2024 sim); not yet in serving runtime |
+| 2 | Preemptive SRPT variant + long-tail recovery measurement | High | Low | Simulator built [run -g]; add preemption |
+| 3 | Wire OutputLengthForecastBundle.p50 as live SRTF prior | High | Low | Infrastructure built (shadow) |
+| 4 | GPU routing on LLM serving trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 5 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
+| 6 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 7 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
+| 8 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+
+---
+
 ## Run 2026-06-20-f
 
 ### Q1. What currently limits Aurelius most?
