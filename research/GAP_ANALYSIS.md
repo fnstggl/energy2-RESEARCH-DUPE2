@@ -8,6 +8,88 @@
 
 ---
 
+## Run 2026-06-20-i — SRTF+aging anti-starvation: implementation and failure analysis
+
+**Artifacts:** `aurelius/benchmarks/srtf_serving_backtest.py` (extended with
+`simulate_queue_with_aging`, `SRTFAgingReport`, `run_srtf_aging_backtest`,
+`load_burstgpt_requests`), `tests/test_srtf_aging_backtest.py` (48 tests),
+`docs/SRTF_AGING_BACKTEST_RESULTS.md`.
+
+**What was implemented:** `simulate_queue_with_aging()` — non-preemptive M/G/c
+discrete-event queue with linear-aging anti-starvation.  Effective scheduling key:
+`effective_key = max(0.0, predicted_tokens − alpha × wait_s)`.  When a request has
+waited `predicted_tokens / alpha` seconds its key reaches 0 (served next, bounded
+starvation).  Alpha set to 1.844 tokens/second: `max_azure_tokens(1346) /
+fifo_p99_wait(730s)`.  BurstGPT fixture cross-validation added.  75 tests pass.
+
+**Measured results (Azure LLM 2024, c=4, ρ=0.85, alpha=1.844):**
+
+| Metric | FIFO | SRTF (no aging) | SRTF+aging |
+|---|---:|---:|---:|
+| short_p90 response (s) | 696.2 | **3.0** | 696.2 |
+| long_p99 response (s) | 733.6 | 2373.1 | **733.6** |
+| overall p99 (s) | 732.7 | 2188.7 | **732.7** |
+| SLA-safe goodput/$ | 13,336 | **56,481** | 17,783 |
+| goodput/$ vs FIFO | — | **+323%** | **+33.3%** |
+| short-p90 vs FIFO | — | **−99.6%** | ~0% |
+
+**Q1. What currently limits Aurelius most?**
+
+**The "age-out wave" failure mode in non-preemptive SRTF+aging.**  SRTF+aging
+with `effective_key=max(0,pred-alpha*wait)` degrades to FIFO at ρ=0.85.  Mechanism:
+
+1. Under pure SRTF, long requests are severely starved — they pile up, unserved.
+2. After `pred/alpha` seconds (≈542s for a 1000-token request), each starved long
+   request ages to effective_key=0 and jumps to high priority.
+3. At ρ=0.85, MANY long requests starve simultaneously.  Around t≈542s, ALL of them
+   fire their starvation trigger at nearly the same time → a wave of
+   effective_key=0 long requests floods the queue.
+4. Fresh short requests (effective_key≈90) lose to the aged long requests
+   (effective_key=0 wins tiebreak by arrival order).
+5. Short requests back up, wait >49s → they too age to 0 → FIFO order.
+
+The 33.3% goodput gain is real but transient: it reflects the initial SRTF phase
+(t=0 to first age-out wave) before system collapses to FIFO.  Starvation IS fixed
+vs pure SRTF (overall p99=732.7s vs SRTF's 2188.7s), so the safety net works.
+
+**Q6. Which research direction appears strongest?**
+
+**Preemptive SRPT** (suspend a running long request when a shorter one arrives;
+resume when server is free).  In LLM serving this requires KV-cache checkpoint
+(paged attention makes this practical).  PecSched (arXiv:2409.15104): 92% p99
+reduction, 595% throughput improvement.  Equinox (arXiv:2508.16646): 1.3×
+throughput, 60% TTFT reduction.
+
+Alternative without preemption: **resource partitioning** — K servers dedicated to
+long requests, (c-K) with SRTF for short requests.  Clean but wastes capacity.
+
+**Q13. What should be attempted next?**
+
+**Option A (Preemptive SRPT):** Extend `simulate_queue` to support preemption
+(checkpoint/resume semantics).  Add KV-overhead model.  Reference: PecSched
+(arXiv:2409.15104), Equinox (arXiv:2508.16646).
+
+**Option B (Resource partitioning):** Two-pool simulator: short queue (SRTF, c-K
+servers) + long queue (FIFO, K servers).  Optimize K via grid search on Azure trace.
+
+**Decision: RESEARCH DISCOVERY** — the age-out wave failure mode is a new negative
+result with clear engineering implications.  Infrastructure (aging simulator, test
+suite, BurstGPT cross-validation) is committed and valid.
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Preemptive SRPT in serving queue | High | Low | **[run -i discovery]** Non-preemptive aging fails at ρ=0.85; preemption is the correct next step |
+| 2 | Resource partitioning (short/long server pools) | High | Medium | Simple alternative to preemption; quantify capacity waste |
+| 3 | Wire OutputLengthForecastBundle.p50 as live SRTF prior | High | Low | Infrastructure built (shadow); first validate preemption |
+| 4 | GPU routing on LLM serving trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 5 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
+| 6 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
+| 7 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+
+---
+
 ## Run 2026-06-20-h — module integration + economic validation
 
 This run pivoted from building shadow modules to **validating** the three

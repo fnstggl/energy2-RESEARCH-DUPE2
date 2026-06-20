@@ -31,6 +31,16 @@ for **+323% SLA-safe goodput/$** — at the documented cost of a long-request
 p99 regression. Robust to a 30%-CV forecast prior. Directional simulator
 result; baseline is FIFO, not SLA-aware. See `docs/SRTF_SERVING_BACKTEST_RESULTS.md`.
 
+**SRTF+aging anti-starvation — failure analysis [run 2026-06-20-i]:** Non-preemptive
+aging (`effective_key=max(0,pred−alpha×wait)`, alpha=1.844 tok/s) degrades to FIFO at
+ρ=0.85 due to the "age-out wave" problem.  All starved long requests simultaneously
+age to effective_key=0 at t≈pred/alpha seconds, flooding high-priority slots and
+blocking short requests.  Short requests then back up and also age out → FIFO.
+Partial result: **+33.3% goodput/$** vs FIFO (transient SRTF phase before wave);
+starvation bounded (overall p99 = 732.7s vs SRTF's 2188.7s).  Short-p90 improvement:
+~0% (FIFO-like in steady state).  **Path forward: preemptive SRPT** (PecSched
+arXiv:2409.15104, Equinox arXiv:2508.16646).  See `docs/SRTF_AGING_BACKTEST_RESULTS.md`.
+
 ---
 
 ## 2. Current Best Results (Benchmark Leaderboard)
