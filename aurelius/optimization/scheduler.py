@@ -12,6 +12,7 @@ Uses a combination of:
 """
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
@@ -70,6 +71,8 @@ class JobScheduler:
         region_contexts: Optional[dict] = None,
         current_states: Optional[dict] = None,
         sla_block_on_unknown: bool = False,
+        gpu_placement_scorer=None,
+        region_gpu_types: Optional[dict] = None,
     ):
         """Initialize the scheduler.
 
@@ -88,6 +91,14 @@ class JobScheduler:
                 workload's current placement/telemetry. Absent => a minimal
                 state pinned to the job's default region is used.
             sla_block_on_unknown: Fail-closed on unknown telemetry metrics.
+            gpu_placement_scorer: Optional GpuPlacementScorer (shadow-mode only).
+                When provided and ``enabled=True``, TTFT-based latency penalties
+                are folded into the placement score for ``latency_critical`` SLA
+                jobs. Fail-open: missing/disabled scorer never changes a decision.
+            region_gpu_types: Optional {region: gpu_type_str} mapping. Tells the
+                scorer which GPU type is available in each region so it can rank
+                placements by TTFT p50 for ``latency_critical`` workloads.
+                Example: {"us-west-h100": "h100", "us-east-t4": "t4"}.
         """
         self.config = config or OptimizationConfig()
         self.objective_fn = ObjectiveFunction(config)
@@ -99,6 +110,10 @@ class JobScheduler:
         self.current_states = current_states or {}
         self.sla_block_on_unknown = sla_block_on_unknown
         self._sla_predictor = None  # lazy
+
+        # GPU placement scoring (shadow-only; off by default).
+        self._gpu_placement_scorer = gpu_placement_scorer
+        self._region_gpu_types = region_gpu_types or {}
 
     # ------------------------------------------------------------------
     # SLA-aware correction helpers (active only when sla_registry is set)
@@ -178,18 +193,26 @@ class JobScheduler:
         )
 
     @staticmethod
-    def _sla_adjusted_score(objective_total: float, sla_eval) -> float:
-        """Fold SLA risk + soft penalties into a candidate's comparable score.
+    def _sla_adjusted_score(
+        objective_total: float, sla_eval, gpu_penalty: float = 0.0
+    ) -> float:
+        """Fold SLA risk + soft penalties + GPU placement penalty into a score.
 
-        Penalties are expressed in 'savings-percent-equivalent' units, so we
-        convert to a fraction of the candidate's own objective magnitude. This
-        keeps the adjustment scale-free: a 10-point penalty raises the effective
-        cost of a placement by ~10%.
+        All penalties are fractional: a combined penalty of 0.10 raises the
+        effective cost of a placement by ~10%, keeping the adjustment scale-free
+        regardless of absolute objective magnitude.
+
+        Args:
+            objective_total: Raw objective value from the cost function.
+            sla_eval: Optional SLAEvaluation (None → no SLA penalty).
+            gpu_penalty: Additive TTFT-based latency penalty in [0, 1] from
+                GpuPlacementScorer (0.0 = no penalty / scorer disabled).
         """
-        if sla_eval is None:
-            return objective_total
-        penalty_fraction = (sla_eval.risk_score + sla_eval.soft_penalty_score) / 100.0
-        return objective_total + abs(objective_total) * penalty_fraction
+        sla_fraction = 0.0
+        if sla_eval is not None:
+            sla_fraction = (sla_eval.risk_score + sla_eval.soft_penalty_score) / 100.0
+        total_fraction = sla_fraction + gpu_penalty
+        return objective_total + abs(objective_total) * total_fraction
 
     def solve(
         self,
@@ -338,6 +361,37 @@ class JobScheduler:
         best_unconstrained_objective = float('inf')
         first_block_eval = None
 
+        # Pre-compute GPU peer TTFT p50s once per job (across all region options).
+        # This enables GpuPlacementScorer to rank GPU types by peer-relative TTFT
+        # for latency_critical placements. Fail-open: if scorer is disabled,
+        # region_gpu_types is empty, or the prior has no data, peer_ttft_p50s
+        # stays empty and gpu_penalty is always 0.0 in the loop below.
+        peer_ttft_p50s: dict = {}
+        scorer = self._gpu_placement_scorer
+        if (scorer is not None and getattr(scorer, '_config', None) is not None
+                and scorer._config.enabled and self._region_gpu_types):
+            prior = getattr(scorer, '_prior', None)
+            if prior is not None:
+                model_size = getattr(job, 'model_size', None)
+                prompt_tokens = getattr(job, 'prompt_tokens', None)
+                min_n = scorer._config.min_subgroup_rows
+                for r in job.region_options:
+                    gtype = self._region_gpu_types.get(r)
+                    if gtype is None:
+                        continue
+                    ttft = prior.predict(
+                        model_size=model_size,
+                        gpu_type=gtype,
+                        prompt_tokens=prompt_tokens,
+                    )
+                    n = prior.subgroup_n(
+                        model_size=model_size,
+                        gpu_type=gtype,
+                        prompt_tokens=prompt_tokens,
+                    )
+                    if ttft is not None and not math.isnan(ttft) and n >= min_n:
+                        peer_ttft_p50s[gtype] = ttft
+
         power_levels = [1.0, 0.75, 0.5] if self.config.min_power_fraction <= 0.5 else [1.0]
         power_levels = [p for p in power_levels if p >= self.config.min_power_fraction]
 
@@ -378,7 +432,22 @@ class JobScheduler:
                                 first_block_eval = sla_eval
                             continue  # HARD SLA violation: placement excluded
 
-                    score = self._sla_adjusted_score(obj.total, sla_eval)
+                    # GPU placement penalty (shadow-only, 0.0 when scorer disabled
+                    # or no peer data is available).
+                    gpu_penalty = 0.0
+                    if peer_ttft_p50s and self._region_gpu_types:
+                        gtype = self._region_gpu_types.get(region)
+                        if gtype is not None and scorer is not None:
+                            ps = scorer.score(
+                                gpu_type=gtype,
+                                model_size=getattr(job, 'model_size', None),
+                                prompt_tokens=getattr(job, 'prompt_tokens', None),
+                                sla_class=job.sla_class,
+                                peer_ttft_p50s=peer_ttft_p50s,
+                            )
+                            gpu_penalty = ps.latency_penalty
+
+                    score = self._sla_adjusted_score(obj.total, sla_eval, gpu_penalty)
                     if score < best_objective:
                         best_objective = score
                         best_decision = decision
