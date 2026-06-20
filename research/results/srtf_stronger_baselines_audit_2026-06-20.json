@@ -1,0 +1,85 @@
+{
+  "config": {
+    "servers": 4,
+    "target_rho": 0.85,
+    "sla_s": 10.0,
+    "time_warp": 21.951901260369368,
+    "total_requests": 5880,
+    "forecast_cv": 0.3,
+    "fixture": "azure_llm_2024_sample.csv"
+  },
+  "rows": {
+    "fifo": {
+      "sla_safe_goodput_per_dollar": 13336.328626444127,
+      "gpu_hours": 4.024833333333343,
+      "cost_usd": 8.049666666666687,
+      "sla_violations": 4917,
+      "sla_violation_pct": 83.62244897959184,
+      "mean_response_s": 343.89293572565674,
+      "p99_response_s": 732.6522282852884,
+      "short_p90_response_s": 696.164192409376,
+      "long_p99_response_s": 733.5527655694905,
+      "mean_queue_wait_s": 341.42875205218735,
+      "p99_queue_wait_s": 730.3240975313861,
+      "runtime_s": 0.013719037999976536
+    },
+    "sla_aware_edf": {
+      "sla_safe_goodput_per_dollar": 13336.328626444127,
+      "gpu_hours": 4.024833333333343,
+      "cost_usd": 8.049666666666687,
+      "sla_violations": 4917,
+      "sla_violation_pct": 83.62244897959184,
+      "mean_response_s": 343.89293572565674,
+      "p99_response_s": 732.6522282852884,
+      "short_p90_response_s": 696.164192409376,
+      "long_p99_response_s": 733.5527655694905,
+      "mean_queue_wait_s": 341.42875205218735,
+      "p99_queue_wait_s": 730.3240975313861,
+      "runtime_s": 0.013268357000015385
+    },
+    "srtf_perfect": {
+      "sla_safe_goodput_per_dollar": 56480.84806824285,
+      "gpu_hours": 4.024833333333343,
+      "cost_usd": 8.049666666666687,
+      "sla_violations": 833,
+      "sla_violation_pct": 14.166666666666666,
+      "mean_response_s": 129.88546337733877,
+      "p99_response_s": 2188.6746830082348,
+      "short_p90_response_s": 3.0273726770137728,
+      "long_p99_response_s": 2373.0860224556877,
+      "mean_queue_wait_s": 127.42127970386937,
+      "p99_queue_wait_s": 2181.744683008235,
+      "runtime_s": 0.013816510999959064
+    },
+    "srtf_forecast": {
+      "sla_safe_goodput_per_dollar": 56854.776595304014,
+      "gpu_hours": 4.024833333333343,
+      "cost_usd": 8.049666666666687,
+      "sla_violations": 876,
+      "sla_violation_pct": 14.89795918367347,
+      "mean_response_s": 141.24774541974327,
+      "p99_response_s": 2232.608729762745,
+      "short_p90_response_s": 3.1659146548472563,
+      "long_p99_response_s": 2387.2897583826484,
+      "mean_queue_wait_s": 138.78356174627388,
+      "p99_queue_wait_s": 2224.917176798205,
+      "runtime_s": 0.013969772999985253
+    },
+    "srpt_reference": {
+      "sla_safe_goodput_per_dollar": 56311.400057973275,
+      "gpu_hours": 4.024833333333343,
+      "cost_usd": 8.049666666666687,
+      "sla_violations": 833,
+      "sla_violation_pct": 14.166666666666666,
+      "mean_response_s": 129.57908306037217,
+      "p99_response_s": 2196.859421712185,
+      "short_p90_response_s": 1.8900000000001,
+      "long_p99_response_s": 2372.5568943528615,
+      "mean_queue_wait_s": 0.0,
+      "p99_queue_wait_s": 0.0,
+      "runtime_s": 0.34992274299997916
+    }
+  },
+  "constraint_aware": "N/A \u2014 provisioning/region policy, no single-queue ordering analog (orthogonal decision surface)",
+  "shadow_tag": "shadow_only_simulator_result_not_production_savings"
+}
