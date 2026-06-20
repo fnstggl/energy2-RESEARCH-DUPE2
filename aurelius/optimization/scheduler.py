@@ -291,6 +291,18 @@ class JobScheduler:
 
         return result
 
+    # SLA class ordering: latency_critical jobs are processed before deadline
+    # jobs, which are processed before best_effort jobs within each priority
+    # band.  This ensures high-urgency placements claim preferred time slots
+    # before lower-urgency jobs — even when all jobs share the same numeric
+    # priority value.  Combined with the SRTF length prior below, the sort
+    # key becomes: (−priority, sla_rank, length_prior_or_inf, deadline).
+    _SLA_CLASS_RANK: dict = {
+        "latency_critical": 0,
+        "deadline": 1,
+        "best_effort": 2,
+    }
+
     def _solve_greedy(
         self,
         jobs: list[Job],
@@ -300,8 +312,26 @@ class JobScheduler:
         queue_data: Optional[dict[str, dict[datetime, float]]] = None,
         gpu_health_data: Optional[dict[str, dict[datetime, float]]] = None,
     ) -> SchedulerResult:
-        """Greedy scheduling: evaluate all feasible (time, region, power) combos."""
-        sorted_jobs = sorted(jobs, key=lambda j: (-j.priority, j.deadline))
+        """Greedy scheduling: evaluate all feasible (time, region, power) combos.
+
+        Sort key: (−priority, sla_class_rank, predicted_output_tokens_or_inf, deadline).
+
+        When ``predicted_output_tokens`` is set on a job, shorter jobs are
+        processed first within each (priority, SLA-class) band, implementing
+        an SRTF (Shortest-Remaining-Time-First) prior that reduces tail latency
+        for short requests (arXiv:2604.06970).  Jobs without the field fall
+        back to the original deadline-only tiebreak — fully backward-compatible.
+        """
+        def _sort_key(j: Job):
+            sla_rank = self._SLA_CLASS_RANK.get(j.sla_class, 2)
+            length_prior = (
+                j.predicted_output_tokens
+                if j.predicted_output_tokens is not None
+                else float("inf")
+            )
+            return (-j.priority, sla_rank, length_prior, j.deadline)
+
+        sorted_jobs = sorted(jobs, key=_sort_key)
 
         schedule = []
         for job in sorted_jobs:
