@@ -133,6 +133,16 @@ from .models import (
     SafetyStatus,
     WorkloadFrontierProfile,
 )
+from .admission import (
+    ADMISSION_ACTIONS,
+    ADMISSION_ADMIT,
+    ADMISSION_DEFER,
+    ADMISSION_REJECT,
+    AdmissionDecision,
+    AdmissionGateConfig,
+    evaluate_admission,
+    evaluate_admission_batch,
+)
 from .risk import (
     RiskConfig,
     RiskEstimate,
@@ -257,6 +267,16 @@ __all__ = [
     "estimate_dynamic_frontier",
     "DynamicControllerConfig",
     "choose_dynamic_rho",
+    # admission gate v1 — flow-rate admission control (arXiv:2604.11001)
+    "ADMISSION_ACTIONS",
+    "ADMISSION_ADMIT",
+    "ADMISSION_DEFER",
+    "ADMISSION_REJECT",
+    "AdmissionDecision",
+    "AdmissionGateConfig",
+    "evaluate_admission",
+    "evaluate_admission_batch",
+    # risk estimation
     "RiskConfig",
     "RiskEstimate",
     "estimate_sla_risk",
