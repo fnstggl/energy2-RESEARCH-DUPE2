@@ -400,7 +400,54 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 7. Experiment History
 
-### Run 2026-06-20-g (this run)
+### Run 2026-06-20-h — MODULE INTEGRATION + ECONOMIC VALIDATION
+
+**Goal:** Stop building shadow modules. Wire the three existing research modules
+(`WorkloadAdmissionGate`, `OutputLengthForecastBundle`, `GpuPlacementScorer`)
+into the actual public replay path and measure whether they improve real public
+benchmark KPIs. No new papers, no new modules, no synthetic-only main evidence.
+(Ran in parallel with runs -f/-g, which wired SRTF into the batch scheduler and
+proved a per-request serving-queue SRTF win — see below; the two are
+complementary, see the cross-reference at the end.)
+
+- **Phase 1 (audit):** Confirmed all three modules were shadow/dead code in the
+  default replay path. `GpuPlacementScorer` is wired into `JobScheduler` but
+  `JobScheduler` is only used by the canonical *energy* backtest — the public
+  LLM traces (Azure 2024 / BurstGPT) run a *different* aggregate per-tick
+  autoscaling replay (`aurelius/traces/backtest.py`) that never constructs a
+  `JobScheduler`. So GPU placement never touched the public LLM replay.
+- **Data:** Downloaded the real BurstGPT trace (1,429,738 requests, CC-BY-4.0).
+  Azure-2024 full week is SAS-gated (HTTP 401) → used the committed 5,880-request
+  sample (as the canonical Azure runner itself does). Real CAISO/PJM/ERCOT price
+  CSVs present.
+- **Phase 3 (baseline):** `research/results/baseline_public_backtest_2026-06-20.*`.
+- **Phase 4 (integration):** Added `aurelius/traces/module_backtest.py` — reuses
+  the LOCKED `backtest.py`/`serving.py`/`economics.py` verbatim, adds additive
+  provisioning variants. A disabled gate is byte-identical to the locked
+  constraint_aware baseline (`tests/test_module_backtest.py`). 153 tests pass.
+- **Phase 6/7 (results, BurstGPT 100/300/600× = robust evidence):**
+  - **WorkloadAdmissionGate → NEUTRAL** (goodput/$ Δ +0.19 / −0.34 / −0.29%).
+    The baseline already provisions to a safe rho, so the gate rarely fires.
+  - **OutputLengthForecastBundle → HURT** (−7.1 / −11.3 / −11.2%). The autoscaler
+    already reads the realized per-tick mean; a forecast can only mis-size. Its
+    SRTF ordering lever is *absent* from the aggregate replay physics.
+  - **GpuPlacementScorer → proxy moved, real KPI regressed.** Routing proxy
+    +54.7pp, but real goodput/$ −0.0004 overall and **−7.3% on the
+    latency_critical subset** (routes to pricier H100, no monetized TTFT benefit).
+- **Phase 8 (decision):** No module improves SLA-safe goodput/$ on the robust
+  aggregate public replay. **Do NOT enable any of the three in runtime.** Keep
+  shadow-only. Merge backtest infrastructure + report only.
+- **Cross-reference to runs -f/-g:** This run's "output length forecasting has no
+  lever in the *aggregate autoscaling* benchmark" finding is **consistent** with
+  run -g's per-request serving-queue SRTF win: the value lives in per-request
+  ordering, not aggregate sizing. This run independently confirms the aggregate
+  path is the wrong surface — the exact reason run -g moved to a per-request
+  discrete-event queue. The two results do not contradict.
+- **Final status: INFRASTRUCTURE ONLY.** No runtime decision path changed by this
+  run; no benchmark/SLA/price/workload definition changed; the three modules stay
+  `enabled=False`.
+
+### Run 2026-06-20-g (previous run)
 - **Phase 1 (audit):** Run -f wired the SRTF sort key into the batch
   `JobScheduler` and showed it neutral on the energy trace, hypothesizing the
   gain needs queue contention. This run tests that hypothesis on the REAL

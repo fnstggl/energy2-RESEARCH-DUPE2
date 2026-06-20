@@ -8,6 +8,40 @@
 
 ---
 
+## Run 2026-06-20-h — module integration + economic validation
+
+This run pivoted from building shadow modules to **validating** the three
+existing ones on real public replay (`WorkloadAdmissionGate`,
+`OutputLengthForecastBundle`, `GpuPlacementScorer`). Artifacts:
+`research/results/{baseline,module_integration}_public_backtest_2026-06-20.*`,
+`research/PUBLIC_BACKTEST_COMMANDS.md`. Key answers:
+
+- **Q1 (biggest limit):** The decision-surface mismatch. The public LLM-serving
+  benchmark (Azure 2024 / BurstGPT) is an *aggregate per-tick autoscaling*
+  replay; it exposes a provisioning decision, not the per-request placement /
+  ordering / GPU-routing decisions the three modules were built for.
+- **Q3 (weakest):** `OutputLengthForecastBundle` in the *aggregate* replay — the
+  autoscaler already reads the realized per-tick mean (clairvoyant), so a
+  forecast can only under-/over-size. Measured **−7…−11%** goodput/$ on BurstGPT.
+  (Consistent with run -g: the SRTF benefit lives in a *per-request* serving
+  queue, NOT the aggregate autoscaler — this run independently confirms the
+  module has no lever in the aggregate path, exactly the gap run -g exploits.)
+- **Q4 (suboptimal decisions):** None of the three modules improved any public
+  KPI on the aggregate replay. `WorkloadAdmissionGate` neutral (baseline already
+  SLA-safe); `GpuPlacementScorer` moves the routing proxy (+54.7pp) but regresses
+  real latency_critical goodput/$ (−7.3%).
+- **Q11 (benchmark weakness):** Azure-2024 full week is SAS-gated (401); the
+  5,880-row sample yields only 11–32 ticks at saturating scales → noisy. BurstGPT
+  (real 1.43M trace) is the robust evidence.
+- **Q13 (next):** Do not enable the three modules in the aggregate path. The
+  output-length SRTF value belongs in the *per-request serving queue* run -g
+  built — pursue that, not aggregate-replay sizing.
+
+**Decision: INFRASTRUCTURE ONLY** — backtest infra + report merged; no runtime
+decision change; the three modules stay `enabled=False`.
+
+---
+
 ## Run 2026-06-20-g
 
 ### Q1. What currently limits Aurelius most?
