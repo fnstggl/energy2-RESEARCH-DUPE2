@@ -49,6 +49,17 @@ on every quantum). Long_p99 regression (+223.4%) nearly matches SRTF (+223.5%)
 TRAIL (arXiv:2410.01035), FlowPrefill (arXiv:2602.16603), SRPT multiserver
 (arXiv:1805.07686). 42 new tests. See `docs/SRPT_PREEMPTIVE_BACKTEST_RESULTS.md`.
 
+**Hybrid Aging+Preemptive SRPT [run 2026-06-20-k]:** Hybrid discipline implemented
+with preemption+dispatch key `remaining_s / (1 + α·accumulated_wait_s)` (α=0.01).
+On Azure LLM 2024: **+64.2% goodput/$ vs FIFO**, long_p99 **34.7% better than pure SRPT**.
+Key finding: α=0.01 aging dispatch key promotes long-waiting requests, making hybrid
+behave like Aging-SRTF (+64.2%) rather than SRPT (+322%). Anti-starvation IS working
+(long_p99: 1,550s vs SRPT 2,373s). Root cause identified: unified aging key for
+preemption + dispatch. Next step: decouple — use remaining_s for preemption (SRPT
+throughput) + remaining/(1+α·wait) for dispatch only (starvation bound). Research basis:
+FastServe (NSDI '26), Chimera (arXiv:2603.22206), SEK-SMOD (arXiv:2510.25963). 43 new
+tests. See `docs/HYBRID_AGING_PREEMPTIVE_BACKTEST_RESULTS.md`.
+
 ---
 
 ## 2. Current Best Results (Benchmark Leaderboard)
@@ -426,11 +437,11 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | Wire aging_srtf into SERVING runtime path (α=0.01) | High (+70.7% gp/$ vs FIFO in sim) | Medium | **Quantified [run -i]** — serving simulator; not yet in serving runtime | Expose aging_srtf ordering in serving path driven by OutputLengthForecastBundle.p50; α=0.01 recommended |
-| 2 | **Preemptive SRPT variant in simulator** | **High** | **Medium** | **DONE [run -j]** | +322.2% gp/$ vs FIFO; best short_p90 (+99.73%); long_p99 bounded not eliminated |
-| 3 | Hybrid Aging+Preemptive SRPT (combine run -i and -j) | High (eliminate both starvation and p99 regression) | Medium | Not Started | Add aging decay to preemptive SRPT: key(r,t) = remaining / (1+α·wait_s) |
+| 1 | **Decoupled Hybrid: SRPT preemption + aging dispatch** | **Very High** (+322% goodput + better long_p99) | **Low** | **Next [run -l]** — root cause from run -k identified | Use remaining_s for preemption; remaining_s/(1+α·wait) for dispatch. Expected: SRPT goodput + Aging-SRTF long_p99 |
+| 2 | Wire SRPT preemptive or aging-SRTF into SERVING runtime | High (+322% or +70.7% gp/$ vs FIFO in sim) | Medium | **Quantified [runs -i/-j/-k]** — serving simulator; not yet in runtime | Expose SRPT preemptive in serving path driven by OutputLengthForecastBundle.p50 |
+| 3 | Hybrid Aging+Preemptive SRPT (combined key) | Medium (+64.2% gp/$ vs FIFO confirmed) | Medium | **DONE [run -k]** | α=0.01 behaves like Aging-SRTF; next: decoupled design for SRPT-level goodput |
 | 4 | Full BurstGPT (1.4M rows) cross-validation | Medium (confirms generalization) | Low | Not Started | Download full BurstGPT_1.csv; run run_burstgpt_srpt_preemptive_backtest() at scale |
-| 5 | Wire OutputLengthForecastBundle.p50 as aging-SRTF prior | High (replaces oracle prior with live forecast) | Low | Infrastructure built (shadow) | Replace perfect-prior in aging_srtf with OutputLengthForecastBundle.p50 |
+| 5 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High (replaces oracle prior) | Low | Infrastructure built (shadow) | Replace perfect-prior in aging_srtf / hybrid with OutputLengthForecastBundle.p50 |
 | 6 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
 | 7 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
 | 8 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
@@ -441,6 +452,80 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-20-k — HYBRID AGING+PREEMPTIVE SRPT SERVING-QUEUE SIMULATOR
+
+**Goal:** Combine aging's anti-starvation guarantee with SRPT preemption mechanics
+into a single discipline: `key(r,t) = remaining_s / (1 + α·accumulated_wait_s)`.
+Hypothesis: achieves near-SRPT goodput/$ (+300% vs FIFO) while capping long_p99
+regression closer to Aging-SRTF levels (+113% vs FIFO), because accumulated wait
+progressively reduces a request's effective key toward zero.
+
+- **Phase 3 (research — 3 papers):**
+  1. **FastServe** (USENIX NSDI '26) — iteration-level preemptive MLFQ + starvation
+     prevention for LLM serving; skip-join multi-level feedback queue avoids
+     head-of-line blocking without full KV-cache eviction overhead.
+  2. **Chimera** (arXiv:2603.22206, March 2026) — STJF with aging-based anti-starvation
+     for multi-agent LLM serving; explicit aging factor in dispatch key.
+  3. **SEK-SMOD** (arXiv:2510.25963, SIGMETRICS 2026) — first policy to provably
+     outperform SRPT-k at all loads via strategic large-job re-prioritization.
+
+- **Phase 4 (implementation):**
+  - `aurelius/benchmarks/srtf_serving_backtest.py` extended:
+    - `HYBRID_AGING_ALPHA_DEFAULT = 0.01` constant.
+    - `_simulate_hybrid_aging_preemptive(requests, servers, aging_alpha)` — full
+      discrete-event M/G/c simulator tracking `frozen_wait_s` (accumulated wait
+      while in queue) per request, re-evaluating effective keys at dispatch time.
+    - `simulate_queue(..., discipline="hybrid_aging_preemptive")` dispatch branch.
+    - `HybridAgingPreemptiveReport` dataclass (5 disciplines + delta KPIs).
+    - `_run_hybrid_backtest_on_trace()` shared helper.
+    - `run_hybrid_aging_preemptive_backtest()` — Azure LLM 2024 public API.
+    - `run_burstgpt_hybrid_backtest()` — BurstGPT cross-validation.
+  - `tests/test_srtf_hybrid_backtest.py` (NEW) — 43 tests, 9 classes, all passing.
+
+- **Phase 7 (benchmark results — public trace replay):**
+
+  **Azure LLM 2024 (5,880 requests, ρ=0.85, SLA=10s, c=4):**
+  | KPI | FIFO | Aging-SRTF (α=0.05) | SRPT-preemptive | **Hybrid (α=0.01)** |
+  |---|---:|---:|---:|---:|
+  | SLA-safe goodput/$ | 13,336 | 22,768 (+70.7%) | 56,311 (+322.2%) | **21,899 (+64.2%)** |
+  | short_p90 response (s) | 696.16 | 152.61 | 1.89 | **169.26** |
+  | short_p90 improvement | — | +78.1% | +99.73% | **+75.7%** |
+  | long_p99 response (s) | 733.55 | 1,568.16 | 2,372.56 | **1,550.23** |
+  | long_p99 regression | — | +113.8% | +223.4% | **+111.3%** |
+  | mean_response_s | 343.89 | 183.06 | 129.58 | **187.02** |
+
+  **BurstGPT (51-request fixture, ρ=0.85, SLA=30s, c=4):**
+  | KPI | FIFO | SRPT-preemptive | **Hybrid (α=0.01)** |
+  |---|---:|---:|---:|
+  | SLA-safe goodput/$ | 70,975 | 67,754 (−4.5%) | **67,754 (−4.5%)** |
+  | short_p90 improvement | — | +67.5% | **+67.5%** |
+  | long_p99 regression | — | +16.0% | **+16.1%** |
+
+- **Key finding — α=0.01 makes hybrid behave like Aging-SRTF, not SRPT:**
+  At α=0.01, the dispatch key `remaining_s / (1 + α·total_wait)` actively promotes
+  long-waiting requests over shorter but fresher arrivals. The "flip point" where
+  a waiting request with remaining_s=5s beats a fresh 3s arrival: `total_wait >
+  (5/3−1)/0.01 = 66.7s`. On the Azure trace at ρ=0.85, a meaningful fraction of
+  requests wait >66.7s (heavy tail), causing systematic short-request bypassing.
+  This makes hybrid goodput (~21,899) nearly equal to Aging-SRTF (~22,768), not SRPT (~56,311).
+
+- **Anti-starvation IS working:** Hybrid long_p99=1,550s vs SRPT long_p99=2,373s →
+  **34.7% improvement** in long_p99. The aging preemption key correctly accumulates
+  protection for long-waiting requests, reducing preemption by new arrivals.
+
+- **Decision:** FRONTIER IMPROVEMENT (simulator) — partial success. Hybrid achieves
+  meaningful long_p99 improvement vs SRPT (−35%) and reasonable goodput vs FIFO
+  (+64.2%). However, the goodput/SRPT ratio is only 0.39, not the near-SRPT parity
+  originally hypothesized. The root cause is the unified aging key for both
+  preemption and dispatch decisions.
+
+- **Next recommended direction (run 2026-06-20-l):**
+  **Decoupled Hybrid:** use `remaining_s` for preemption (preserves SRPT goodput
+  benefit) and `remaining_s / (1 + α·total_wait)` for dispatch only (anti-starvation).
+  Expected: SRPT-level goodput ($+322%) with Aging-SRTF-level long_p99 (+113% vs FIFO).
+  Alternative: try much smaller α=0.001 to preserve SRPT character while adding weak
+  aging protection.
 
 ### Run 2026-06-20-j — PREEMPTIVE SRPT SERVING-QUEUE SIMULATOR
 
