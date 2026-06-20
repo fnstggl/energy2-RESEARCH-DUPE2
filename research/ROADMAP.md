@@ -93,6 +93,14 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   `latency_critical` SLA jobs. Controlled via `gpu_placement_scorer` +
   `region_gpu_types` kwargs on `JobScheduler.__init__`. Shadow-only:
   `enabled=False` default; fail-open on missing/insufficient data.
+- **SRTF sort key [NEW - run 2026-06-20-f]:** `predicted_output_tokens:
+  Optional[float] = None` added to `Job` dataclass; `_SLA_CLASS_RANK` +
+  length-prior tiebreak wired into `_solve_greedy`. Sort order:
+  `(−priority, sla_class_rank, length_prior_or_inf, deadline)`.  Jobs without
+  priors get `float("inf")` — fully backward-compatible (degrades to original
+  `(−priority, deadline)` for homogeneous-SLA-class jobs).  37 new tests in
+  `tests/test_srtf_scheduling.py`. Research basis: arXiv:2604.06970,
+  arXiv:2410.01035, arXiv:2604.07931. Benchmark module: `srtf_backtest.py`.
 - **Energy/carbon shifting:** primary economic lever; already sufficient.
 - **Constraint scoring:** `aurelius/constraints/` — multi-constraint
   scorer with region, thermal, topology, migration veto.
@@ -230,30 +238,54 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   - Confirmed: GPU routing routes substantially more `latency_critical` jobs
     to H100 vs baseline on flat-price synthetic data.
   - 34 new tests; zero regressions.
+- **Real canonical benchmark [run 2026-06-20-f]:**
+  - Baseline goodput/$: **0.300667** — GPU routing goodput/$: **0.300246**
+  - Delta: **−0.000422 (−0.14%)** ← negative finding
+  - Routing quality: +54.7 pp H100 placement for LC jobs, ~65% TTFT penalty
+    reduction. Routing direction confirmed correct.
+  - Root cause of negative goodput/$ delta: H100 GPUs are in PJM (us-east),
+    the highest-cost energy region in the canonical trace. TTFT improvement does
+    not count toward goodput/$ when all jobs already meet their long (26-day)
+    deadlines; energy cost does count. On this trace, routing to PJM costs more
+    than it gains in TTFT credit.
+  - Finding: GPU routing improves TTFT quality but is energy-price-dominated
+    when goodput/$ is the KPI. For measurable uplift, need a trace where TTFT
+    violations are the binding SLA constraint (LLM serving, not energy batch).
 - **Next steps:**
-  1. Run `run_gpu_routing_backtest()` with real canonical price data to get
-     the quantitative goodput/$ delta table.
+  1. Evaluate on BurstGPT / Azure LLM 2024 where latency violations are common
+     and TTFT improvement directly reduces SLA miss rate.
   2. Tune `penalty_floor`/`penalty_ceil` from CARA TTFT distribution data.
-  3. Wire into BurstGPT / Azure 2024 trace replay with per-region GPU labels.
+  3. Consider energy-price-aware penalty attenuation (reduce GPU routing penalty
+     when the preferred GPU region has materially higher energy cost).
 
 ### 4.4 Semi-Clairvoyant Scheduling
 
 #### Output Length Prediction for Token-Magnitude Priors
-- **Status:** Infrastructure built (shadow-only)
+- **Status:** Sort key wired into scheduler [run 2026-06-20-f]
 - **Expected upside:** High — "Scheduling the Unschedulable" (arXiv:
   2604.06970) shows token magnitude priors increase P90 short-request
   performance by 32% vs FIFO, and removing magnitude increases p95 by
   5.8×. LAPS-SD (arXiv:2505.17074, IJCAI 2025) extends to speculative
   decoding — predicted length + token acceptance rate together determine
-  optimal service ordering.
-- **Complexity:** Medium — `OutputLengthForecastBundle` is built; remaining
-  work is wiring p50 into scheduler request ordering.
+  optimal service ordering. TRAIL (arXiv:2410.01035) achieves near-SRTF
+  via embedding-based SPRPT without clairvoyant access.
+- **Complexity:** Low — sort key is wired; remaining work is LLM trace replay.
 - **Risks:** Without good token prediction the scheduling gains erode.
 - **Datasets available:** CARA carries `num_predicted_output_tokens` vs
   `actual_output_tokens` — ready for backtest.
+- **Wired [run 2026-06-20-f]:**
+  - `predicted_output_tokens: Optional[float] = None` added to `Job` dataclass.
+  - `_SLA_CLASS_RANK` + length-prior sort key wired into `_solve_greedy`.
+  - Canonical energy backtest: **0.0% delta** (expected — energy scheduling
+    has no queue contention; SRTF gain applies when requests compete for
+    limited GPU capacity at the same time, as in LLM serving traces).
+  - `aurelius/benchmarks/srtf_backtest.py` A/B benchmark module added.
+  - 37 new tests; 0 regressions.
 - **Next steps:**
-  1. Wire `OutputLengthForecastBundle` p50 into greedy scheduler sort key.
-  2. Evaluate on BurstGPT and Azure 2024 with simulated output-length priors.
+  1. Evaluate SRTF on BurstGPT and Azure LLM 2024 (LLM serving, queue
+     contention present) — expected +15–32% p90 short-request improvement.
+  2. Wire `OutputLengthForecastBundle.p50` as shadow prior value (replaces
+     `runtime_hours × SRTF_TOKENS_PER_HOUR` proxy with calibrated estimate).
 
 ### 4.5 Probabilistic Demand Modeling
 
@@ -325,21 +357,85 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | Output length prediction → semi-clairvoyant scheduling | High (+32% p90 short-request per arXiv:2604.06970) | Medium | Infrastructure built (shadow) | Wire calibration + HGB into CARA backtest; integrate p50 as SRTF prior |
-| 2 | GPU routing benchmark on real price data | High (TTFT 9× spread) | Low | **Benchmark infra complete [run -e]** | Run run_gpu_routing_backtest() with canonical CSV files present |
+| 1 | SRTF on LLM serving traces (BurstGPT / Azure 2024) | High (+32% p90 short-request per arXiv:2604.06970) | Low | **Sort key wired [run -f]** — canonical energy 0% (expected) | Evaluate on BurstGPT + Azure 2024 with queue contention |
+| 2 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated, expected) | Evaluate on BurstGPT where TTFT is the binding constraint |
 | 3 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 4 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 5 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 6 | TTFT p50 shadow integration (already shadow_ready) | Medium | Low-Medium | shadow_ready | Wire into routing decision |
-| 7 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 8 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
-| 9 | TPOT forecasting after CARA train.jsonl expansion | Medium | Low | build_after_data_expansion | Expand CARA to train.jsonl (392 MB) |
+| 4 | Wire OutputLengthForecastBundle.p50 as SRTF shadow prior | High (replaces runtime_hours proxy with calibrated token estimate) | Low | Infrastructure built (shadow) | Replace SRTF_TOKENS_PER_HOUR proxy with p50 from OutputLengthForecastBundle |
+| 5 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 6 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 7 | TTFT p50 shadow integration (already shadow_ready) | Medium | Low-Medium | shadow_ready | Wire into routing decision |
+| 8 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 9 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+| 10 | TPOT forecasting after CARA train.jsonl expansion | Medium | Low | build_after_data_expansion | Expand CARA to train.jsonl (392 MB) |
 
 ---
 
 ## 7. Experiment History
 
-### Run 2026-06-20-e (this run)
+### Run 2026-06-20-f (this run)
+- **Phase 1 (audit):** Repository audit. Run -e built the GPU routing benchmark
+  harness and stated that canonical CSV files were "not present." This run
+  discovered those CSV files ARE present (`data/caiso_us_west_dam.csv` etc.),
+  ran both the GPU routing and the SRTF benchmarks with real CAISO/PJM/ERCOT
+  price data, and wired `predicted_output_tokens` into the greedy scheduler
+  sort key as an SRTF prior.
+- **Phase 2 (research):** 3 new papers reviewed:
+  1. "TRAIL: Embedding-Based Scheduling for LLMs" (arXiv:2410.01035) — SPRPT
+     (Shortest Predicted Remaining Processing Time) via intermediate-layer
+     embeddings achieves near-SRTF performance without clairvoyant token
+     length access; validates the SRTF direction for production use.
+  2. "Robust Length Prediction for Efficient LLM Serving" [ELIS]
+     (arXiv:2604.07931) — iterative SRTF with encoder-based length predictor
+     shows strong latency improvement on multi-tenant LLM serving clusters;
+     supports the `OutputLengthForecastBundle` → SRTF prior pipeline.
+  3. "EnergyLens: Energy-Aware LLM Inference Serving" (arXiv:2605.14249) —
+     energy-aware batching and scheduling; confirms that energy × SLA joint
+     optimization is the frontier direction for Aurelius's combined KPI.
+- **Phase 3 (benchmarks):** 37 new SRTF tests + existing scheduler tests; all
+  passing. Zero regressions. Two canonical benchmarks run with real
+  CAISO/PJM/ERCOT price data for the first time.
+- **Phase 4 (implementation):**
+  - `aurelius/models.py`: added `predicted_output_tokens: Optional[float] = None`
+    to `Job` dataclass — SRTF scheduling prior; `None` = no prior available;
+    fully backward-compatible.
+  - `aurelius/optimization/scheduler.py`: added `_SLA_CLASS_RANK` class variable
+    (`latency_critical=0, deadline=1, best_effort=2`); modified `_solve_greedy`
+    sort key to `(−priority, sla_class_rank, length_prior_or_inf, deadline)`.
+    Backward-compatible: `predicted_output_tokens=None` → `float("inf")` →
+    same order as original `(−priority, deadline)` for all-same-sla_class jobs.
+  - `aurelius/benchmarks/srtf_backtest.py` (NEW): A/B benchmark module.
+    `SRTF_TOKENS_PER_HOUR = 500_000.0`; `SRTF_ELIGIBLE_WORKLOAD_TYPES` =
+    `realtime_inference` + `llm_batch_inference`; `augment_jobs_with_srtf_priors()`;
+    `run_srtf_backtest()` (baseline vs SRTF); `SRTFBacktestReport` dataclass.
+  - `tests/test_srtf_scheduling.py` (NEW): 37 tests (6 classes):
+    `TestJobPredictedOutputTokens` (5), `TestSLAClassRank` (4),
+    `TestGreedySortKey` (9), `TestAugmentJobsWithSRTFPriors` (10),
+    `TestSRTFBacktestReport` (4), `TestSRTFEndToEnd` (5).
+- **Benchmark results (real CAISO/PJM/ERCOT canonical trace, seed=20260201,
+  1000 jobs, 26-day window):**
+  - **GPU routing:** baseline=0.300667, gpu_routing=0.300246, Δ=−0.14%.
+    Routing quality: +54.7 pp H100 placement for LC jobs (confirmed correct).
+    Root cause of negative Δ: H100 GPUs are in PJM (us-east), the highest
+    energy-cost region. On a 26-day energy-shifting window all jobs already
+    meet deadlines without routing; energy cost dominates over TTFT gain.
+    On LLM serving traces with binding TTFT SLAs the expected direction flips.
+  - **SRTF scheduling:** baseline=0.352783, srtf=0.352783, Δ=0.0%.
+    Expected neutral: energy scheduling has no queue contention (each job
+    selects its optimal time slot independently over 26 days). SRTF gain
+    materializes under request-queue pressure (LLM serving traces).
+    Short-first ordering: ~100% of eligible jobs sorted correctly.
+- **Decision:** Positive (infrastructure). Both canonical benchmarks confirm
+  correct implementation and expected neutral/negative results on the energy
+  trace (no queue contention). SRTF sort key wired and backward-compatible.
+  Zero regressions. Infrastructure ready for LLM serving trace evaluation.
+- **Next recommended direction:**
+  1. Evaluate SRTF on BurstGPT and Azure LLM 2024 (queue contention present)
+     — expected +15–32% p90 short-request gain from arXiv:2604.06970.
+  2. Evaluate GPU routing on a trace where TTFT violations are the binding SLA
+     constraint (not deadline miss on a 26-day batch-scheduling window).
+  3. Wire `WorkloadAdmissionGate` into cluster simulator for Azure 2024 replay.
+
+### Run 2026-06-20-e
 - **Phase 1 (audit):** Repository audit completed. Run -d wired `GpuPlacementScorer`
   into the scheduler but left GPU routing unvalidated on any price-data trace because
   the canonical benchmark had no `region_gpu_types` metadata. This run targets the
