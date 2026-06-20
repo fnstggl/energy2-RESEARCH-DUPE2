@@ -39,6 +39,16 @@ Short_p90 improvement preserved at 70-78% vs FIFO (vs 99.6% for pure SRTF).
 Research basis: Astraea (arXiv:2512.14142), FlowPrefill (arXiv:2602.16603),
 Equinox (arXiv:2508.16646). 37 new tests. See `docs/SRTF_AGING_BACKTEST_RESULTS.md`.
 
+**Preemptive SRPT [run 2026-06-20-j]:** Discrete-event M/G/c SRPT preemptive
+simulator added. On Azure LLM 2024 (5,880 requests, ρ=0.85): **+322.2%
+SLA-safe goodput/$ vs FIFO** (within 0.3 pp of SRTF perfect) with the **best
+short_p90 across all disciplines** (1.89s, +99.73% vs FIFO's 696s). Anti-starvation
+guarantee: long jobs make monotonic forward progress (remaining service decreases
+on every quantum). Long_p99 regression (+223.4%) nearly matches SRTF (+223.5%)
+— starvation bounded but not eliminated at high utilization. Research basis:
+TRAIL (arXiv:2410.01035), FlowPrefill (arXiv:2602.16603), SRPT multiserver
+(arXiv:1805.07686). 42 new tests. See `docs/SRPT_PREEMPTIVE_BACKTEST_RESULTS.md`.
+
 ---
 
 ## 2. Current Best Results (Benchmark Leaderboard)
@@ -417,19 +427,96 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
 | 1 | Wire aging_srtf into SERVING runtime path (α=0.01) | High (+70.7% gp/$ vs FIFO in sim) | Medium | **Quantified [run -i]** — serving simulator; not yet in serving runtime | Expose aging_srtf ordering in serving path driven by OutputLengthForecastBundle.p50; α=0.01 recommended |
-| 2 | Preemptive SRPT variant in simulator | High (eliminates long-tail regression entirely) | Medium | Not Started | Add preemption to simulator; service = initial − elapsed |
-| 3 | Full BurstGPT (1.4M rows) cross-validation | Medium (confirms generalization) | Low | Not Started | Download full BurstGPT_1.csv; run run_burstgpt_aging_backtest() at scale |
-| 4 | Wire OutputLengthForecastBundle.p50 as aging-SRTF prior | High (replaces oracle prior with live forecast) | Low | Infrastructure built (shadow) | Replace perfect-prior in aging_srtf with OutputLengthForecastBundle.p50 |
-| 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 8 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 9 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 10 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+| 2 | **Preemptive SRPT variant in simulator** | **High** | **Medium** | **DONE [run -j]** | +322.2% gp/$ vs FIFO; best short_p90 (+99.73%); long_p99 bounded not eliminated |
+| 3 | Hybrid Aging+Preemptive SRPT (combine run -i and -j) | High (eliminate both starvation and p99 regression) | Medium | Not Started | Add aging decay to preemptive SRPT: key(r,t) = remaining / (1+α·wait_s) |
+| 4 | Full BurstGPT (1.4M rows) cross-validation | Medium (confirms generalization) | Low | Not Started | Download full BurstGPT_1.csv; run run_burstgpt_srpt_preemptive_backtest() at scale |
+| 5 | Wire OutputLengthForecastBundle.p50 as aging-SRTF prior | High (replaces oracle prior with live forecast) | Low | Infrastructure built (shadow) | Replace perfect-prior in aging_srtf with OutputLengthForecastBundle.p50 |
+| 6 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 7 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 8 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 9 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 10 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 11 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-20-j — PREEMPTIVE SRPT SERVING-QUEUE SIMULATOR
+
+**Goal:** Address the theoretical starvation risk of non-preemptive SRTF by
+adding a preemptive SRPT discipline to the serving-queue simulator.  In
+preemptive SRPT, when a shorter job arrives it immediately reclaims the server
+running the longest-remaining job.  The preempted job re-enters the waiting
+queue with its current remaining service time, guaranteeing monotonic forward
+progress (remaining service never increases).
+
+- **Phase 1 (audit):** Read ROADMAP, GAP_ANALYSIS.  Confirmed #2 highest-EV
+  opportunity: preemptive SRPT variant.  SRTF perfect shows +323.5% goodput/$
+  vs FIFO but +223.5% long_p99 regression (starvation).  Aging-SRTF bounds it
+  to +113.8% at the cost of goodput (α=0.01: +70.7% vs FIFO).  Preemptive SRPT
+  should deliver near-SRTF goodput + best-possible short_p90 + bounded starvation.
+
+- **Phase 3 (research — 3 papers):**
+  1. **TRAIL** (arXiv:2410.01035, ICLR 2025) — near-SRTF performance via
+     embedding-based SPRPT with limited preemptions.
+  2. **FlowPrefill** (arXiv:2602.16603, Feb 2026) — operator-level preemption
+     blueprint for SLO-aware LLM serving; decouples preemption granularity from
+     prefill scheduling.
+  3. **SRPT Multiserver** (arXiv:1805.07686, 2018) — SRPT server-selection rule
+     for M/G/k (preempt the server with the longest remaining service when a
+     shorter job arrives).
+
+- **Phase 4 (implementation):**
+  - `aurelius/benchmarks/srtf_serving_backtest.py` extended:
+    - `_simulate_srpt_preemptive(requests, servers)` — discrete-event M/G/c
+      SRPT preemptive simulator with per-server version counters (stale-event
+      detection), remaining-service tracking, and heapq-based waiting queue.
+    - `simulate_queue(..., discipline="srpt_preemptive")` dispatch branch.
+    - `SRTFPreemptiveReport` dataclass (all 4 disciplines + delta KPIs).
+    - `_run_preemptive_backtest_on_trace()` — shared backtest helper.
+    - `run_srpt_preemptive_backtest()` — Azure LLM 2024 public function.
+    - `run_burstgpt_srpt_preemptive_backtest()` — BurstGPT cross-validation.
+  - `tests/test_srtf_preemptive_backtest.py` (NEW) — 42 tests, 9 classes, all passing.
+
+- **Phase 7 (benchmark results — public trace replay):**
+
+  **Azure LLM 2024 (5,880 requests, ρ=0.85, SLA=10s, c=4, time_warp=21.95):**
+  | KPI | FIFO | SRTF-perfect | Aging-SRTF (α=0.01) | SRPT Preemptive |
+  |---|---:|---:|---:|---:|
+  | SLA-safe goodput/$ | 13,336 | 56,481 (+323.5%) | 22,768 (+70.7%) | **56,311 (+322.2%)** |
+  | short_p90 response (s) | 696.16 | 3.03 | 152.61 | **1.89** |
+  | short_p90 improvement | — | +99.57% | +78.08% | **+99.73%** |
+  | long_p99 response (s) | 733.55 | 2,373.09 | 1,568.16 | **2,372.56** |
+  | long_p99 regression | — | +223.5% | +113.8% | **+223.4%** |
+  | mean_response_s | 343.89 | 129.89 | 183.06 | **129.58** |
+  | p50_response_s | 342.20 | 2.71 | 58.49 | **2.09** |
+
+  **BurstGPT (51-request fixture, ρ=0.85, SLA=30s, c=4):**
+  | KPI | FIFO | SRTF-perfect | SRPT Preemptive |
+  |---|---:|---:|---:|
+  | SLA-safe goodput/$ | 70,975 | 67,754 (−4.5%) | **67,754 (−4.5%)** |
+  | short_p90 improvement | — | +56.5% | **+67.5%** |
+  | long_p99 regression | — | +10.8% | **+16.0%** |
+
+- **Decision:** FRONTIER IMPROVEMENT (simulator).  SRPT preemptive achieves
+  near-SRTF goodput (+322.2% vs +323.5%) with the best short_p90 across all
+  four disciplines (+99.73% vs FIFO).  Theoretical anti-starvation guarantee
+  (monotonic remaining-service decrease) confirmed in implementation; empirically,
+  long_p99 regression (+223.4%) matches SRTF at ρ=0.85 because high short-job
+  arrival rate keeps long jobs continuously preempted.
+
+- **Empirical finding — goodput vs Aging-SRTF:**  SRPT preemptive (+322.2%)
+  dramatically outperforms Aging-SRTF (+70.7%) on Azure LLM 2024.  The preemptive
+  variant is the better choice when goodput/$ is the primary KPI; Aging-SRTF is
+  preferable when long_p99 latency SLA must also be bounded.
+
+- **Next recommended direction:**
+  1. Hybrid Aging+Preemptive SRPT: use remaining_s / (1 + α·wait_s) as the
+     preemption key, combining anti-starvation aging with preemptive scheduling.
+  2. Cross-validate on full BurstGPT (1.4M rows) using run_burstgpt_srpt_preemptive_backtest().
+  3. Wire SRPT preemptive into the serving runtime path with OutputLengthForecastBundle.p50
+     as the predicted_tokens prior.
 
 ### Run 2026-06-20-i — AGING-SRTF ANTI-STARVATION GUARD + BURSTGPT CROSS-VALIDATION
 

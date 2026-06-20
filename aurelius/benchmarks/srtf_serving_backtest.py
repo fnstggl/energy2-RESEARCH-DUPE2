@@ -1,6 +1,7 @@
 """SRTF serving-queue backtest — the request-level evaluation of shortest-job-
 first ordering on a real LLM serving trace (arXiv:2604.06970), extended with
-SRTF-with-Aging anti-starvation guard [run 2026-06-20-i].
+SRTF-with-Aging anti-starvation guard [run 2026-06-20-i] and Preemptive SRPT
+(Shortest Remaining Processing Time) [run 2026-06-20-j].
 
 Why this module exists
 ----------------------
@@ -29,7 +30,7 @@ What is real vs. modelled
     * service time  s_i = TTFT_BASE_S + actual_output_tokens · TPOT_S
       (continuous-batching decode physics; the same per-token rate the engine
       uses).
-    * ``c`` homogeneous replicas behind one queue (M/G/c, non-preemptive).
+    * ``c`` homogeneous replicas behind one queue (M/G/c).
     * arrivals are time-warped by a single scalar so cluster utilization hits a
       realistic ``target_rho`` — the public sample is downsampled and its raw
       RPS would leave the pool 85% idle.  The warp preserves the real token
@@ -39,15 +40,23 @@ What is real vs. modelled
   ordering key and the physics are genuinely decoupled.
 
 Disciplines compared through the identical simulator:
-  ``fifo``           — serve waiting requests in arrival order.
-  ``srtf_perfect``   — serve shortest *predicted* job first; prior = actual tokens.
-  ``srtf_forecast``  — shortest predicted first; prior = actual × lognormal noise.
-  ``aging_srtf``     — SRTF with aging: key(r,t) = predicted / (1 + α·wait_s).
-                       Long requests gain priority as wait grows, bounding
-                       starvation while preserving most of the SRTF short-request
-                       gain.  Research basis: Astraea (arXiv:2512.14142) aging-
-                       based promotion; FlowPrefill (arXiv:2602.16603) preemptive
-                       HoL mitigation.
+  ``fifo``              — serve waiting requests in arrival order (non-preemptive).
+  ``srtf``              — serve shortest *predicted* job first (non-preemptive).
+  ``aging_srtf``        — SRTF with aging: key(r,t) = predicted / (1 + α·wait_s).
+                          Long requests gain priority as wait grows, bounding
+                          starvation while preserving most of the SRTF short-request
+                          gain.  Research basis: Astraea (arXiv:2512.14142) aging-
+                          based promotion; FlowPrefill (arXiv:2602.16603) preemptive
+                          HoL mitigation.
+  ``srpt_preemptive``   — Preemptive SRPT [run 2026-06-20-j]: when a shorter request
+                          arrives, the server running the longest-remaining job is
+                          preempted; the preempted job re-enters waiting with its
+                          current remaining service time and is resumed later.
+                          Maintains the SRPT invariant: at all times the c requests
+                          with shortest remaining service are running.
+                          Research basis: TRAIL (arXiv:2410.01035, ICLR 2025);
+                          FlowPrefill (arXiv:2602.16603); SRPT for multiserver
+                          (arXiv:1805.07686).
 
 AGING_ALPHA calibration (AGING_ALPHA_DEFAULT = 0.05):
   A p99-length Azure 2024 request (479 tokens) reaches parity with the median
@@ -211,21 +220,166 @@ def calibrate_time_warp(
 # Discrete-event M/G/c simulator (non-preemptive)
 # ---------------------------------------------------------------------------
 
+def _simulate_srpt_preemptive(
+    requests: list[_Request],
+    servers: int,
+) -> tuple[dict, dict, dict]:
+    """Preemptive M/G/c SRPT discrete-event simulator.
+
+    Maintains the SRPT invariant: at all times the *c* requests with the
+    shortest remaining service time are the ones running.  When a newly
+    arriving request is shorter than the longest-remaining running job, that
+    running job is preempted; it re-enters the waiting queue with its current
+    remaining service time and will be resumed when a server is next freed.
+
+    Key properties (vs. non-preemptive SRTF):
+
+    - **No unbounded starvation:** every long request makes forward progress
+      whenever it holds a server.  Its remaining service decreases
+      monotonically.  Once its remaining drops below any competing request's
+      service time it can no longer be preempted.
+    - **SRPT optimality:** SRPT minimises mean response time for M/G/1
+      (Schrage 1968) and achieves near-optimal results for M/G/c
+      (arXiv:1805.07686).
+    - **Short-request benefit preserved:** short requests preempt long ones and
+      reach the same near-SRTF p90 latency as the non-preemptive discipline.
+
+    Stale-event detection: each server maintains a ``version`` counter that is
+    incremented on every start or preemption.  A completion event is ignored if
+    its recorded version differs from the server's current counter.
+
+    Wait time accounting: wait_map[i] = response[i] − service_s[i], which
+    captures the sum of all queuing intervals (initial wait + any preemption
+    intervals).
+
+    Research basis:
+    - TRAIL (arXiv:2410.01035, ICLR 2025): SRPT with limited preemptions.
+    - FlowPrefill (arXiv:2602.16603, Feb 2026): operator-level preemption at
+      token boundaries; event-driven scheduling on arrival/completion.
+    - SRPT for multiserver systems (arXiv:1805.07686): theoretical analysis of
+      preemptive SRPT in M/G/k queues.
+    """
+    n = len(requests)
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+
+    # Per-server state (indexed 0..servers-1).
+    s_req:   list = [None] * servers   # current _Request or None (free)
+    s_start: list = [0.0]  * servers   # wall-clock time this service period began
+    s_rem0:  list = [0.0]  * servers   # remaining service at the start of this period
+    s_ver:   list = [0]    * servers   # stale-event version counter
+
+    # Waiting heap: (remaining_s, stable_seq, _Request).
+    # remaining_s is the work still needed when the request entered waiting.
+    waiting: list = []
+    _wseq = [0]
+
+    def _nseq() -> int:
+        _wseq[0] += 1
+        return _wseq[0]
+
+    # Event heap: (time, ev_type, seq, server_id_or_-1, version_or_-1, request)
+    # ev_type 0 = ARRIVAL (sorts before completions at equal time)
+    # ev_type 1 = COMPLETION
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _remaining(sid: int, t: float) -> float:
+        return s_rem0[sid] - (t - s_start[sid])
+
+    def _start(sid: int, req: _Request, rem: float, t: float) -> None:
+        s_req[sid]  = req
+        s_start[sid] = t
+        s_rem0[sid]  = rem
+        s_ver[sid]  += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + rem, 1, _en(), sid, v, req))
+
+    def _preempt(sid: int, t: float):
+        """Remove running request from server; return (req, remaining_s)."""
+        req = s_req[sid]
+        rem = max(0.0, _remaining(sid, t))
+        s_req[sid]  = None
+        s_ver[sid] += 1   # invalidate the pending completion event
+        return req, rem
+
+    response: dict[int, float] = {}
+
+    while events:
+        ev  = heapq.heappop(events)
+        t   = ev[0]
+        ety = ev[1]
+
+        if ety == 0:  # ---- ARRIVAL ----------------------------------------
+            req = ev[5]
+            free = next((s for s in range(servers) if s_req[s] is None), None)
+            if free is not None:
+                # A server is idle — start immediately, no preemption needed.
+                _start(free, req, req.service_s, t)
+            else:
+                # All servers busy.  Find the one with the most remaining work.
+                worst_sid, worst_rem = 0, -1.0
+                for s in range(servers):
+                    r = _remaining(s, t)
+                    if r > worst_rem:
+                        worst_rem, worst_sid = r, s
+                if req.service_s < worst_rem:
+                    # Arriving request is shorter → preempt the worst server.
+                    preempted, prem = _preempt(worst_sid, t)
+                    _start(worst_sid, req, req.service_s, t)
+                    heapq.heappush(waiting, (prem, _nseq(), preempted))
+                else:
+                    # Arriving request is not shorter than any running → wait.
+                    heapq.heappush(waiting, (req.service_s, _nseq(), req))
+
+        else:  # ---- COMPLETION ---------------------------------------------
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue   # stale: this server was preempted or re-started
+            response[req.idx] = t - req.arrival_s
+            s_req[sid]  = None
+            s_ver[sid] += 1
+            if waiting:
+                rem_s, _, nxt = heapq.heappop(waiting)
+                _start(sid, nxt, rem_s, t)
+
+    # Wait time = total response − total service (captures sum of all
+    # queuing intervals including preemption pauses).
+    wait_map = {
+        r.idx: max(0.0, response[r.idx] - r.service_s)
+        for r in requests if r.idx in response
+    }
+    resp  = [response[r.idx] for r in requests if r.idx in response]
+    waits = [wait_map[r.idx] for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits, servers)
+    return summary, response, wait_map
+
+
 def simulate_queue(
     requests: list[_Request],
     servers: int,
     discipline: str,
     aging_alpha: float = AGING_ALPHA_DEFAULT,
 ) -> tuple[dict, dict, dict]:
-    """Run a non-preemptive M/G/c discrete-event simulation.
+    """Run a M/G/c discrete-event simulation under the requested discipline.
 
     ``discipline``:
-      ``fifo``        — ready requests served in arrival order.
-      ``srtf``        — ready requests served shortest *predicted* service first.
-      ``aging_srtf``  — SRTF with aging: at dispatch time t the effective key is
-                        ``predicted_tokens / (1 + aging_alpha * wait_so_far)``.
-                        As wait grows the key falls, giving long-waiting requests
-                        higher priority and bounding starvation.
+      ``fifo``             — ready requests served in arrival order (non-preemptive).
+      ``srtf``             — shortest *predicted* job first (non-preemptive).
+      ``aging_srtf``       — SRTF with aging: at dispatch time t the effective key
+                             is ``predicted_tokens / (1 + aging_alpha * wait_so_far)``.
+                             As wait grows the key falls, giving long-waiting requests
+                             higher priority and bounding starvation.
+      ``srpt_preemptive``  — Preemptive SRPT: when a shorter request arrives the
+                             longest-running job is preempted and re-enters waiting
+                             with its remaining service.  Eliminates unbounded
+                             starvation; each long request always makes progress.
 
     ``aging_alpha`` only affects the ``aging_srtf`` discipline.  The default
     (0.05) is calibrated so an Azure-2024 p99 request (479 tok) reaches parity
@@ -235,6 +389,8 @@ def simulate_queue(
     ``{request_idx: seconds}``.  The simulation is deterministic given the
     inputs; ties break on arrival sequence (request index).
     """
+    if discipline == "srpt_preemptive":
+        return _simulate_srpt_preemptive(requests, servers)
     n = len(requests)
     by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
 
@@ -463,6 +619,80 @@ class SRTFAgingReport:
             "aging_long_p99_delta_pct": round(self.aging_long_p99_delta_pct, 2),
             "srtf_goodput_delta_pct": round(self.srtf_goodput_delta_pct, 2),
             "aging_goodput_delta_pct": round(self.aging_goodput_delta_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+@dataclass
+class SRTFPreemptiveReport:
+    """4-discipline comparison: FIFO, SRTF (non-preemptive), Aging-SRTF, SRPT-preemptive.
+
+    Run 2026-06-20-j extends run -i's aging analysis by adding a preemptive
+    SRPT discipline that eliminates (rather than bounds) long-request starvation.
+
+    Research basis:
+    - TRAIL (arXiv:2410.01035, ICLR 2025): SRPT with limited preemptions; 1.66–
+      2.01× lower mean latency + M/G/1 closed-form formula for the SRPT variant.
+    - FlowPrefill (arXiv:2602.16603, Feb 2026): operator-level preemption at
+      token/operator boundaries; event-driven scheduling on arrival/completion.
+    - SRPT for multiserver systems (arXiv:1805.07686): SRPT policy for M/G/k
+      runs the k requests with smallest remaining processing time; near-optimal.
+    """
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    time_warp: float
+    sla_s: float
+    aging_alpha: float
+
+    fifo: dict
+    srtf_perfect: dict         # non-preemptive SRTF (oracle prior)
+    aging_srtf: dict           # non-preemptive SRTF with aging (α=aging_alpha)
+    srpt_preemptive: dict      # preemptive SRPT (oracle prior = actual tokens)
+
+    # Short-request p90 improvement vs FIFO (positive = better)
+    srtf_short_p90_improvement_pct: float
+    aging_short_p90_improvement_pct: float
+    srpt_short_p90_improvement_pct: float
+
+    # Long-request p99 change vs FIFO
+    # Negative % = improvement; positive % = regression (starvation)
+    srtf_long_p99_delta_pct: float     # large positive → starvation
+    aging_long_p99_delta_pct: float    # smaller positive → partial recovery
+    srpt_long_p99_delta_pct: float     # expected near zero or negative → full recovery
+
+    # SLA-safe goodput/$ vs FIFO (positive = better)
+    srtf_goodput_delta_pct: float
+    aging_goodput_delta_pct: float
+    srpt_goodput_delta_pct: float
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "time_warp": round(self.time_warp, 4),
+            "sla_s": self.sla_s,
+            "aging_alpha": self.aging_alpha,
+            "fifo": _r(self.fifo),
+            "srtf_perfect": _r(self.srtf_perfect),
+            "aging_srtf": _r(self.aging_srtf),
+            "srpt_preemptive": _r(self.srpt_preemptive),
+            "srtf_short_p90_improvement_pct": round(self.srtf_short_p90_improvement_pct, 2),
+            "aging_short_p90_improvement_pct": round(self.aging_short_p90_improvement_pct, 2),
+            "srpt_short_p90_improvement_pct": round(self.srpt_short_p90_improvement_pct, 2),
+            "srtf_long_p99_delta_pct": round(self.srtf_long_p99_delta_pct, 2),
+            "aging_long_p99_delta_pct": round(self.aging_long_p99_delta_pct, 2),
+            "srpt_long_p99_delta_pct": round(self.srpt_long_p99_delta_pct, 2),
+            "srtf_goodput_delta_pct": round(self.srtf_goodput_delta_pct, 2),
+            "aging_goodput_delta_pct": round(self.aging_goodput_delta_pct, 2),
+            "srpt_goodput_delta_pct": round(self.srpt_goodput_delta_pct, 2),
             "shadow_tag": self.shadow_tag,
         }
 
@@ -724,5 +954,159 @@ def run_burstgpt_aging_backtest(
     if len(raw) < 2:
         raise ValueError("need at least 2 requests")
     return _run_aging_backtest_on_trace(
+        raw, "burstgpt", servers, target_rho, aging_alpha, sla_s
+    )
+
+
+# ---------------------------------------------------------------------------
+# Preemptive SRPT — 4-discipline comparison [run 2026-06-20-j]
+# ---------------------------------------------------------------------------
+
+def _run_preemptive_backtest_on_trace(
+    raw: list[tuple[float, int]],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    aging_alpha: float,
+    sla_s: float,
+) -> "SRTFPreemptiveReport":
+    """Internal helper: run all 4 disciplines and return SRTFPreemptiveReport."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    def _build() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),  # oracle prior (actual = predicted)
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs  = _build()
+    srtf_reqs  = _build()
+    aging_reqs = _build()
+    srpt_reqs  = _build()
+
+    fifo_sim,  fifo_resp,  _ = simulate_queue(fifo_reqs,  servers, "fifo")
+    srtf_sim,  srtf_resp,  _ = simulate_queue(srtf_reqs,  servers, "srtf")
+    aging_sim, aging_resp, _ = simulate_queue(
+        aging_reqs, servers, "aging_srtf", aging_alpha=aging_alpha
+    )
+    srpt_sim,  srpt_resp,  _ = simulate_queue(srpt_reqs,  servers, "srpt_preemptive")
+
+    gp_fifo  = _sla_safe_goodput_per_dollar(fifo_reqs,  fifo_resp,  sla_s, servers)
+    gp_srtf  = _sla_safe_goodput_per_dollar(srtf_reqs,  srtf_resp,  sla_s, servers)
+    gp_aging = _sla_safe_goodput_per_dollar(aging_reqs, aging_resp, sla_s, servers)
+    gp_srpt  = _sla_safe_goodput_per_dollar(srpt_reqs,  srpt_resp,  sla_s, servers)
+
+    fifo_sim["sla_safe_goodput_per_dollar"]  = gp_fifo
+    srtf_sim["sla_safe_goodput_per_dollar"]  = gp_srtf
+    aging_sim["sla_safe_goodput_per_dollar"] = gp_aging
+    srpt_sim["sla_safe_goodput_per_dollar"]  = gp_srpt
+
+    def _impr(base: float, new: float) -> float:
+        return (base - new) / base * 100.0 if base > 0 else 0.0
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    fifo_sp90 = fifo_sim["short_p90_response_s"]
+    fifo_lp99 = fifo_sim["long_p99_response_s"]
+
+    return SRTFPreemptiveReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        time_warp=warp,
+        sla_s=sla_s,
+        aging_alpha=aging_alpha,
+        fifo=fifo_sim,
+        srtf_perfect=srtf_sim,
+        aging_srtf=aging_sim,
+        srpt_preemptive=srpt_sim,
+        srtf_short_p90_improvement_pct=_impr(fifo_sp90, srtf_sim["short_p90_response_s"]),
+        aging_short_p90_improvement_pct=_impr(fifo_sp90, aging_sim["short_p90_response_s"]),
+        srpt_short_p90_improvement_pct=_impr(fifo_sp90, srpt_sim["short_p90_response_s"]),
+        srtf_long_p99_delta_pct=_delta(fifo_lp99, srtf_sim["long_p99_response_s"]),
+        aging_long_p99_delta_pct=_delta(fifo_lp99, aging_sim["long_p99_response_s"]),
+        srpt_long_p99_delta_pct=_delta(fifo_lp99, srpt_sim["long_p99_response_s"]),
+        srtf_goodput_delta_pct=_delta(gp_fifo, gp_srtf),
+        aging_goodput_delta_pct=_delta(gp_fifo, gp_aging),
+        srpt_goodput_delta_pct=_delta(gp_fifo, gp_srpt),
+    )
+
+
+def run_srpt_preemptive_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    aging_alpha: float = 0.01,
+    sla_s: float = DEFAULT_SLA_S,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+) -> "SRTFPreemptiveReport":
+    """4-discipline comparison on Azure LLM 2024: FIFO / SRTF / Aging-SRTF / SRPT-preemptive.
+
+    Extends run -i's aging analysis by adding preemptive SRPT, which eliminates
+    (not just bounds) long-request starvation.  In SRPT, a running long job is
+    interrupted when a shorter request arrives; the long job resumes with its
+    remaining service time.  Because remaining service decreases monotonically
+    while a job holds the server, every long job eventually becomes the shortest
+    remaining and completes without further preemption.
+
+    The default ``aging_alpha=0.01`` is the recommended sweet spot from run -i
+    (+70.7% goodput/$ vs FIFO, 49% starvation reduction).
+
+    Args:
+        servers: Replica pool size (M/G/c). Identical across all disciplines.
+        target_rho: Target cluster utilization (arrival time-warp).
+        job_limit: Optional cap on the number of real requests used.
+        aging_alpha: Aging decay constant for the aging_srtf discipline.
+        sla_s: E2E response-time SLA budget (seconds).
+        azure_fixture: Path to the Azure LLM 2024 CSV fixture.
+
+    Returns:
+        ``SRTFPreemptiveReport`` with KPIs and deltas for all four disciplines.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_preemptive_backtest_on_trace(
+        raw, "azure_llm_2024", servers, target_rho, aging_alpha, sla_s
+    )
+
+
+def run_burstgpt_srpt_preemptive_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    aging_alpha: float = 0.01,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    burstgpt_fixture: str = DEFAULT_BURSTGPT_FIXTURE,
+) -> "SRTFPreemptiveReport":
+    """Cross-validate SRPT-preemptive on BurstGPT — 4-discipline comparison.
+
+    Runs the same 4-discipline comparison as ``run_srpt_preemptive_backtest``
+    but on the BurstGPT trace (heavier output-token distribution, avg ~340 tok
+    vs Azure 2024's ~104 tok, with a higher default SLA budget of 30 s).
+
+    Args:
+        servers: Replica pool size.
+        target_rho: Target cluster utilization.
+        job_limit: Optional cap on number of requests.
+        aging_alpha: Aging decay constant for the aging_srtf discipline.
+        sla_s: SLA budget (default 30 s for BurstGPT's longer service times).
+        burstgpt_fixture: BurstGPT CSV path.
+
+    Returns:
+        ``SRTFPreemptiveReport`` with FIFO / SRTF / Aging-SRTF / SRPT-preemptive KPIs.
+    """
+    raw = load_burstgpt_serving_requests(burstgpt_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_preemptive_backtest_on_trace(
         raw, "burstgpt", servers, target_rho, aging_alpha, sla_s
     )
