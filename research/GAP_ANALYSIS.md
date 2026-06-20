@@ -8,34 +8,301 @@
 
 ---
 
-## Run 2026-06-20-f — module integration + economic validation
+## Run 2026-06-20-h — module integration + economic validation
 
 This run pivoted from building shadow modules to **validating** the three
-existing ones on real public replay. Key gap-analysis answers:
+existing ones on real public replay (`WorkloadAdmissionGate`,
+`OutputLengthForecastBundle`, `GpuPlacementScorer`). Artifacts:
+`research/results/{baseline,module_integration}_public_backtest_2026-06-20.*`,
+`research/PUBLIC_BACKTEST_COMMANDS.md`. Key answers:
 
 - **Q1 (biggest limit):** The decision-surface mismatch. The public LLM-serving
   benchmark (Azure 2024 / BurstGPT) is an *aggregate per-tick autoscaling*
   replay; it exposes a provisioning decision, not the per-request placement /
-  ordering / GPU-routing decisions the three modules were built for. The modules
-  had no genuine lever there.
-- **Q3 (weakest):** `OutputLengthForecastBundle` — the autoscaler already reads
-  the realized per-tick mean (clairvoyant), so a forecast can only under- or
-  over-size. Its real benefit (SRTF per-request ordering) is not modeled by the
-  aggregate physics. Measured **−7…−11%** goodput/$ on BurstGPT.
+  ordering / GPU-routing decisions the three modules were built for.
+- **Q3 (weakest):** `OutputLengthForecastBundle` in the *aggregate* replay — the
+  autoscaler already reads the realized per-tick mean (clairvoyant), so a
+  forecast can only under-/over-size. Measured **−7…−11%** goodput/$ on BurstGPT.
+  (Consistent with run -g: the SRTF benefit lives in a *per-request* serving
+  queue, NOT the aggregate autoscaler — this run independently confirms the
+  module has no lever in the aggregate path, exactly the gap run -g exploits.)
 - **Q4 (suboptimal decisions):** None of the three modules improved any public
-  KPI. `WorkloadAdmissionGate` is neutral because the baseline is already
-  SLA-safe; `GpuPlacementScorer` moves the routing proxy (+54.7pp) but regresses
-  the real latency_critical goodput/$ (−7.3%).
+  KPI on the aggregate replay. `WorkloadAdmissionGate` neutral (baseline already
+  SLA-safe); `GpuPlacementScorer` moves the routing proxy (+54.7pp) but regresses
+  real latency_critical goodput/$ (−7.3%).
 - **Q11 (benchmark weakness):** Azure-2024 full week is SAS-gated (401); the
-  committed 5,880-row sample yields only 11–32 ticks at saturating scales →
-  noisy. BurstGPT (real 1.43M trace) is the robust evidence.
-- **Q13 (next):** Do not enable any module. To ever validate output-length SRTF
-  or GPU routing, build a *per-request discrete-event* serving harness with
-  per-region GPU labels — the aggregate replay structurally cannot show their
-  benefit. Until then, keep all three shadow-only.
+  5,880-row sample yields only 11–32 ticks at saturating scales → noisy. BurstGPT
+  (real 1.43M trace) is the robust evidence.
+- **Q13 (next):** Do not enable the three modules in the aggregate path. The
+  output-length SRTF value belongs in the *per-request serving queue* run -g
+  built — pursue that, not aggregate-replay sizing.
 
 **Decision: INFRASTRUCTURE ONLY** — backtest infra + report merged; no runtime
-decision change; modules stay `enabled=False`.
+decision change; the three modules stay `enabled=False`.
+
+---
+
+## Run 2026-06-20-g
+
+### Q1. What currently limits Aurelius most?
+
+**The proven SRTF value lives in a layer Aurelius does not yet schedule.** Run
+-g proved (on the real Azure LLM 2024 queue) that shortest-predicted-job-first
+cuts short-request p90 latency by −99.6% and lifts SLA-safe goodput/$ by +323%
+vs FIFO — but only in a request-level serving queue. The merged batch
+`JobScheduler` sort key (run -f) is inert for this (no queue-wait semantics),
+and the serving path has no per-request ordering hook yet. Wiring SRTF into the
+serving runtime (with an anti-starvation guard) is the gap.
+
+**Secondary:** long-request starvation under non-preemptive SJF (p99 733s →
+2189s) needs an aging/preemption mitigation before any runtime use.
+
+### Q2. What theoretically offers the largest gain?
+
+**SRTF/SPRPT ordering in the serving request queue.** Quantified, not
+hypothetical: +252–324% SLA-safe goodput/$ across ρ∈{0.80,0.85,0.92} on the
+real trace, robust to a 30%-CV forecast prior. The remaining work is exposing
+the ordering hook in the serving path + an aging guard.
+
+### Q3. Which forecasts are weakest?
+
+1. **Output length p50 as the live SRTF prior** — the serving backtest used a
+   simulated prior; the real `OutputLengthForecastBundle.p50` must drive the
+   ordering for the value to transfer. (Robustness is encouraging: 30%-CV noise
+   barely dented the gain.)
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving-queue ordering is FIFO** — the single largest measured gap
+   (request-level SRTF not yet in the serving path).
+2. **No anti-starvation aging** — needed before SRTF can go live.
+3. **GPU penalty calibration** — heuristic floor/ceil (unchanged).
+
+### Q5. Which workloads benefit least?
+
+**Batch / energy-shifting workloads** — confirmed again. The batch scheduler has
+no queue contention to exploit; SRTF is a serving-queue phenomenon. Light-load
+serving (ρ=0.10) also benefits little — the win scales with contention.
+
+### Q6. Which research direction appears strongest?
+
+**Serving-path SRTF + aging guard**, then SRPT (preemptive) to recover the
+long-tail. The simulator is built and the value is quantified; this is now an
+implementation task, not a research question.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Expose an ordering hook in the serving path keyed on
+   `OutputLengthForecastBundle.p50`.
+2. Add an aging term (a request's effective key decreases with wait time) so no
+   request waits beyond a TTL — bounds the long-tail regression.
+3. Re-run `srtf_serving_backtest` end-to-end with the live prior.
+
+### Q8. What is the shortest path to another +50% gain?
+
+The serving-queue SRTF result already shows >+250% goodput/$ vs FIFO in
+simulation; even discounting heavily for the FIFO-not-SLA-aware baseline and
+regime sensitivity, realizing a fraction of it in the serving runtime is the
+highest-leverage move available.
+
+### Q9. What would need to be true to achieve +300%?
+
+The +300% target is vs SLA-aware (not FIFO). The serving SRTF result is vs FIFO,
+so it is **not** a +300%-vs-SLA-aware claim. Reaching the aspirational target
+still requires the full stack: live output-length prior, serving-path SRTF with
+aging, heterogeneous GPU placement on serving traces, measured queue-wait
+labels, agentic PDGraph, joint carbon+placement, pilot telemetry.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Service-time model** `TTFT_BASE + tokens·TPOT` — a documented proxy; real
+   continuous-batching throughput is load-dependent (batch size effects) and may
+   compress the short/long gap.
+2. **Time-warp realism** — the public sample is downsampled; warping to ρ=0.85
+   preserves shape but not absolute burst micro-structure.
+3. **Non-preemptive SJF is the right discipline** — SRPT (preemptive) or a
+   hybrid may dominate by recovering the long-tail; not yet measured.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **FIFO baseline** — weaker than SLA-aware; the headline % is vs FIFO.
+2. **Single trace (Azure 2024)** — BurstGPT replay through the same simulator
+   would cross-validate (BurstGPT carries real request+response tokens too).
+3. **No preemption modeled** — the long-tail cost may be overstated relative to
+   a preemptive implementation.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT through the serving simulator** — cross-trace validation of the
+   SRTF serving result (real request/response tokens available).
+2. **Vidur profiling CSVs** — load-dependent service-time calibration.
+3. **ShareGPT** — output-length cross-dataset validation for the prior.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Expose SRTF/SPRPT ordering in the serving path driven by
+   `OutputLengthForecastBundle.p50`, with an aging/preemption guard.
+2. Add a preemptive SRPT variant to `srtf_serving_backtest` and measure the
+   long-tail recovery vs the non-preemptive starvation cost.
+
+**Short-term (2–3 runs):**
+3. Cross-validate on BurstGPT through the same simulator.
+4. Wire the live output-length prior and re-run end-to-end.
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Serving-path SRTF/SPRPT + aging guard | High | Medium | **Value quantified [run -g]** (+323% goodput/$ vs FIFO, Azure 2024 sim); not yet in serving runtime |
+| 2 | Preemptive SRPT variant + long-tail recovery measurement | High | Low | Simulator built [run -g]; add preemption |
+| 3 | Wire OutputLengthForecastBundle.p50 as live SRTF prior | High | Low | Infrastructure built (shadow) |
+| 4 | GPU routing on LLM serving trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 5 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
+| 6 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 7 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
+| 8 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+
+---
+
+## Run 2026-06-20-f
+
+### Q1. What currently limits Aurelius most?
+
+**SRTF scheduling not yet evaluated on LLM serving traces.** The sort key is
+wired and backward-compatible, but the expected +32% p90 short-request gain
+(arXiv:2604.06970) can only be measured on traces with queue contention (BurstGPT,
+Azure LLM 2024) — not on the canonical 26-day energy-shifting trace where jobs
+have no shared queue.
+
+**Secondary:** GPU routing goodput/$ is negative on the canonical energy trace
+(−0.14%) because H100 GPUs are in the highest-cost PJM energy region and the
+TTFT improvement has no direct goodput/$ credit when no jobs miss deadlines.
+
+### Q2. What theoretically offers the largest gain?
+
+**SRTF evaluation on LLM serving traces** — sort key is wired; running BurstGPT
+and Azure LLM 2024 with queue contention is the lowest-effort next step.
+Expected: +15–32% p90 short-request goodput on serving traces.
+
+**Second:** Wire `OutputLengthForecastBundle.p50` as the SRTF prior value
+(replaces `runtime_hours × 500K tokens/hour` proxy with calibrated token estimate).
+
+### Q3. Which forecasts are weakest?
+
+1. **SRTF prior quality** — current prior uses `runtime_hours × SRTF_TOKENS_PER_HOUR`
+   (rough proxy); calibrated `OutputLengthForecastBundle.p50` is built but not yet
+   wired as the prior source.
+2. **GPU-type-specific TTFT penalty calibration** — `penalty_floor/ceil` heuristic;
+   not tuned from goodput/$ sensitivity on LLM serving traces.
+3. **TTFT p99 tail** — still at baseline_fallback (67% fallback on time holdout).
+4. **Queue wait** — derived proxy only; no real measured wait labels.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **SRTF on LLM serving traces** — sort key is wired but the gain only
+   materializes under queue contention; evaluation pending.
+2. **Batch admission timing** — `WorkloadAdmissionGate` implemented but not
+   connected to any trace replay.
+3. **GPU penalty calibration** — heuristic floor/ceil; not from goodput data.
+
+### Q5. Which workloads benefit least?
+
+**Energy batch scheduling** — confirmed neutral for both SRTF (0%) and GPU routing
+(−0.14%) on the 26-day canonical energy trace. Both features provide value only
+under request-queue pressure (LLM serving workloads).
+
+### Q6. Which research direction appears strongest?
+
+**Evaluating SRTF on BurstGPT and Azure LLM 2024** — zero new implementation
+required; the benchmark harness (`srtf_backtest.py`) is built. This is a run of
+the existing code on a trace with queue contention.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Run `srtf_backtest` on BurstGPT and Azure 2024 with `predicted_output_tokens`
+   set from `num_predicted_output_tokens` or `runtime_hours` proxy.
+2. If short requests are served first, p90 TTFT drops → more SLA-safe goodput/$.
+Estimated complexity: 1 run of low scope (replay + result recording).
+
+### Q8. What is the shortest path to another +50% gain?
+
+1. SRTF on LLM serving traces (+15–32% directional).
+2. Wire `OutputLengthForecastBundle.p50` as SRTF prior (better priors → larger gain).
+3. Admission gate cluster simulator integration (+3–8% from KV overflow reduction).
+Combined: +50% plausible within 2–3 runs on LLM serving traces.
+
+### Q9. What would need to be true to achieve +300%?
+
+Unchanged. Requires: accurate output length prediction, heterogeneous GPU
+placement benchmarked on LLM serving traces (not energy trace), measured
+queue-wait labels, agentic PDGraph, joint carbon + placement optimization,
+pilot telemetry.
+
+### Q10. Which assumptions might be wrong?
+
+1. **SRTF gain transfers from pure LLM queue to Aurelius's job model** — the
+   canonical Job model uses `runtime_hours` as the service time, not token
+   counts. On BurstGPT and Azure 2024 the proxy is reasonable, but the exact
+   gain depends on how well `runtime_hours × SRTF_TOKENS_PER_HOUR` correlates
+   with actual request service time.
+2. **GPU routing direction flips on LLM trace** — the energy trace result
+   (−0.14%) was driven by PJM energy prices. On BurstGPT (no energy shifting,
+   synthetic prices), the TTFT improvement should dominate.
+3. **No queue contention assumption on canonical energy trace** — the 26-day
+   window is long enough for all jobs to find cheap slots independently. If a
+   shorter window or higher job density was used, SRTF would show a delta.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Canonical energy trace lacks queue contention** — SRTF and GPU routing
+   benefits are hidden on this trace. LLM serving traces are the right vehicle.
+2. **No per-region GPU-type labels in public LLM traces** — BurstGPT and Azure
+   2024 lack GPU-type metadata. Synthetic assignment needed for GPU routing eval.
+3. **SRTF prior is a proxy** — `runtime_hours × 500K` is rough; calibrated p50
+   from `OutputLengthForecastBundle` would reduce proxy error.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT / Azure 2024 replay with synthetic GPU-type labels** — existing
+   traces, no new data needed; synthetic assignment from CARA fleet composition.
+2. **Vidur profiling CSVs** — measured kernel latency for penalty calibration.
+3. **ShareGPT** — output token counts for length predictor cross-dataset validation.
+4. **Mooncake FAST25 traces** — KV prefix reuse cross-validation (unchanged).
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Run `run_srtf_backtest()` adapted for BurstGPT or Azure LLM 2024 trace
+   (where jobs share GPU time and queue contention is present).
+2. Wire `OutputLengthForecastBundle.p50` as the `predicted_output_tokens` prior
+   source to replace the `runtime_hours × SRTF_TOKENS_PER_HOUR` proxy.
+
+**Short-term (2–3 runs):**
+3. Wire `WorkloadAdmissionGate` into cluster simulator for Azure 2024 replay.
+4. Evaluate GPU routing on BurstGPT / Azure 2024 where TTFT violations are
+   the binding SLA constraint.
+5. Vidur CSV ingestion for penalty calibration.
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | SRTF on LLM serving traces (BurstGPT / Azure 2024) | High | Low effort | Sort key wired [run -f] — eval pending |
+| 2 | Wire OutputLengthForecastBundle.p50 as SRTF prior | High | Low effort | Infrastructure built (shadow) |
+| 3 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low effort | Wired [run -d], benchmarked [run -f] — eval on LLM trace pending |
+| 4 | Admission gate → cluster simulator integration | Medium | Medium | Implemented (unconnected) |
+| 5 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 6 | Vidur CSV ingestion for GPU penalty calibration | Low-Med | Low | Not started |
+| 7 | Mooncake trace ingestion (KV prefix reuse) | Low-Med | Low | Not started |
+| 8 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+| 9 | Hermes PDGraph agentic routing | High | High effort | Not started |
 
 ---
 
@@ -50,10 +317,10 @@ priors, all jobs are treated as equal priority in the request queue, losing
 the SRTF-like gain of short-first ordering (+32% p90 per arXiv:2604.06970).
 
 **Secondary:** The GPU routing benchmark (`run_gpu_routing_backtest()`) is
-now fully instrumented but the quantitative goodput/$ delta on real canonical
-price data has not been obtained because the canonical CSV files are not
-present in the repo (data files are gitignored). The benchmark infra is
-ready; it fires whenever the CSVs are mounted.
+now fully instrumented. The canonical CSV files were believed absent (gitignored)
+at run -e time; run -f discovered they ARE present (`data/caiso_us_west_dam.csv`
+etc.) and ran the benchmark with real CAISO/PJM/ERCOT data — result: −0.14%
+goodput/$ (energy-price-dominated; see run -f for root cause analysis).
 
 ### Q2. What theoretically offers the largest gain?
 
@@ -63,8 +330,9 @@ single-run implementation that can produce a measurable delta. The
 scheduler sort key is a 1–2 file change. Expected gain: +15–32% p90
 short-request goodput on LLM-serving traces (arXiv:2604.06970).
 
-**Second:** Running the GPU routing benchmark with real price data — the
-benchmark harness is now complete; this is a data-availability task.
+**Second:** SRTF evaluation on LLM serving traces (BurstGPT / Azure 2024).
+GPU routing on real canonical data was run in run -f (−0.14%, energy-price-dominated);
+the LLM serving trace evaluation remains pending.
 
 ### Q3. Which forecasts are weakest?
 
@@ -131,9 +399,9 @@ joint carbon + placement optimization, pilot telemetry.
 
 ### Q11. Which benchmark weaknesses exist?
 
-1. **Canonical CSVs not in repo** — `run_gpu_routing_backtest()` fires only
-   when `data/caiso_us_west_dam.csv` etc. are present. Real quantitative delta
-   not yet obtained.
+1. **Canonical CSVs confirmed present** — `data/caiso_us_west_dam.csv` etc.
+   ARE in the repo. `run_gpu_routing_backtest()` was run in run -f: −0.14%
+   goodput/$ (energy-price-dominated; see run -f root cause).
 2. **No per-region GPU-type labels in public traces** — BurstGPT, Azure 2024,
    Alibaba GenAI all lack GPU-type metadata. Synthetic assignment is an
    approximation.

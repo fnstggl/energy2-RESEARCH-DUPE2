@@ -180,7 +180,7 @@
 
 ---
 
-## 5b. Module-Integration Validation (run 2026-06-20-f)
+## 5b. Module-Integration Validation (run 2026-06-20-h)
 
 Public-replay economic validation of the three shadow research modules. Runners:
 `scripts/run_baseline_public_backtest.py`, `scripts/run_module_integration_backtest.py`

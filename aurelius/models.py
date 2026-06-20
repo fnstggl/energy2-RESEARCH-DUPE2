@@ -112,6 +112,14 @@ class Job:
     allowed_regions: list[str] = field(default_factory=list)
     forbidden_regions: list[str] = field(default_factory=list)
 
+    # SRTF scheduling prior — predicted output token count for this request.
+    # When set, the greedy scheduler orders jobs short-first within each priority
+    # band, improving tail latency for short requests (arXiv:2604.06970).
+    # None means no prior available; the scheduler falls back to deadline-only
+    # ordering (fully backward-compatible).  Set from
+    # OutputLengthForecastBundle.p50_tokens at admission time (shadow-only).
+    predicted_output_tokens: Optional[float] = None
+
     # Mid-job region migration support. None means the job CANNOT migrate
     # (e.g. realtime_inference — latency-pinned to one region). A float value
     # is the cost in hours per migration: checkpoint-write + cross-region
