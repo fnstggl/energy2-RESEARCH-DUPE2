@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 

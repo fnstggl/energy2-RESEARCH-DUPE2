@@ -24,8 +24,10 @@ from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aurelius.traces import burstgpt  # noqa: E402
-from aurelius.traces import azure_llm  # noqa: E402
+from aurelius.traces import (
+    azure_llm,  # noqa: E402
+    burstgpt,  # noqa: E402
+)
 from aurelius.traces.backtest import run_backtest  # noqa: E402
 from aurelius.traces.schema import time_rescale  # noqa: E402
 
