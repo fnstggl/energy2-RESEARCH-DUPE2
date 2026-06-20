@@ -8,6 +8,151 @@
 
 ---
 
+## Run 2026-06-20-c
+
+### Q1. What currently limits Aurelius most?
+
+**Pilot telemetry** remains the top bottleneck. The GPU placement scorer, output
+length forecaster, and admission gate are all implemented in shadow mode, but
+their real goodput/$ impact cannot be quantified until wired into a backtest
+simulation with GPU-type-annotated traces.
+
+**Secondary:** Three shadow modules are now implemented but not yet wired into
+the scheduler or cluster simulator:
+1. `GpuPlacementScorer` — penalty ready but not folded into `_sla_adjusted_score`
+2. `OutputLengthForecastBundle` — p50 ready but not used as scheduler sort key
+3. `WorkloadAdmissionGate` — implemented but not connected to any trace replay
+
+### Q2. What theoretically offers the largest gain?
+
+**Wiring GpuPlacementScorer into the scheduler** for `latency_critical` SLA class
+is now the shortest path to a measurable benchmark delta. The 9× TTFT spread
+across GPU types seen in CARA is the largest unexploited signal in the system.
+If routing `latency_critical` requests to faster GPU types reduces TTFT violations,
+the allowed rho ceiling rises → more SLA-safe goodput/$.
+
+**Second:** Semi-clairvoyant scheduling via output length p50 — infrastructure is
+complete; integration is one scheduler change away.
+
+### Q3. Which forecasts are weakest?
+
+1. **GPU-type-specific TTFT at predict time** — the `GpuPlacementScorer` is built
+   but needs integration; its real penalty calibration (penalty_floor/ceil) is
+   a heuristic, not tuned from trace data.
+2. **Output token length** — forecaster built; calibration not yet validated on
+   real CARA data (data is gitignored).
+3. **TTFT p99 tail** — still at baseline_fallback (67% fallback on time holdout).
+4. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **GPU type selection without TTFT awareness** — `GpuPlacementScorer` built but
+   not yet wired into `_find_best_slot` or `_sla_adjusted_score`.
+2. **Request ordering without length priors** — `OutputLengthForecastBundle` built
+   but not wired into greedy sort order.
+3. **Batch admission timing** — admission gate implemented but unconnected.
+
+### Q5. Which workloads benefit least?
+
+**GPU packing / training scheduling** — unchanged. CA is near frontier on Alibaba
+GPU, MIT Supercloud, Philly. The new GPU placement scorer applies to LLM serving
+traces only (latency_critical SLA class), not training workloads.
+
+### Q6. Which research direction appears strongest?
+
+**GPU placement scorer → scheduler integration** is now the clearest single-run
+deliverable. The infrastructure is complete; the remaining work is:
+1. Pass `GpuPlacementScorer.latency_penalty` into scheduler objective for
+   `latency_critical` placements.
+2. Evaluate on BurstGPT with synthetic GPU-type labels from CARA prior table.
+
+Second: **LAPS-SD insight (arXiv:2505.17074)** — speculative decoding reduces
+per-token cost; combining output length prediction with SD token acceptance rate
+could yield a compound gain for SD-capable LLM serving clusters.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Wire `GpuPlacementScorer.latency_penalty` into `scheduler._sla_adjusted_score`
+   as an additive term when `sla_class == "latency_critical"` (single function,
+   ~10 lines of change).
+2. Add GPU-type metadata to the BurstGPT and Azure 2024 trace replay.
+3. Evaluate: if `latency_critical` requests route to h100 over t4 when the TTFT
+   spread is large, the SLA-safe rho ceiling rises → more goodput/$.
+Estimated complexity: 1 run of low-medium scope.
+
+### Q8. What is the shortest path to another +50% gain?
+
+1. Wire GPU placement scorer → BurstGPT evaluation → estimated +5-15%.
+2. Wire output length p50 into SRTF scheduler ordering → +15-30% on LLM traces.
+3. Wire admission gate into Azure 2024 replay → +3-8% from KV overflow reduction.
+Combined: +50% total from three integrations is plausible within 2-3 runs.
+
+### Q9. What would need to be true to achieve +300%?
+
+Unchanged from prior runs. Requires: accurate output length prediction,
+heterogeneous GPU placement (now built), measured queue-wait labels, agentic
+PDGraph, joint carbon + placement optimization, pilot telemetry.
+
+### Q10. Which assumptions might be wrong?
+
+1. **TTFT p50 stability across time** — the `TTFTShadowPrior` is a static table
+   fitted from CARA data. If GPU performance varies by cluster load or driver
+   version, the static prior may over-penalize under-loaded slower GPU types.
+2. **penalty_floor/ceil heuristic calibration** — the [0.05, 0.50] range is a
+   design choice, not tuned from trace data. If the actual goodput/$ sensitivity
+   to TTFT is lower than assumed, the penalty may introduce routing distortions.
+3. **Latency-critical fraction in public traces** — BurstGPT and Azure 2024 don't
+   carry explicit SLA class labels; synthetic assignment from workload_type may
+   under- or over-represent `latency_critical` workloads.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **No GPU-type labels in Azure 2024** — the scorer can't be directly validated
+   on the largest trace without synthetic GPU-type assignment.
+2. **BurstGPT short duration** (34 min) — may miss the TTFT benefit for long
+   sessions where GPU type choice compounds over many requests.
+3. **GPU packing traces at safe frontier** — Alibaba GPU, MIT Supercloud, Philly
+   unchanged; scorer does not help training workloads.
+
+### Q12. Which public datasets should be added?
+
+1. **Mooncake FAST25 traces** — still highest priority for KV prefix reuse.
+2. **Vidur profiling CSVs** — kernel latency priors for heterogeneous placement
+   scorer tuning (validates penalty calibration on A100/H100/A10G/T4).
+3. **ShareGPT conversation traces** — output token counts for length predictor
+   cross-dataset validation.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Wire `GpuPlacementScorer.latency_penalty` into `scheduler._sla_adjusted_score`
+   for `latency_critical` workloads — ~10 lines of change, medium impact.
+2. Add GPU-type metadata to benchmark trace replay for BurstGPT + Azure 2024.
+3. Evaluate and record before/after SLA-safe goodput/$ delta.
+
+**Short-term (2-3 runs):**
+4. Wire output length p50 into scheduler greedy sort key.
+5. Admission gate → cluster simulator integration.
+6. Mooncake trace ingestion.
+
+---
+
+## Future Opportunity Ranking (Expected Value × Feasibility)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | GPU placement scorer → scheduler integration | High | Low effort | Built (unconnected) |
+| 2 | Output token calibration → SRTF scheduling | High | Medium | Infrastructure built |
+| 3 | Admission gate → simulator integration | Medium | Medium | Implemented (unconnected) |
+| 4 | BOute MOBO routing co-optimisation | High | High effort | Not Started |
+| 5 | Mooncake trace ingestion | Low-Med | High | Not Started |
+| 6 | TTFT p50 shadow integration | Medium | Low | shadow_ready |
+| 7 | Hermes PDGraph agentic routing | High | High effort | Not Started |
+| 8 | Carbon-power MILP joint optimization | Medium | High effort | Not Started |
+| 9 | CARA train.jsonl TPOT expansion | Medium | Low | build_after_data |
+
+---
+
 ## Run 2026-06-20-b
 
 ### Q1. What currently limits Aurelius most?

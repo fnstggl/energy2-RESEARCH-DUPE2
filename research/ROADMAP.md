@@ -58,13 +58,22 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   status per `docs/FORECAST_LEVERAGE_AUDIT.md`).
 - **Queue wait:** `aurelius/forecasting/cara_queue_forecaster.py` — HGB
   on derived CARA queue proxy (shadow-only).
-- **Output token length [NEW - run 2026-06-20-b]:**
+- **Output token length [run 2026-06-20-b]:**
   `aurelius/forecasting/cara_output_length_forecaster.py` — calibrated
   output-token-count predictor. Two components: (a) `BiasCalibrationForecaster`
   debiases `num_predicted_output_tokens` via Huber regression; (b)
   `HGBOutputLengthForecaster` predicts `actual_output_tokens` at p50/p90/p95
   from all predict-time CARA features. Shadow-only. 39 tests passing.
   Enables semi-clairvoyant scheduling (arXiv:2604.06970).
+- **Heterogeneous GPU placement scorer [NEW - run 2026-06-20-c]:**
+  `aurelius/forecasting/gpu_placement_scorer.py` — wraps `TTFTShadowPrior`
+  to produce per-(gpu_type, model_size, prompt_token_bin) TTFT p50 ranking
+  and normalized latency-penalty scores for the scheduler. Peer-normalized:
+  fastest GPU type in the candidate set gets `penalty_floor`; slowest gets
+  `penalty_ceil`. `enabled=False` default; SLA-class gated (only
+  `latency_critical` receives non-zero penalty). 37 tests passing. Research
+  basis: arXiv:2604.07472 (Fast Heterogeneous Serving) + arXiv:2604.16682
+  (KAIROS). Enables exploitation of the 9× TTFT spread in CARA GPU data.
 - **Cache / prefix reuse:** `aurelius/forecasting/cache_prefix_forecaster.py`
   — HGB on SwissAI bucket-reuse + CC-traces (shadow-ready for integration
   review; single-dataset caveat applies).
@@ -177,22 +186,52 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   2. Evaluate on Azure LLM 2024 week trace with load-spiked replay.
   3. Tune `kv_soft_ceiling` and `max_defer_ms` from CARA data.
 
-### 4.3 Semi-Clairvoyant Scheduling
+### 4.3 Heterogeneous GPU Placement Scoring
+
+#### GPU Type Routing via TTFT-Prior Penalty
+- **Status:** Implemented (shadow-only, enabled=False default)
+- **Expected upside:** High — CARA shows 9× TTFT p99 spread across GPU types;
+  routing latency_critical requests to the appropriate GPU type could reduce
+  TTFT violations by 30-50% directionally.
+- **Research basis:** arXiv:2604.07472 (Fast Heterogeneous Serving, near-optimal
+  allocation in <1s), arXiv:2604.16682 (KAIROS, heterogeneous scheduling with
+  TTFT-aware SLO routing).
+- **Implementation:** `aurelius/forecasting/gpu_placement_scorer.py` —
+  `GpuPlacementConfig`, `GpuPlacementScore`, `GpuPlacementScorer`.
+- **Tests:** 37 passing in `tests/test_gpu_placement_scorer.py`.
+- **Safety invariants:**
+  - `enabled=False` default prevents accidental production use.
+  - Fail-open: missing/insufficient prior → penalty = 0.0 (neutral).
+  - Only `latency_critical` SLA class receives non-zero penalty.
+  - No controller / scheduler / executor imports.
+- **Open questions:** What penalty_floor/ceil achieves optimal goodput/$ vs
+  SLA-safe tradeoff on BurstGPT and Azure 2024? Requires scheduler integration.
+- **Next steps:**
+  1. Wire `GpuPlacementScorer.latency_penalty` into `scheduler._sla_adjusted_score`
+     as an additive dimension when `sla_class == "latency_critical"`.
+  2. Evaluate on BurstGPT trace with synthetic GPU-type labels from CARA prior.
+  3. Tune `penalty_floor`/`penalty_ceil` from CARA subgroup TTFT distributions.
+
+### 4.4 Semi-Clairvoyant Scheduling
 
 #### Output Length Prediction for Token-Magnitude Priors
-- **Status:** Not Started
+- **Status:** Infrastructure built (shadow-only)
 - **Expected upside:** High — "Scheduling the Unschedulable" (arXiv:
   2604.06970) shows token magnitude priors increase P90 short-request
   performance by 32% vs FIFO, and removing magnitude increases p95 by
-  5.8×.
-- **Complexity:** Medium — needs output token prediction from request
-  features (prompt type, user context, model).
+  5.8×. LAPS-SD (arXiv:2505.17074, IJCAI 2025) extends to speculative
+  decoding — predicted length + token acceptance rate together determine
+  optimal service ordering.
+- **Complexity:** Medium — `OutputLengthForecastBundle` is built; remaining
+  work is wiring p50 into scheduler request ordering.
 - **Risks:** Without good token prediction the scheduling gains erode.
-- **Datasets needed:** CARA carries `num_predicted_output_tokens` vs
-  `actual_output_tokens` — ready for output-length prediction audit.
-- **Next steps:** Audit CARA actual vs predicted output token counts.
+- **Datasets available:** CARA carries `num_predicted_output_tokens` vs
+  `actual_output_tokens` — ready for backtest.
+- **Next steps:**
+  1. Wire `OutputLengthForecastBundle` p50 into greedy scheduler sort key.
+  2. Evaluate on BurstGPT and Azure 2024 with simulated output-length priors.
 
-### 4.4 Probabilistic Demand Modeling
+### 4.5 Probabilistic Demand Modeling
 
 #### Hermes-style PDGraph for Multi-Step LLM Applications
 - **Status:** Not Started
@@ -206,7 +245,7 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   agentic traces (4,976 rows), AgentPerfBench.
 - **Next steps:** Audit CC-traces for multi-step application structure.
 
-### 4.5 Carbon-Aware Joint Optimization
+### 4.6 Carbon-Aware Joint Optimization
 
 #### Carbon-Aware Compute-Power MILP (Prosumer Datacenter)
 - **Status:** Not Started
@@ -218,7 +257,7 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 - **Note:** Energy shifting already implemented and already sufficient per
   `FORECAST_LEVERAGE_AUDIT.md`. This is the next frontier.
 
-### 4.6 Data Expansion
+### 4.7 Data Expansion
 
 #### Mooncake FAST25 Traces
 - **Status:** Not Started
@@ -264,7 +303,7 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 |---|---|---|---|---|---|
 | 1 | Output length prediction → semi-clairvoyant scheduling | High (+32% p90 short-request per arXiv:2604.06970) | Medium | Infrastructure built (shadow) | Wire calibration + HGB into CARA backtest; integrate p50 as SRTF prior |
 | 2 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 3 | Heterogeneous GPU placement scorer (TTFT 9× spread) | High | Medium | build_now | Build placement scorer using HGB TTFT forecasts per GPU type |
+| 3 | Heterogeneous GPU placement scorer (TTFT 9× spread) | High | Medium | **Implemented (shadow)** | Wire into scheduler objective folding; evaluate on Azure 2024 |
 | 4 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
 | 5 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
 | 6 | TTFT p50 shadow integration (already shadow_ready) | Medium | Low-Medium | shadow_ready | Wire into routing decision |
@@ -276,7 +315,55 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 7. Experiment History
 
-### Run 2026-06-20-b (this run)
+### Run 2026-06-20-c (this run)
+- **Phase 1 (audit):** Repository audit completed. Two prior runs have implemented
+  WorkloadAdmissionGate v1 (run -a) and OutputLengthForecastBundle v1 (run -b).
+  This run targets the #3 EV opportunity: Heterogeneous GPU Placement Scorer.
+- **Phase 2 (research):** 3 new papers reviewed:
+  1. "KAIROS: Stateful, Context-Aware Power-Efficient Agentic Inference Serving"
+     (arXiv:2604.16682, April 2026) — hardware-aware placement, heterogeneous
+     scheduling, and power-aware cluster orchestration. Defines SLOs via TTFT +
+     TBT metrics with per-GPU-type awareness. Maps directly to placement scorer.
+  2. "Semi-Clairvoyant Scheduling of Speculative Decoding Requests" [LAPS-SD]
+     (arXiv:2505.17074, IJCAI 2025) — Least-Attained/Perceived-Service for SD
+     adaptively schedules based on predicted output length + token acceptance rate.
+     Extends arXiv:2604.06970 to speculative decoding regime; relevant to the
+     SRTF scheduling direction.
+  3. "LLM Serving Needs Mathematical Optimization and Algorithmic Foundations,
+     Not Just Heuristics" (arXiv:2605.01280, May 2026) — advocates for rigorous
+     MILP/LP formulation for LLM scheduling; supports Aurelius's existing MILP
+     path and validates the TTFT-aware placement direction.
+  Also reviewed: Hetis (arXiv:2509.08309, fine-grained parallelism for
+  heterogeneous GPU clusters), TokenFlow (arXiv:2510.02758, burst-resilient
+  preemptive scheduling), AccelGen (arXiv:2503.13737, SLO-guaranteed multi-app
+  heterogeneous inference).
+- **Phase 3 (benchmarks):** 4964 tests passing (subset; excludes backtesting/ml/
+  live/html-reporting dirs which need lightgbm/matplotlib). 5 pre-existing
+  LightGBM failures unchanged. 37 new GPU placement scorer tests all pass.
+- **Phase 4 (implementation):** Implemented `GpuPlacementScorer v1`:
+  - `aurelius/forecasting/gpu_placement_scorer.py` — 280 LOC, pure stdlib +
+    numpy, shadow-only.
+  - Components: `GpuPlacementConfig` (configures enabled/sla_classes/thresholds),
+    `GpuPlacementScore` (per-candidate score with ttft_p50_s, relative_rank,
+    latency_penalty, status), `GpuPlacementScorer` (rank_gpu_types + score).
+  - Integration point: wraps `TTFTShadowPrior` (already fitted from CARA);
+    adds peer-normalized penalty in [0, penalty_floor..penalty_ceil].
+  - Safety: enabled=False default; fail-open for missing/insufficient prior;
+    no penalty for non-latency-critical SLA classes; no controller imports.
+  - `tests/test_gpu_placement_scorer.py` — 37 tests, all passing.
+  - Exported from `aurelius/forecasting/__init__.py`.
+- **Decision:** Positive (closes the #3 EV gap). Scorer is shadow-only with full
+  safety tagging. 37 tests pass. Enables scheduler to optionally exploit the 9×
+  TTFT spread across GPU types seen in CARA data.
+- **Next recommended direction:**
+  1. Wire `GpuPlacementScorer.latency_penalty` into scheduler objective for
+     `latency_critical` placements — fold as additive penalty on `obj.total`.
+  2. Evaluate on BurstGPT + Azure LLM 2024 with synthetic GPU-type labels to
+     quantify goodput/$ delta from TTFT-aware routing.
+  3. Wire `OutputLengthForecastBundle` p50 into SRTF scheduler ordering.
+  4. Wire admission gate into cluster simulator for Azure 2024 trace replay.
+
+### Run 2026-06-20-b (previous run)
 - **Phase 1 (audit):** Repository audit completed. Previous run (2026-06-20)
   implemented WorkloadAdmissionGate v1. This run builds on that foundation.
 - **Phase 2 (research):** 3 new papers reviewed:

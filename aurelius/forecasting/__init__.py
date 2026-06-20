@@ -58,6 +58,13 @@ VALIDATION vs INTEGRATION:
   - Dry-run execution adapters UNCHANGED (except logging forecasts)
 """
 
+# Heterogeneous GPU placement scorer (shadow-only; research basis: arXiv:2604.07472, arXiv:2604.16682)
+from .gpu_placement_scorer import (
+    GpuPlacementConfig,
+    GpuPlacementScore,
+    GpuPlacementScorer,
+)
+
 # CARA output length forecaster (shadow-only; research basis: arXiv:2604.06970, arXiv:2602.11812)
 from .cara_output_length_forecaster import (
     BiasCalibrationForecaster,
@@ -113,6 +120,10 @@ from .quantile_model import (
 from .uncertainty import DecisionForecast, ForecastPackager
 
 __all__ = [
+    # Heterogeneous GPU placement scorer (shadow-only)
+    "GpuPlacementConfig",
+    "GpuPlacementScore",
+    "GpuPlacementScorer",
     # CARA output length forecaster (shadow-only)
     "BiasCalibrationForecaster",
     "HGBOutputLengthConfig",
