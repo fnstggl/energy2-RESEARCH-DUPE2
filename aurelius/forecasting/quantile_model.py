@@ -15,6 +15,10 @@ IMPORTANT:
 
 v1.1 enables minimal short-horizon lag features (1h, 6h) for accuracy
 while preserving predict-time safety and deterministic fallback.
+
+v6.0 adds cross-regional price spread features: how cheap/expensive is
+this region relative to others at the same hour? This encodes the core
+routing signal for multi-region scheduling decisions.
 """
 
 import logging
@@ -302,6 +306,19 @@ PRICE_RANK_FEATURE_COLS = [
     "price_vs_lag168_abs",
 ]
 
+# v6.0 cross-regional spread feature column names
+CROSS_REGION_FEATURE_COLS = [
+    "cross_price_vs_min",        # (price - min_regional) / (min_regional + eps) — 0 = cheapest
+    "cross_price_vs_mean",       # (price - mean_regional) / (mean_regional + eps) — 0 = average
+    "cross_is_cheapest",         # 1.0 if this region is cheapest right now
+    "cross_price_vs_min_lag_24h",
+    "cross_price_vs_mean_lag_24h",
+    "cross_is_cheapest_lag_24h",
+    "cross_price_vs_min_lag_168h",
+    "cross_price_vs_mean_lag_168h",
+    "cross_is_cheapest_lag_168h",
+]
+
 
 def _compute_per_region_lag_168h(
     values: np.ndarray,
@@ -345,6 +362,140 @@ def _compute_per_region_lag_168h(
             lag_arr[i] = rgn_lookup.get(lagged_ts, values[i])
 
     return lag_arr
+
+
+def build_cross_region_lookup(
+    timestamps: "list[datetime]",
+    regions: "list[str]",
+    values: np.ndarray,
+) -> "dict[object, dict[str, float]]":
+    """Build a fast timestamp → {region: price} lookup for cross-regional features.
+
+    Used by both training (build_feature_matrix) and prediction
+    (add_cross_region_features) to find prices for ALL regions at each
+    timestamp without leakage: a row at time T only sees prices also at T.
+
+    Args:
+        timestamps: List of datetime objects aligned with regions/values.
+        regions:    Region strings aligned with timestamps/values.
+        values:     Price array aligned with timestamps/regions.
+
+    Returns:
+        Dict keyed by floored-hour Timestamp → {region: price_$/MWh}.
+    """
+    ts_arr = pd.to_datetime(timestamps)
+    lookup: dict = {}
+    for ts, region, val in zip(ts_arr, regions, values):
+        ts_key = ts.floor("h")
+        if ts_key not in lookup:
+            lookup[ts_key] = {}
+        lookup[ts_key][region] = float(val)
+    return lookup
+
+
+def add_cross_region_features(
+    df: pd.DataFrame,
+    timestamps: "list[datetime]",
+    regions: "list[str]",
+    cross_region_lookup: "dict",
+    lag_hours: "list[int]" = None,
+    eps: float = 1.0,
+) -> pd.DataFrame:
+    """Join cross-regional spread features into a feature matrix.
+
+    For each row (timestamp, region):
+    - How much MORE expensive is this region vs the cheapest alternative? (cross_price_vs_min)
+    - How does this region compare to the regional mean? (cross_price_vs_mean)
+    - Is this region currently the cheapest option? (cross_is_cheapest)
+    - Same three features at lag_24h and lag_168h.
+
+    All features default to neutral values (0 or 0.5) when cross-regional
+    data is unavailable (single-region setup or no context).
+
+    Args:
+        df:                  Feature matrix to augment.
+        timestamps:          Timestamps aligned with df rows.
+        regions:             Regions aligned with df rows.
+        cross_region_lookup: {floored_ts: {region: price}} from build_cross_region_lookup.
+        lag_hours:           Lag windows for lagged spread features (default [24, 168]).
+        eps:                 Denominator floor in $/MWh to avoid division by zero.
+
+    Returns:
+        df with cross-regional spread columns appended.
+    """
+    if lag_hours is None:
+        lag_hours = [24, 168]
+
+    if not cross_region_lookup:
+        # No multi-region data: add neutral placeholder columns
+        df["cross_price_vs_min"] = 0.0
+        df["cross_price_vs_mean"] = 0.0
+        df["cross_is_cheapest"] = 1.0
+        for h in lag_hours:
+            df[f"cross_price_vs_min_lag_{h}h"] = 0.0
+            df[f"cross_price_vs_mean_lag_{h}h"] = 0.0
+            df[f"cross_is_cheapest_lag_{h}h"] = 1.0
+        return df
+
+    ts_arr = pd.to_datetime(timestamps)
+    n = len(timestamps)
+
+    # Current-hour spread features
+    vs_min = np.zeros(n)
+    vs_mean = np.zeros(n)
+    is_cheapest = np.ones(n)  # default 1 = assume cheapest when no cross data
+
+    for i, (ts, region) in enumerate(zip(ts_arr, regions)):
+        ts_key = ts.floor("h")
+        regional = cross_region_lookup.get(ts_key, {})
+        n_regions = len(regional)
+        if n_regions < 2 or region not in regional:
+            # Single region or region absent: neutral
+            vs_min[i] = 0.0
+            vs_mean[i] = 0.0
+            is_cheapest[i] = 1.0
+            continue
+        cur = regional[region]
+        prices = list(regional.values())
+        min_p = min(prices)
+        mean_p = float(np.mean(prices))
+        vs_min[i] = max(0.0, (cur - min_p) / (min_p + eps))
+        vs_mean[i] = (cur - mean_p) / (mean_p + eps)
+        is_cheapest[i] = 1.0 if cur <= min_p + eps else 0.0
+
+    df["cross_price_vs_min"] = vs_min
+    df["cross_price_vs_mean"] = vs_mean
+    df["cross_is_cheapest"] = is_cheapest
+
+    # Lagged spread features
+    for lag_h in lag_hours:
+        lag_delta = pd.Timedelta(hours=lag_h)
+        lag_vs_min = np.zeros(n)
+        lag_vs_mean = np.zeros(n)
+        lag_is_cheapest = np.ones(n)
+
+        for i, (ts, region) in enumerate(zip(ts_arr, regions)):
+            ts_lag = ts.floor("h") - lag_delta
+            regional = cross_region_lookup.get(ts_lag, {})
+            n_regions = len(regional)
+            if n_regions < 2 or region not in regional:
+                lag_vs_min[i] = 0.0
+                lag_vs_mean[i] = 0.0
+                lag_is_cheapest[i] = 1.0
+                continue
+            cur = regional[region]
+            prices = list(regional.values())
+            min_p = min(prices)
+            mean_p = float(np.mean(prices))
+            lag_vs_min[i] = max(0.0, (cur - min_p) / (min_p + eps))
+            lag_vs_mean[i] = (cur - mean_p) / (mean_p + eps)
+            lag_is_cheapest[i] = 1.0 if cur <= min_p + eps else 0.0
+
+        df[f"cross_price_vs_min_lag_{lag_h}h"] = lag_vs_min
+        df[f"cross_price_vs_mean_lag_{lag_h}h"] = lag_vs_mean
+        df[f"cross_is_cheapest_lag_{lag_h}h"] = lag_is_cheapest
+
+    return df
 
 
 def compute_price_rank_features(
@@ -540,10 +691,12 @@ def build_feature_matrix(
     include_rolling: bool = True,
     include_volatility: bool = False,
     include_rank_features: bool = False,
+    include_cross_region_features: bool = False,
     known_regions: Optional[list[str]] = None,
     lag_hours: Optional[list[int]] = None,
     rolling_hours: Optional[list[int]] = None,
     weather_lookup: Optional[dict] = None,
+    cross_region_lookup: Optional[dict] = None,
 ) -> pd.DataFrame:
     """Build full feature matrix for training or prediction.
 
@@ -562,6 +715,11 @@ def build_feature_matrix(
       for multi-region routing decisions (rolling_mean_168h, range_position_168h,
       below_p10_168h, price_vs_mean_168h).
 
+    v6.0 addition:
+    - include_cross_region_features: adds cross-regional spread features that
+      encode "is this region cheap/expensive relative to other regions right now?"
+      Requires cross_region_lookup built via build_cross_region_lookup().
+
     Args:
         timestamps: List of timestamps
         regions: List of regions
@@ -570,10 +728,12 @@ def build_feature_matrix(
         include_rolling: Whether to include rolling features
         include_volatility: Whether to include volatility regime features
         include_rank_features: Whether to include v5.0 price rank features
+        include_cross_region_features: Whether to include v6.0 cross-regional spread features
         known_regions: Known regions for consistent encoding
         lag_hours: Specific lag hours to use
         rolling_hours: Specific rolling windows
         weather_lookup: Prebuilt weather lookup from build_weather_lookup() (optional)
+        cross_region_lookup: Prebuilt cross-regional lookup from build_cross_region_lookup() (optional)
 
     Returns:
         DataFrame with all features
@@ -646,6 +806,13 @@ def build_feature_matrix(
     if weather_lookup:
         df = add_weather_features(df, timestamps, regions, weather_lookup)
 
+    # Cross-regional spread features (v6.0)
+    if include_cross_region_features:
+        if cross_region_lookup is None and values is not None and len(values) == len(timestamps):
+            # Build lookup on-the-fly from the training data
+            cross_region_lookup = build_cross_region_lookup(timestamps, regions, values)
+        df = add_cross_region_features(df, timestamps, regions, cross_region_lookup or {})
+
     # Fill NaN with 0
     df = df.fillna(0)
 
@@ -661,7 +828,9 @@ def build_feature_matrix_for_predict(
     rolling_hours: Optional[list[int]] = None,
     include_volatility: bool = False,
     include_rank_features: bool = False,
+    include_cross_region_features: bool = False,
     weather_lookup: Optional[dict] = None,
+    cross_region_lookup: Optional[dict] = None,
 ) -> tuple[pd.DataFrame, bool]:
     """Build feature matrix for prediction with automatic fallback.
 
@@ -677,12 +846,16 @@ def build_feature_matrix_for_predict(
         rolling_hours: Rolling windows if sufficient data
         include_volatility: Whether to include volatility regime features
         include_rank_features: Whether to include v5.0 price rank features
+        include_cross_region_features: Whether to include v6.0 cross-regional spread features
         weather_lookup: Prebuilt weather lookup from build_weather_lookup() (optional).
             When provided, weather features are joined for each (timestamp, region).
             For the prediction horizon, entries from the weather_lookup covering those
             timestamps are used directly (historical actuals serve as proxy for weather
             forecasts at backtesting time; production use would substitute weather API
             forecast values instead).
+        cross_region_lookup: Prebuilt cross-regional lookup from build_cross_region_lookup()
+            (optional). When provided, adds cross-regional spread features to the matrix.
+            For the prediction horizon, the lookup uses only past timestamps (no leakage).
 
     Returns:
         Tuple of (feature_matrix, used_lags) where used_lags indicates
@@ -708,8 +881,10 @@ def build_feature_matrix_for_predict(
             include_rolling=False,
             include_volatility=False,
             include_rank_features=False,
+            include_cross_region_features=include_cross_region_features,
             known_regions=known_regions,
             weather_lookup=weather_lookup,
+            cross_region_lookup=cross_region_lookup,
         )
         return df, False
 
@@ -742,10 +917,12 @@ def build_feature_matrix_for_predict(
         include_rolling=True,
         include_volatility=include_volatility,
         include_rank_features=include_rank_features,
+        include_cross_region_features=include_cross_region_features,
         known_regions=known_regions,
         lag_hours=lag_hours,
         rolling_hours=rolling_hours,
         weather_lookup=weather_lookup,
+        cross_region_lookup=cross_region_lookup,
     )
 
     df = full_df.iloc[n_recent:].reset_index(drop=True)

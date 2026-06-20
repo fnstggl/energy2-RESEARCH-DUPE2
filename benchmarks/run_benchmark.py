@@ -462,6 +462,28 @@ def run_single_benchmark(
         else:
             print("  WARNING: ml_quantile_v5 unavailable, falling back to seasonal_naive")
             effective_forecaster = "seasonal_naive"
+    elif forecaster == "ml_quantile_v6":
+        # v6.0: cross-regional price spread features — encodes "is this region
+        # cheap vs peers right now?" directly targeting multi-region routing.
+        # Builds on v5.0 (rank + volatility + lag_336h) and adds 9 new features:
+        # cross_price_vs_min, cross_price_vs_mean, cross_is_cheapest (current +
+        # 24h lag + 168h lag). Requires ≥2 regions; single-region degrades gracefully.
+        PriceQuantileForecaster, PriceModelConfig = _get_ml_forecaster_cls()
+        if PriceQuantileForecaster is not None:
+            price_forecaster_cls = PriceQuantileForecaster
+            price_forecaster_config = PriceModelConfig(
+                seed=42,
+                n_estimators=200,
+                learning_rate=0.05,
+                include_volatility_features=True,
+                num_leaves=63,
+                include_weather_features=False,
+                include_rank_features=True,
+                include_cross_region_features=True,
+            )
+        else:
+            print("  WARNING: ml_quantile_v6 unavailable, falling back to seasonal_naive")
+            effective_forecaster = "seasonal_naive"
     elif forecaster == "ml_quantile_perregion":
         PerRegionForecaster, PerRegionForecasterConfig, PriceModelConfig = _get_per_region_forecaster_cls()
         if PerRegionForecaster is not None:
@@ -621,7 +643,7 @@ def run_single_benchmark(
     # Collect per-fold forecast quality if ML mode was used
     forecast_quality_summary = None
     if effective_forecaster in ("ml_quantile", "ml_quantile_perregion", "ml_quantile_v5",
-                                 "ml_quantile_recovery"):
+                                 "ml_quantile_v6", "ml_quantile_recovery"):
         fq_records = [r.forecast_quality.to_dict() for r in rounds if r.forecast_quality is not None]
         if fq_records:
             import math
@@ -741,7 +763,8 @@ def parse_args() -> argparse.Namespace:
                    help="Optimizer method")
     p.add_argument("--forecaster", default="seasonal_naive",
                    choices=["seasonal_naive", "ml_quantile", "ml_quantile_weather",
-                            "ml_quantile_perregion", "ml_quantile_v5", "ml_quantile_recovery"],
+                            "ml_quantile_perregion", "ml_quantile_v5", "ml_quantile_v6",
+                            "ml_quantile_recovery"],
                    help="Forecasting method: 'seasonal_naive' (default, no ML), "
                         "'ml_quantile' (LightGBM v2.0 — volatility features, preserved baseline), "
                         "'ml_quantile_weather' (joint model + weather features), "
@@ -749,6 +772,8 @@ def parse_args() -> argparse.Namespace:
                         "CAISO/PJM price-only — eliminates cross-region feature stealing), "
                         "'ml_quantile_v5' (v5.0 — adds price rank features + lag_336h for "
                         "better cheap-regime routing), "
+                        "'ml_quantile_v6' (v6.0 — adds cross-regional price spread features: "
+                        "encodes cheapest-region signal directly for multi-region routing), "
                         "'ml_quantile_recovery' (v2.0 + regime-aware recovery correction: "
                         "reduces forecast bias when recent prices << training mean). "
                         "NEVER mix oracle with ml_quantile for savings claims.")

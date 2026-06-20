@@ -33,6 +33,7 @@ from .quantile_model import (
     QUANTILE_P50,
     QUANTILE_P90,
     ModelMetadata,
+    build_cross_region_lookup,
     build_feature_matrix,
     build_feature_matrix_for_predict,
     build_weather_lookup,
@@ -124,6 +125,12 @@ class PriceModelConfig:
             price_vs_mean_168h). These encode "is the current price cheap relative
             to recent history?" which is the core routing signal for multi-region
             optimization. Default True.
+        include_cross_region_features: Enable v6.0 cross-regional spread features.
+            Encodes "is this region cheap/expensive relative to other regions right now?"
+            using cross_price_vs_min, cross_is_cheapest, cross_price_vs_mean and their
+            24h/168h lagged variants. These directly target the multi-region routing
+            decision: when a region is persistently the cheapest, the optimizer should
+            route there. Requires multi-region context at predict time. Default False.
     """
     seed: int = DEFAULT_SEED
     n_estimators: int = 200
@@ -136,6 +143,7 @@ class PriceModelConfig:
     min_child_samples: int = 20
     reg_lambda: float = 0.0
     include_rank_features: bool = False
+    include_cross_region_features: bool = False
 
 
 class PriceQuantileForecaster:
@@ -205,6 +213,11 @@ class PriceQuantileForecaster:
         # weather features are available for the predict() call path when the
         # caller does not supply a separate predict-time weather_df.
         self._train_weather_lookup: dict = {}
+        # v6.0: Cross-regional spread features.
+        self._use_cross_region = self.config.include_cross_region_features
+        # Stored cross-regional lookup built during fit() — used at predict time
+        # when multi-region context is available.
+        self._train_cross_region_lookup: dict = {}
         # Bias-correction lookup: {region: {hour: bias}} loaded from artifact
         self._p50_bias: dict[str, dict[int, float]] = {}
         self._corrections_loaded: bool = False
@@ -289,6 +302,22 @@ class PriceQuantileForecaster:
                 f"regions={list(weather_df['region'].unique()) if 'region' in weather_df else '?'}"
             )
 
+        # Build cross-regional lookup once and cache for predict-time reuse (v6.0)
+        self._train_cross_region_lookup = {}
+        effective_cross_region_lookup: dict = {}
+        if self._use_cross_region:
+            effective_cross_region_lookup = build_cross_region_lookup(
+                timestamps, regions, values
+            )
+            self._train_cross_region_lookup = effective_cross_region_lookup
+            n_multi = sum(
+                1 for v in effective_cross_region_lookup.values() if len(v) >= 2
+            )
+            logger.info(
+                f"Cross-regional features enabled: {len(effective_cross_region_lookup)} "
+                f"hourly entries, {n_multi} with ≥2 regions, regions={sorted(set(regions))}"
+            )
+
         X = build_feature_matrix(
             timestamps,
             regions,
@@ -297,10 +326,12 @@ class PriceQuantileForecaster:
             include_rolling=self._use_rolling,
             include_volatility=self._use_volatility,
             include_rank_features=self._use_rank,
+            include_cross_region_features=self._use_cross_region,
             known_regions=self._known_regions,
             lag_hours=self._lag_hours,
             rolling_hours=self._rolling_hours,
             weather_lookup=effective_weather_lookup,
+            cross_region_lookup=effective_cross_region_lookup,
         )
         X_np = X.values
 
@@ -412,6 +443,27 @@ class PriceQuantileForecaster:
                 # Fallback: use training-time weather lookup (covers context window)
                 predict_weather_lookup = self._train_weather_lookup
 
+        # Resolve cross-regional lookup for the prediction window (v6.0).
+        # recent_prices may contain ALL region records (multi-region context) when
+        # the BacktestEngine passes the full recent_context. Build a fresh lookup
+        # from these records so the prediction window uses up-to-date cross-regional
+        # spreads. Falls back to the training-time lookup if no recent_prices.
+        predict_cross_region_lookup: dict = {}
+        if self._use_cross_region:
+            if recent_prices:
+                all_ts = [p.timestamp for p in recent_prices]
+                all_regions = [p.region for p in recent_prices]
+                all_vals = np.array([p.price_per_mwh for p in recent_prices])
+                n_distinct = len(set(all_regions))
+                if n_distinct >= 2:
+                    predict_cross_region_lookup = build_cross_region_lookup(
+                        all_ts, all_regions, all_vals
+                    )
+                else:
+                    predict_cross_region_lookup = self._train_cross_region_lookup
+            else:
+                predict_cross_region_lookup = self._train_cross_region_lookup
+
         # Extract recent values for this region.
         # Use up to max_lag+24h of context to support lag_336h (v5.0) and rank features.
         # The caller (BacktestEngine) provides context_hours=336 records per region.
@@ -423,7 +475,7 @@ class PriceQuantileForecaster:
             if len(region_prices) >= MIN_RECENT_HOURS:
                 recent_values = np.array(region_prices[-context_window:])
 
-        regions = [region] * len(timestamps)
+        predict_regions = [region] * len(timestamps)
 
         # Check if sufficient recent data for lag features
         use_lags = check_recent_data_sufficient(recent_values)
@@ -431,29 +483,33 @@ class PriceQuantileForecaster:
         if use_lags:
             X, _ = build_feature_matrix_for_predict(
                 timestamps,
-                regions,
+                predict_regions,
                 recent_values,
                 known_regions=self._known_regions,
                 lag_hours=self._lag_hours,
                 rolling_hours=self._rolling_hours,
                 include_volatility=self._use_volatility,
                 include_rank_features=self._use_rank,
+                include_cross_region_features=self._use_cross_region,
                 weather_lookup=predict_weather_lookup,
+                cross_region_lookup=predict_cross_region_lookup,
             )
         else:
             logger.debug("Price model: using temporal+region only (insufficient recent data)")
             X = build_feature_matrix(
                 timestamps,
-                regions,
+                predict_regions,
                 values=None,
                 include_lags=True,
                 include_rolling=True,
                 include_volatility=self._use_volatility,
                 include_rank_features=self._use_rank,
+                include_cross_region_features=self._use_cross_region,
                 known_regions=self._known_regions,
                 lag_hours=self._lag_hours,
                 rolling_hours=self._rolling_hours,
                 weather_lookup=predict_weather_lookup,
+                cross_region_lookup=predict_cross_region_lookup,
             )
 
         X_np = X.values

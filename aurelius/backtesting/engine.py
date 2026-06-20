@@ -904,7 +904,10 @@ class BacktestEngine:
         eval_window_timestamps = [eval_start_dt + timedelta(hours=h) for h in range(n_eval_hours)]
 
         for region in regions:
-            region_context = [r for r in recent_context if r.region == region]
+            # Pass full multi-region recent_context so cross-regional spread
+            # features (v6.0) can compare this region against peers at predict
+            # time. Existing lag features filter internally (p.region == region),
+            # so this is backward-compatible with all prior forecaster variants.
             # Slice predict_weather_df to this region only for efficiency
             region_weather_df: Optional[Any] = None
             if predict_weather_df is not None and not (
@@ -918,11 +921,11 @@ class BacktestEngine:
                 _pred_sig = _inspect.signature(price_fc.predict)
                 if "weather_df" in _pred_sig.parameters:
                     preds = price_fc.predict(
-                        region, eval_timestamps, region_context,
+                        region, eval_timestamps, recent_context,
                         weather_df=region_weather_df,
                     )
                 else:
-                    preds = price_fc.predict(region, eval_timestamps, region_context)
+                    preds = price_fc.predict(region, eval_timestamps, recent_context)
                 # Use p50 as the optimizer signal (median forecast)
                 forecast_price_data[region] = {fc.timestamp: fc.p50 for fc in preds}
             except Exception as exc:
