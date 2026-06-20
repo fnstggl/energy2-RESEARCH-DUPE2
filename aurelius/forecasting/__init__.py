@@ -58,6 +58,17 @@ VALIDATION vs INTEGRATION:
   - Dry-run execution adapters UNCHANGED (except logging forecasts)
 """
 
+# CARA output length forecaster (shadow-only; research basis: arXiv:2604.06970, arXiv:2602.11812)
+from .cara_output_length_forecaster import (
+    BiasCalibrationForecaster,
+    HGBOutputLengthConfig,
+    HGBOutputLengthForecaster,
+    OutputLengthForecast,
+    OutputLengthForecastBundle,
+    compute_bias_stats,
+    compute_percentile_stats,
+)
+
 # Legacy forecasters (still available for backwards compatibility)
 # Simple baseline forecasters
 # Baseline regression
@@ -102,6 +113,14 @@ from .quantile_model import (
 from .uncertainty import DecisionForecast, ForecastPackager
 
 __all__ = [
+    # CARA output length forecaster (shadow-only)
+    "BiasCalibrationForecaster",
+    "HGBOutputLengthConfig",
+    "HGBOutputLengthForecaster",
+    "OutputLengthForecast",
+    "OutputLengthForecastBundle",
+    "compute_bias_stats",
+    "compute_percentile_stats",
     # Legacy forecasters
     "PriceForecaster",
     "PriceForecast",

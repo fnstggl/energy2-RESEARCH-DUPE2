@@ -58,6 +58,13 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   status per `docs/FORECAST_LEVERAGE_AUDIT.md`).
 - **Queue wait:** `aurelius/forecasting/cara_queue_forecaster.py` — HGB
   on derived CARA queue proxy (shadow-only).
+- **Output token length [NEW - run 2026-06-20-b]:**
+  `aurelius/forecasting/cara_output_length_forecaster.py` — calibrated
+  output-token-count predictor. Two components: (a) `BiasCalibrationForecaster`
+  debiases `num_predicted_output_tokens` via Huber regression; (b)
+  `HGBOutputLengthForecaster` predicts `actual_output_tokens` at p50/p90/p95
+  from all predict-time CARA features. Shadow-only. 39 tests passing.
+  Enables semi-clairvoyant scheduling (arXiv:2604.06970).
 - **Cache / prefix reuse:** `aurelius/forecasting/cache_prefix_forecaster.py`
   — HGB on SwissAI bucket-reuse + CC-traces (shadow-ready for integration
   review; single-dataset caveat applies).
@@ -240,9 +247,10 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
    aspirational target. The remaining 8.93% likely requires pilot
    calibration data — the simulator's synthetic window is too smooth.
 
-4. **Output length prediction:** Required to unlock semi-clairvoyant
-   scheduling gains (token magnitude priors). CARA has the labels but
-   the audit hasn't been run.
+4. **Output length prediction (calibration gate):** Infrastructure is now
+   built (`cara_output_length_forecaster.py`, 39 tests). Next gate:
+   integrate with CARA data and run backtest on scheduling-prior benefit.
+   Wiring into the scheduler requires evaluating p50 as a SRTF-like prior.
 
 5. **Admission gate simulation integration:** The `WorkloadAdmissionGate`
    (v1) is implemented but not wired into the cluster simulator or any
@@ -254,19 +262,62 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | Output length prediction → semi-clairvoyant scheduling | High (+32% p90 short-request per arXiv:2604.06970) | Medium | Not Started | Audit CARA actual vs predicted output tokens |
+| 1 | Output length prediction → semi-clairvoyant scheduling | High (+32% p90 short-request per arXiv:2604.06970) | Medium | Infrastructure built (shadow) | Wire calibration + HGB into CARA backtest; integrate p50 as SRTF prior |
 | 2 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 3 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 4 | TTFT p50 shadow integration (already shadow_ready) | Medium | Low-Medium | shadow_ready | Wire into routing decision |
-| 5 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 6 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
-| 7 | TPOT forecasting after CARA train.jsonl expansion | Medium | Low | build_after_data_expansion | Expand CARA to train.jsonl (392 MB) |
+| 3 | Heterogeneous GPU placement scorer (TTFT 9× spread) | High | Medium | build_now | Build placement scorer using HGB TTFT forecasts per GPU type |
+| 4 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 5 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 6 | TTFT p50 shadow integration (already shadow_ready) | Medium | Low-Medium | shadow_ready | Wire into routing decision |
+| 7 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 8 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+| 9 | TPOT forecasting after CARA train.jsonl expansion | Medium | Low | build_after_data_expansion | Expand CARA to train.jsonl (392 MB) |
 
 ---
 
 ## 7. Experiment History
 
-### Run 2026-06-20 (this run)
+### Run 2026-06-20-b (this run)
+- **Phase 1 (audit):** Repository audit completed. Previous run (2026-06-20)
+  implemented WorkloadAdmissionGate v1. This run builds on that foundation.
+- **Phase 2 (research):** 3 new papers reviewed:
+  1. "Predicting LLM Output Length via Entropy-Guided Representations"
+     (arXiv:2602.11812, ICLR 2026) — EGTP + PLP achieves -29.16% MAE vs
+     baselines for output length prediction; enables semi-clairvoyant scheduling.
+  2. "Fast Heterogeneous Serving: Scalable Mixed-Scale LLM Allocation for
+     SLO-Constrained Inference" (arXiv:2604.07472) — AGH achieves near-optimal
+     SLO-compliant allocation in 3 seconds; applicable to heterogeneous GPU
+     placement scorer.
+  3. "BOute: Cost-Efficient LLM Serving with Heterogeneous LLMs and GPUs via
+     Multi-Objective Bayesian Optimization" (arXiv:2602.10729, MLSys 2026) —
+     2.57× improvement or 15-61% cost reduction via MOBO routing + deployment
+     co-optimisation across heterogeneous GPU/model combinations.
+  Also reviewed: SLAI scheduler (arXiv:2508.01002, 53% median TTFT reduction,
+  26% capacity increase), Fluid-Guided Online Scheduling (arXiv:2504.11320).
+- **Phase 3 (benchmarks):** 5123 tests passing, 10 pre-existing failures
+  (jinja2 / HTML reporting dependency not installed locally), 18 skipped.
+  Key modules confirmed: canonical energy backtest 17/17, frontier admission
+  38/38, CARA latency forecaster all passing.
+- **Phase 4 (implementation):** Implemented `OutputLengthForecastBundle v1`:
+  - `aurelius/forecasting/cara_output_length_forecaster.py` — 320 LOC.
+    Components: `BiasCalibrationForecaster` (Huber regression debiasing),
+    `HGBOutputLengthForecaster` (HGB quantile at p50/p90/p95),
+    `OutputLengthForecastBundle` (combines both with batch API),
+    `compute_bias_stats`, `compute_percentile_stats` (pure audit helpers).
+  - `tests/test_cara_output_length_forecaster.py` — 39 tests, all passing.
+  - Exported from `aurelius/forecasting/__init__.py`.
+  - Key design: `actual_output_tokens` is leakage — only used as label.
+    `num_predicted_output_tokens` is predict-time; calibration corrects
+    systematic engine bias. p90 ≥ p50 invariant enforced in all paths.
+- **Decision:** Positive (enables #1 ranked research opportunity). Module
+  is shadow-only with full safety tagging. 39 tests pass. 5123 total pass.
+- **Next recommended direction:**
+  1. Wire `OutputLengthForecastBundle` into CARA latency backtest to
+     measure calibration MAE reduction on CARA train/test split.
+  2. Implement SRTF-like scheduling prior using p50 predictions.
+  3. Evaluate on Azure LLM 2024 trace with simulated output-length priors.
+  4. Build heterogeneous GPU placement scorer (rank 3, next highest EV).
+
+### Run 2026-06-20 (previous run)
 - **Phase 1 (audit):** Repository audit completed. No `research/` directory
   existed; created with ROADMAP, BENCHMARK_REGISTRY, GAP_ANALYSIS.
 - **Phase 2 (research):** 3 new papers reviewed:
