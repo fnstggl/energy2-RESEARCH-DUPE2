@@ -65,7 +65,7 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   `HGBOutputLengthForecaster` predicts `actual_output_tokens` at p50/p90/p95
   from all predict-time CARA features. Shadow-only. 39 tests passing.
   Enables semi-clairvoyant scheduling (arXiv:2604.06970).
-- **Heterogeneous GPU placement scorer [NEW - run 2026-06-20-c]:**
+- **Heterogeneous GPU placement scorer [run 2026-06-20-c]:**
   `aurelius/forecasting/gpu_placement_scorer.py` — wraps `TTFTShadowPrior`
   to produce per-(gpu_type, model_size, prompt_token_bin) TTFT p50 ranking
   and normalized latency-penalty scores for the scheduler. Peer-normalized:
@@ -74,6 +74,7 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   `latency_critical` receives non-zero penalty). 37 tests passing. Research
   basis: arXiv:2604.07472 (Fast Heterogeneous Serving) + arXiv:2604.16682
   (KAIROS). Enables exploitation of the 9× TTFT spread in CARA GPU data.
+  **NOW WIRED into scheduler [run 2026-06-20-d].**
 - **Cache / prefix reuse:** `aurelius/forecasting/cache_prefix_forecaster.py`
   — HGB on SwissAI bucket-reuse + CC-traces (shadow-ready for integration
   review; single-dataset caveat applies).
@@ -85,6 +86,13 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 - **Core scheduler:** `aurelius/optimization/scheduler.py` — greedy +
   local search + optional MILP (PuLP).
 - **SLA-aware correction:** folded into scheduler via `sla_registry`.
+- **GPU placement penalty [NEW - run 2026-06-20-d]:** `GpuPlacementScorer`
+  now wired into `_find_best_slot` + `_sla_adjusted_score`. When enabled,
+  TTFT-based latency penalties are computed per-region using the fitted
+  `TTFTShadowPrior` and folded into the candidate ranking for
+  `latency_critical` SLA jobs. Controlled via `gpu_placement_scorer` +
+  `region_gpu_types` kwargs on `JobScheduler.__init__`. Shadow-only:
+  `enabled=False` default; fail-open on missing/insufficient data.
 - **Energy/carbon shifting:** primary economic lever; already sufficient.
 - **Constraint scoring:** `aurelius/constraints/` — multi-constraint
   scorer with region, thermal, topology, migration veto.
@@ -189,7 +197,7 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ### 4.3 Heterogeneous GPU Placement Scoring
 
 #### GPU Type Routing via TTFT-Prior Penalty
-- **Status:** Implemented (shadow-only, enabled=False default)
+- **Status:** Implemented + wired into scheduler (shadow-only, enabled=False default)
 - **Expected upside:** High — CARA shows 9× TTFT p99 spread across GPU types;
   routing latency_critical requests to the appropriate GPU type could reduce
   TTFT violations by 30-50% directionally.
@@ -206,11 +214,18 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
   - No controller / scheduler / executor imports.
 - **Open questions:** What penalty_floor/ceil achieves optimal goodput/$ vs
   SLA-safe tradeoff on BurstGPT and Azure 2024? Requires scheduler integration.
+- **Wired [run 2026-06-20-d]:**
+  - `GpuPlacementScorer.latency_penalty` now folds into `_sla_adjusted_score`
+    via `gpu_penalty` parameter for `latency_critical` placements.
+  - `TTFTShadowPrior.predict()` extended: when `model_size=None`, falls through
+    to `by_gpu` lookup (GPU-only prior without model-size context).
+  - `TTFTShadowPrior.by_gpu_counts` added for `subgroup_n()` fallback.
+  - `JobScheduler` accepts `gpu_placement_scorer` + `region_gpu_types` kwargs.
+  - 28 new tests passing; 105 total passing.
 - **Next steps:**
-  1. Wire `GpuPlacementScorer.latency_penalty` into `scheduler._sla_adjusted_score`
-     as an additive dimension when `sla_class == "latency_critical"`.
-  2. Evaluate on BurstGPT trace with synthetic GPU-type labels from CARA prior.
-  3. Tune `penalty_floor`/`penalty_ceil` from CARA subgroup TTFT distributions.
+  1. Add synthetic `region_gpu_types` to BurstGPT + Azure 2024 benchmark replay.
+  2. Evaluate SLA-safe goodput/$ delta with TTFT-aware routing enabled.
+  3. Tune `penalty_floor`/`penalty_ceil` from CARA TTFT distribution data.
 
 ### 4.4 Semi-Clairvoyant Scheduling
 
@@ -302,8 +317,8 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
 | 1 | Output length prediction → semi-clairvoyant scheduling | High (+32% p90 short-request per arXiv:2604.06970) | Medium | Infrastructure built (shadow) | Wire calibration + HGB into CARA backtest; integrate p50 as SRTF prior |
-| 2 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 3 | Heterogeneous GPU placement scorer (TTFT 9× spread) | High | Medium | **Implemented (shadow)** | Wire into scheduler objective folding; evaluate on Azure 2024 |
+| 2 | GPU placement scorer → BurstGPT/Azure 2024 benchmark evaluation | High (TTFT 9× spread) | Low | **Wired into scheduler [run -d]** | Add synthetic region_gpu_types to benchmark replay; measure goodput/$ delta |
+| 3 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
 | 4 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
 | 5 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
 | 6 | TTFT p50 shadow integration (already shadow_ready) | Medium | Low-Medium | shadow_ready | Wire into routing decision |
@@ -315,7 +330,71 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 7. Experiment History
 
-### Run 2026-06-20-c (this run)
+### Run 2026-06-20-d (this run)
+- **Phase 1 (audit):** Repository audit completed. Three prior runs have implemented
+  WorkloadAdmissionGate (run -a), OutputLengthForecastBundle (run -b), and
+  GpuPlacementScorer (run -c). This run targets the #1 EV gap: wiring the
+  GpuPlacementScorer into the scheduler for latency_critical placements.
+- **Phase 2 (research):** 3 new papers reviewed:
+  1. "DistServe: Disaggregating Prefill and Decoding for Goodput-optimized
+     Large Language Model Serving" (arXiv:2401.09670, OSDI'24) — separates
+     prefill (latency-bound) from decode (throughput-bound) onto dedicated GPU
+     pools to optimize TTFT independently of TPOT. Maps directly to the
+     placement scorer rationale: routing latency_critical prefills to fast
+     GPU types is equivalent to DistServe's disaggregated prefill pool.
+  2. "Splitwise: Efficient Generative LLM Inference Using Phase Splitting"
+     (arXiv:2311.18677, ISCA'24) — extends the disaggregation idea to KV-cache
+     migration between prefill and decode nodes. Validates that per-request
+     TTFT can be significantly reduced via hardware-tier routing. Relevance:
+     the 9× TTFT spread in CARA across GPU types (H100 vs T4) is the
+     heterogeneous-cluster analogue of Splitwise's phase splitting.
+  3. "Efficient LLM Scheduling by Learning to Rank" (arXiv:2408.15792) —
+     formally cited in gpu_placement_scorer.py but not yet documented in
+     experiment history. Proposes SRTF-like ranking of requests by predicted
+     service time; when combined with the GPU placement scorer (rank-by-TTFT),
+     the two approaches become complementary: GPU routing reduces absolute TTFT,
+     and SRTF ordering reduces queueing delay for short requests.
+- **Phase 3 (benchmarks):** 105 tests passing (77 pre-existing + 28 new).
+  Pre-existing failures: 5 LightGBM, 4 PyYAML/SLA, 4 benchmark harness file
+  structure, 5 live API (all pre-existing, unchanged). 0 new failures.
+- **Phase 4 (implementation):**
+  - `aurelius/forecasting/ttft_shadow_prior.py`:
+    - `by_gpu_counts` field added (total rows per GPU type for subgroup_n fallback)
+    - `predict()` extended: `model_size=None` now falls through to `by_gpu` lookup
+      enabling GPU-type peer comparison without model-size context
+    - `subgroup_n()` uses `by_gpu_counts` when `model_size=None`
+    - `to_dict()` / `load_prior()` updated (backward-compatible)
+  - `aurelius/optimization/scheduler.py`:
+    - `__init__()`: `gpu_placement_scorer` + `region_gpu_types` kwargs
+    - `_sla_adjusted_score()`: `gpu_penalty: float = 0.0` parameter (additive)
+    - `_find_best_slot()`: pre-computes peer GPU TTFT p50s per job; folds
+      `latency_penalty` from scorer into candidate score via `_sla_adjusted_score`
+    - Full fail-open: disabled/missing scorer → gpu_penalty=0.0 for all candidates
+  - `tests/test_scheduler_gpu_placement.py` — 28 new tests:
+    - 9 × TTFTShadowPrior GPU fallback behavior
+    - 5 × `_sla_adjusted_score` with gpu_penalty parameter
+    - 14 × end-to-end scheduler routing integration
+- **Benchmark results (directional, synthetic prior):**
+  - With equal prices: latency_critical jobs routed to H100 vs T4 (confirmed).
+  - With T4 20% cheaper: TTFT penalty (0.50 × |obj|) exceeds price advantage
+    → latency_critical jobs still go to H100 (confirmed).
+  - best_effort jobs: unaffected, route to cheapest region as before (confirmed).
+  - Three-GPU ranking: h100 → a100 → t4 preference order verified end-to-end.
+  - Quantitative SLA-safe goodput/$ delta on BurstGPT/Azure 2024 traces
+    requires adding synthetic `region_gpu_types` to benchmark replay (next run).
+- **Decision:** Positive. Integration complete. 28 new tests pass. No regression.
+  Architecture closes the gap from "scorer built but unconnected" (run -c) to
+  "scorer active in scheduler for latency_critical SLA class" (run -d).
+- **Next recommended direction:**
+  1. Add synthetic `region_gpu_types` metadata to BurstGPT + Azure 2024 canonical
+     backtest — assign regions to GPU types matching CARA fleet (H100 / A100 / T4)
+     and measure SLA-safe goodput/$ delta with GPU routing enabled vs disabled.
+  2. Wire `OutputLengthForecastBundle` p50 into greedy scheduler sort key as SRTF
+     prior — use `num_predicted_output_tokens` as a secondary sort dimension after
+     SLA class, with `actual_output_tokens` reserved as label-only.
+  3. Wire `WorkloadAdmissionGate` into cluster simulator for Azure 2024 trace replay.
+
+### Run 2026-06-20-c (previous run)
 - **Phase 1 (audit):** Repository audit completed. Two prior runs have implemented
   WorkloadAdmissionGate v1 (run -a) and OutputLengthForecastBundle v1 (run -b).
   This run targets the #3 EV opportunity: Heterogeneous GPU Placement Scorer.
