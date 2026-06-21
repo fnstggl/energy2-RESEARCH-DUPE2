@@ -8,6 +8,120 @@
 
 ---
 
+## Run 2026-06-21-q — Conformal Adaptive α (Frontier Improvement)
+
+### Q1. What currently limits Aurelius most?
+
+**The serving runtime still uses FIFO.** The SRTF simulator frontier has now reached
+SRPT-optimal (+322.24% vs FIFO) via conformal adaptive α [run -q]. The remaining limit
+is wiring the conformal scheduler into a production serving runtime with live
+OutputLengthForecastBundle.p50 predictions instead of oracle tokens.
+
+### Q2. What theoretically offers the largest gain?
+
+**Wiring the conformal discipline into the serving runtime with live predictions.** The
+conformal calibrator was designed for exactly this: when predictions are from a trained
+model (CV ≈ 20-30%), it will auto-tune α to match prediction quality, maintaining strong
+goodput while adapting gracefully.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live prior** — all backtest results still use oracle
+   prior. The conformal calibrator can adapt α from real prediction errors. Integration is
+   the key remaining step.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving queue uses FIFO** — conformal discipline: +322.24% vs FIFO (oracle), +267.81%
+   vs FIFO (30%-CV noisy). Not yet wired into runtime.
+2. **BurstGPT conformal validation not yet run** — the conformal approach has only been
+   validated on Azure LLM 2024 (fixture level for BurstGPT). HF fullscale pending.
+3. **BurstGPT vs SLA-aware baseline** — SLA-aware measured on Azure; BurstGPT pending.
+
+### Q5. Which workloads benefit least?
+
+**Small traces and batch workloads.** Confirmed: BurstGPT fixture (51 rows) shows conformal
+= fixed α (both slightly below FIFO) due to warmup threshold not reached. HF fullscale
+(59,999 records) expected to show the same pattern as Azure.
+
+### Q6. Which research direction appears strongest?
+
+**Wire conformal discipline into serving runtime with live OutputLengthForecastBundle.p50.**
+This compounds: economic scheduler (+25.75% vs SLA-aware) × serving queue scheduler
+(+322% vs FIFO) → potentially the largest absolute gain achievable.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Wire the conformal discipline into the canonical LLM backtest with live predictions. Even
+at 30%-CV noise, conformal gives +267.81% vs FIFO (vs +273.99% for fixed α). The
+compounding with economic scheduling is the key.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Same as Q7. Both canonical baselines (sla_aware) and FIFO show massive room for
+improvement from queue discipline integration.
+
+### Q9. What would need to be true to achieve +300%?
+
++300% vs FIFO: **ACHIEVED** (conformal +322.24% on Azure LLM 2024 oracle).
++300% vs SLA-aware (North Star): SLA-aware = +125.4% vs FIFO; conformal = +322% vs FIFO
+→ conformal = +87% vs SLA-aware. Getting to +300% vs SLA-aware requires:
+1. Live prediction (conformal adapts to real CV)
+2. Compound with economic scheduling shifts
+
+### Q10. Which assumptions might be wrong?
+
+1. **Oracle prior as primary benchmark.** Conformal converges α → 0 because oracle tokens
+   = actual tokens. With real predictions (CV ≈ 20-30%), α → 0.001 → +267-274% vs FIFO.
+   The conformal approach is still the best available: it automatically uses the right α.
+2. **30%-CV noisy retention.** Conformal achieves 83.1% retention (267.81%/322.24%), vs
+   fixed α=0.001 at 100% retention (273.99%/273.99%). The absolute comparison shows fixed
+   is slightly better under 30%-CV noise; the real choice depends on predictor quality.
+3. **Overhead model additivity.** Still applies (same as run -o).
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Oracle prior.** All primary benchmark results use perfect token-length prediction.
+   Conformal with oracle = SRPT, which is the optimum — a favorable evaluation context.
+2. **FIFO baseline.** North Star requires vs SLA-aware. Conformal vs SLA-aware: +87%.
+3. **BurstGPT conformal.** Only tested on 51-row fixture (warmup not reached). HF fullscale pending.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT** — output token cross-validation for BurstGPT-like heavy tail.
+2. **Mooncake FAST25 Traces** (Apache-2.0) — KV prefix reuse signal.
+3. **Vidur Profiling CSVs** — measured kernel latency for service time calibration.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. BurstGPT HF fullscale conformal validation (59,999 records) — confirm +644% SRPT
+   ceiling is approached by conformal on BurstGPT's heavier distribution.
+2. BurstGPT vs SLA-aware baseline — measure the North Star gap on BurstGPT.
+
+**Short-term (2–3 runs):**
+3. Wire OutputLengthForecastBundle.p50 as live prior into conformal discipline.
+   The calibrator will adapt α from real prediction residuals.
+4. Wire conformal discipline into canonical LLM serving backtest (compound gains).
+
+---
+
+## Future Opportunity Ranking — Updated After Run -q
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Wire conformal discipline into serving runtime with live predictions | Very High | Medium | Calibrator built; live prior pending |
+| 2 | BurstGPT HF fullscale conformal validation (59,999 records) | High | Medium | Fixture done; HF fullscale pending |
+| 3 | BurstGPT vs SLA-aware baseline | Very High | Low | SLA-aware measured on Azure [run -n]; BurstGPT pending |
+| 4 | Wire OutputLengthForecastBundle.p50 as live prior | High | Low | Infrastructure built (shadow) |
+| 5 | Compound economic + queue scheduling in canonical backtest | Very High | High | Requires serving runtime integration |
+| 6 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
+| 7 | GPU routing on LLM trace (TTFT binding) | Medium | Low | benchmarked on energy trace [run -f] |
+
+---
+
 ## Run 2026-06-21-p — BurstGPT HF Full-Scale Cross-Validation (Frontier Improvement)
 
 ### Q1. What currently limits Aurelius most?
