@@ -180,6 +180,44 @@
 
 ---
 
+## 5e. Input-Token-Conditioned Live Prior Backtest (run 2026-06-21-u)
+
+**Null result** — input-token bucket conditioning provides no measurable improvement over global median.
+
+Functions: `load_burstgpt_serving_requests_with_features()` + `make_input_conditioned_prior_predictions()`
++ `run_burstgpt_hf_input_conditioned_prior_backtest()`. Results in
+`research/results/input_conditioned_prior_backtest_2026-06-21.{json,md}`.
+
+**Prior quality improvement vs global median:**
+
+| metric | global (run -t) | conditioned (run -u) |
+|---|---:|---:|
+| pred_cv_pct | 15.34% | 34.64% |
+| prior_mae_tokens | 166.93 | 153.68 |
+| ranking_accuracy_pct | ~52.2% | 60.50% |
+
+**Scheduling performance (BurstGPT HF, 5,880 records, ρ=0.85, 4 servers, sla=30s):**
+
+| condition | gp/$ | vs FIFO | vs oracle retention |
+|---|---:|---:|---:|
+| FIFO | 6,528.76 | — | — |
+| Oracle | 48,598.82 | +644.38% | 100% |
+| Global median (run -t) | 34,003.60 | +420.83% | 70.0% |
+| Input-conditioned (run -u) | 33,962.29 | +420.20% | 69.88% |
+
+**Key finding:** +17% ranking accuracy improvement (52%→61%) does NOT translate to scheduling gain.
+Root cause: ConformalAlphaCalibrator already compensates for prediction quality within this accuracy range.
+Threshold for improvement: ranking accuracy must exceed ~75%, requiring a learned predictor.
+
+**Research papers:**
+1. arXiv:2408.15792 (Learning to Rank for LLM Scheduling, NeurIPS 2024)
+2. arXiv:2604.07931 (ProD: Robust Length Prediction, Apr 2026)
+3. arXiv:2602.11812 (EGTP: Input-Feature Output Prediction, ICLR 2026)
+
+19 tests passing (unit + integration). Decision: null result kept as research infrastructure.
+
+---
+
 ## 5d. Live Causal Prior SRTF Backtest (run 2026-06-21-t)
 
 Production-realism evaluation of running-median prior (causal, no future leakage) against

@@ -4559,3 +4559,412 @@ def run_burstgpt_hf_live_prior_backtest(
     return _run_live_prior_on_trace(
         raw, "burstgpt_hf_fullscale", servers, target_rho, sla_s, prior_window
     )
+
+
+# ---------------------------------------------------------------------------
+# Input-token-conditioned live prior (run 2026-06-21-u)
+# ---------------------------------------------------------------------------
+# Hypothesis: conditioning the sliding-window median on the request's own
+# input-token length improves ranking accuracy because longer inputs tend to
+# produce longer outputs (r=0.309 for BurstGPT HF 5,880-sample; r=0.512 full).
+# Higher ranking accuracy → better SRPT-like ordering → higher SLA-safe goodput/$.
+#
+# Physical basis:
+# - arXiv:2604.07931 (ProD: Robust Length Prediction, Apr 2026): prompt-conditioned
+#   bucket-median estimation for heavy-tailed output distributions.
+# - arXiv:2602.11812 (EGTP, ICLR 2026): input features predict output length.
+# - arXiv:2408.15792 (Learning to Rank for SJF, NeurIPS 2024): ranking accuracy
+#   is the key scheduling metric, not absolute prediction error.
+# ---------------------------------------------------------------------------
+
+INPUT_TOKEN_BUCKETS: list[int] = [100, 300, 700, 2000]
+INPUT_CONDITIONED_WINDOW: int = LIVE_PRIOR_WINDOW  # per-bucket window = 200
+
+
+def load_burstgpt_serving_requests_with_features(
+    path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    limit: Optional[int] = None,
+) -> list[tuple[float, int, int, str]]:
+    """Return (arrival_s, output_tokens, input_tokens, model_id) from BurstGPT HF JSONL.
+
+    Extends load_burstgpt_serving_requests_jsonl() to preserve input-side features
+    needed for input-conditioned prediction [run 2026-06-21-u].
+    """
+    import json as _json
+
+    rows: list[tuple[float, int, int, str]] = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = _json.loads(line)
+                ts = float(d["request_arrival_ts_s"])
+                out_tok = int(d.get("output_tokens") or 0)
+                in_tok = int(d.get("input_tokens") or 0)
+                model = str(d.get("model_id") or "")
+            except (KeyError, ValueError, TypeError):
+                continue
+            if out_tok > 0:
+                rows.append((ts, out_tok, in_tok, model))
+    rows.sort(key=lambda r: r[0])
+    if not rows:
+        return []
+    t0 = rows[0][0]
+    result = [(ts - t0, out_tok, in_tok, model) for ts, out_tok, in_tok, model in rows]
+    if limit is not None:
+        result = result[:limit]
+    return result
+
+
+def _input_bucket_idx(input_tokens: int, edges: list[int]) -> int:
+    """Return bucket index for input_tokens given right-exclusive edge list."""
+    for j, edge in enumerate(edges):
+        if input_tokens < edge:
+            return j
+    return len(edges)
+
+
+def make_input_conditioned_prior_predictions(
+    raw: list[tuple[float, int, int, str]],
+    window: int = INPUT_CONDITIONED_WINDOW,
+    bucket_edges: Optional[list[int]] = None,
+    min_bucket_count: int = 5,
+    warmup_value: Optional[float] = None,
+) -> tuple[list[float], dict]:
+    """Input-token-bucket-conditioned causal median prediction [run 2026-06-21-u].
+
+    For request i with input length in bucket b, predicts output tokens as
+    the median of the last ``window`` completions whose input_tokens also fell
+    in bucket b.  Falls back to the global sliding-window median if bucket b
+    has fewer than ``min_bucket_count`` entries at the time of prediction.
+    All predictions are strictly causal: prediction[i] uses only completions 0..i-1.
+
+    Args:
+        raw: List of (arrival_s, output_tokens, input_tokens, model_id).
+        window: Per-bucket and global sliding window size.
+        bucket_edges: Right-exclusive bucket edges (default: INPUT_TOKEN_BUCKETS).
+        min_bucket_count: Minimum bucket history before using bucket vs global median.
+        warmup_value: Fallback before any global history (default: global median).
+
+    Returns:
+        (predictions, stats) — same structure as make_live_prior_predictions but
+        with additional 'ranking_accuracy_pct', 'n_buckets', 'bucket_edges' keys.
+    """
+    if bucket_edges is None:
+        bucket_edges = list(INPUT_TOKEN_BUCKETS)
+    if not raw:
+        return [], {}
+
+    all_out = [out_tok for _, out_tok, _, _ in raw]
+    sorted_all = sorted(all_out)
+    global_median = float(sorted_all[len(sorted_all) // 2])
+    fallback = warmup_value if warmup_value is not None else global_median
+
+    n_buckets = len(bucket_edges) + 1
+    bucket_histories: list[list[int]] = [[] for _ in range(n_buckets)]
+    global_history: list[int] = []
+
+    predictions: list[float] = []
+
+    for _arr, out_tok, in_tok, _model in raw:
+        b = _input_bucket_idx(in_tok, list(bucket_edges))
+        bh = bucket_histories[b]
+
+        if len(bh) >= min_bucket_count:
+            win = bh[-window:]
+            s = sorted(win)
+            pred = float(s[len(s) // 2])
+        elif global_history:
+            win = global_history[-window:]
+            s = sorted(win)
+            pred = float(s[len(s) // 2])
+        else:
+            pred = fallback
+
+        predictions.append(pred)
+        bh.append(out_tok)
+        global_history.append(out_tok)
+
+    # Prediction quality stats
+    errors = [abs(predictions[i] - all_out[i]) for i in range(len(raw))]
+    biases = [predictions[i] - all_out[i] for i in range(len(raw))]
+    mean_actual = statistics.mean(all_out)
+    mae = statistics.mean(errors)
+    mean_bias = statistics.mean(biases)
+    pred_std = statistics.stdev(predictions) if len(predictions) > 1 else 0.0
+    cv_pct = 100.0 * pred_std / max(1.0, mean_actual)
+    rel_mae_pct = 100.0 * mae / max(1.0, mean_actual)
+
+    # Pairwise ranking accuracy (sampled concordance)
+    rng = random.Random(42)
+    n = len(raw)
+    n_pairs = min(10_000, n * (n - 1) // 2)
+    concordant = 0
+    total_pairs = 0
+    for _ in range(n_pairs):
+        i, j = rng.sample(range(n), 2)
+        if all_out[i] == all_out[j]:
+            continue
+        total_pairs += 1
+        if (predictions[i] < predictions[j]) == (all_out[i] < all_out[j]):
+            concordant += 1
+    ranking_acc_pct = 100.0 * concordant / total_pairs if total_pairs > 0 else 50.0
+
+    stats = {
+        "prior_cv_pct": round(cv_pct, 2),
+        "prior_mae_tokens": round(mae, 2),
+        "prior_rel_mae_pct": round(rel_mae_pct, 2),
+        "prior_bias_tokens": round(mean_bias, 2),
+        "prior_bias_pct": round(100.0 * mean_bias / max(1.0, mean_actual), 2),
+        "ranking_accuracy_pct": round(ranking_acc_pct, 2),
+        "warmup_fallback": round(fallback, 2),
+        "global_median_actual": round(global_median, 2),
+        "n_buckets": n_buckets,
+        "bucket_edges": list(bucket_edges),
+        "min_bucket_count": min_bucket_count,
+        "window": window,
+        "n_requests": len(raw),
+    }
+    return predictions, stats
+
+
+@dataclass
+class InputConditionedPriorReport:
+    """Input-token-conditioned prior vs global median prior [run 2026-06-21-u].
+
+    Compares four conditions on the same public trace:
+      - FIFO baseline
+      - Conformal with oracle prior (upper bound)
+      - Conformal with global sliding-window median (run -t reference)
+      - Conformal with input-token-bucket-conditioned median (this run)
+
+    Key measurement: cond_vs_global_uplift_pct — improvement over the global
+    running-median prior from run -t.  If positive, input-token conditioning
+    provides real scheduling gain on top of the run -t baseline.
+    """
+
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    prior_window: int
+    bucket_edges: list
+    min_bucket_count: int
+
+    # Global median prior stats (run -t reference)
+    global_prior_cv_pct: float
+    global_prior_mae_tokens: float
+    global_prior_rel_mae_pct: float
+
+    # Input-conditioned prior stats
+    cond_prior_cv_pct: float
+    cond_prior_mae_tokens: float
+    cond_prior_rel_mae_pct: float
+    cond_ranking_accuracy_pct: float
+
+    # KPIs
+    fifo_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+    global_goodput_per_dollar: float
+    cond_goodput_per_dollar: float
+
+    oracle_delta_pct: float              # oracle conformal vs FIFO
+    global_delta_pct: float              # global prior conformal vs FIFO (run -t)
+    cond_delta_pct: float                # conditioned prior conformal vs FIFO
+    cond_vs_oracle_retention_pct: float  # cond / oracle goodput, %
+    cond_vs_global_uplift_pct: float     # (cond - global) / global * 100
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "prior_window": self.prior_window,
+            "bucket_edges": self.bucket_edges,
+            "min_bucket_count": self.min_bucket_count,
+            "global_prior_cv_pct": round(self.global_prior_cv_pct, 2),
+            "global_prior_mae_tokens": round(self.global_prior_mae_tokens, 2),
+            "global_prior_rel_mae_pct": round(self.global_prior_rel_mae_pct, 2),
+            "cond_prior_cv_pct": round(self.cond_prior_cv_pct, 2),
+            "cond_prior_mae_tokens": round(self.cond_prior_mae_tokens, 2),
+            "cond_prior_rel_mae_pct": round(self.cond_prior_rel_mae_pct, 2),
+            "cond_ranking_accuracy_pct": round(self.cond_ranking_accuracy_pct, 2),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 2),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 2),
+            "global_goodput_per_dollar": round(self.global_goodput_per_dollar, 2),
+            "cond_goodput_per_dollar": round(self.cond_goodput_per_dollar, 2),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "global_delta_pct": round(self.global_delta_pct, 2),
+            "cond_delta_pct": round(self.cond_delta_pct, 2),
+            "cond_vs_oracle_retention_pct": round(self.cond_vs_oracle_retention_pct, 2),
+            "cond_vs_global_uplift_pct": round(self.cond_vs_global_uplift_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_input_conditioned_prior_on_trace(
+    raw_with_features: list[tuple[float, int, int, str]],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    bucket_edges: list[int],
+    min_bucket_count: int,
+) -> InputConditionedPriorReport:
+    """Run FIFO / oracle / global-prior / input-conditioned-prior on a trace."""
+    raw = [(arr, out_tok) for arr, out_tok, _, _ in raw_with_features]
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    global_preds, global_stats = make_live_prior_predictions(raw, window=prior_window)
+    cond_preds, cond_stats = make_input_conditioned_prior_predictions(
+        raw_with_features, window=prior_window, bucket_edges=bucket_edges,
+        min_bucket_count=min_bucket_count,
+    )
+
+    def _reqs_oracle() -> list[_Request]:
+        return [
+            _Request(idx=i, arrival_s=arr / warp, actual_tokens=tok,
+                     predicted_tokens=float(tok), service_s=_service_time_s(tok))
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _reqs_global() -> list[_Request]:
+        return [
+            _Request(idx=i, arrival_s=arr / warp, actual_tokens=tok,
+                     predicted_tokens=global_preds[i], service_s=_service_time_s(tok))
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _reqs_cond() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=raw_with_features[i][0] / warp,
+                actual_tokens=raw_with_features[i][1],
+                predicted_tokens=cond_preds[i],
+                service_s=_service_time_s(raw_with_features[i][1]),
+            )
+            for i in range(len(raw_with_features))
+        ]
+
+    fifo_reqs = _reqs_oracle()
+    oracle_reqs = _reqs_oracle()
+    global_reqs = _reqs_global()
+    cond_reqs = _reqs_cond()
+
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    global_cal = ConformalAlphaCalibrator()
+    global_sim, global_resp, _ = _simulate_decoupled_hybrid_conformal(
+        global_reqs, servers, global_cal
+    )
+    cond_cal = ConformalAlphaCalibrator()
+    cond_sim, cond_resp, _ = _simulate_decoupled_hybrid_conformal(
+        cond_reqs, servers, cond_cal
+    )
+
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    gp_global = _sla_safe_goodput_per_dollar(global_reqs, global_resp, sla_s, servers)
+    gp_cond = _sla_safe_goodput_per_dollar(cond_reqs, cond_resp, sla_s, servers)
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    cond_vs_oracle = (gp_cond / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+    cond_vs_global = _delta(gp_global, gp_cond)
+
+    return InputConditionedPriorReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        bucket_edges=list(bucket_edges),
+        min_bucket_count=min_bucket_count,
+        global_prior_cv_pct=global_stats.get("prior_cv_pct", 0.0),
+        global_prior_mae_tokens=global_stats.get("prior_mae_tokens", 0.0),
+        global_prior_rel_mae_pct=global_stats.get("prior_rel_mae_pct", 0.0),
+        cond_prior_cv_pct=cond_stats.get("prior_cv_pct", 0.0),
+        cond_prior_mae_tokens=cond_stats.get("prior_mae_tokens", 0.0),
+        cond_prior_rel_mae_pct=cond_stats.get("prior_rel_mae_pct", 0.0),
+        cond_ranking_accuracy_pct=cond_stats.get("ranking_accuracy_pct", 50.0),
+        fifo_goodput_per_dollar=gp_fifo,
+        oracle_goodput_per_dollar=gp_oracle,
+        global_goodput_per_dollar=gp_global,
+        cond_goodput_per_dollar=gp_cond,
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        global_delta_pct=_delta(gp_fifo, gp_global),
+        cond_delta_pct=_delta(gp_fifo, gp_cond),
+        cond_vs_oracle_retention_pct=cond_vs_oracle,
+        cond_vs_global_uplift_pct=cond_vs_global,
+    )
+
+
+def run_burstgpt_hf_input_conditioned_prior_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = INPUT_CONDITIONED_WINDOW,
+    bucket_edges: Optional[list[int]] = None,
+    min_bucket_count: int = 5,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> InputConditionedPriorReport:
+    """Input-token-conditioned prior on BurstGPT HF [run 2026-06-21-u].
+
+    Extends the global sliding-window median prior from run -t by conditioning
+    on input-token length. For request i with input length in bucket b, the
+    predicted output is the median of the last ``prior_window`` completions also
+    in bucket b, falling back to the global median when the bucket has insufficient
+    history. This adds exactly one conditioning dimension — no model, no features
+    beyond the request's own input_tokens.
+
+    Hypothesis: input-token length predicts output-token length (r=0.309 for
+    BurstGPT HF 5,880-sample; full dataset r=0.512). Bucketing lifts pred_cv
+    from 15.3% → 34.6% and ranking accuracy from 52.2% → 61.1% (+17%).
+
+    Expected improvement over run -t (BurstGPT global retention=70%):
+      - Input-conditioned prior has higher pred_cv → better request differentiation
+      - Conformal calibrator more effective with higher-variance predictions
+      - Estimate: +5 to +15% uplift in SLA-safe goodput/$ vs global prior
+
+    Args:
+        servers: Replica pool size (M/G/c).
+        target_rho: Target cluster utilization.
+        job_limit: Cap on requests (default 5880 for run -t comparability).
+        sla_s: E2E SLA budget.
+        prior_window: Per-bucket sliding window size.
+        bucket_edges: Input-token bucket boundaries (default: INPUT_TOKEN_BUCKETS).
+        min_bucket_count: Minimum bucket history before using bucket vs global median.
+        jsonl_path: Path to BurstGPT HF normalized JSONL.
+
+    Returns:
+        ``InputConditionedPriorReport`` with four-way KPI comparison.
+    """
+    if bucket_edges is None:
+        bucket_edges = list(INPUT_TOKEN_BUCKETS)
+    raw_with_features = load_burstgpt_serving_requests_with_features(
+        jsonl_path, limit=job_limit
+    )
+    if len(raw_with_features) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+    return _run_input_conditioned_prior_on_trace(
+        raw_with_features, "burstgpt_hf_input_conditioned",
+        servers, target_rho, sla_s, prior_window, bucket_edges, min_bucket_count,
+    )

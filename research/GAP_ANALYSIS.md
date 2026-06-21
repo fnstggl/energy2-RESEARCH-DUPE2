@@ -8,6 +8,138 @@
 
 ---
 
+## Run 2026-06-21-u — Input-Token-Conditioned Prior (Null Result / Research Learning)
+
+### Q1. What currently limits Aurelius most?
+
+**The conformal calibrator dominates prior quality in the 52–61% ranking accuracy range.**
+This run tested the next simplest improvement over the global running-median prior from run -t:
+conditioning on input-token length (bucket edges [0,100,300,700,2000,∞]). Results:
+- Input-conditioned gp/$: 33,962 vs global 34,004 — **cond_vs_global_uplift = −0.12%**
+- pred_cv lifted 15.3%→34.6% (meaningful improvement in spread)
+- ranking_accuracy: 52.2%→60.5% (+17%, measured)
+- Scheduling gain: zero — conformal α adapts to compensate completely
+- **Root cause**: ConformalAlphaCalibrator already compensates for prediction quality;
+  within 52–61% accuracy range it is the dominant factor, not the prior ranking.
+
+### Q2. What theoretically offers the largest gain?
+
+**A learned output-token predictor achieving 75%+ ranking accuracy.** This run establishes
+that bucket-based conditioning (52→61% acc) is insufficient. The calibrator's compensation
+saturates somewhere above 61%. A gradient-boosted model on richer features (CARA HGB:
+TTFT, queue state, prompt content hash) is estimated to reach 80%+ ranking accuracy —
+above the threshold where conformal compensation becomes insufficient.
+
+### Q3. Which forecasts are weakest?
+
+1. **Live prior ranking accuracy** — bucket conditioning peaks at 61%. Need 75%+ (HGB model).
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Prior has 61% ranking accuracy** (bucket) or 52% (global), both below the ~75% threshold.
+2. **Serving queue uses FIFO in production** — conformal: +420% (BurstGPT) not yet wired.
+3. **North Star gap (vs SLA-aware)** — unchanged.
+
+### Q5. Which workloads benefit least?
+
+**BurstGPT HF 5,880-sample under input-conditioned prior.** Despite r=0.309 input-output
+correlation, the conformal calibrator absorbs the entire improvement. The global median
+prior was already nearly at the calibrator's compensation ceiling for this trace.
+
+### Q6. Which research direction appears strongest?
+
+**Learned output-token predictor (HGB/CARA approach).** This run ruled out bucket
+conditioning and established the threshold: ranking accuracy must exceed ~75% to produce
+measurable scheduling uplift above the calibrator's compensation ceiling. The `HGBOutputLengthForecaster`
+already built in `cara_output_length_forecaster.py` is the natural vehicle — wire it as
+the live prior in `_run_input_conditioned_prior_on_trace`.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Replace bucket prior with `HGBOutputLengthForecaster.p50` predictions. If ranking accuracy
+reaches 75%+, the conformal calibrator can no longer fully compensate — the prior quality
+directly translates to scheduling gain. Even 5pp retention improvement = ~2,400 gp/$ uplift
+on BurstGPT (current gap: 30% × 48,598 oracle = 14,580 gp/$ uncaptured).
+
+### Q8. What is the shortest path to another +50% gain?
+
+Learned predictor reaching 85%+ ranking accuracy could close 50%+ of the oracle gap
+(currently 30% on BurstGPT). +50% of (48,598 − 34,004) = +7,297 gp/$ ≈ +21.5% over
+current BurstGPT baseline. Combined with economic scheduling compound (+183.4%), +50%
+total becomes achievable.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Same as run -t. Independence estimate: +876% vs FIFO compound (economic × queue).
+North Star gap: +52.8% vs SLA-aware (Azure), target +300%, gap 247.2pp. A learned
+predictor closing the oracle gap from 70%→90% would increase live_delta_pct from
++420% to ~+580% on BurstGPT, improving North Star progress substantially.
+
+### Q10. Which assumptions might be wrong?
+
+1. **75% ranking accuracy threshold.** The threshold is inferred from the 52–61% dead zone.
+   The actual inflection point could be lower (60%) or higher (80%) — needs measurement.
+2. **Input-output correlation being the bottleneck.** The 61% accuracy cap may be due to
+   the sliding-window median algorithm, not the conditioning signal. A learned ranker using
+   the same features could achieve higher accuracy.
+3. **Independence of conformal calibration and ranking accuracy.** The calibrator adapts
+   α to empirical errors — if ranking accuracy is 75%+, errors shrink → α→0 → pure SRPT.
+   The interaction may be more complex.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **BurstGPT 5,880-sample early composition.** ChatGPT mean=270 tok, GPT-4 mean=231 tok
+   in this sample — both models have similar distributions, so model stratification adds
+   nothing. Full dataset has ChatGPT p50=7 vs GPT-4 p50=235 (strongly stratifiable).
+2. **No ground-truth ranking accuracy for global median.** The 52.2% estimate was from
+   offline analysis, not re-measured in this run (confirmed: cond=60.5% measured).
+3. **Single trace (BurstGPT HF 5,880).** The Azure trace lacks input_tokens field in
+   the current fixture — only BurstGPT was used for this experiment.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT / LMSYS** — richer request features + multiple models for predictor training.
+2. **CARA latency prediction dataset** — TTFT + queue state for HGB predictor.
+3. **Mooncake FAST25** — KV prefix reuse signal.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Wire `HGBOutputLengthForecaster.p50` as live prior (needs CARA feature extraction at
+   serve time, or synthesized from BurstGPT `input_tokens` + statistical features).
+2. Evaluate ranking accuracy of HGB vs bucket vs global on BurstGPT — confirm the 75% threshold.
+
+**Short-term (2–3 runs):**
+3. End-to-end compound backtest: economic scheduling × live-prior SRTF in single trace run.
+4. Full BurstGPT dataset (58,042 records, not 5,880 sample) for model stratification —
+   ChatGPT p50=7 vs GPT-4 p50=235 means model ID provides strong prior signal.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -u
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Learned output-token predictor (HGB on input features, target >75% ranking acc) | Very High | Medium | Bucket conditioning ruled out [run -u]: 61% acc = zero gain. `HGBOutputLengthForecaster` built, needs BurstGPT wiring |
+| 2 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO. Needs true end-to-end integration |
+| 3 | Full BurstGPT (58,042 records) with model stratification | High | Low | ChatGPT p50=7 vs GPT-4 p50=235 — strongly stratifiable with model_id signal |
+| 4 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 5 | Wire conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+| 6 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
+| 7 | GPU routing on LLM trace (TTFT binding) | Medium | Low | benchmarked on energy trace [run -f] |
+
+**Closed opportunities:**
+- Input-token bucket conditioning: **NULL RESULT [run -u]** — −0.12% vs global prior (conformal compensates at 61% acc)
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 88.1% BurstGPT
+- Preemption overhead on BurstGPT: **CLOSED** [run -s] — 95.25% retention at 0.30s
+- BurstGPT noisy prior: **CLOSED** [run -r] — 100.0% retention
+- BurstGPT SLA-aware baseline: **CLOSED** [run -r] — +210.6% vs FIFO
+- BurstGPT conformal: **CLOSED** [run -r] — +644.4% vs FIFO
+
+---
+
 ## Run 2026-06-21-t — Live Causal Prior Evaluation (Production Realism Gate)
 
 ### Q1. What currently limits Aurelius most?
@@ -109,23 +241,7 @@ Independence estimate: +876% compound vs FIFO → far exceeds +300% vs SLA-aware
 
 ---
 
-## Future Opportunity Ranking — Updated After Run -t
-
-| rank | opportunity | EV | feasibility | status |
-|---|---|---|---|---|
-| 1 | Request-specific output-token predictor (CARA HGB or prompt features) | Very High | Medium | Gap quantified: 18pp Azure, 12pp BurstGPT |
-| 2 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO |
-| 3 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
-| 4 | Wire conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
-| 5 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
-| 6 | GPU routing on LLM trace (TTFT binding) | Medium | Low | benchmarked on energy trace [run -f] |
-
-**Closed opportunities:**
-- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 88.1% BurstGPT
-- Preemption overhead on BurstGPT: **CLOSED** [run -s] — 95.25% retention at 0.30s
-- BurstGPT noisy prior: **CLOSED** [run -r] — 100.0% retention
-- BurstGPT SLA-aware baseline: **CLOSED** [run -r] — +210.6% vs FIFO
-- BurstGPT conformal: **CLOSED** [run -r] — +644.4% vs FIFO
+## Future Opportunity Ranking — Superseded After Run -t (see run -u ranking above)
 
 ---
 

@@ -1,0 +1,32 @@
+{
+  "trace": "burstgpt_hf_input_conditioned",
+  "total_requests": 5880,
+  "servers": 4,
+  "target_rho": 0.85,
+  "sla_s": 30.0,
+  "prior_window": 200,
+  "bucket_edges": [
+    100,
+    300,
+    700,
+    2000
+  ],
+  "min_bucket_count": 5,
+  "global_prior_cv_pct": 15.34,
+  "global_prior_mae_tokens": 166.93,
+  "global_prior_rel_mae_pct": 64.48,
+  "cond_prior_cv_pct": 34.64,
+  "cond_prior_mae_tokens": 153.68,
+  "cond_prior_rel_mae_pct": 59.36,
+  "cond_ranking_accuracy_pct": 60.5,
+  "fifo_goodput_per_dollar": 6528.76,
+  "oracle_goodput_per_dollar": 48598.82,
+  "global_goodput_per_dollar": 34003.6,
+  "cond_goodput_per_dollar": 33962.29,
+  "oracle_delta_pct": 644.38,
+  "global_delta_pct": 420.83,
+  "cond_delta_pct": 420.2,
+  "cond_vs_oracle_retention_pct": 69.88,
+  "cond_vs_global_uplift_pct": -0.12,
+  "shadow_tag": "shadow_only_simulator_result_not_production_savings"
+}
