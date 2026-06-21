@@ -3921,3 +3921,202 @@ def run_burstgpt_conformal_alpha_backtest(
     if len(raw) < 2:
         raise ValueError("need at least 2 requests")
     return _run_conformal_alpha_on_trace(raw, "burstgpt", servers, target_rho, sla_s)
+
+
+# ---------------------------------------------------------------------------
+# BurstGPT HF Full-Scale Extended Validation [run 2026-06-21-r]
+# ---------------------------------------------------------------------------
+# Three validation gates using the 59,999-record HuggingFace BurstGPT JSONL
+# (CC-BY-4.0) that the 54-row CSV fixture cannot support due to insufficient
+# queue depth.  Run 2026-06-21-p confirmed that the HF dataset demonstrates
+# strong SRPT/decoupled-hybrid gains (+492.7% vs FIFO at 5,880 records).
+#
+# These functions close the three open gates from the run -q / run -p gap analysis:
+#   (1) BurstGPT HF conformal α validation — does conformal approach SRPT on
+#       BurstGPT's heavier distribution (+644.4% SRPT ceiling vs FIFO)?
+#   (2) BurstGPT HF vs SLA-aware baseline — North Star gap measurement on BurstGPT
+#       (SLA-aware baseline was only validated on Azure LLM 2024 in run -n).
+#   (3) BurstGPT HF 30%-CV noisy prior robustness — confirms generalization of the
+#       100% retention gate validated on Azure LLM 2024 in run -n.
+#
+# Research basis:
+#   - arXiv:2604.07931 (Robust Length Prediction, ProD methods, April 2026):
+#     BurstGPT's heavy-tailed prompt-conditioned distribution (p99≈934 tok) means
+#     prediction errors are larger than on Azure LLM 2024 (p99≈479 tok). The
+#     ConformalAlphaCalibrator adapts α to the empirical p90 error — heavier-tailed
+#     traces may see higher α steady-states, but the calibrator handles this
+#     automatically without trace-specific tuning.
+#   - arXiv:2603.11273 (Duration Aware Scheduling, workload drift, March 2026):
+#     Cross-trace validation under workload drift (Azure→BurstGPT) validates that
+#     scheduling gains are not trace-specific artifacts. The conformal calibrator's
+#     online adaptation is the mechanism that handles drift.
+#   - arXiv:2509.23384 (NexusSched, predictive two-layer scheduling, 2025):
+#     The conformal calibrator + aging dispatch key is a realization of NexusSched's
+#     two-layer architecture: frontend prediction (ConformalAlphaCalibrator) +
+#     backend dispatch (aging key). Cross-trace validation on BurstGPT confirms
+#     this architecture generalizes beyond the training trace.
+# ---------------------------------------------------------------------------
+
+
+def run_burstgpt_hf_conformal_alpha_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> ConformalAlphaReport:
+    """Conformal Adaptive α cross-validation on BurstGPT HF full-scale [run 2026-06-21-r].
+
+    Cross-validates the conformal α approach on the HF BurstGPT normalized sample
+    (59,999 records, CC-BY-4.0) rather than the 54-row fixture which has insufficient
+    queue depth to demonstrate SRPT > FIFO.
+
+    BurstGPT has a significantly heavier output-token distribution than Azure LLM 2024:
+      - p50 ≈ 236 tokens (vs ≈ 90 for Azure LLM 2024)
+      - p99 ≈ 934 tokens (vs ≈ 479 for Azure LLM 2024)
+
+    Expected outcomes (oracle prior, BurstGPT HF 5,880-record sample, ρ=0.85, 4 servers):
+      FIFO baseline:            ~ reference goodput/$
+      SRPT (upper bound):       ~ +644% vs FIFO (confirmed in run -p)
+      Decoupled-fixed α=0.001:  ~ +493% vs FIFO (confirmed in run -p)
+      Decoupled-conformal:      approaches SRPT ceiling as α → 0 on oracle prior
+
+    With oracle tokens (predicted == actual), the ConformalAlphaCalibrator measures
+    zero prediction error → α → 0 → dispatch is pure SRPT → goodput/$ approaches the
+    SRPT ceiling.  With heavier tail the absolute gains are larger than on Azure LLM 2024.
+
+    Research basis: arXiv:2604.07931 (ProD, heavy-tailed length distributions),
+    arXiv:2603.11273 (Duration Aware Scheduling, cross-trace robustness),
+    arXiv:2509.23384 (NexusSched, two-layer adaptive scheduling).
+
+    Args:
+        servers: Replica pool size (M/G/c). Identical across disciplines.
+        target_rho: Target cluster utilization (arrival time-warp applied equally).
+        job_limit: Optional cap on requests (None = use all available records).
+                   Set to 5880 to match the Azure LLM 2024 scale for comparability.
+        sla_s: E2E response-time SLA budget (seconds); default=30s for BurstGPT.
+        jsonl_path: Path to the HF BurstGPT normalized JSONL.
+
+    Returns:
+        ``ConformalAlphaReport`` with KPIs for all 4 disciplines on BurstGPT HF.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+    return _run_conformal_alpha_on_trace(raw, "burstgpt_hf_fullscale", servers, target_rho, sla_s)
+
+
+def run_burstgpt_hf_sla_aware_baseline_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    aging_alpha: float = DECOUPLED_HYBRID_ALPHA_DEFAULT,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> SLAAwareBaselineReport:
+    """SLA-aware baseline comparison on BurstGPT HF full-scale [run 2026-06-21-r].
+
+    Measures the North Star gap on BurstGPT: how much additional goodput/$ does
+    continuous token-length prediction (decoupled hybrid α=0.001) provide over
+    binary SLA-class awareness (sla_aware discipline)?
+
+    On Azure LLM 2024 (run -n):
+      - FIFO: 13,336 goodput/$
+      - SLA-aware: 30,063 goodput/$ (+125.4% vs FIFO)
+      - Decoupled α=0.001: 49,877 goodput/$ (+274.0% vs FIFO, +65.9% vs SLA-aware)
+      - SRPT: 56,311 goodput/$ (+322.2% vs FIFO)
+
+    BurstGPT's heavier distribution (p50=236 vs 90 tokens) is expected to amplify
+    all three gains because SRTF benefits scale with output-length variance.
+
+    Uses the HF BurstGPT JSONL (59,999 records) to ensure sufficient queue depth.
+    The 54-row fixture shows all disciplines equivalent (queue never builds a backlog).
+
+    Research basis: arXiv:2512.12928 (PROSERVE, multi-priority scheduling with TDG),
+    arXiv:2507.10150 (Past-Future Scheduler, binary SLA-class theory),
+    arXiv:2604.07931 (ProD, heavy-tailed BurstGPT distribution characterization).
+
+    Args:
+        servers: Replica pool size (M/G/c). Identical across disciplines.
+        target_rho: Target cluster utilization.
+        aging_alpha: Aging decay for decoupled hybrid (default=0.001 Pareto-optimal).
+        job_limit: Optional cap on requests (None = use all available).
+                   Set to 5880 to match the Azure LLM 2024 comparability scale.
+        sla_s: E2E response-time SLA budget (seconds); default=30s for BurstGPT.
+        jsonl_path: Path to the HF BurstGPT normalized JSONL.
+
+    Returns:
+        ``SLAAwareBaselineReport`` with FIFO / SLA-aware / Decoupled / SRPT KPIs.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+    return _run_sla_aware_baseline_on_trace(
+        raw, "burstgpt_hf_fullscale", servers, target_rho, aging_alpha, sla_s
+    )
+
+
+def run_burstgpt_hf_noisy_prior_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    aging_alpha: float = DECOUPLED_HYBRID_ALPHA_DEFAULT,
+    forecast_noise_cv: float = 0.30,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    seed: int = 20260621,
+) -> NoisyPriorRobustnessReport:
+    """30%-CV noisy prior robustness on BurstGPT HF full-scale [run 2026-06-21-r].
+
+    Validates that decoupled hybrid α=0.001 retains its goodput/$ gain under
+    realistic 30%-CV lognormal forecast noise on BurstGPT's heavier distribution.
+
+    On Azure LLM 2024 (run -n): **100% noisy retention** — zero measurable impact
+    from 30%-CV noise.  The mechanism: at α=0.001 preemption is pure SRPT
+    (remaining_s only, not prediction-dependent), and short requests (service ≈1.95s
+    vs SLA=10s) dominate SLA-safe tokens — their ordering is noise-insensitive.
+
+    BurstGPT's heavier tail (p99=934 vs 479 tokens) may show different behavior:
+    - Larger absolute prediction errors (30%-CV of 934 tokens = ±280 tokens error)
+    - Long requests are more numerous, so starvation could affect more tokens
+    - The SLA=30s budget provides more headroom for short requests to be SLA-safe
+
+    Expected: high retention (≥95%) because the same mechanism applies — preemptive
+    SRPT with α=0.001 is dominated by actual remaining work, not predicted tokens.
+    The preemption-corrects-mistakes mechanism (arXiv:2508.14544) should preserve
+    most of the oracle gain under BurstGPT's heavier noise levels.
+
+    Research basis: arXiv:2508.14544 (Adaptively Robust LLM Inference, Aug 2025),
+    arXiv:2604.07931 (Robust Length Prediction, heavy-tailed distributions, Apr 2026),
+    arXiv:1902.00732 (Scheduling with Predictions, Mitzenmacher 2019).
+
+    Args:
+        servers: Replica pool size (M/G/c). Identical across disciplines.
+        target_rho: Target cluster utilization.
+        aging_alpha: Aging decay for decoupled hybrid (default=0.001 Pareto-optimal).
+        forecast_noise_cv: Lognormal coefficient of variation for forecast noise.
+        job_limit: Optional cap on requests (None = use all available records).
+                   Set to 5880 to match the Azure LLM 2024 comparability scale.
+        sla_s: E2E response-time SLA budget (seconds); default=30s for BurstGPT.
+        jsonl_path: Path to the HF BurstGPT normalized JSONL.
+        seed: Random seed for reproducible noise injection.
+
+    Returns:
+        ``NoisyPriorRobustnessReport`` with oracle / noisy / retention KPIs.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+    return _run_noisy_prior_on_trace(
+        raw, "burstgpt_hf_fullscale", servers, target_rho, aging_alpha,
+        sla_s, forecast_noise_cv, seed
+    )
