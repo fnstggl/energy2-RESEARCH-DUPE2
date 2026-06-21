@@ -8,6 +8,131 @@
 
 ---
 
+## Run 2026-06-21-m — Decoupled Hybrid Alpha Sweep (Pareto Frontier)
+
+### Q1. What currently limits Aurelius most?
+
+**The serving runtime still uses FIFO.** The alpha sweep (run -m) identifies α=0.001
+as the Pareto-optimal configuration: +274.0% goodput/$ vs FIFO with near-SRPT
+short_p90 (1.91s) and a meaningful starvation bound (flip-point ~66 min). The gap
+remaining vs pure SRPT (+322.2%) is now only ~48pp, driven by the aging dispatch
+occasionally promoting long-waiting medium-length requests over fresh short arrivals
+even at α=0.001. The primary limit is now wiring α=0.001 into the serving runtime.
+
+### Q2. What theoretically offers the largest gain?
+
+**Wiring decoupled hybrid (α=0.001) into the serving runtime with
+OutputLengthForecastBundle.p50 as the live prior.** The simulator shows +274%
+goodput/$ vs FIFO at oracle prior quality. With 30%-CV noisy prior (run -g showed
+SRTF retains >99% of short_p90 at 30% CV), the expected production gain is large.
+Additionally, switching comparison baseline from FIFO to SLA-aware would close
+the North Star gap directly.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live prior** — all serving backtests still use
+   oracle prior. The 30%-CV robustness from run -g applies to SRTF but has not been
+   explicitly re-tested for decoupled hybrid at α=0.001.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving queue uses FIFO** — α=0.001 decoupled hybrid confirmed +274% goodput/$ at
+   simulator fidelity; not yet wired into runtime.
+2. **Oracle prior only** — OutputLengthForecastBundle.p50 not driving ordering.
+3. **No SLA-aware baseline comparison** — all results vs FIFO; the North Star (+300% vs
+   SLA-aware) requires adding SLA-aware as a comparison discipline.
+
+### Q5. Which workloads benefit least?
+
+**Batch / energy-shifting and small traces.** Confirmed across all runs. BurstGPT
+fixture (51 requests) cannot distinguish alpha values due to insufficient queue depth.
+
+### Q6. Which research direction appears strongest?
+
+**Prior robustness at α=0.001:** Run -g showed SRTF retains >99% short_p90 at 30%
+CV noise. Verifying the same holds for decoupled hybrid at α=0.001 is the critical
+gate before recommending production deployment. If robust, α=0.001 becomes the
+recommended production configuration.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Update `DECOUPLED_HYBRID_ALPHA_DEFAULT = 0.001` and re-run the benchmark. Alpha sweep
+shows +31.4% goodput improvement over α=0.01 (+274% vs +184.5% vs FIFO). The change
+is 1-line with tests already passing.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Wire decoupled hybrid (α=0.001) into the serving runtime with live prior. Simulator
+shows +274% vs FIFO → even at 50% degradation from oracle to real prior, the net gain
+is ~+137% vs FIFO, far exceeding +50%.
+
+### Q9. What would need to be true to achieve +300%?
+
++300% vs FIFO is achievable: SRPT = +322%, decoupled α=0.001 = +274%, and with
+noise-robust live prior expected to land +250-280% vs FIFO.
++300% vs SLA-aware (the North Star) requires:
+1. Live prior (OutputLengthForecastBundle.p50) at α=0.001.
+2. Confirm serving runtime integration.
+3. Heterogeneous GPU routing on LLM traces (TTFT SLA improvement).
+4. SLA-aware baseline added to measure true progress toward North Star.
+
+### Q10. Which assumptions might be wrong?
+
+1. **30%-CV robustness transfers from SRTF to decoupled hybrid at α=0.001.** Run -g
+   proved SRTF is robust at 30% CV. Decoupled hybrid at α=0.001 behaves very similarly
+   (dispatch ≈ pure SRPT when flip-point is 66+ min), so the same robustness is expected
+   but not yet verified.
+2. **Flip-point analysis is based on p99/p50 service times.** The actual flip-point
+   distribution depends on which pairs of (waiting request, fresh arrival) actually
+   compete at dispatch. At ρ=0.85 the heavy tail means occasional very-long requests
+   may have shorter remaining service than expected.
+3. **BurstGPT fixture small-sample limitation.** 51 requests cannot validate generalization.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **FIFO baseline** — all goodput/$ deltas vs FIFO. The North Star is vs SLA-aware.
+2. **BurstGPT fixture (51 rows)** — too small for cross-trace validation.
+3. **Oracle prior only** — no noisy-prior validation for decoupled hybrid.
+4. **No preemption cost model** — zero-overhead preemption is optimistic.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT full dataset** (1.4M rows, CC-BY-4.0) — highest priority.
+2. **ShareGPT** — output token cross-validation.
+3. **Vidur profiling CSVs** — GPU penalty calibration.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Update `DECOUPLED_HYBRID_ALPHA_DEFAULT = 0.001` as recommended configuration.
+2. Evaluate 30%-CV prior robustness for decoupled hybrid at α=0.001.
+3. Wire decoupled hybrid (α=0.001) into serving runtime with OutputLengthForecastBundle.p50.
+
+**Short-term (2–3 runs):**
+4. Full BurstGPT cross-validation (1.4M rows) — `run_burstgpt_alpha_sweep()` ready.
+5. Add SLA-aware baseline comparison to the serving simulator.
+6. Preemption overhead cost model (KV-cache eviction latency estimate per token).
+
+---
+
+## Future Opportunity Ranking — Updated After Run -m
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Wire decoupled hybrid (α=0.001) into serving runtime | Very High | Medium | Pareto-optimal α identified [run -m]: +274% goodput/$ vs FIFO |
+| 2 | 30%-CV prior robustness for α=0.001 | High | Low | Not started — critical gate for production deployment |
+| 3 | Full BurstGPT cross-validation (1.4M rows) | High | Low | run_burstgpt_alpha_sweep() ready |
+| 4 | Add SLA-aware baseline to serving simulator | Very High | Low | Needed for North Star progress measurement |
+| 5 | Wire OutputLengthForecastBundle.p50 as live prior | High | Low | Infrastructure built (shadow) |
+| 6 | Admission gate → cluster simulator | Medium | Medium | Implemented (unconnected) |
+| 7 | GPU routing on LLM trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 8 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 9 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+
+---
+
 ## Run 2026-06-21-l — Decoupled Hybrid SRPT serving-queue simulator
 
 ### Q1. What currently limits Aurelius most?

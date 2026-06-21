@@ -2064,3 +2064,347 @@ def run_burstgpt_decoupled_hybrid_backtest(
     return _run_decoupled_hybrid_backtest_on_trace(
         raw, "burstgpt", servers, target_rho, aging_alpha, sla_s
     )
+
+
+# ---------------------------------------------------------------------------
+# Alpha Sweep for Decoupled Hybrid SRPT [run 2026-06-21-m]
+# ---------------------------------------------------------------------------
+
+# Default alpha values to sweep — spans 2 orders of magnitude.
+# α=0.001: "flip point" for long request (100s remaining) vs fresh 3s arrival
+#   at dispatch = (100/3−1)/0.001 ≈ 32,233s (~9h) — essentially never fires.
+#   Expected: near-SRPT goodput (+315-322%) with very mild starvation bound.
+# α=0.005: flip point ≈ 6,447s (~107m) — fires under extreme tail scenarios.
+#   Expected: between α=0.001 (+315%) and α=0.01 (+184.5%).
+# α=0.01:  flip point ≈ 3,233s (~54m) — rarely fires at ρ=0.85 [run -l].
+#   Measured: +184.5% goodput/$ vs FIFO.
+# α=0.05:  flip point ≈ 647s (~10.8m) — fires more frequently.
+#   Expected: Aging-SRTF-level goodput (+70-100%) with strongest starvation bound.
+ALPHA_SWEEP_DEFAULT: tuple = (0.001, 0.005, 0.01, 0.05)
+
+
+@dataclass
+class AlphaSweepEntry:
+    """Result for a single aging_alpha value in the decoupled hybrid sweep.
+
+    Captures the three key KPIs used to characterize the goodput/$ ↔ starvation
+    Pareto frontier: SLA-safe goodput/$ (maximize), short_p90 improvement (maximize),
+    and long_p99 regression (minimize).
+
+    Research basis: arXiv:2604.00499 (TIE scheduling shows distributional ordering
+    outperforms point estimates for heavy-tailed output lengths — the alpha sweep
+    is the dispatch-side analogue: tuning how aggressively we promote long-waiting
+    requests at dispatch).
+    """
+    aging_alpha: float
+    goodput_per_dollar: float
+    goodput_delta_pct_vs_fifo: float    # positive = better than FIFO
+    short_p90_response_s: float
+    short_p90_improvement_pct: float    # positive = shorter wait than FIFO
+    long_p99_response_s: float
+    long_p99_delta_pct_vs_fifo: float   # positive = regression vs FIFO (starvation)
+    mean_response_s: float
+    sla_violation_rate: float           # fraction of requests exceeding sla_s
+
+    # Flip-point: the accumulated dispatch wait (seconds) at which a long request
+    # with remaining_s=long_p99_service_s beats a fresh arrival with
+    # remaining_s=short_p90_service_s.  Computed analytically from alpha.
+    # flip_point = (long_p99_service_s / short_p90_service_s − 1) / alpha
+    # Lower flip_point → aging fires more often → stronger starvation protection.
+    flip_point_s: float
+
+    def to_dict(self) -> dict:
+        return {
+            "aging_alpha": self.aging_alpha,
+            "goodput_per_dollar": round(self.goodput_per_dollar, 2),
+            "goodput_delta_pct_vs_fifo": round(self.goodput_delta_pct_vs_fifo, 2),
+            "short_p90_response_s": round(self.short_p90_response_s, 4),
+            "short_p90_improvement_pct": round(self.short_p90_improvement_pct, 2),
+            "long_p99_response_s": round(self.long_p99_response_s, 4),
+            "long_p99_delta_pct_vs_fifo": round(self.long_p99_delta_pct_vs_fifo, 2),
+            "mean_response_s": round(self.mean_response_s, 4),
+            "sla_violation_rate": round(self.sla_violation_rate, 6),
+            "flip_point_s": round(self.flip_point_s, 1),
+        }
+
+
+@dataclass
+class AlphaSweepReport:
+    """Pareto frontier for decoupled hybrid SRPT aging_alpha sweep [run 2026-06-21-m].
+
+    Profiles decoupled_hybrid at multiple alpha values on the Azure LLM 2024 trace
+    to map the goodput/$ ↔ long_p99_regression Pareto frontier.
+
+    The decoupled hybrid uses:
+      Preemption key = remaining_s (pure SRPT — unchanged across all alpha)
+      Dispatch key   = remaining_s / (1 + alpha * total_wait_s)
+
+    The alpha parameter controls only the dispatch aggressiveness:
+      - Low alpha → dispatch ≈ pure SRPT → near-SRPT goodput, minimal starvation protection
+      - High alpha → dispatch promotes long-waiting requests → stronger starvation protection
+        at the cost of reducing goodput (occasionally dispatches longer jobs over shorter ones)
+
+    SRPT and FIFO results are included as reference anchors.
+
+    Research context:
+      arXiv:2604.00499 (TIE) shows that for heavy-tailed LLM outputs, risk-adjusted
+      ordering keys outperform point estimates. The alpha sweep is the dispatch-key
+      analogue: it tunes how aggressively the aging term down-weights short fresh arrivals
+      relative to long-waiting requests — equivalent to choosing the tail-inflation
+      factor in TIE scheduling.
+    """
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    time_warp: float
+
+    fifo_goodput: float
+    fifo_short_p90_s: float
+    fifo_long_p99_s: float
+    srpt_goodput: float
+    srpt_short_p90_s: float
+    srpt_long_p99_s: float
+
+    entries: list  # list[AlphaSweepEntry], one per alpha
+
+    # Index of the Pareto-optimal entry (maximises goodput/$ subject to
+    # long_p99_delta_pct ≤ srpt_long_p99_delta_pct — i.e. no worse starvation
+    # than pure SRPT, but best goodput available under that constraint).
+    pareto_best_alpha: float
+    pareto_best_goodput_delta_pct: float
+    pareto_best_long_p99_delta_pct: float
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "time_warp": round(self.time_warp, 4),
+            "fifo_goodput": round(self.fifo_goodput, 2),
+            "fifo_short_p90_s": round(self.fifo_short_p90_s, 4),
+            "fifo_long_p99_s": round(self.fifo_long_p99_s, 4),
+            "srpt_goodput": round(self.srpt_goodput, 2),
+            "srpt_short_p90_s": round(self.srpt_short_p90_s, 4),
+            "srpt_long_p99_s": round(self.srpt_long_p99_s, 4),
+            "entries": [e.to_dict() for e in self.entries],
+            "pareto_best_alpha": self.pareto_best_alpha,
+            "pareto_best_goodput_delta_pct": round(self.pareto_best_goodput_delta_pct, 2),
+            "pareto_best_long_p99_delta_pct": round(self.pareto_best_long_p99_delta_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _compute_flip_point_s(aging_alpha: float, long_service_s: float, short_service_s: float) -> float:
+    """Analytical dispatch flip-point.
+
+    The accumulated wait (seconds) at which a request with remaining_s=long_service_s
+    beats a fresh arrival with remaining_s=short_service_s under the aging dispatch key
+    remaining_s / (1 + alpha * total_wait_s).
+
+    Derived by solving:
+        long_service_s / (1 + alpha * wait) < short_service_s
+      ⟺  wait > (long_service_s / short_service_s - 1) / alpha
+
+    A lower flip-point means aging fires more aggressively; a higher flip-point
+    means aging rarely changes dispatch order vs pure SRPT.
+    """
+    if aging_alpha <= 0.0 or short_service_s <= 0.0:
+        return float("inf")
+    ratio = long_service_s / short_service_s
+    if ratio <= 1.0:
+        return 0.0
+    return (ratio - 1.0) / aging_alpha
+
+
+def _run_alpha_sweep_on_trace(
+    raw: list[tuple[float, int]],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    alphas: tuple,
+    sla_s: float,
+) -> "AlphaSweepReport":
+    """Internal helper: run alpha sweep on a pre-loaded trace."""
+    # Run FIFO and SRPT-preemptive as anchors (shared warp).
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    def _build() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs = _build()
+    srpt_reqs = _build()
+
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    srpt_sim, srpt_resp, _ = simulate_queue(srpt_reqs, servers, "srpt_preemptive")
+
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    gp_srpt = _sla_safe_goodput_per_dollar(srpt_reqs, srpt_resp, sla_s, servers)
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+    srpt_sim["sla_safe_goodput_per_dollar"] = gp_srpt
+
+    def _impr(base: float, new: float) -> float:
+        return (base - new) / base * 100.0 if base > 0 else 0.0
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    fifo_sp90 = fifo_sim["short_p90_response_s"]
+    fifo_lp99 = fifo_sim["long_p99_response_s"]
+    srpt_lp99_delta = _delta(fifo_lp99, srpt_sim["long_p99_response_s"])
+
+    entries: list = []
+    for alpha in alphas:
+        dh_reqs = _build()
+        dh_sim, dh_resp, _ = simulate_queue(
+            dh_reqs, servers, "decoupled_hybrid", aging_alpha=alpha
+        )
+        gp_dh = _sla_safe_goodput_per_dollar(dh_reqs, dh_resp, sla_s, servers)
+        dh_sim["sla_safe_goodput_per_dollar"] = gp_dh
+
+        n_total = len(dh_resp)
+        n_violated = sum(1 for v in dh_resp.values() if v > sla_s) if n_total else 0
+        sla_viol_rate = n_violated / n_total if n_total else 0.0
+
+        # Flip-point: use p99 service time as "long" and p90 short service as "short".
+        long_p99_svc = TTFT_BASE_S + srpt_sim.get("long_p99_response_s", 100.0) * TPOT_S
+        short_p90_svc = TTFT_BASE_S + fifo_sp90 * TPOT_S
+        # Simpler: use Azure 2024 empirical percentiles (p99≈479 tok, p50≈90 tok).
+        _long_svc_s = _service_time_s(479)   # p99 output tokens Azure 2024
+        _short_svc_s = _service_time_s(90)   # p50 output tokens Azure 2024
+        flip_s = _compute_flip_point_s(alpha, _long_svc_s, _short_svc_s)
+
+        entry = AlphaSweepEntry(
+            aging_alpha=alpha,
+            goodput_per_dollar=gp_dh,
+            goodput_delta_pct_vs_fifo=_delta(gp_fifo, gp_dh),
+            short_p90_response_s=dh_sim["short_p90_response_s"],
+            short_p90_improvement_pct=_impr(fifo_sp90, dh_sim["short_p90_response_s"]),
+            long_p99_response_s=dh_sim["long_p99_response_s"],
+            long_p99_delta_pct_vs_fifo=_delta(fifo_lp99, dh_sim["long_p99_response_s"]),
+            mean_response_s=dh_sim.get("mean_response_s", 0.0),
+            sla_violation_rate=sla_viol_rate,
+            flip_point_s=flip_s,
+        )
+        entries.append(entry)
+
+    # Pareto best: among entries where long_p99_delta ≤ srpt_long_p99_delta
+    # (starvation no worse than pure SRPT), pick the one with highest goodput.
+    # If none meet the constraint (should not happen since α=smallest approaches SRPT),
+    # fall back to highest goodput unconditionally.
+    srpt_bound = srpt_lp99_delta
+    candidates = [e for e in entries if e.long_p99_delta_pct_vs_fifo <= srpt_bound + 1.0]
+    if not candidates:
+        candidates = list(entries)
+    best = max(candidates, key=lambda e: e.goodput_delta_pct_vs_fifo)
+
+    return AlphaSweepReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        time_warp=warp,
+        fifo_goodput=gp_fifo,
+        fifo_short_p90_s=fifo_sp90,
+        fifo_long_p99_s=fifo_lp99,
+        srpt_goodput=gp_srpt,
+        srpt_short_p90_s=srpt_sim["short_p90_response_s"],
+        srpt_long_p99_s=srpt_sim["long_p99_response_s"],
+        entries=entries,
+        pareto_best_alpha=best.aging_alpha,
+        pareto_best_goodput_delta_pct=best.goodput_delta_pct_vs_fifo,
+        pareto_best_long_p99_delta_pct=best.long_p99_delta_pct_vs_fifo,
+    )
+
+
+def run_decoupled_hybrid_alpha_sweep(
+    alphas: tuple = ALPHA_SWEEP_DEFAULT,
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_SLA_S,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+) -> "AlphaSweepReport":
+    """Map the goodput/$ ↔ starvation Pareto frontier for decoupled hybrid [run 2026-06-21-m].
+
+    Profiles the decoupled hybrid SRPT discipline across multiple aging_alpha values
+    on the Azure LLM 2024 trace to identify the Pareto-optimal operating point.
+
+    The decoupled hybrid uses pure SRPT for preemption (unchanged across all alpha)
+    and an aging dispatch key remaining_s/(1+alpha·wait_s) for queue selection.
+    Only the dispatch aggressiveness changes with alpha:
+      - α=0.001: flip point ~32,000s — near-SRPT goodput, minimal starvation protection
+      - α=0.005: flip point ~6,447s — between SRPT and α=0.01
+      - α=0.01:  flip point ~3,233s — measured +184.5% goodput/$ vs FIFO [run -l]
+      - α=0.05:  flip point ~647s   — Aging-SRTF-like behaviour at dispatch
+
+    Research basis:
+      - arXiv:2604.00499 (TIE scheduling): for heavy-tailed LLM output lengths,
+        risk-adjusted ordering keys outperform point estimates. The alpha parameter
+        is the dispatch-side analogue of TIE's tail-inflation factor.
+      - arXiv:2508.01002 (SLAI): throughput-optimal scheduling + starvation control
+        requires separate mechanisms for different scheduling decisions.
+      - arXiv:2603.07917 (SageSched): +28.7% efficiency from uncertainty-aware
+        scheduling — validates prediction-driven ordering across disciplines.
+
+    Args:
+        alphas: Tuple of aging_alpha values to sweep.
+        servers: Replica pool size (M/G/c). Identical across all disciplines.
+        target_rho: Target cluster utilization (arrival time-warp).
+        job_limit: Optional cap on the number of real requests used.
+        sla_s: E2E response-time SLA budget (seconds).
+        azure_fixture: Path to the Azure LLM 2024 CSV fixture.
+
+    Returns:
+        ``AlphaSweepReport`` with per-alpha KPIs, FIFO/SRPT anchors, and
+        Pareto-optimal alpha identification.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_alpha_sweep_on_trace(raw, "azure_llm_2024", servers, target_rho, alphas, sla_s)
+
+
+def run_burstgpt_alpha_sweep(
+    alphas: tuple = ALPHA_SWEEP_DEFAULT,
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    burstgpt_fixture: str = DEFAULT_BURSTGPT_FIXTURE,
+) -> "AlphaSweepReport":
+    """Cross-validate decoupled hybrid alpha sweep on BurstGPT [run 2026-06-21-m].
+
+    Same sweep as ``run_decoupled_hybrid_alpha_sweep`` but on the BurstGPT trace
+    (heavier output-token distribution, avg ~340 tokens vs Azure 2024's ~104 tokens).
+
+    Args:
+        alphas: Tuple of aging_alpha values to sweep.
+        servers: Replica pool size.
+        target_rho: Target cluster utilization.
+        job_limit: Optional cap on requests.
+        sla_s: SLA budget (default 30s for BurstGPT).
+        burstgpt_fixture: BurstGPT CSV path.
+
+    Returns:
+        ``AlphaSweepReport`` with per-alpha KPIs on BurstGPT.
+    """
+    raw = load_burstgpt_serving_requests(burstgpt_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_alpha_sweep_on_trace(raw, "burstgpt", servers, target_rho, alphas, sla_s)
