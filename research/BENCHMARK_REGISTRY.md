@@ -180,6 +180,27 @@
 
 ---
 
+## 5c. Preemption Overhead Sensitivity Analysis (run 2026-06-21-o)
+
+Overhead sweep: `run_preemption_overhead_sensitivity_backtest()` + `run_burstgpt_preemption_overhead_backtest()`.
+Addresses the largest documented honesty gap in all prior serving backtests (runs g–n):
+zero recomputation overhead per preemption event.
+
+| overhead_s | SRPT gp/$ | Decoupled gp/$ | SRPT vs FIFO | Dec vs FIFO |
+|---:|---:|---:|---:|---:|
+| 0.00 | 56,311 | 49,877 | +322.2% | +274.0% |
+| 0.15 | 54,291 | 47,960 | +307.1% | +259.6% |
+| 0.30 | 53,260 | 47,192 | +299.4% | +253.9% |
+| 0.50 | 52,395 | 46,804 | +292.9% | +251.0% |
+| 1.00 | 51,694 | 48,085 | +287.6% | +260.6% |
+
+FIFO baseline: 13,336 gp/$ (unchanged by overhead — non-preemptive).
+Decoupled retention at 0.30s: **92.65%**. SRPT retention at 0.30s: **92.9%**.
+Breakeven overhead: not reached within 1.0s sweep range.
+Physical basis: FastSwitch (arXiv:2411.18424), arXiv:2411.07447, arXiv:2603.16054.
+70 tests passing. Result: honesty gap CLOSED. Preemption overhead discount = 7–7.3% at
+realistic 0.30s/event — within the 5–15% estimate from GAP_ANALYSIS Q10 #2.
+
 ## 5b. Module-Integration Validation (run 2026-06-20-h)
 
 Public-replay economic validation of the three shadow research modules. Runners:

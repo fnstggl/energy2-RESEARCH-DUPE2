@@ -80,6 +80,20 @@ a sharp transition between α=0.005 (short_p90=2.06s) and α=0.01 (short_p90=14.
 arXiv:2604.00499 (TIE scheduling), arXiv:2508.01002 (SLAI), arXiv:2603.07917 (SageSched).
 40 new tests. See `docs/ALPHA_SWEEP_BACKTEST_RESULTS.md`.
 
+**Preemption Overhead Sensitivity Analysis [run 2026-06-21-o]:** Closes the largest
+documented honesty gap from all prior serving backtests (runs g–n): zero recomputation
+overhead per preemption event was assumed, estimated to cause 5–15% gain overstatement.
+This run sweeps `preemption_overhead_s` ∈ {0.0, 0.15, 0.30, 0.50, 1.00}s and measures
+SLA-safe goodput/$ degradation on Azure LLM 2024 (5,880 requests, ρ=0.85). **Key finding:
+the gain is robust.** At 0.30s overhead (2× TTFT_BASE_S, near-worst-case recomputation):
+SRPT retains **92.9%** (+299.4% vs FIFO vs +322.2% at zero overhead); Decoupled Hybrid
+α=0.001 retains **92.65%** (+253.9% vs FIFO vs +274.0% at zero overhead). Neither
+discipline drops below FIFO within the full 1.0s sweep range (breakeven not reached).
+Preemption overhead model backward-compatible (overhead_s=0.0 default preserves all prior
+results). 70 tests passing. Physical basis: FastSwitch (arXiv:2411.18424, NeurIPS 2024);
+arXiv:2411.07447 (recomputation < swapping for seqs < 4,000 tokens); arXiv:2603.16054
+(M/G/c fleet simulation). See `docs/PREEMPTION_OVERHEAD_BACKTEST_RESULTS.md`.
+
 **SLA-Aware Baseline + Noisy Prior Robustness [run 2026-06-21-n]:** Three improvements
 from the top-ranked roadmap opportunities. (1) **`DECOUPLED_HYBRID_ALPHA_DEFAULT` updated
 0.01 → 0.001**: the Pareto-optimal alpha from run -m is now the live default — benchmark
