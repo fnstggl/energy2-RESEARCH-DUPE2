@@ -8,6 +8,121 @@
 
 ---
 
+## Run 2026-06-21-s — BurstGPT HF Preemption Overhead Cross-Validation (Infrastructure Improvement)
+
+### Q1. What currently limits Aurelius most?
+
+**The serving runtime still uses FIFO.** All six cross-trace validation gates are now
+CLOSED on both public LLM traces (Azure LLM 2024 + BurstGPT HF):
+- Noisy prior robustness: 100.0% retention on Azure [run -n] AND BurstGPT [run -r]
+- Preemption overhead: ≥92.65% retention on Azure [run -o] AND 95.25% on BurstGPT [run -s]
+- Cross-trace SRTF: +492.7% vs FIFO (decoupled) on BurstGPT [run -p]
+- Conformal α: +644.4% vs FIFO on BurstGPT [run -r] (SRPT ceiling, cross-trace)
+- SLA-aware baseline: measured on Azure (+65.9% over SLA-aware) and BurstGPT (+90.8%)
+- Alpha sweep: Pareto-optimal α=0.001 confirmed on Azure [run -m], BurstGPT [run -p]
+
+There are no remaining validation gaps. The only blocker is runtime integration.
+
+### Q2. What theoretically offers the largest gain?
+
+**Wiring the conformal discipline into the serving runtime with live predictions.**
+All validation gates passed. Expected: +322–644% vs FIFO depending on trace; +87–140%
+vs SLA-aware. Compound with economic scheduling could push toward the +300% North Star.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live prior** — all backtests still use oracle prior.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving queue uses FIFO** — conformal: +322.24% (Azure) / +644.4% (BurstGPT). Not wired.
+2. **North Star gap (vs SLA-aware)** — decoupled vs SLA-aware: +65.9% (Azure) / +90.8% (BurstGPT).
+   Target: +300%.
+
+### Q5. Which workloads benefit least?
+
+**Batch workloads under pure energy-price constraint.** BurstGPT and Azure LLM 2024 both
+show massive SRTF gains. The CA leaderboard shows more modest gains (+1.77% BurstGPT,
++25.75% Azure) because the provisioning model doesn't include queue discipline ordering.
+
+### Q6. Which research direction appears strongest?
+
+**Wire conformal discipline into serving runtime.** All validation gates closed [runs -n through -s].
+Compound economic + queue scheduling [rank #2] is next after integration.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Wire the conformal discipline into the serving runtime. Even at 30%-CV noise:
++267-492% vs FIFO. The gap vs SLA-aware is +65.9–90.8%.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Same as Q7. Decoupled hybrid at +90.8% over SLA-aware on BurstGPT.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
++300% vs FIFO: **ACHIEVED** on both traces (conformal: +322.24% Azure, +644.4% BurstGPT).
++300% vs SLA-aware (North Star): not yet achieved.
+- BurstGPT: SLA-aware = +210.6% vs FIFO; conformal = +644.4% → conformal = +139.6% vs SLA-aware
+- Azure: SLA-aware = +125.4% vs FIFO; conformal = +322.24% → conformal = +87% vs SLA-aware
+- To reach +300% vs SLA-aware: requires compounding economic scheduling + serving queue.
+  Economic scheduling can add ~25% (Azure LLM 2024 CA result) on top of serving queue gains.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Oracle prior as primary benchmark.** Validated: 100% retention under 30%-CV noise
+   (both traces). Conformal adapts α from real prediction residuals.
+2. **Overhead model additivity.** NOW CLOSED [run -s]: BurstGPT 95.25% retention at
+   0.30s/event. Higher than Azure (92.65%) due to longer service times.
+3. **SLA=30s for BurstGPT.** Under tighter SLA (10s), BurstGPT gains may differ.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Oracle prior.** Both public traces still use perfect token-length prediction.
+   Robustness validated (100% retention under 30%-CV noise).
+2. **North Star gap.** Conformal vs SLA-aware: +87% (Azure) / +139.6% (BurstGPT).
+   Target +300% requires runtime integration + economic scheduling compound.
+3. **Only two public LLM traces.** ShareGPT would add a third cross-validation.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT** — output token cross-validation, third public LLM trace.
+2. **Mooncake FAST25 Traces** (Apache-2.0) — KV prefix reuse signal.
+3. **Vidur Profiling CSVs** — measured kernel latency for service time calibration.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Wire conformal discipline into serving runtime with live OutputLengthForecastBundle.p50.
+2. Measure compound gain: economic scheduling × SRTF serving queue on canonical backtest.
+
+**Short-term (2–3 runs):**
+3. ShareGPT as third public LLM trace for broader cross-trace validation.
+4. Compound economic + queue scheduling in canonical backtest.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -s
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Wire conformal discipline into serving runtime with live predictions | Very High | Medium | All 6 gates CLOSED [runs -n through -s]; integration pending |
+| 2 | Compound economic + queue scheduling in canonical backtest | Very High | High | Requires serving runtime integration |
+| 3 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 4 | Wire OutputLengthForecastBundle.p50 as live prior | High | Low | Infrastructure built (shadow) |
+| 5 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
+| 6 | GPU routing on LLM trace (TTFT binding) | Medium | Low | benchmarked on energy trace [run -f] |
+
+**Closed opportunities:**
+- Preemption overhead on BurstGPT: **CLOSED** [run -s] — 95.25% retention at 0.30s (more robust than Azure)
+- BurstGPT noisy prior: **CLOSED** [run -r] — 100.0% retention
+- BurstGPT SLA-aware baseline: **CLOSED** [run -r] — +210.6% vs FIFO
+- BurstGPT conformal: **CLOSED** [run -r] — +644.4% vs FIFO
+
+---
+
 ## Run 2026-06-21-r — BurstGPT HF Extended Validation (Frontier Improvement)
 
 ### Q1. What currently limits Aurelius most?

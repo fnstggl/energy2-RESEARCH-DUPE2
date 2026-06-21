@@ -37,6 +37,22 @@ tokens) amplifies every discipline vs Azure (p99≈479 tokens). 56 new tests. Re
 arXiv:2604.07931 (ProD, Robust Length Prediction), arXiv:2603.11273 (Duration Aware
 Scheduling), arXiv:2509.23384 (NexusSched). See `docs/BURSTGPT_HF_EXTENDED_BACKTEST_RESULTS.md`.
 
+**BurstGPT HF Preemption Overhead Cross-Validation [run 2026-06-21-s]:** Closes
+the last cross-validation gap: preemption overhead sensitivity was validated on Azure
+LLM 2024 [run -o] but not BurstGPT HF. This run confirms **BurstGPT is more robust
+to preemption overhead than Azure**. SRPT retention @0.30s: **94.58%** (vs 92.9% on
+Azure, +1.7pp). Decoupled retention @0.30s: **95.25%** (vs 92.65%, +2.6pp). Breakeven
+never reached within the full 1.0s sweep (same as Azure). At 1.0s overhead: SRPT
++565.62% vs FIFO, Decoupled +435.21% vs FIFO. Physical explanation confirmed: BurstGPT's
+longer service times (p50≈4.87s vs Azure p50≈1.95s) make 0.30s overhead a 6.2% relative
+penalty vs 15.4% on Azure — a 2.5× smaller fraction. **All six cross-trace validation
+gates now closed on both public LLM traces (Azure LLM 2024 + BurstGPT HF):**
+noisy prior (100% both), overhead (≥92.65% both), cross-trace SRTF, alpha sweep,
+conformal α, SLA-aware baseline. 15 new tests. Research basis: FastSwitch
+(arXiv:2411.18424, NeurIPS 2024), arXiv:2411.07447 (recomputation < swapping for
+seqs < 4k tokens), arXiv:1805.07686 (SRPT multiserver, heavy-tail robustness).
+See `docs/BURSTGPT_HF_OVERHEAD_BACKTEST_RESULTS.md`.
+
 **Conformal Adaptive α [run 2026-06-21-q]:** `ConformalAlphaCalibrator` adapts
 the decoupled-hybrid dispatch α from empirical p90 prediction errors. With oracle
 tokens: measured p90_error → 0 → α → 0 → dispatch = pure SRPT → **+322.24% SLA-safe
@@ -172,6 +188,17 @@ See `docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md` for full table.
 **New frontier [run -r]: Conformal adaptive α achieves SRPT ceiling (+644.4%) on BurstGPT HF — cross-trace validated.**
 Previous frontier [run -q]: Conformal +322.24% on Azure LLM 2024.
 Previous frontier [run -m]: Fixed α=0.001 at +274.0%. Gap closed: +48.24pp.
+
+**All six cross-trace validation gates now CLOSED [run -s] on both Azure LLM 2024 and BurstGPT HF:**
+preemption overhead @0.30s — BurstGPT **95.25% retention** (vs Azure 92.65%, more robust due to longer service times).
+
+**Overhead robustness summary [runs -o and -s]:**
+
+| overhead_s | Azure SRPT @0.30s | BurstGPT SRPT @0.30s |
+|---:|---:|---:|
+| 0.30s retention | 92.9% | **94.58%** |
+| Decoupled retention | 92.65% | **95.25%** |
+| Breakeven | >1.0s | >1.0s |
 
 Dynamic Frontier Estimator: **73.2%** oracle-alpha capture on Azure 2024.
 Calibration aspirational target (95%) **NOT** reached (final 91.07%).
@@ -531,23 +558,89 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 6. Highest Expected Value Opportunities (Ranked)
 
+> Updated after run 2026-06-21-s. All six cross-trace validation gates now CLOSED.
+
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | **Wire decoupled hybrid (α=0.001) into serving runtime** | **Very High** (+274% Azure, +493% BurstGPT vs FIFO) | **Medium** | **All gates PASSED: noisy [run -n] + overhead [run -o] + cross-trace [run -p]** | Connect to serving path driven by OutputLengthForecastBundle.p50 |
-| 2 | BurstGPT noisy prior robustness (30%-CV) | High (confirms generalization) | Low | Not started | Run run_burstgpt_decoupled_hybrid_backtest with lognormal noise injection |
-| 3 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High (replaces oracle prior) | Low | Infrastructure built (shadow) | Replace perfect-prior in decoupled hybrid with OutputLengthForecastBundle.p50 |
-| 4 | Compare vs SLA-aware baseline (not FIFO) | Very High (closes North Star gap) | Medium | Not Started | Re-run serving backtest with sla_aware comparison discipline on BurstGPT |
-| 5 | Conformal interval adaptive α tuning (arXiv:2508.14544) | Medium (closes ~48pp to SRPT) | Medium | Not Started | Predict token-length confidence interval; map to α for dispatch key |
-| 6 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 7 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 8 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 9 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 10 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 11 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+| 1 | **Wire decoupled hybrid (α=0.001) into serving runtime** | **Very High** (+274% Azure, +493% BurstGPT vs FIFO) | **Medium** | **All 6 gates CLOSED: noisy [run -n,-r] + overhead [run -o,-s] + cross-trace [run -p,-r] + SLA-aware [run -n,-r] + conformal [run -q,-r]** | Connect to serving path driven by OutputLengthForecastBundle.p50 |
+| 2 | Compound economic + queue scheduling in canonical backtest | Very High (compounding E + Q gains) | High | Not Started | Wire conformal discipline into trace replay; measure vs economic-only |
+| 3 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High (replaces oracle prior) | Low | Infrastructure built (shadow) | Replace oracle prior in decoupled hybrid with OutputLengthForecastBundle.p50 |
+| 4 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
+| 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 8 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 9 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 10 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+
+**Removed from table (now closed):**
+- Preemption overhead on BurstGPT — **CLOSED** [run -s]: 95.25% retention at 0.30s
+- BurstGPT noisy prior robustness — **CLOSED** [run -r]: 100.0% retention
+- BurstGPT SLA-aware baseline — **CLOSED** [run -r]: +210.6% vs FIFO
+- BurstGPT conformal alpha — **CLOSED** [run -r]: +644.4% vs FIFO
 
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-21-s — BURSTGPT HF PREEMPTION OVERHEAD CROSS-VALIDATION (INFRASTRUCTURE IMPROVEMENT)
+
+**Goal:** Close the last cross-validation gap: preemption overhead sensitivity was
+validated on Azure LLM 2024 [run -o] but not BurstGPT HF. Verify whether BurstGPT's
+heavier output-token distribution makes it more or less robust to per-event overhead.
+
+**Bottleneck addressed:** GAP_ANALYSIS Q10 flagged "Overhead model additivity validated
+on Azure [run -o] but not on BurstGPT" as an assumption that might be wrong. This run
+closes that gap.
+
+**Implementation:**
+- Added `run_burstgpt_hf_preemption_overhead_backtest()` to `srtf_serving_backtest.py`
+  (reuses `_run_preemption_overhead_on_trace` helper; loads HF JSONL via
+  `load_burstgpt_serving_requests_jsonl`; `job_limit=5880` default for Azure comparability)
+- Added 15 new tests in `tests/test_preemption_overhead_backtest.py` (Class 11)
+- All 85 tests passing
+
+**Benchmark results (public trace: BurstGPT HF, 5,880 requests, SLA=30s, ρ=0.85):**
+
+| overhead_s | SRPT gp/$ | Decoupled gp/$ | FIFO gp/$ | SRPT vs FIFO | Dec vs FIFO |
+|---:|---:|---:|---:|---:|---:|
+| 0.00 | 48,598.82 | 38,695.42 | 6,528.76 | +644.38% | +492.69% |
+| 0.15 | 47,575.20 | 38,315.67 | 6,528.76 | +628.70% | +486.88% |
+| **0.30** | **46,319.85** | **37,169.09** | **6,528.76** | **+609.47%** | **+469.31%** |
+| 0.50 | 44,894.71 | 36,229.99 | 6,528.76 | +587.65% | +454.93% |
+| 1.00 | 43,456.53 | 34,942.30 | 6,528.76 | +565.62% | +435.21% |
+
+**Retention at 0.30s/event (canonical measurement):**
+- SRPT: **94.58%** (vs 92.9% on Azure — +1.7pp MORE robust)
+- Decoupled: **95.25%** (vs 92.65% on Azure — +2.6pp MORE robust)
+- Breakeven: **None reached** within 1.0s sweep (same as Azure)
+
+**Physical explanation:** BurstGPT p50 service ≈4.87s vs Azure ≈1.95s. At 0.30s overhead:
+BurstGPT penalty = 0.30/4.87 = 6.2% vs Azure 0.30/1.95 = 15.4%. The same overhead
+is a 2.5× smaller relative penalty on BurstGPT.
+
+**Before vs After (vs Azure [run -o]):**
+
+| KPI | Azure LLM 2024 [run -o] | BurstGPT HF [run -s] |
+|---|---:|---:|
+| SRPT @0.30s overhead vs FIFO | +299.4% | **+609.47%** |
+| Decoupled @0.30s overhead vs FIFO | +253.9% | **+469.31%** |
+| SRPT retention @0.30s | 92.9% | **94.58%** |
+| Decoupled retention @0.30s | 92.65% | **95.25%** |
+| SRPT breakeven | >1.0s | **>1.0s** |
+| Decoupled breakeven | >1.0s | **>1.0s** |
+
+**Research papers reviewed:**
+1. FastSwitch (arXiv:2411.18424, NeurIPS 2024) — 1.4–11.2× TTFT context-switch overhead
+2. arXiv:2411.07447 — recomputation < swapping for seqs < 4,000 tokens; BurstGPT p99=934 ✓
+3. SRPT multiserver (arXiv:1805.07686) — heavier tails → more robust to overhead
+
+**Verdict:** INFRASTRUCTURE IMPROVEMENT — Closes the last cross-validation gap. BurstGPT HF
+is confirmed MORE robust to preemption overhead than Azure LLM 2024 (95.25% vs 92.65%
+decoupled retention at 0.30s). All six cross-trace validation gates now closed on both
+public LLM traces. Run category: Infrastructure Improvement (validation completeness).
+
+---
 
 ### Run 2026-06-21-p — BURSTGPT HF FULL-SCALE SRTF CROSS-VALIDATION (FRONTIER IMPROVEMENT)
 

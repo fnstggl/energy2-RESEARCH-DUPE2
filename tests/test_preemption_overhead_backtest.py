@@ -54,6 +54,7 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     DECOUPLED_HYBRID_ALPHA_DEFAULT,
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
+    DEFAULT_BURSTGPT_HF_JSONL,
     DEFAULT_BURSTGPT_SLA_S,
     DEFAULT_SLA_S,
     OVERHEAD_SWEEP_DEFAULT_S,
@@ -68,6 +69,7 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     calibrate_time_warp,
     load_burstgpt_serving_requests,
     load_serving_requests,
+    run_burstgpt_hf_preemption_overhead_backtest,
     run_burstgpt_preemption_overhead_backtest,
     run_preemption_overhead_sensitivity_backtest,
     simulate_queue,
@@ -75,6 +77,7 @@ from aurelius.benchmarks.srtf_serving_backtest import (
 
 _AZURE_FIXTURE_AVAILABLE = os.path.exists(DEFAULT_AZURE_FIXTURE)
 _BURSTGPT_FIXTURE_AVAILABLE = os.path.exists(DEFAULT_BURSTGPT_FIXTURE)
+_BURSTGPT_HF_AVAILABLE = os.path.exists(DEFAULT_BURSTGPT_HF_JSONL)
 
 
 # ---------------------------------------------------------------------------
@@ -670,3 +673,137 @@ class TestBurstGPTPreemptionOverheadBacktest:
             overhead_values_s=(0.0,),
         )
         assert r.sla_s == DEFAULT_BURSTGPT_SLA_S
+
+
+# ---------------------------------------------------------------------------
+# Class 11: BurstGPT HF full-scale preemption overhead [run 2026-06-21-s]
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not _BURSTGPT_HF_AVAILABLE, reason="BurstGPT HF JSONL not available")
+class TestBurstGPTHFPreemptionOverheadBacktest:
+    """Cross-validate preemption overhead robustness on BurstGPT HF full-scale.
+
+    Mirrors TestBurstGPTPreemptionOverheadBacktest but uses the HF JSONL
+    (59,999 records, job_limit=5880 for Azure comparability) instead of the
+    51-row fixture.  At 5,880 records there is sufficient queue depth to observe
+    the full scheduling signal, making the overhead sweep meaningful.
+
+    BurstGPT's heavier distribution (p99≈934 vs Azure p99≈479 tokens) means:
+      - Each preemption overhead_s is a smaller fraction of longer service times
+      - Expected retention at 0.30s overhead: ≥ Azure's 92.65% (more robust)
+    """
+
+    def test_run_returns_report(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30),
+            job_limit=300,
+        )
+        assert isinstance(r, PreemptionOverheadReport)
+
+    def test_trace_name_burstgpt_hf(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30),
+            job_limit=300,
+        )
+        assert r.trace == "burstgpt_hf"
+
+    def test_srpt_goodput_positive_at_zero_overhead(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30),
+            job_limit=300,
+        )
+        assert r.entries[0].srpt_goodput_per_dollar > 0
+
+    def test_decoupled_goodput_positive_at_zero_overhead(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30),
+            job_limit=300,
+        )
+        assert r.entries[0].decoupled_goodput_per_dollar > 0
+
+    def test_fifo_goodput_positive(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0,),
+            job_limit=300,
+        )
+        assert r.fifo_goodput > 0
+
+    def test_sla_s_is_burstgpt_default(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0,),
+            job_limit=300,
+        )
+        assert r.sla_s == DEFAULT_BURSTGPT_SLA_S
+
+    def test_entries_length_matches_overhead_values(self):
+        oh = (0.0, 0.15, 0.30)
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=oh,
+            job_limit=300,
+        )
+        assert len(r.entries) == 3
+
+    def test_job_limit_respected(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0,),
+            job_limit=200,
+        )
+        assert r.total_requests == 200
+
+    def test_to_dict_has_required_keys(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30),
+            job_limit=300,
+        )
+        d = r.to_dict()
+        for k in ["trace", "total_requests", "servers", "sla_s",
+                  "srpt_retention_at_0_30s", "decoupled_retention_at_0_30s",
+                  "shadow_tag", "entries"]:
+            assert k in d, f"Missing key: {k}"
+
+    def test_srpt_goodput_non_increasing_with_overhead(self):
+        """Goodput/$ degrades monotonically as overhead increases."""
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.15, 0.30, 0.50, 1.0),
+            job_limit=500,
+        )
+        gps = [e.srpt_goodput_per_dollar for e in r.entries]
+        for i in range(1, len(gps)):
+            assert gps[i] <= gps[i - 1] + 0.5, f"Non-monotone at i={i}: {gps}"
+
+    def test_fifo_constant_across_overhead_entries(self):
+        """FIFO is non-preemptive — overhead has no effect on its goodput/$."""
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30, 1.0),
+            job_limit=400,
+        )
+        fifo_vals = [e.fifo_goodput_per_dollar for e in r.entries]
+        for v in fifo_vals:
+            assert abs(v - fifo_vals[0]) < 1e-6
+
+    def test_zero_overhead_srpt_matches_first_entry(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30),
+            job_limit=300,
+        )
+        assert abs(r.zero_overhead_srpt_goodput - r.entries[0].srpt_goodput_per_dollar) < 1e-6
+
+    def test_zero_overhead_decoupled_matches_first_entry(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0, 0.30),
+            job_limit=300,
+        )
+        assert abs(r.zero_overhead_decoupled_goodput - r.entries[0].decoupled_goodput_per_dollar) < 1e-6
+
+    def test_shadow_tag_present(self):
+        r = run_burstgpt_hf_preemption_overhead_backtest(
+            overhead_values_s=(0.0,),
+            job_limit=200,
+        )
+        assert r.to_dict()["shadow_tag"] == "shadow_only_simulator_result_not_production_savings"
+
+    def test_default_job_limit_is_5880(self):
+        """Default job_limit=5880 matches Azure LLM 2024 comparability scale."""
+        import inspect
+        sig = inspect.signature(run_burstgpt_hf_preemption_overhead_backtest)
+        assert sig.parameters["job_limit"].default == 5880
