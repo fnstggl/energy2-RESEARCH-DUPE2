@@ -3604,6 +3604,74 @@ def run_burstgpt_preemption_overhead_backtest(
     )
 
 
+def run_burstgpt_hf_preemption_overhead_backtest(
+    overhead_values_s: tuple = OVERHEAD_SWEEP_DEFAULT_S,
+    servers: int = 4,
+    target_rho: float = 0.85,
+    aging_alpha: float = DECOUPLED_HYBRID_ALPHA_DEFAULT,
+    job_limit: Optional[int] = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> "PreemptionOverheadReport":
+    """Preemption overhead sensitivity on BurstGPT HF full-scale [run 2026-06-21-s].
+
+    Cross-validates the preemption overhead sensitivity result from Azure LLM 2024
+    (run 2026-06-21-o) on the BurstGPT HF normalized sample (CC-BY-4.0).
+
+    BurstGPT has a *heavier* output-token distribution than Azure LLM 2024:
+      - output_tokens p50≈236 vs Azure p50≈90  (2.6× longer service)
+      - output_tokens p99≈934 vs Azure p99≈479  (1.9× longer tail)
+      - SLA budget = 30s (vs 10s for Azure), proportionally larger headroom
+
+    Why this matters: longer service times mean more tokens are decoded between
+    preemption events, so each overhead_s increment is a *smaller* fraction of
+    the total service time for any individual request.  The expected behavior:
+      - Higher absolute preemption count (more preemptions per longer request)
+      - But *higher* robustness to per-event overhead (overhead / service << Azure)
+      - Retention at 0.30s overhead expected ≥ Azure's 92.65%
+
+    Job limit defaults to 5,880 to match the Azure LLM 2024 comparability scale
+    used in runs -m through -r.  Use job_limit=None for the full 59,999-record run.
+
+    Physical calibration (identical to run -o):
+      - 0.00s: zero overhead (previous assumption in all runs g–n)
+      - 0.15s: TTFT_BASE_S = one re-prefill (minimum real recomputation cost)
+      - 0.30s: 2×TTFT_BASE_S (moderate; canonical measurement point)
+      - 0.50s: conservative worst-case for short-sequence recomputation
+      - 1.00s: upper bound (swap-based preemption for long sequences)
+
+    Research basis:
+      - FastSwitch (arXiv:2411.18424, NeurIPS 2024): 1.4–11.2× TTFT context-switch.
+      - arXiv:2411.07447: recomputation < swapping for sequences < 4,000 tokens.
+      - BurstGPT (arXiv:2401.17644): real LLM inference trace from production.
+      - SRPT multiserver (arXiv:1805.07686): overhead robustness scales with
+        service-time variance — heavier tails → more robust to per-event overhead.
+
+    Args:
+        overhead_values_s: Per-preemption overhead sweep (seconds).
+        servers: Replica pool size (M/G/c). Identical across disciplines.
+        target_rho: Target cluster utilization.
+        aging_alpha: Aging decay for decoupled hybrid (default Pareto-optimal 0.001).
+        job_limit: Cap on requests. Defaults to 5,880 (Azure comparability scale).
+                   Set to None for the full 59,999-record run.
+        sla_s: E2E response-time SLA budget (seconds). Default = 30s for BurstGPT.
+        jsonl_path: Path to BurstGPT HF normalized JSONL.
+
+    Returns:
+        ``PreemptionOverheadReport`` with per-overhead KPIs, breakeven analysis,
+        and retention metrics. trace = "burstgpt_hf".
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+    return _run_preemption_overhead_on_trace(
+        raw, "burstgpt_hf", servers, target_rho, aging_alpha, sla_s, overhead_values_s
+    )
+
+
 # ---------------------------------------------------------------------------
 # Full-scale BurstGPT cross-validation [run 2026-06-21-p]
 # ---------------------------------------------------------------------------
