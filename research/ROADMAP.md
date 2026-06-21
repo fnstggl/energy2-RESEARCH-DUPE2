@@ -37,6 +37,21 @@ tokens) amplifies every discipline vs Azure (p99≈479 tokens). 56 new tests. Re
 arXiv:2604.07931 (ProD, Robust Length Prediction), arXiv:2603.11273 (Duration Aware
 Scheduling), arXiv:2509.23384 (NexusSched). See `docs/BURSTGPT_HF_EXTENDED_BACKTEST_RESULTS.md`.
 
+**Admission Gate + SRPT Compound Under Overload [run 2026-06-21-t]:** Wires a
+queue-depth admission gate into the SRPT preemptive simulator and tests at ρ ∈ {0.85, 0.95, 1.05}
+on Azure LLM 2024 and BurstGPT HF. Key finding: **gate provides consistent goodput/$ improvement
+across ALL load levels**, even at stable load (ρ=0.85). Mechanism: pure SRPT starves long requests
+(p99=2,197–3,446s >> SLA); the gate drops these SLA-busted jobs early, concentrating service on
+requests that can still complete. Azure: **+3.74% → +4.38% → +7.28%** as ρ increases.
+BurstGPT: **+10.99% → +13.21% → +13.67%** (larger due to heavier tail). p99 improves from
+2,197–2,402s to 31–35s on Azure; from 2,760–3,446s to 244–251s on BurstGPT. Gate only fires
+when a request would WAIT (not preempt), preserving SRPT's preemption invariant. Closes ROADMAP
+rank #6. New code: `_simulate_srpt_with_queue_gate()`, `AdmissionGateEntry`, `AdmissionGateReport`,
+`run_admission_gate_overload_backtest()`, `run_burstgpt_admission_gate_overload_backtest()`.
+46 new tests. Research basis: arXiv:2604.11001 (Flow-Controlled Scheduling), arXiv:2510.15330
+(BeLLMan), arXiv:2605.16867 (GoodServe), arXiv:2604.06970 §5 (overload control).
+See `docs/ADMISSION_GATE_OVERLOAD_BACKTEST_RESULTS.md`.
+
 **BurstGPT HF Preemption Overhead Cross-Validation [run 2026-06-21-s]:** Closes
 the last cross-validation gap: preemption overhead sensitivity was validated on Azure
 LLM 2024 [run -o] but not BurstGPT HF. This run confirms **BurstGPT is more robust
@@ -558,22 +573,23 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 6. Highest Expected Value Opportunities (Ranked)
 
-> Updated after run 2026-06-21-s. All six cross-trace validation gates now CLOSED.
+> Updated after run 2026-06-21-t. Admission gate wired into simulator; rank #6 CLOSED.
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | **Wire decoupled hybrid (α=0.001) into serving runtime** | **Very High** (+274% Azure, +493% BurstGPT vs FIFO) | **Medium** | **All 6 gates CLOSED: noisy [run -n,-r] + overhead [run -o,-s] + cross-trace [run -p,-r] + SLA-aware [run -n,-r] + conformal [run -q,-r]** | Connect to serving path driven by OutputLengthForecastBundle.p50 |
+| 1 | **Wire decoupled hybrid (α=0.001) into serving runtime** | **Very High** (+274% Azure, +493% BurstGPT vs FIFO) | **Medium** | **All 6 gates CLOSED + admission gate wired [run -t]** | Connect to serving path driven by OutputLengthForecastBundle.p50 |
 | 2 | Compound economic + queue scheduling in canonical backtest | Very High (compounding E + Q gains) | High | Not Started | Wire conformal discipline into trace replay; measure vs economic-only |
 | 3 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High (replaces oracle prior) | Low | Infrastructure built (shadow) | Replace oracle prior in decoupled hybrid with OutputLengthForecastBundle.p50 |
 | 4 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
 | 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 6 | KV-pressure admission gate (wire WorkloadAdmissionGate) | Medium (richer signals vs depth gate) | Medium | Depth gate wired [run -t]; KV-signal gate is next step | Replace depth gate with `WorkloadAdmissionGate` (KV-cache util + queue-p99 signals) |
 | 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
 | 8 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
 | 9 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
 | 10 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
 **Removed from table (now closed):**
+- Admission gate simulation integration — **CLOSED** [run -t]: +3.74–+13.67% goodput/$ benefit
 - Preemption overhead on BurstGPT — **CLOSED** [run -s]: 95.25% retention at 0.30s
 - BurstGPT noisy prior robustness — **CLOSED** [run -r]: 100.0% retention
 - BurstGPT SLA-aware baseline — **CLOSED** [run -r]: +210.6% vs FIFO
@@ -582,6 +598,71 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-21-t — ADMISSION GATE + SRPT COMPOUND UNDER OVERLOAD (FRONTIER IMPROVEMENT)
+
+**Goal:** Wire a queue-depth admission gate into the SRPT preemptive simulator (closing
+ROADMAP rank #6: "Admission gate simulation integration"). Test at ρ ∈ {0.85, 0.95, 1.05}
+on Azure LLM 2024 and BurstGPT HF. Measure real KPI impact of compound strategy
+(SRPT + gate) vs. SRPT alone.
+
+**Bottleneck addressed:** The `WorkloadAdmissionGate` in `aurelius/frontier/admission.py`
+was built (38 tests) but unconnected to any simulator. Queue-depth-based admission control
+is a tractable proxy for KV-cache pressure gating that requires no additional telemetry.
+
+**Research papers discovered this run:**
+1. **BeLLMan** (arXiv:2510.15330, Oct 2025) — NEW: demand-side congestion control for
+   LLM serving; re-injection (deferral) vs immediate drop. 8× E2E latency, 25% energy,
+   +19% requests at peak.
+2. **GoodServe** (arXiv:2605.16867, May 2026) — NEW: agentic LLM serving with SLO-
+   violation risk monitoring + runtime migrations. +27.4% goodput.
+3. **"Scheduling the Unschedulable" §5** (arXiv:2604.06970) — PREVIOUSLY CITED for
+   ordering only; the overload control component (admit/defer/reject) now exploited.
+
+**Implementation:**
+- `_simulate_srpt_with_queue_gate()` in `srtf_serving_backtest.py` — SRPT preemptive
+  loop with queue-depth circuit breaker. Gate fires when `len(waiting) >= max_queue_depth`
+  AND arriving request would WAIT (not preempt). Deferred requests re-inject at t+defer_s;
+  if re-injection would miss SLA → dropped.
+- `AdmissionGateEntry` / `AdmissionGateReport` frozen dataclasses with `to_dict()`.
+- `run_admission_gate_overload_backtest()` — Azure LLM 2024 (5,880 reqs, SLA=10s)
+- `run_burstgpt_admission_gate_overload_backtest()` — BurstGPT HF (5,880 reqs, SLA=30s)
+- 46 new tests in `tests/test_admission_gate_overload_backtest.py` — all passing
+
+**Benchmark results — Azure LLM 2024 (SLA=10s, servers=4, depth=8, defer=1.0s):**
+
+| ρ | SRPT gp/$ | SRPT+Gate gp/$ | gate benefit | drop% | SRPT p99 | Gate p99 |
+|---|---:|---:|---:|---:|---:|---:|
+| 0.85 | 56,311 | 58,418 | **+3.74%** | 9.0% | 2,197s | 33s |
+| 0.95 | 51,725 | 53,990 | **+4.38%** | 12.2% | 2,338s | 35s |
+| 1.05 | 47,717 | 51,188 | **+7.28%** | 15.3% | 2,402s | 31s |
+
+**Benchmark results — BurstGPT HF (SLA=30s, 5,880 reqs, servers=4, depth=8, defer=1.0s):**
+
+| ρ | SRPT gp/$ | SRPT+Gate gp/$ | gate benefit | drop% | SRPT p99 | Gate p99 |
+|---|---:|---:|---:|---:|---:|---:|
+| 0.85 | 48,599 | 53,939 | **+10.99%** | 12.9% | 2,760s | 244s |
+| 0.95 | 44,350 | 50,207 | **+13.21%** | 16.0% | 2,986s | 251s |
+| 1.05 | 40,834 | 46,416 | **+13.67%** | 18.8% | 3,446s | 247s |
+
+**Key findings:**
+1. Gate helps at ALL ρ levels, not just overload. Even at ρ=0.85, pure SRPT produces
+   p99=2,197s (Azure) / 2,760s (BurstGPT) >> SLA. The gate drops these doomed requests
+   early, concentrating service on SLA-achievable work.
+2. Gate benefit is monotonically increasing with ρ (larger benefit under higher load).
+3. BurstGPT benefit (+11–14%) > Azure benefit (+4–7%) because heavier tail → more SRPT
+   starvation → more SLA-busted requests to shed.
+4. p99 latency drops dramatically (2,197s → 33s on Azure) — collateral improvement from
+   queue depth bounding.
+5. `defer_fraction` counts events (can > 1.0 if requests deferred multiple times);
+   `drop_fraction` counts unique drops (9–19% of requests).
+
+**Result classification:** FRONTIER IMPROVEMENT — first real measurement of admission
+gate impact via public trace replay.
+
+See `docs/ADMISSION_GATE_OVERLOAD_BACKTEST_RESULTS.md`.
+
+---
 
 ### Run 2026-06-21-s — BURSTGPT HF PREEMPTION OVERHEAD CROSS-VALIDATION (INFRASTRUCTURE IMPROVEMENT)
 

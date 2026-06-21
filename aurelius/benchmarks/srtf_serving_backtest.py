@@ -5,8 +5,9 @@ SRTF-with-Aging anti-starvation guard [run 2026-06-20-i], Preemptive SRPT
 Decoupled Hybrid SRPT [run 2026-06-20-l], Alpha Sweep [run 2026-06-21-m],
 SLA-aware baseline + Noisy Prior Robustness [run 2026-06-21-n],
 Preemption Overhead Sensitivity [run 2026-06-21-o],
-BurstGPT HF Cross-Validation [run 2026-06-21-p], and
-Conformal Adaptive α [run 2026-06-21-q].
+BurstGPT HF Cross-Validation [run 2026-06-21-p],
+Conformal Adaptive α [run 2026-06-21-q], and
+Admission Gate + SRPT Compound Under Overload [run 2026-06-21-t].
 
 Why this module exists
 ----------------------
@@ -4187,4 +4188,496 @@ def run_burstgpt_hf_noisy_prior_backtest(
     return _run_noisy_prior_on_trace(
         raw, "burstgpt_hf_fullscale", servers, target_rho, aging_alpha,
         sla_s, forecast_noise_cv, seed
+    )
+
+
+# ---------------------------------------------------------------------------
+# Admission Gate + SRPT Compound Under Overload [run 2026-06-21-t]
+# ---------------------------------------------------------------------------
+# Research basis:
+#   - arXiv:2604.11001 (Flow-Controlled Scheduling for LLM Inference, Apr 2026):
+#     Deterministic flow-control via token-budget gating prevents KV-cache overflow
+#     and improves mean + tail latency without output-length prediction.
+#   - arXiv:2510.15330 (BeLLMan, Oct 2025): demand-side congestion control reduces
+#     E2E latency 8×, 25% energy reduction, 19% more requests served at peak.
+#   - arXiv:2605.16867 (GoodServe, May 2026): SLO-violation risk monitoring +
+#     runtime request migrations → +27.4% goodput under overload.
+#   - arXiv:2604.06970 (Scheduling the Unschedulable, Apr 2026): §5 overload control
+#     component (explicit admit/defer/reject) — previously only the ORDERING component
+#     (SRTF sort key) was exploited in Aurelius.
+#
+# The WorkloadAdmissionGate in aurelius/frontier/admission.py uses KV-cache
+# utilization and queue-p99 signals — a richer signal than queue depth alone.
+# This simulator uses queue depth as a tractable proxy that requires no
+# additional telemetry signal and is deterministically reproducible from the
+# public trace. The gate fires only when a request would join the WAITING queue
+# (not when it would preempt a running job), preserving the SRPT preemption
+# invariant while preventing queue backlog growth under overload.
+#
+# Motivation: at ρ ≤ 0.85 (normal load) the waiting queue rarely fills up, so
+# the gate has minimal impact. At ρ = 0.95 (near-overload) the queue grows and
+# gate-induced deferral/dropping of requests that cannot complete within SLA
+# reduces wasted goodput and improves mean response time. At ρ = 1.05 (overload)
+# the queue grows unboundedly without admission control — the gate prevents
+# long-tail degradation by shedding load early.
+# ---------------------------------------------------------------------------
+
+
+def _simulate_srpt_with_queue_gate(
+    requests: list[_Request],
+    servers: int,
+    max_queue_depth: int,
+    defer_s: float,
+    sla_s: float,
+    preemption_overhead_s: float = 0.0,
+) -> tuple[dict, dict, dict, dict]:
+    """Preemptive M/G/c SRPT with queue-depth admission gate.
+
+    Extension of ``_simulate_srpt_preemptive()`` with a queue-depth gate:
+    when all servers are busy and the waiting queue is at capacity
+    (``len(waiting) >= max_queue_depth``), an arriving request that would
+    otherwise join the queue is DEFERRED rather than added to the backlog.
+    It is re-injected as a new arrival at ``t + defer_s``.
+
+    If a deferred re-injection arrives at time ``t`` where
+    ``t + req.service_s > req.arrival_s + sla_s``, the request can never
+    complete within its SLA even if served immediately — it is DROPPED
+    (never added to ``response``).
+
+    The gate fires only when a request would wait (not when it would
+    preempt a running job), so SRPT's preemption invariant is preserved.
+
+    Research basis:
+    - Flow-Controlled Scheduling (arXiv:2604.11001): gating arrivals on
+      observed queue pressure prevents overflow and improves tail latency.
+    - BeLLMan (arXiv:2510.15330): demand-side congestion control; re-inject
+      (deferral) rather than immediate drop reduces starvation.
+
+    Args:
+        requests: List of warped ``_Request`` objects sorted by arrival.
+        servers:  Number of homogeneous replicas.
+        max_queue_depth: Maximum number of requests allowed in the waiting
+            queue at any instant. When reached, new arrivals are deferred.
+            Recommended: ``servers * 2`` (controls latency budget exposure).
+        defer_s:  Deferral re-injection delay in seconds.
+        sla_s:    E2E SLA budget; used to detect unrecoverable deferrals.
+        preemption_overhead_s: Re-prefill cost added to preempted remainder.
+
+    Returns:
+        (summary, response, wait_map, gate_stats) where gate_stats has
+        keys: ``defer_count``, ``drop_count``, ``total_arrivals``,
+        ``defer_fraction``, ``drop_fraction``.
+    """
+    n = len(requests)
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+    _npreempt = [0]
+
+    # Per-server state
+    s_req   = [None] * servers
+    s_start = [0.0]  * servers
+    s_rem0  = [0.0]  * servers
+    s_ver   = [0]    * servers
+
+    # Waiting heap: (remaining_s, stable_seq, _Request)
+    waiting = []
+    _wseq   = [0]
+
+    def _nseq() -> int:
+        _wseq[0] += 1
+        return _wseq[0]
+
+    # Event heap: (time, ev_type, seq, server_id, version, request)
+    # ev_type 0 = ARRIVAL, ev_type 1 = COMPLETION, ev_type 2 = DEFERRED_ARRIVAL
+    events = []
+    _eseq  = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _remaining(sid: int, t: float) -> float:
+        return s_rem0[sid] - (t - s_start[sid])
+
+    def _start(sid: int, req: _Request, rem: float, t: float) -> None:
+        s_req[sid]   = req
+        s_start[sid] = t
+        s_rem0[sid]  = rem
+        s_ver[sid]  += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + rem, 1, _en(), sid, v, req))
+
+    def _preempt(sid: int, t: float):
+        req = s_req[sid]
+        rem = max(0.0, _remaining(sid, t))
+        s_req[sid]  = None
+        s_ver[sid] += 1
+        return req, rem
+
+    response    = {}
+    defer_count = [0]
+    drop_count  = [0]
+
+    def _handle_arrival(req: _Request, t: float) -> None:
+        free = next((s for s in range(servers) if s_req[s] is None), None)
+        if free is not None:
+            _start(free, req, req.service_s, t)
+            return
+        # All servers busy — find the one with the most remaining work.
+        worst_sid, worst_rem = 0, -1.0
+        for s in range(servers):
+            r = _remaining(s, t)
+            if r > worst_rem:
+                worst_rem, worst_sid = r, s
+        if req.service_s < worst_rem:
+            # Arriving request is shorter → preempt (gate does not apply here).
+            preempted, prem = _preempt(worst_sid, t)
+            _start(worst_sid, req, req.service_s, t)
+            _npreempt[0] += 1
+            heapq.heappush(
+                waiting,
+                (prem + preemption_overhead_s, _nseq(), preempted),
+            )
+        else:
+            # Request would wait — apply queue-depth gate.
+            if len(waiting) >= max_queue_depth:
+                next_t = t + defer_s
+                if next_t + req.service_s > req.arrival_s + sla_s:
+                    # Request cannot complete within SLA even if served
+                    # immediately at next re-injection → drop.
+                    drop_count[0] += 1
+                else:
+                    defer_count[0] += 1
+                    heapq.heappush(events, (next_t, 2, _en(), -1, -1, req))
+            else:
+                heapq.heappush(waiting, (req.service_s, _nseq(), req))
+
+    while events:
+        ev  = heapq.heappop(events)
+        t   = ev[0]
+        ety = ev[1]
+
+        if ety == 0 or ety == 2:  # ARRIVAL or DEFERRED_ARRIVAL
+            _handle_arrival(ev[5], t)
+
+        else:  # COMPLETION (ety == 1)
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue   # stale event
+            response[req.idx] = t - req.arrival_s
+            s_req[sid]  = None
+            s_ver[sid] += 1
+            if waiting:
+                rem_s, _, nxt = heapq.heappop(waiting)
+                _start(sid, nxt, rem_s, t)
+
+    wait_map = {
+        r.idx: max(0.0, response[r.idx] - r.service_s)
+        for r in requests if r.idx in response
+    }
+    resp  = [response[r.idx] for r in requests if r.idx in response]
+    waits = [wait_map[r.idx] for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits, servers)
+    summary["preemption_count"] = _npreempt[0]
+    summary["defer_count"]      = defer_count[0]
+    summary["drop_count"]       = drop_count[0]
+
+    gate_stats = {
+        "defer_count":    defer_count[0],
+        "drop_count":     drop_count[0],
+        "total_arrivals": n,
+        "defer_fraction": defer_count[0] / max(n, 1),
+        "drop_fraction":  drop_count[0]  / max(n, 1),
+    }
+    return summary, response, wait_map, gate_stats
+
+
+# ---------------------------------------------------------------------------
+# Report dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AdmissionGateEntry:
+    """Results for one load level in the admission gate overload backtest.
+
+    Attributes:
+        rho: Target cluster utilization for this entry.
+        srpt_without_gate: SRPT summary dict (no gate).
+        srpt_with_gate: SRPT + queue gate summary dict.
+        gate_benefit_pct: % change in sla_safe_goodput/$ (with vs without gate).
+            Positive = gate helps; negative = gate hurts (unexpected at low load).
+        defer_fraction: Fraction of arrivals deferred at least once.
+        drop_fraction:  Fraction of arrivals dropped (past SLA deadline at defer).
+    """
+    rho: float
+    srpt_without_gate: dict
+    srpt_with_gate: dict
+    gate_benefit_pct: float
+    defer_fraction: float
+    drop_fraction: float
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "rho": self.rho,
+            "srpt_without_gate": _r(self.srpt_without_gate),
+            "srpt_with_gate": _r(self.srpt_with_gate),
+            "gate_benefit_pct": round(self.gate_benefit_pct, 2),
+            "defer_fraction": round(self.defer_fraction, 4),
+            "drop_fraction": round(self.drop_fraction, 4),
+        }
+
+
+@dataclass(frozen=True)
+class AdmissionGateReport:
+    """Multi-ρ admission gate overload backtest [run 2026-06-21-t].
+
+    Compares SRPT-without-gate vs SRPT-with-queue-gate at multiple load
+    levels (ρ ∈ {0.85, 0.95, 1.05}) on a public LLM serving trace.
+
+    The gate is a queue-depth circuit-breaker: when len(waiting) >= max_queue_depth,
+    an arriving request (that would otherwise wait) is deferred by defer_s seconds
+    and re-injected. If re-injection arrives past the SLA deadline, the request
+    is dropped rather than served to waste goodput on an inevitable SLA miss.
+
+    Key expected patterns:
+    - ρ=0.85 (normal): gate fires rarely (< 5% of requests); benefit ≈ 0%.
+    - ρ=0.95 (near-overload): gate fires for 10–30% of requests; benefit > 0%.
+    - ρ=1.05 (overload): gate fires heavily; significant sla_safe_goodput/$ gain.
+
+    Research basis:
+    - arXiv:2604.11001 (Flow-Controlled Scheduling for LLM Inference)
+    - arXiv:2510.15330 (BeLLMan, demand-side congestion control)
+    - arXiv:2605.16867 (GoodServe, SLO-violation risk monitoring)
+    - arXiv:2604.06970 (Scheduling the Unschedulable, §5 overload control)
+
+    Attributes:
+        trace_name: Identifier for the input trace.
+        servers: Number of homogeneous replicas (M/G/c pool size).
+        max_queue_depth: Queue depth threshold that triggers the gate.
+        defer_s: Re-injection delay in seconds.
+        sla_s: E2E SLA budget (seconds).
+        rho_list: Tuple of target utilization levels tested.
+        entries: Dict mapping rho → AdmissionGateEntry.
+    """
+    trace_name: str
+    servers: int
+    max_queue_depth: int
+    defer_s: float
+    sla_s: float
+    rho_list: tuple
+    entries: dict  # float rho → AdmissionGateEntry
+
+    def entry(self, rho: float) -> AdmissionGateEntry:
+        return self.entries[rho]
+
+    def benefit_at_rho(self, rho: float) -> float:
+        """Gate benefit (% goodput/$ change) at a given ρ."""
+        return self.entries[rho].gate_benefit_pct
+
+    def to_dict(self) -> dict:
+        return {
+            "trace_name": self.trace_name,
+            "servers": self.servers,
+            "max_queue_depth": self.max_queue_depth,
+            "defer_s": self.defer_s,
+            "sla_s": self.sla_s,
+            "rho_list": list(self.rho_list),
+            "entries": {str(rho): e.to_dict() for rho, e in self.entries.items()},
+        }
+
+
+# ---------------------------------------------------------------------------
+# Internal helper
+# ---------------------------------------------------------------------------
+
+def _run_admission_gate_on_trace(
+    raw: list[tuple[float, int]],
+    trace_name: str,
+    servers: int,
+    rho_list: list[float],
+    max_queue_depth: int,
+    defer_s: float,
+    sla_s: float,
+) -> AdmissionGateReport:
+    """Run SRPT with/without queue-gate on a trace at multiple ρ levels.
+
+    Oracle prior (predicted_tokens == actual_tokens) is used consistently
+    with all other backtests in this module.  Identical time-warp is applied
+    to both gated and ungated runs at each ρ level.
+    """
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    entries: dict = {}
+    for rho in rho_list:
+        warp = calibrate_time_warp(raw, servers=servers, target_rho=rho)
+        reqs = [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=int(tok),
+                predicted_tokens=float(tok),  # oracle prior
+                service_s=_service_time_s(int(tok)),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+        # SRPT without gate
+        srpt_sim, srpt_resp, _ = _simulate_srpt_preemptive(reqs, servers)
+        gp_srpt = _sla_safe_goodput_per_dollar(reqs, srpt_resp, sla_s, servers)
+        srpt_sim["sla_safe_goodput_per_dollar"] = gp_srpt
+
+        # SRPT with queue gate
+        gate_sim, gate_resp, _, gate_stats = _simulate_srpt_with_queue_gate(
+            reqs,
+            servers,
+            max_queue_depth=max_queue_depth,
+            defer_s=defer_s,
+            sla_s=sla_s,
+        )
+        gp_gate = _sla_safe_goodput_per_dollar(reqs, gate_resp, sla_s, servers)
+        gate_sim["sla_safe_goodput_per_dollar"] = gp_gate
+
+        entries[rho] = AdmissionGateEntry(
+            rho=rho,
+            srpt_without_gate=srpt_sim,
+            srpt_with_gate=gate_sim,
+            gate_benefit_pct=_delta(gp_srpt, gp_gate),
+            defer_fraction=gate_stats["defer_fraction"],
+            drop_fraction=gate_stats["drop_fraction"],
+        )
+
+    return AdmissionGateReport(
+        trace_name=trace_name,
+        servers=servers,
+        max_queue_depth=max_queue_depth,
+        defer_s=defer_s,
+        sla_s=sla_s,
+        rho_list=tuple(rho_list),
+        entries=entries,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public backtest functions
+# ---------------------------------------------------------------------------
+
+def run_admission_gate_overload_backtest(
+    servers: int = 4,
+    rho_list: Optional[list] = None,
+    max_queue_depth: Optional[int] = None,
+    defer_s: float = 1.0,
+    sla_s: float = DEFAULT_SLA_S,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    job_limit: Optional[int] = None,
+) -> AdmissionGateReport:
+    """Admission gate + SRPT overload backtest on Azure LLM 2024 [run 2026-06-21-t].
+
+    Wires a queue-depth admission gate into the SRPT preemptive simulator and
+    evaluates the compound strategy at three load levels: normal (ρ=0.85),
+    near-overload (ρ=0.95), and overload (ρ=1.05).
+
+    At stable load (ρ=0.85) the gate fires rarely and benefit is expected to
+    be near zero.  At ρ=0.95 the gate prevents queue bloat that would otherwise
+    push long-waiting requests past their SLA deadline; at ρ=1.05 (overload)
+    the gate becomes the primary SLA-safety mechanism and sla_safe_goodput/$
+    should be substantially higher with the gate than without.
+
+    Design invariants (consistent with all other backtests):
+    - Oracle prior: ``predicted_tokens == actual_tokens``.
+    - Identical time-warp applied to both gated and ungated runs at each ρ.
+    - Service physics: ``service_s = TTFT_BASE_S + actual_output_tokens × TPOT_S``.
+    - SLA-safe goodput/$ denominator: total GPU busy-time (same across disciplines).
+    - NOT production savings — simulator / public-trace directional result only.
+
+    Research basis:
+    - arXiv:2604.11001 (Flow-Controlled Scheduling for LLM Inference, Apr 2026)
+    - arXiv:2510.15330 (BeLLMan, demand-side congestion control, Oct 2025)
+    - arXiv:2604.06970 (Scheduling the Unschedulable, §5 overload control)
+
+    Args:
+        servers: Replica pool size (M/G/c). Gate threshold = servers * 2 by default.
+        rho_list: Target utilization levels to test. Default: [0.85, 0.95, 1.05].
+        max_queue_depth: Maximum waiting queue length before gate fires.
+            Default: servers * 2 (= 8 for 4 servers).
+        defer_s: Re-injection delay in seconds when gate fires. Default: 1.0s.
+        sla_s: E2E SLA budget for goodput counting. Default: 10.0s (Azure 2024).
+        azure_fixture: Path to Azure LLM 2024 CSV fixture.
+        job_limit: Optional cap on request count (None = use all 5,880).
+
+    Returns:
+        ``AdmissionGateReport`` with per-ρ SRPT vs. SRPT+gate KPIs and gate stats.
+    """
+    if rho_list is None:
+        rho_list = [0.85, 0.95, 1.05]
+    if max_queue_depth is None:
+        max_queue_depth = servers * 2
+
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+
+    return _run_admission_gate_on_trace(
+        raw, "azure_llm_2024", servers, rho_list, max_queue_depth, defer_s, sla_s
+    )
+
+
+def run_burstgpt_admission_gate_overload_backtest(
+    servers: int = 4,
+    rho_list: Optional[list] = None,
+    max_queue_depth: Optional[int] = None,
+    defer_s: float = 1.0,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    job_limit: Optional[int] = None,
+) -> AdmissionGateReport:
+    """Admission gate + SRPT overload cross-validation on BurstGPT HF [run 2026-06-21-t].
+
+    Cross-validates the admission gate compound strategy on the BurstGPT HF
+    trace (59,999 records, CC-BY-4.0) which has a heavier output-token
+    distribution than Azure LLM 2024 (p50≈236 vs ≈90 tokens, p99≈934 vs ≈479).
+
+    BurstGPT's heavier distribution means:
+    - Service times are longer (avg ~6.95s vs ~1.95s for Azure 2024).
+    - Queue backlog under overload has larger SLA impact per request.
+    - Gate benefit at ρ=0.95 and ρ=1.05 should be larger than on Azure 2024.
+
+    SLA budget is 30s (vs 10s for Azure 2024) to match BurstGPT's service scale.
+
+    Research basis:
+    - arXiv:2604.11001 (Flow-Controlled Scheduling for LLM Inference)
+    - arXiv:2605.16867 (GoodServe, agentic LLM serving with SLO monitoring)
+    - arXiv:2510.15330 (BeLLMan, demand-side congestion control)
+    - arXiv:2604.07931 (Robust Length Prediction, BurstGPT characterization)
+
+    Args:
+        servers: Replica pool size. Default 4 (same as Azure backtest for comparability).
+        rho_list: Target utilization levels. Default: [0.85, 0.95, 1.05].
+        max_queue_depth: Waiting queue capacity threshold. Default: servers * 2.
+        defer_s: Re-injection delay in seconds. Default: 1.0s.
+        sla_s: E2E SLA budget. Default: 30.0s (BurstGPT's service scale).
+        jsonl_path: Path to BurstGPT HF normalized JSONL.
+        job_limit: Optional cap on request count (None = use all 59,999).
+
+    Returns:
+        ``AdmissionGateReport`` with per-ρ KPIs on BurstGPT HF trace.
+    """
+    if rho_list is None:
+        rho_list = [0.85, 0.95, 1.05]
+    if max_queue_depth is None:
+        max_queue_depth = servers * 2
+
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+
+    return _run_admission_gate_on_trace(
+        raw, "burstgpt_hf", servers, rho_list, max_queue_depth, defer_s, sla_s
     )

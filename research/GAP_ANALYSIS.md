@@ -8,6 +8,128 @@
 
 ---
 
+## Run 2026-06-21-t — Admission Gate + SRPT Compound Under Overload (Frontier Improvement)
+
+### Q1. What currently limits Aurelius most?
+
+**The serving runtime still uses FIFO.** Admission gate + SRPT compound is now measured
+on two public traces at three load levels. The compound provides +3.74–+13.67% goodput/$
+over SRPT alone. But all SRTF gains remain simulator-only; production integration is the
+outstanding blocker.
+
+**New finding from this run:** Pure SRPT without admission control creates catastrophic
+p99 latency (2,197–3,446s) even at ρ=0.85. The queue-depth gate reduces p99 by 66–97×
+and improves goodput/$ by +3.74–13.67%. The "cut losses early" pattern is validated
+across both traces.
+
+### Q2. What theoretically offers the largest gain?
+
+**Wiring the conformal discipline into the serving runtime with live predictions.**
+With the admission gate now measured (+3.74–13.67%), the compound SRPT + gate + conformal
+ordering could compound gains: ordering (×4–7×) × gate (+4–14%) → compound > +300% vs FIFO.
+Economic scheduling could further compound toward the +300% vs SLA-aware North Star.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live prior** — all backtests still use oracle prior.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving queue uses FIFO** — conformal: +322.24% (Azure) / +644.4% (BurstGPT). Not wired.
+2. **Admission control uses basic depth gate** — `WorkloadAdmissionGate` (KV-cache util +
+   queue-p99 signals) is unconnected. May provide better precision than depth-only gate.
+3. **North Star gap (vs SLA-aware)** — decoupled vs SLA-aware: +65.9% (Azure) / +90.8% (BurstGPT).
+
+### Q5. Which workloads benefit least?
+
+**Batch workloads under pure energy-price constraint.** The CA leaderboard shows more modest
+gains (+1.77% BurstGPT, +25.75% Azure) because the provisioning model doesn't express queue
+discipline ordering. Admission gate benefit is serving-queue-specific.
+
+### Q6. Which research direction appears strongest?
+
+**Wire conformal discipline + admission gate into serving runtime.** All six cross-trace
+validation gates closed [runs -n through -s]; admission gate measured [run -t]. The compound
+economic + queue scheduling is next after integration.
+
+### Q7. What is the shortest path to another +10% gain?
+
+The admission gate alone provides +3.74–13.67% vs SRPT (not vs FIFO). Wiring conformal
+serving order into the runtime achieves +87–140% over SLA-aware. Even modest integration
+(e.g., SRPT sort key without full conformal) would deliver +65.9–90.8% over SLA-aware.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Decoupled hybrid at +90.8% over SLA-aware on BurstGPT. Compound with gate: conservative
+estimate ~+14% compound on top → total ~+90.8% × 1.14 ≈ +103% vs SLA-aware.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
++300% vs FIFO: **ACHIEVED** on both traces (conformal: +322.24% Azure, +644.4% BurstGPT).
++300% vs SLA-aware (North Star): not yet achieved.
+- BurstGPT: conformal = +139.6% vs SLA-aware; compound with gate: ~+158%
+- Azure: conformal = +87% vs SLA-aware; compound with gate: ~+93%
+- To reach +300% vs SLA-aware: requires compounding economic scheduling + serving queue.
+  Economic scheduling can add ~25% (Azure CA result) on top of serving queue gains.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Oracle prior as primary benchmark.** Validated: 100% retention under 30%-CV noise
+   (both traces). Conformal adapts α from real prediction residuals.
+2. **Overhead model additivity.** CLOSED [run -s]: BurstGPT 95.25% retention at 0.30s.
+3. **Queue depth as proxy for KV pressure.** The depth gate uses a simple threshold
+   (servers × 2 = 8). The `WorkloadAdmissionGate` uses richer KV-cache utilization +
+   queue-p99 signals — could provide better precision. Not yet compared directly.
+4. **SLA=30s for BurstGPT.** Under tighter SLA (10s), BurstGPT gains may differ.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Oracle prior.** Both public traces still use perfect token-length prediction.
+2. **North Star gap.** Conformal vs SLA-aware: +87% (Azure) / +139.6% (BurstGPT).
+3. **Only two public LLM traces.** ShareGPT would add a third cross-validation.
+4. **Admission gate: depth proxy only.** KV-cache-signal gate (WorkloadAdmissionGate)
+   not yet measured. Possible improvement opportunity.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT** — output token cross-validation, third public LLM trace.
+2. **Mooncake FAST25 Traces** (Apache-2.0) — KV prefix reuse signal.
+3. **Vidur Profiling CSVs** — measured kernel latency for service time calibration.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Wire conformal discipline into serving runtime with live OutputLengthForecastBundle.p50.
+2. OR: Compare KV-cache-signal `WorkloadAdmissionGate` vs depth gate in the simulator.
+
+**Short-term (2–3 runs):**
+3. ShareGPT as third public LLM trace.
+4. Compound economic + queue scheduling in canonical backtest.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -t
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Wire conformal discipline into serving runtime with live predictions | Very High | Medium | All 6 gates CLOSED; admission gate measured [run -t]; integration pending |
+| 2 | Compound economic + queue scheduling in canonical backtest | Very High | High | Requires serving runtime integration |
+| 3 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 4 | Wire OutputLengthForecastBundle.p50 as live prior | High | Low | Infrastructure built (shadow) |
+| 5 | KV-signal admission gate (WorkloadAdmissionGate) | Medium | Medium | Depth gate measured [run -t] +4–14%; KV-signal may outperform |
+| 6 | GPU routing on LLM trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+
+**Closed opportunities:**
+- Admission gate → cluster simulator: **CLOSED** [run -t] — +3.74–+13.67% benefit confirmed
+- Preemption overhead on BurstGPT: **CLOSED** [run -s] — 95.25% retention at 0.30s
+- BurstGPT noisy prior: **CLOSED** [run -r] — 100.0% retention
+- BurstGPT SLA-aware baseline: **CLOSED** [run -r] — +210.6% vs FIFO
+- BurstGPT conformal: **CLOSED** [run -r] — +644.4% vs FIFO
+
+---
+
 ## Run 2026-06-21-s — BurstGPT HF Preemption Overhead Cross-Validation (Infrastructure Improvement)
 
 ### Q1. What currently limits Aurelius most?
