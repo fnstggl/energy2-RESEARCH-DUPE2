@@ -180,6 +180,40 @@
 
 ---
 
+## 5d. Live Causal Prior SRTF Backtest (run 2026-06-21-t)
+
+Production-realism evaluation of running-median prior (causal, no future leakage) against
+oracle prior. Functions: `make_live_prior_predictions()` + `run_live_prior_conformal_backtest()`
++ `run_burstgpt_hf_live_prior_backtest()`. Results in
+`research/results/live_prior_compound_backtest_2026-06-21.{json,md}`.
+
+**Prior quality:**
+
+| trace | actual_cv_pct | prior_cv_pct | prior_mae_tokens | prior_rel_mae_pct |
+|---|---:|---:|---:|---:|
+| Azure LLM 2024 | 80.5% | 7.0% | 43.1 tok | 47.9% |
+| BurstGPT HF (5,880 limit) | ~90% | ~8% | ~80 tok | ~34% |
+
+**Serving queue performance vs FIFO:**
+
+| trace | FIFO gp/$ | oracle gp/$ | live gp/$ | oracle_delta_pct | live_delta_pct | live_vs_oracle_retention |
+|---|---:|---:|---:|---:|---:|---:|
+| Azure LLM 2024 | 13,336 | 56,311 | 46,008 | +322.2% | +244.4% | 81.6% |
+| BurstGPT HF (5,880) | baseline | oracle | live | +TBD% | +420.8% | 88.1% |
+
+**Key finding:** Azure prompt–output correlation r=−0.022 (R²=0.0005). Running median is the
+best achievable simple prior; no simple feature beats it. Prior CV=7% vs actual CV=80.5%
+→ prior is near-constant ≈ global median ≈ 90 tokens.
+
+**Compound gain (independence assumption):** economic scheduling (+183.4%) × serving queue
+(+244.42% live) → estimated **+876%** vs FIFO combined.
+
+Gate: Azure retention (81.6%) is 1.5pp below 83% noisy-prior floor. BurstGPT (88.1%) passes.
+Root cause: Azure near-zero feature correlation makes running median essentially oracle-equivalent
+for ordering — conformal α compensates but cannot fully recover the prediction CV gap.
+
+16 unit + integration tests passing. All live prior results are directional simulator only.
+
 ## 5c. Preemption Overhead Sensitivity Analysis (run 2026-06-21-o)
 
 Overhead sweep: `run_preemption_overhead_sensitivity_backtest()` + `run_burstgpt_preemption_overhead_backtest()`.

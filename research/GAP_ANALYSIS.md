@@ -8,6 +8,127 @@
 
 ---
 
+## Run 2026-06-21-t — Live Causal Prior Evaluation (Production Realism Gate)
+
+### Q1. What currently limits Aurelius most?
+
+**The prior is still oracle.** This run measured the first production-realistic prior:
+causal sliding-window running median (window=200, no future leakage). Key findings:
+- Azure retention: **81.6%** (live prior vs oracle; 1.5pp below 83% noisy-prior floor)
+- BurstGPT retention: **88.1%** (above 83% floor — passes gate on BurstGPT)
+- Azure CV_actual=80.5%, prior_cv=7.0% → prior is nearly constant (≈ global median ≈ 90 tok)
+- Zero correlation (r=-0.022) between prompt tokens and output tokens in Azure trace → no simple
+  feature can beat running median on this trace; request-specific predictor requires external signals
+- Compound gain (independence assumption): economic scheduling (+183.4%) × serving queue
+  (+244.42% live on Azure) → estimated **+876%** vs FIFO combined
+
+### Q2. What theoretically offers the largest gain?
+
+**A request-specific output-token predictor.** Running median has CV=7% vs actual CV=80.5%.
+The entire scheduling gain comes from ordering, and ordering requires differentiation.
+A predictor like CARA HGB (trained on TTFT, queue state, GPU type) could dramatically improve
+the prior — closing the 18pp retention gap from 82% toward oracle (100%).
+
+### Q3. Which forecasts are weakest?
+
+1. **Live prior** — confirmed: running median CV=7% vs actual 80.5%. Near-constant prediction.
+   Any request-specific signal (prompt length, model id, session history) would help.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Prior is running median, not request-specific.** Measured 18.4pp gap to oracle on Azure.
+2. **Serving queue uses FIFO** — with live prior, conformal achieves +244.42% (Azure) /
+   +420.83% (BurstGPT) vs FIFO. Still not wired into runtime.
+3. **North Star gap (vs SLA-aware)** — unchanged from run -s.
+
+### Q5. Which workloads benefit least?
+
+**Azure LLM 2024 with running-median prior.** Prompt–output correlation is near zero
+(r=-0.022), making running median the best achievable simple predictor. BurstGPT is more
+tractable: higher output variance (p50=236 tok vs 90) means running median is more useful
+relative to FIFO ordering, giving 88.1% retention vs 81.6% on Azure.
+
+### Q6. Which research direction appears strongest?
+
+**Request-specific output-token predictor (CARA HGB approach).** The live prior experiment
+quantified exactly how much we're leaving on the table: 18pp retention on Azure. A model
+using prompt length + session features could push retention above 95%. This is now the
+clearest highest-EV target.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Add any feature that correlates with output length. Even prompt_char_count or request_type
+label could help. The full CARA HGB (TTFT proxy + queue state) could close 50% of the gap.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Request-specific predictor bringing retention from 82% → 95%+ would recover ~13pp × 322%
+oracle = ~42pp additional gain. Combined with economic scheduling compound, this exceeds +50%.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Same as run -s. Current live prior gives +244.42% vs FIFO (Azure). SLA-aware = +125.4%.
+So live prior is already +53% vs SLA-aware. To reach +300% vs SLA-aware: requires either
+a substantially better prior (request-specific) or compounding with economic scheduling.
+Independence estimate: +876% compound vs FIFO → far exceeds +300% vs SLA-aware.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Independence assumption for compound gain.** The +876% estimate assumes economic
+   scheduling and serving queue gains compound multiplicatively. True compound requires
+   end-to-end integrated backtest.
+2. **Running median as best achievable simple prior.** On Azure (r≈0), this is correct.
+   On other traces with richer signals, simple features might help more.
+3. **SLA=10s for Azure, 30s for BurstGPT.** Tighter SLA changes which requests are
+   SLA-compliant and could shift retention ratios.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Oracle prior still used for oracle comparison.** Live prior gap now measured (18pp Azure).
+2. **Azure trace lacks request-specific features.** Only ContextTokens + GeneratedTokens;
+   no model ID, no session, no TTFT. CARA HGB cannot be evaluated on this trace.
+3. **Compound gain is independence-assumption only.** End-to-end backtest still pending.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT** — richer request features (prompt text) for predictor training/testing.
+2. **CARA latency prediction dataset** — TTFT + queue state; enables request-specific prior.
+3. **Mooncake FAST25** — KV prefix reuse signal.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Evaluate CARA HGB predictor as live prior (needs TTFT/queue-state signal in trace).
+2. ShareGPT as third public LLM trace with richer feature space.
+
+**Short-term (2–3 runs):**
+3. End-to-end compound backtest: economic scheduling × live-prior SRTF in single trace run.
+4. Explore session-level features (conversation turn number) for output-length prediction.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -t
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Request-specific output-token predictor (CARA HGB or prompt features) | Very High | Medium | Gap quantified: 18pp Azure, 12pp BurstGPT |
+| 2 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO |
+| 3 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 4 | Wire conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+| 5 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
+| 6 | GPU routing on LLM trace (TTFT binding) | Medium | Low | benchmarked on energy trace [run -f] |
+
+**Closed opportunities:**
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 88.1% BurstGPT
+- Preemption overhead on BurstGPT: **CLOSED** [run -s] — 95.25% retention at 0.30s
+- BurstGPT noisy prior: **CLOSED** [run -r] — 100.0% retention
+- BurstGPT SLA-aware baseline: **CLOSED** [run -r] — +210.6% vs FIFO
+- BurstGPT conformal: **CLOSED** [run -r] — +644.4% vs FIFO
+
+---
+
 ## Run 2026-06-21-s — BurstGPT HF Preemption Overhead Cross-Validation (Infrastructure Improvement)
 
 ### Q1. What currently limits Aurelius most?

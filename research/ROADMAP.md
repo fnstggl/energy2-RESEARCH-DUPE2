@@ -24,6 +24,15 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Live Causal Prior [run 2026-06-21-t]:** First production-realistic prior evaluation.
+Causal sliding-window median (window=200) achieves **+244.42% vs FIFO** on Azure LLM 2024
+(81.6% oracle retention) and **+420.83% vs FIFO** on BurstGPT HF (70.0% retention). Prior
+CV=7% (Azure), 15% (BurstGPT). Key finding: running median provides almost zero request-specific
+information (constant ≈ global median); the conformal calibrator adapts α upward, partially
+compensating but leaving 18-30% gap to oracle. Request-specific predictor (CARA HGB) needed
+to close remainder. Compound gain estimate: +876% vs FIFO (economic + queue, independence
+assumption). 16 new tests. Results: `research/results/live_prior_compound_backtest_2026-06-21.md`.
+
 **BurstGPT HF Extended Validation [run 2026-06-21-r]:** Three extended experiments
 cross-validate the full BurstGPT HF normalized sample (5,880 records from 59,999, CC-BY-4.0)
 confirming all Azure LLM 2024 results generalize. (1) **Conformal α on BurstGPT: +644.4% vs FIFO**
@@ -179,13 +188,14 @@ See `docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md` for full table.
 
 **Request-level serving queue (SRTF simulator — separate from aggregate CA leaderboard):**
 
-| trace | n_reqs | Decoupled α=0.001 vs FIFO | Conformal α vs FIFO | SRPT vs FIFO | SLA |
-|---|---:|---:|---:|---:|---|
-| Azure LLM 2024 [run -m / -q] | 5,880 | +274.0% | **+322.24%** | +322.2% | 10s |
-| BurstGPT HF (5,880 sample) [run -p / -r] | 5,880 | **+492.7%** | **+644.4%** | +644.4% | 30s |
-| BurstGPT HF (full 58,042) [run -p] | 58,042 | **+231.4%** | — | +316.1% | 30s |
+| trace | n_reqs | Conformal live prior vs FIFO | Decoupled α=0.001 vs FIFO | Conformal oracle vs FIFO | SRPT vs FIFO | SLA |
+|---|---:|---:|---:|---:|---:|---|
+| Azure LLM 2024 [run -m / -q / -t] | 5,880 | **+244.42%** [run -t] | +274.0% | **+322.24%** | +322.2% | 10s |
+| BurstGPT HF (5,880 sample) [run -p / -r / -t] | 5,880 | **+420.83%** [run -t] | **+492.7%** | **+644.4%** | +644.4% | 30s |
+| BurstGPT HF (full 58,042) [run -p] | 58,042 | — | **+231.4%** | — | +316.1% | 30s |
 
 **New frontier [run -r]: Conformal adaptive α achieves SRPT ceiling (+644.4%) on BurstGPT HF — cross-trace validated.**
+**Live prior floor [run -t]: Causal sliding-window median achieves +244% (Azure) / +421% (BurstGPT) vs FIFO — 81.6% / 70.0% retention vs oracle.**
 Previous frontier [run -q]: Conformal +322.24% on Azure LLM 2024.
 Previous frontier [run -m]: Fixed α=0.001 at +274.0%. Gap closed: +48.24pp.
 
@@ -558,30 +568,135 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 6. Highest Expected Value Opportunities (Ranked)
 
-> Updated after run 2026-06-21-s. All six cross-trace validation gates now CLOSED.
+> Updated after run 2026-06-21-t. Live causal prior measured: +244% Azure, +421% BurstGPT
+> vs FIFO. Running-median prior = 81.6% retention on Azure; request-specific predictor
+> needed to close remainder.
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | **Wire decoupled hybrid (α=0.001) into serving runtime** | **Very High** (+274% Azure, +493% BurstGPT vs FIFO) | **Medium** | **All 6 gates CLOSED: noisy [run -n,-r] + overhead [run -o,-s] + cross-trace [run -p,-r] + SLA-aware [run -n,-r] + conformal [run -q,-r]** | Connect to serving path driven by OutputLengthForecastBundle.p50 |
-| 2 | Compound economic + queue scheduling in canonical backtest | Very High (compounding E + Q gains) | High | Not Started | Wire conformal discipline into trace replay; measure vs economic-only |
-| 3 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High (replaces oracle prior) | Low | Infrastructure built (shadow) | Replace oracle prior in decoupled hybrid with OutputLengthForecastBundle.p50 |
-| 4 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
-| 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 8 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 9 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 10 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+| 1 | **Wire conformal+decoupled into serving runtime with request-specific prior** | **Very High** (+322% oracle, +244% live-prior on Azure) | **Medium** | **Live-prior floor measured [run -t]**: running median = 81.6% retention. CARA HGB would close remainder | Integrate `HGBOutputLengthForecaster.p50` as prior in `_run_live_prior_on_trace` |
+| 2 | Compound economic + queue scheduling in canonical backtest | Very High (estimated +876% vs FIFO compound) | High | **Compound table measured [run -t]** — independence-assumption estimate | Wire conformal discipline into trace replay; measure true vs estimated compound |
+| 3 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
+| 4 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 5 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 6 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 7 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 8 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 9 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
 **Removed from table (now closed):**
 - Preemption overhead on BurstGPT — **CLOSED** [run -s]: 95.25% retention at 0.30s
 - BurstGPT noisy prior robustness — **CLOSED** [run -r]: 100.0% retention
 - BurstGPT SLA-aware baseline — **CLOSED** [run -r]: +210.6% vs FIFO
 - BurstGPT conformal alpha — **CLOSED** [run -r]: +644.4% vs FIFO
+- Live causal prior (running median) — **MEASURED** [run -t]: 81.6% retention (Azure), 70.0% (BurstGPT)
 
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-21-t — LIVE CAUSAL PRIOR + COMPOUND TABLE (RESEARCH DISCOVERY)
+
+**Goal:** Close the oracle gap by measuring the performance of a CAUSAL SLIDING-WINDOW
+MEDIAN prior (zero-external-model, minimum viable production prior) vs oracle. Also build
+the first compound gain table showing economic scheduling × serving queue improvement.
+
+**Bottleneck addressed:** All prior validations used oracle tokens (predicted == actual) or
+artificial 30%-CV lognormal noise. Neither reflects a deployed system. This run introduces
+a CAUSAL prior: for request i, predict output tokens as the p50 of the last 200 actual
+completions from requests 0..i-1. No external model, no features — just historical statistics.
+
+**Implementation:**
+- Added `make_live_prior_predictions()` to `srtf_serving_backtest.py` — causal sliding-window
+  median predictor with diagnostic stats (CV, MAE, bias, relative MAE)
+- Added `LivePriorReport` dataclass — tracks FIFO / oracle / live comparison with retention %
+- Added `_run_live_prior_on_trace()` helper — runs all 3 disciplines on any trace
+- Added `run_live_prior_conformal_backtest()` for Azure LLM 2024
+- Added `run_burstgpt_hf_live_prior_backtest()` for BurstGPT HF cross-validation
+- Created `tests/test_live_prior_backtest.py` — 16 tests (all passing, zero regressions)
+- Created `scripts/run_live_prior_compound_backtest.py` — public trace runner + compound table
+- 335 total tests passing
+
+**Benchmark results (public traces: Azure LLM 2024 + BurstGPT HF):**
+
+*Azure LLM 2024 (5,880 requests, ρ=0.85, 4 servers, SLA=10s):*
+
+| Discipline | SLA-safe goodput/$ | vs FIFO | vs Oracle |
+|---|---:|---:|---:|
+| FIFO | 13,336 | (baseline) | — |
+| Conformal oracle | 56,311 | +322.24% | — |
+| **Conformal live prior** | **45,933** | **+244.42%** | **81.6% retention** |
+
+Prior quality: CV=7.0%, MAE=60.5 tokens, relative MAE=52.3%
+
+*BurstGPT HF (5,880 records, ρ=0.85, 4 servers, SLA=30s):*
+
+| Discipline | SLA-safe goodput/$ | vs FIFO | vs Oracle |
+|---|---:|---:|---:|
+| FIFO | 6,529 | (baseline) | — |
+| Conformal oracle | 48,599 | +644.38% | — |
+| **Conformal live prior** | **34,004** | **+420.83%** | **70.0% retention** |
+
+Prior quality: CV=15.3%, MAE=166.9 tokens, relative MAE=?%
+
+**Compound gain table (independence estimate):**
+
+| Lever | vs FIFO | Source |
+|---|---:|---|
+| SLA-aware binary priority | +125.4% | run -n |
+| Economic scheduling (constraint_aware) | +183.4% | BENCHMARK_REGISTRY |
+| Conformal queue (oracle) | +322.24% | run -q |
+| Conformal queue (live prior) | +244.42% | **this run** |
+| Compound: live queue + economic (est.) | +876.2% | independence estimate |
+
+**Key research findings:**
+
+1. **Running median is a good zero-feature prior** — achieves 81.6% retention on Azure
+   (just below the 83.1% noisy-prior floor from run -n). Difference: 1.5pp.
+
+2. **BurstGPT heavier tail reduces running-median effectiveness** — 70.0% retention vs
+   81.6% on Azure. Physical reason: BurstGPT p99/p50 = 3.96× vs Azure's 5.3×, but the
+   ABSOLUTE token variance is much larger (p99=934 vs 479), so the running median
+   underestimates long requests more severely.
+
+3. **Running median prior CV is low** (7-15%), while actual token CV is 80%+. This
+   means the prior provides almost NO REQUEST-SPECIFIC INFORMATION — it's effectively a
+   population-level constant. The conformal calibrator compensates by raising α, giving
+   more aging-based dispatch.
+
+4. **Production implication**: A zero-feature prior (running median) gives +244% vs FIFO
+   on Azure — substantially above the SLA-aware baseline (+125%). Adding request-specific
+   features (CARA HGB forecaster, prompt-type classification) would close the remaining
+   ~78pp gap to oracle (+322%).
+
+5. **Compound estimate (+876% vs FIFO)**: Requires verification via end-to-end integrated
+   backtest. Independence assumption may overestimate; real compound gain needs measurement.
+
+**Research papers reviewed:**
+1. arXiv:2604.06970 (Scheduling the Unschedulable, SOSP 2026) — §6.3 causal production priors
+2. arXiv:2508.14544 (Adaptively Robust LLM Inference) — causal running estimator assumption
+3. arXiv:2503.07545 (Queueing, Predictions, LLMs) — historical estimators as practical realisation
+4. arXiv:2604.07931 (ProD, Robust Length Prediction) — heavy-tailed prior challenges
+
+**Before vs After:**
+
+| Metric | Before (oracle only) | After (live prior measured) |
+|---|---:|---:|
+| Azure conformal vs FIFO (oracle) | +322.24% | +322.24% (unchanged) |
+| Azure conformal vs FIFO (live prior) | unknown | **+244.42%** |
+| Azure live retention | unknown | **81.6%** |
+| BurstGPT conformal vs FIFO (live prior) | unknown | **+420.83%** |
+| BurstGPT live retention | unknown | **70.0%** |
+| Compound gain estimate | not computed | **+876% vs FIFO** (estimated) |
+
+**Verdict:** RESEARCH DISCOVERY — Measures the live prior floor for the first time. Running
+median achieves 81.6% retention on Azure (just below the 83.1% noisy floor from run -n).
+The key insight: to close the oracle gap, request-specific token-length prediction is
+required (CARA HGB forecaster). Documented as the clearest path to closing the remaining
+gap from +244% to +322% on Azure LLM 2024. Results written to
+`research/results/live_prior_compound_backtest_2026-06-21.{json,md}`.
+
+---
 
 ### Run 2026-06-21-s — BURSTGPT HF PREEMPTION OVERHEAD CROSS-VALIDATION (INFRASTRUCTURE IMPROVEMENT)
 
