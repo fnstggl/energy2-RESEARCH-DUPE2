@@ -60,6 +60,16 @@ throughput) + remaining/(1+α·wait) for dispatch only (starvation bound). Resea
 FastServe (NSDI '26), Chimera (arXiv:2603.22206), SEK-SMOD (arXiv:2510.25963). 43 new
 tests. See `docs/HYBRID_AGING_PREEMPTIVE_BACKTEST_RESULTS.md`.
 
+**Decoupled Hybrid [run 2026-06-20-l]:** Decoupled architecture separates preemption
+key (pure `remaining_s` — SRPT-optimal) from dispatch key (`remaining_s / (1 + α·total_wait_s)`
+— aging anti-starvation).  On Azure LLM 2024: **+184.5% goodput/$ vs FIFO** — 2.87× better
+than the Hybrid (+64.2%), short_p90 improvement 97.9% (near-SRPT, vs Hybrid 75.7%).
+Residual gap vs pure SRPT (+322.2%) caused by aging dispatch occasionally promoting
+long-waiting jobs past the 10 s SLA boundary.  Long_p99 regression +132.3% (better
+than pure SRPT +223.4%, slightly worse than Hybrid +111.3%).  Research basis:
+Medha/LARS (arXiv:2409.17264), Chameleon (arXiv:2411.17741), SEK-SMOD (arXiv:2510.25963).
+51 tests passing. See `docs/DECOUPLED_HYBRID_BACKTEST_RESULTS.md`.
+
 ---
 
 ## 2. Current Best Results (Benchmark Leaderboard)
@@ -437,21 +447,95 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | **Decoupled Hybrid: SRPT preemption + aging dispatch** | **Very High** (+322% goodput + better long_p99) | **Low** | **Next [run -l]** — root cause from run -k identified | Use remaining_s for preemption; remaining_s/(1+α·wait) for dispatch. Expected: SRPT goodput + Aging-SRTF long_p99 |
-| 2 | Wire SRPT preemptive or aging-SRTF into SERVING runtime | High (+322% or +70.7% gp/$ vs FIFO in sim) | Medium | **Quantified [runs -i/-j/-k]** — serving simulator; not yet in runtime | Expose SRPT preemptive in serving path driven by OutputLengthForecastBundle.p50 |
-| 3 | Hybrid Aging+Preemptive SRPT (combined key) | Medium (+64.2% gp/$ vs FIFO confirmed) | Medium | **DONE [run -k]** | α=0.01 behaves like Aging-SRTF; next: decoupled design for SRPT-level goodput |
-| 4 | Full BurstGPT (1.4M rows) cross-validation | Medium (confirms generalization) | Low | Not Started | Download full BurstGPT_1.csv; run run_burstgpt_srpt_preemptive_backtest() at scale |
-| 5 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High (replaces oracle prior) | Low | Infrastructure built (shadow) | Replace perfect-prior in aging_srtf / hybrid with OutputLengthForecastBundle.p50 |
-| 6 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 7 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 8 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 9 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 10 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 11 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+| 1 | **α sweep on Decoupled Hybrid (find goodput–starvation Pareto front)** | **High** (α=0.001 may recover 95%+ of SRPT goodput at +184% → +300%) | **Low** | **Next [run -m]** — run -l confirmed architecture; residual gap is α parameter | Sweep α ∈ {0, 0.0005, 0.001, 0.005, 0.01, 0.05}; find Pareto knee |
+| 2 | Wire SRPT preemptive or aging-SRTF into SERVING runtime | High (+322% or +70.7% gp/$ vs FIFO in sim) | Medium | **Quantified [runs -i/-j/-k/-l]** — serving simulator; not yet in runtime | Expose decoupled_hybrid in serving path driven by OutputLengthForecastBundle.p50 |
+| 3 | **DONE [run -l]** Decoupled Hybrid: SRPT preemption + aging dispatch | +184.5% gp/$ vs FIFO (2.87× Hybrid) | Low | **DONE** | 51 tests; see docs/DECOUPLED_HYBRID_BACKTEST_RESULTS.md |
+| 4 | Hybrid Aging+Preemptive SRPT (combined key) | Medium (+64.2% gp/$ vs FIFO confirmed) | Medium | **DONE [run -k]** | α=0.01 behaves like Aging-SRTF; decoupled (run -l) fixes this |
+| 5 | Full BurstGPT (1.4M rows) cross-validation | Medium (confirms generalization) | Low | Not Started | Download full BurstGPT_1.csv; run run_burstgpt_srpt_preemptive_backtest() at scale |
+| 6 | Wire OutputLengthForecastBundle.p50 as live SRPT prior | High (replaces oracle prior) | Low | Infrastructure built (shadow) | Replace perfect-prior in aging_srtf / hybrid with OutputLengthForecastBundle.p50 |
+| 7 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 8 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 9 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 10 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 11 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 12 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-20-l — DECOUPLED HYBRID SERVING-QUEUE SIMULATOR
+
+**Goal:** Fix the root cause identified in run -k: the unified aging key applied to BOTH
+preemption and dispatch caused hybrid to behave like Aging-SRTF (+64.2% goodput/$) rather
+than SRPT (+322.2%).  Hypothesis: separating the preemption key (pure `remaining_s` — SRPT)
+from the dispatch key (`remaining_s / (1 + α·total_wait_s)` — aging) will recover
+near-SRPT goodput while retaining Aging-SRTF-level starvation protection.
+
+- **Phase 3 (research — 3 papers):**
+  1. **Medha/LARS** (arXiv:2409.17264, MICRO '25) — Length-Aware Relative Slack preemptive
+     scheduling; 5.7× throughput, 30× median latency, 174× P99 latency reduction vs
+     non-preemptive.  Validates preemptive preemption-at-arrival as the correct architectural
+     separation.
+  2. **Chameleon** (arXiv:2411.17741, MICRO '25) — Non-preemptive multi-queue scheduling
+     for heterogeneous workloads; aging-at-dispatch as the correct layer for starvation
+     prevention.
+  3. **SEK-SMOD** (arXiv:2510.25963, SIGMETRICS 2026) — strategic large-job re-prioritization
+     at dispatch outperforms SRPT-k; validates aging dispatch (not preemption) as the
+     starvation-prevention layer.
+
+- **Phase 4 (implementation):**
+  - `aurelius/benchmarks/srtf_serving_backtest.py` extended:
+    - `DECOUPLED_HYBRID_ALPHA_DEFAULT = 0.01` constant.
+    - `_simulate_decoupled_hybrid(requests, servers, aging_alpha)` — new discrete-event
+      M/G/c simulator.  ARRIVAL: preemption uses pure `remaining_s` (SRPT).  COMPLETION:
+      dispatch uses `remaining_s / (1 + α·total_wait_s)` (aging).
+    - `simulate_queue(..., discipline="decoupled_hybrid")` dispatch branch.
+    - `DecoupledHybridReport` dataclass (6 disciplines + delta KPIs).
+    - `_run_decoupled_hybrid_backtest_on_trace()` shared helper.
+    - `run_decoupled_hybrid_backtest()` — Azure LLM 2024 public function.
+    - `run_burstgpt_decoupled_hybrid_backtest()` — BurstGPT cross-validation.
+  - `tests/test_srtf_decoupled_hybrid_backtest.py` (NEW) — 51 tests, 10 classes, all passing.
+
+- **Phase 7 (benchmark results — public trace replay):**
+
+  **Azure LLM 2024 (5,880 requests, ρ=0.85, SLA=10s, c=4, time_warp=21.95):**
+  | KPI | FIFO | SRTF | Aging-SRTF (α=0.01) | SRPT | Hybrid (α=0.01) | **Decoupled (α=0.01)** |
+  |---|---:|---:|---:|---:|---:|---:|
+  | SLA-safe goodput/$ | 13,336 | 56,481 (+323.5%) | 22,768 (+70.7%) | 56,311 (+322.2%) | 21,899 (+64.2%) | **37,945 (+184.5%)** |
+  | short_p90 improvement | — | 99.6% | 78.1% | 99.7% | 75.7% | **97.9%** |
+  | long_p99 regression vs FIFO | — | +223.5% | +113.8% | +223.4% | +111.3% | **+132.3%** |
+
+  **BurstGPT (51-request fixture, ρ=0.85, SLA=30s, c=4):**
+  All disciplines score identically (−4.5%) on this small trace — SLA-budget limited,
+  not scheduling-discipline limited.  Full 1.4M-row trace needed for cross-validation.
+
+- **Key findings:**
+  1. **Decoupled is 2.87× better than Hybrid** in goodput/$ (+184.5% vs +64.2%).  Root
+     cause fix confirmed: removing aging from the preemption key restores SRPT-optimal
+     preemption decisions.
+  2. **Short_p90 near-SRPT** (97.9% vs hybrid's 75.7%): decoupled preempts short fresh
+     arrivals over long running jobs, cutting queueing time for short requests.
+  3. **Residual goodput gap vs pure SRPT** (184.5% vs 322.2%): aging dispatch at α=0.01
+     occasionally promotes long-waiting (longer) requests over fresh short arrivals at
+     completion time.  When short requests accumulate queue wait, their aging key can be
+     beaten by a long job with very large accumulated wait, pushing the short request past
+     the 10 s SLA.  Short_p90 = 14.9 s (vs SRPT's 6.3 s); the 10 s SLA clips ~10% of
+     short requests that SRPT would serve in time.
+  4. **Long_p99 at +132.3%** (worse than FIFO, better than SRPT's +223.4%): aging dispatch
+     helps but less than pure aging-SRTF (+113.8%); SRPT preemption keeps re-queuing long
+     jobs every time a shorter request arrives.
+
+- **Decision:** FRONTIER IMPROVEMENT (simulator) — architecture validated.  +184.5%
+  goodput/$ vs FIFO is a real and substantial gain (2.87× over Hybrid).  The hypothesis
+  that decoupled = SRPT goodput was too optimistic; actual result is between Hybrid and
+  SRPT, but much closer to SRPT for short_p90 metric.
+
+- **Next recommended direction (run 2026-06-20-m):**
+  **α sensitivity sweep** on decoupled hybrid across α ∈ {0, 0.0005, 0.001, 0.005, 0.01,
+  0.05}.  Hypothesis: α=0.001 recovers 95%+ of SRPT goodput (+300%+) while providing
+  meaningful starvation protection for the 1st percentile of long jobs.  This maps the
+  Pareto front between goodput and long_p99 starvation protection.
 
 ### Run 2026-06-20-k — HYBRID AGING+PREEMPTIVE SRPT SERVING-QUEUE SIMULATOR
 

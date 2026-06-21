@@ -8,6 +8,113 @@
 
 ---
 
+## Run 2026-06-20-l — Decoupled Hybrid serving-queue simulator
+
+### Q1. What currently limits Aurelius most?
+
+**The goodput gap between Decoupled Hybrid (+184.5% vs FIFO) and pure SRPT (+322.2%).**
+Run -l confirms the decoupled architecture (SRPT preemption + aging dispatch) is correct
+and delivers 2.87× the goodput of Hybrid (+64.2%).  The residual gap arises from aging
+dispatch at α=0.01 occasionally promoting long-waiting requests over fresh short arrivals
+at completion time, causing ~10% of short requests to miss the 10 s SLA.  The primary
+limit is now α calibration — the dispatch aging parameter.
+
+### Q2. What theoretically offers the largest gain?
+
+**α sweep on Decoupled Hybrid.**  At α=0, Decoupled becomes pure SRPT (+322.2%).  At
+α=0.001, the flip-point threshold rises to 667 s (vs 66.7 s at α=0.01), dramatically
+reducing how often long-waiting requests beat fresh short arrivals at dispatch time.
+Expected: α=0.001 recovers 95%+ of SRPT goodput (~+300%) while providing meaningful
+starvation protection for the 1st-percentile long jobs.  This maps the Pareto front
+between goodput and long_p99 protection.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live prior** — all serving backtests use oracle
+   prior. 30%-CV robustness shown for non-preemptive SRTF [run -g]; not yet tested for
+   decoupled hybrid.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving queue uses FIFO** — simulator confirms +322.2% goodput/$ available from
+   SRPT preemptive; not yet deployed in runtime.
+2. **α=0.01 dispatch aging cuts goodput by 42% vs SRPT** — α parameter tuning is the
+   highest-leverage remaining knob on the decoupled hybrid.
+3. **OutputLengthForecastBundle not driving ordering** — oracle prior only.
+
+### Q5. Which workloads benefit least?
+
+**Batch / energy-shifting workloads** — confirmed across all runs.  BurstGPT fixture
+(51 rows, SLA=30 s) shows all disciplines score identically (−4.5% vs FIFO); the SLA
+budget, not the scheduling discipline, is the binding constraint on this small trace.
+
+### Q6. Which research direction appears strongest?
+
+**α sweep on Decoupled Hybrid (run -m).**  The architecture is now validated; the
+goodput–starvation Pareto front is the next open question.  Very low implementation
+complexity (just iterate α values through existing `decoupled_hybrid` discipline).
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. Run α sweep on decoupled_hybrid; α=0.005 or α=0.001 likely recovers 20–40 pp of the
+   137 pp goodput gap vs SRPT.  Estimated +50–100% goodput/$ at α=0.001.
+2. Wire decoupled_hybrid into serving runtime driven by OutputLengthForecastBundle.p50.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Wire decoupled_hybrid (or pure srpt_preemptive) into the serving runtime with
+OutputLengthForecastBundle.p50 as the predicted_tokens prior.  The simulator confirms
++184.5%–+322.2% vs FIFO.  Even with 30%-CV forecast error, run -g showed SRTF retains
+>99% of its short_p90 benefit — suggesting goodput gain is robust to noisy priors.
+
+### Q9. What would need to be true to achieve +300%?
+
++300% vs FIFO is achievable in simulation with α=0 (pure SRPT: +322.2% confirmed).
+The decoupled hybrid at α=0.001 is expected to recover 95%+ of SRPT goodput:
+1. α at or below 0.001 (reduces aging dispatch frequency).
+2. Live output-length prior (OutputLengthForecastBundle.p50) replacing oracle.
+3. Measured queue-wait labels + pilot telemetry for frontier calibration.
+The simulator confirms the ceiling; deploying it is the remaining gap.
+
+### Q10. Which assumptions might be wrong?
+
+1. **α=0.001 will recover near-SRPT goodput** — the Pareto front may be steeper;
+   even α=0.001 could still clip some short requests past 10 s SLA if they wait long.
+2. **Zero preemption overhead** — LLM serving preemption requires KV-cache eviction.
+   Real overhead could reduce effective goodput vs the simulator.
+3. **Oracle prior (actual tokens = predicted)** — real predictions have 30%+ CV; need
+   to verify goodput robustness for decoupled_hybrid under forecast noise.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **FIFO baseline** — all goodput/$ deltas vs FIFO. SLA-aware baseline not yet compared.
+2. **BurstGPT fixture** — 51 rows; too small for starvation analysis. Full 1.4M-row
+   dataset needed for cross-trace confirmation.
+3. **No preemption cost model** — zero-overhead preemption is optimistic.
+4. **Simulator fidelity** — no batching, speculative decoding, CUDA graph overhead.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT full dataset** (1.4M rows, CC-BY-4.0) — top priority.
+2. **ShareGPT** — output token cross-validation for OutputLengthForecastBundle.
+3. **Vidur profiling CSVs** — GPU penalty calibration for heterogeneous routing.
+
+### Q13. What should be attempted next?
+
+**Immediate (run 2026-06-20-m):**
+1. α sweep on Decoupled Hybrid: α ∈ {0, 0.0005, 0.001, 0.005, 0.01, 0.05}.
+   Expected: α=0.001 recovers 95%+ of SRPT goodput (+300%+) with meaningful
+   starvation protection.  Maps the Pareto frontier.
+
+**Short-term (2–3 runs):**
+2. Wire decoupled_hybrid into serving runtime path driven by OutputLengthForecastBundle.p50.
+3. Add preemption overhead cost model (KV-cache eviction latency estimate per token).
+4. Cross-validate on full BurstGPT (1.4M rows) at ρ=0.85 and ρ=0.95.
+
+---
+
 ## Run 2026-06-20-k — Hybrid Aging+Preemptive SRPT serving-queue simulator
 
 ### Q1. What currently limits Aurelius most?
@@ -135,15 +242,16 @@ The simulator confirms the ceiling; deploying it is the remaining gap.
 
 | rank | opportunity | EV | feasibility | status |
 |---|---|---|---|---|
-| 1 | Decoupled Hybrid (SRPT preemption + aging dispatch) | Very High | Low effort | Not started — root cause from run -k |
-| 2 | Wire SRPT preemptive into serving runtime | High | Medium | Quantified [runs -i/-j/-k]; not yet in runtime |
-| 3 | Hybrid Aging+Preemptive (unified key) | Medium | Done | +64.2% gp/$ vs FIFO [run -k]; behaves like Aging-SRTF at α=0.01 |
-| 4 | Full BurstGPT cross-validation (1.4M rows) | Medium | Low | run_burstgpt_*_backtest() functions ready |
-| 5 | Wire OutputLengthForecastBundle.p50 as live prior | High | Low | Infrastructure built (shadow) |
-| 6 | Admission gate → cluster simulator | Medium | Medium | Implemented (unconnected) |
-| 7 | GPU routing on LLM trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
-| 8 | BOute MOBO routing co-optimisation | High | High effort | Not started |
-| 9 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
+| 1 | **α sweep on Decoupled Hybrid** (find Pareto knee) | Very High | Very Low effort | **Next [run -m]** — architecture confirmed, α is the only knob |
+| 2 | Wire decoupled_hybrid into serving runtime | High | Medium | Quantified [run -l: +184.5%]; not yet in runtime |
+| 3 | Decoupled Hybrid (SRPT preemption + aging dispatch) | Very High | Done | **+184.5% gp/$ vs FIFO [run -l]**; 2.87× Hybrid |
+| 4 | Hybrid Aging+Preemptive (unified key) | Medium | Done | +64.2% gp/$ vs FIFO [run -k]; behaves like Aging-SRTF at α=0.01 |
+| 5 | Full BurstGPT cross-validation (1.4M rows) | Medium | Low | run_burstgpt_*_backtest() functions ready |
+| 6 | Wire OutputLengthForecastBundle.p50 as live prior | High | Low | Infrastructure built (shadow) |
+| 7 | Admission gate → cluster simulator | Medium | Medium | Implemented (unconnected) |
+| 8 | GPU routing on LLM trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 9 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+| 10 | Carbon-power MILP joint optimization | Medium | High effort | Not started |
 
 ---
 
