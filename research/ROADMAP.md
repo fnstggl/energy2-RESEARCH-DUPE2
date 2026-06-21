@@ -24,6 +24,19 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**BurstGPT HF Extended Validation [run 2026-06-21-r]:** Three extended experiments
+cross-validate the full BurstGPT HF normalized sample (5,880 records from 59,999, CC-BY-4.0)
+confirming all Azure LLM 2024 results generalize. (1) **Conformal α on BurstGPT: +644.4% vs FIFO**
+(SRPT ceiling; conformal_mean_alpha → 0.000001, same α→0 convergence as Azure). Conformal vs
+fixed α=0.001: +25.59%. (2) **SLA-aware baseline on BurstGPT: +210.6% vs FIFO** (vs +125.4%
+on Azure — heavier tail amplifies class-awareness benefit). Decoupled hybrid over SLA-aware:
+**+90.8%** (vs +65.9% on Azure). Continuous prediction adds more value on heavier distributions.
+(3) **30%-CV noisy prior robustness on BurstGPT: 100.0% retention** (matches Azure exactly).
+Pattern: all gains scale with output-token variance (arXiv:1805.07686). BurstGPT (p99≈934
+tokens) amplifies every discipline vs Azure (p99≈479 tokens). 56 new tests. Research basis:
+arXiv:2604.07931 (ProD, Robust Length Prediction), arXiv:2603.11273 (Duration Aware
+Scheduling), arXiv:2509.23384 (NexusSched). See `docs/BURSTGPT_HF_EXTENDED_BACKTEST_RESULTS.md`.
+
 **Conformal Adaptive α [run 2026-06-21-q]:** `ConformalAlphaCalibrator` adapts
 the decoupled-hybrid dispatch α from empirical p90 prediction errors. With oracle
 tokens: measured p90_error → 0 → α → 0 → dispatch = pure SRPT → **+322.24% SLA-safe
@@ -153,10 +166,11 @@ See `docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md` for full table.
 | trace | n_reqs | Decoupled α=0.001 vs FIFO | Conformal α vs FIFO | SRPT vs FIFO | SLA |
 |---|---:|---:|---:|---:|---|
 | Azure LLM 2024 [run -m / -q] | 5,880 | +274.0% | **+322.24%** | +322.2% | 10s |
-| BurstGPT HF (5,880 sample) [run -p] | 5,880 | **+492.7%** | — | +644.4% | 30s |
+| BurstGPT HF (5,880 sample) [run -p / -r] | 5,880 | **+492.7%** | **+644.4%** | +644.4% | 30s |
 | BurstGPT HF (full 58,042) [run -p] | 58,042 | **+231.4%** | — | +316.1% | 30s |
 
-**New frontier [run -q]: Conformal adaptive α matches SRPT exactly (+322.24%) on Azure LLM 2024.**
+**New frontier [run -r]: Conformal adaptive α achieves SRPT ceiling (+644.4%) on BurstGPT HF — cross-trace validated.**
+Previous frontier [run -q]: Conformal +322.24% on Azure LLM 2024.
 Previous frontier [run -m]: Fixed α=0.001 at +274.0%. Gap closed: +48.24pp.
 
 Dynamic Frontier Estimator: **73.2%** oracle-alpha capture on Azure 2024.
