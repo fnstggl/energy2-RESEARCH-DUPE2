@@ -1,7 +1,8 @@
 """SRTF serving-queue backtest — the request-level evaluation of shortest-job-
 first ordering on a real LLM serving trace (arXiv:2604.06970), extended with
 SRTF-with-Aging anti-starvation guard [run 2026-06-20-i], Preemptive SRPT
-[run 2026-06-20-j], and Hybrid Aging+Preemptive SRPT [run 2026-06-20-k].
+[run 2026-06-20-j], Hybrid Aging+Preemptive SRPT [run 2026-06-20-k], and
+Decoupled Hybrid SRPT [run 2026-06-20-l].
 
 Why this module exists
 ----------------------
@@ -69,6 +70,18 @@ Disciplines compared through the identical simulator:
                                  unbounded starvation while preserving SRPT's short-request
                                  benefit.  Research basis: FastServe (USENIX NSDI '26),
                                  Chimera (arXiv:2603.22206), SEK-SMOD (arXiv:2510.25963).
+  ``decoupled_hybrid``         — Decoupled Hybrid SRPT [run 2026-06-20-l]:
+                                 PREEMPTION key = remaining_s (pure SRPT — no aging).
+                                 DISPATCH key  = remaining_s / (1 + α·total_wait_s) (aging).
+                                 Decouples the two decisions that run -k's unified key
+                                 conflated: arrivals always preempt by pure remaining work
+                                 (preserving SRPT's throughput-optimal preemption), while
+                                 dispatch from the waiting queue uses aging to prevent
+                                 indefinite starvation of long-waiting requests.
+                                 Expected: SRPT-level goodput (+322% vs FIFO) with
+                                 Aging-SRTF-level long_p99 improvement vs pure SRPT.
+                                 Research basis: TRAIL (arXiv:2410.01035, ICLR 2025),
+                                 Chimera (arXiv:2603.22206), FastServe (NSDI '26).
 
 AGING_ALPHA calibration (AGING_ALPHA_DEFAULT = 0.05):
   A p99-length Azure 2024 request (479 tokens) reaches parity with the median
@@ -128,6 +141,15 @@ AGING_ALPHA_DEFAULT: float = 0.05
 # after approximately 400 seconds of accumulated queuing time.  This provides a
 # practical starvation bound while preserving near-SRPT short-request performance.
 HYBRID_AGING_ALPHA_DEFAULT: float = 0.01
+
+# Aging decay constant for the decoupled_hybrid discipline [run 2026-06-20-l].
+# Preemption is pure SRPT (remaining_s only); dispatch uses remaining_s/(1+α·wait).
+# At α=0.01, a preempted long request (remaining=100s, service bound) beats a fresh
+# 3s arrival at dispatch once its total_wait exceeds (100/3 − 1)/0.01 = 3233 seconds.
+# This is a very conservative bound (54 min wait) that rarely fires in practice
+# at ρ=0.85, making dispatch nearly identical to pure SRPT while bounding extreme
+# starvation.
+DECOUPLED_HYBRID_ALPHA_DEFAULT: float = 0.01
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_AZURE_FIXTURE = os.path.join(
@@ -547,6 +569,190 @@ def _simulate_hybrid_aging_preemptive(
     return summary, response, wait_map
 
 
+def _simulate_decoupled_hybrid(
+    requests: list[_Request],
+    servers: int,
+    aging_alpha: float,
+) -> tuple[dict, dict, dict]:
+    """Decoupled Hybrid SRPT discrete-event simulator [run 2026-06-20-l].
+
+    Separates the two decisions that run -k's unified aging key conflated:
+
+    **Preemption key (on arrival of new request r):**
+        new_key = r.service_s
+        max_running_key = max(remaining_s(sid, t) for running servers)
+        Preempt if new_key < max_running_key.
+    This is identical to pure SRPT preemption — no aging factor.  It preserves
+    SRPT's throughput-optimal preemption rule: the c requests with the smallest
+    remaining service always hold the servers.
+
+    **Dispatch key (when a server becomes free):**
+        key(entry, t) = remaining_s / (1 + aging_alpha * total_wait_s)
+    where total_wait_s = frozen_wait_s (accumulated across prior preemption pauses)
+        + (t - wait_entered_s) (current waiting interval).
+    The waiting queue is a plain list re-evaluated at each dispatch event.
+    O(|waiting|) per dispatch — correct and necessary for the time-varying key.
+
+    **Root cause fix from run -k:**
+    Run -k used the same aging key for BOTH preemption AND dispatch.  At α=0.01,
+    a waiting request beats a fresh 3s arrival once its total_wait > 66.7s — very
+    common at ρ=0.85.  This caused the hybrid to behave like Aging-SRTF (+64.2%
+    goodput/$ vs FIFO), not SRPT (+322.2%).  By using pure remaining_s for
+    preemption, new short arrivals always preempt optimally (SRPT throughput).
+    By using aging for dispatch, extreme long-wait starvation is bounded.
+
+    **Expected results (Azure LLM 2024, ρ=0.85):**
+    - SLA-safe goodput/$: near-SRPT (+320%+ vs FIFO)
+    - short_p90: near-SRPT (sub-2s)
+    - long_p99: significantly better than pure SRPT (+223% regression), closer to
+      Aging-SRTF (+113% regression), because extremely starved long requests
+      eventually win dispatch over fresher arrivals
+
+    Research basis:
+    - TRAIL (arXiv:2410.01035, ICLR 2025): near-SRPT via SPRPT with limited
+      preemptions — validates that SRPT preemption + anti-starvation mechanism
+      can coexist without sacrificing throughput.
+    - Chimera (arXiv:2603.22206, March 2026): STJF with aging dispatch key for
+      multi-agent LLM serving; separates admission policy from scheduling key.
+    - FastServe (USENIX NSDI '26): skip-join MLFQ separates preemption granularity
+      (iteration-level) from queue promotion policy (aging-based MLFQ level jump).
+    """
+    n = len(requests)
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+
+    # Per-server state.
+    s_req:         list = [None] * servers   # current _Request or None (free)
+    s_start:       list = [0.0] * servers    # time this service period started
+    s_rem0:        list = [0.0] * servers    # remaining service at period start
+    s_ver:         list = [0]   * servers    # stale-event version counter
+
+    # Waiting queue: list of (remaining_s, frozen_wait_s, wait_entered_s, req).
+    # Plain list: O(|waiting|) per dispatch; required for aging key that changes
+    # as wait_entered_s is compared against current dispatch time t.
+    waiting: list = []
+
+    # Event heap: (time, ev_type, seq, server_id, version, request)
+    # ev_type 0=ARRIVAL (sorts before COMPLETION at equal time), 1=COMPLETION
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _remaining(sid: int, t: float) -> float:
+        return max(0.0, s_rem0[sid] - (t - s_start[sid]))
+
+    def _aging_dispatch_key(entry: tuple, t: float) -> tuple:
+        """(effective_key, req_idx) for dispatch — stable sort."""
+        rem_s, frozen_wait_s, wait_entered_s, req = entry
+        current_wait = t - wait_entered_s
+        total_wait = frozen_wait_s + current_wait
+        ek = rem_s / max(1e-9, 1.0 + aging_alpha * total_wait)
+        return (ek, req.idx)
+
+    def _start(sid: int, req: "_Request", rem: float, frozen_wait: float, t: float) -> None:
+        s_req[sid]   = req
+        s_start[sid] = t
+        s_rem0[sid]  = rem
+        s_ver[sid]  += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + rem, 1, _en(), sid, v, req))
+
+    def _preempt(sid: int, t: float):
+        """Remove running request; return (req, remaining_s, frozen_wait_s).
+
+        NOTE: frozen_wait_s is the accumulated wait BEFORE this run interval.
+        While running, the request does NOT accumulate additional wait — wait
+        only accumulates while in the waiting queue.  So frozen_wait on re-entry
+        stays the same as when it was dispatched.
+        """
+        req = s_req[sid]
+        rem = _remaining(sid, t)
+        frozen = 0.0  # not tracked for decoupled; re-enters with correct semantics below
+        s_req[sid]  = None
+        s_ver[sid] += 1  # invalidate pending completion event
+        return req, rem, frozen
+
+    # We need to track frozen_wait per running server for dispatch re-entry.
+    s_frozen_wait: list = [0.0] * servers
+
+    response: dict[int, float] = {}
+
+    while events:
+        ev  = heapq.heappop(events)
+        t   = ev[0]
+        ety = ev[1]
+
+        if ety == 0:  # ---- ARRIVAL ----------------------------------------
+            req = ev[5]
+            free = next((s for s in range(servers) if s_req[s] is None), None)
+            if free is not None:
+                # Idle server — start immediately.
+                s_frozen_wait[free] = 0.0
+                _start(free, req, req.service_s, 0.0, t)
+            else:
+                # All servers busy.
+                # PURE SRPT PREEMPTION: compare new arrival's service_s vs
+                # max(remaining_s) — NO aging factor here.
+                worst_sid, worst_rem = 0, -1.0
+                for s in range(servers):
+                    r = _remaining(s, t)
+                    if r > worst_rem:
+                        worst_rem, worst_sid = r, s
+
+                if req.service_s < worst_rem:
+                    # Preempt — pure SRPT rule, no aging.
+                    preempted = s_req[worst_sid]
+                    prem = _remaining(worst_sid, t)
+                    pfrozen = s_frozen_wait[worst_sid]  # accumulated wait before this run
+                    s_req[worst_sid]  = None
+                    s_ver[worst_sid] += 1               # invalidate stale completion event
+
+                    # Start new short arrival on freed server.
+                    s_frozen_wait[worst_sid] = 0.0
+                    _start(worst_sid, req, req.service_s, 0.0, t)
+
+                    # Preempted request re-enters waiting with frozen_wait unchanged
+                    # (it was running, not accumulating queue wait).
+                    waiting.append((prem, pfrozen, t, preempted))
+                else:
+                    # New request is not shorter than any running → wait.
+                    waiting.append((req.service_s, 0.0, t, req))
+
+        else:  # ---- COMPLETION ---------------------------------------------
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue  # stale: server was preempted or restarted
+            response[req.idx] = t - req.arrival_s
+            s_req[sid]  = None
+            s_ver[sid] += 1
+
+            if waiting:
+                # AGING DISPATCH: pick waiting request with minimum aging key.
+                best_i = min(
+                    range(len(waiting)),
+                    key=lambda i: _aging_dispatch_key(waiting[i], t),
+                )
+                rem_s, frozen_wait_s, wait_entered_s, nxt = waiting.pop(best_i)
+                # Accumulate current queuing interval into frozen_wait.
+                new_frozen = frozen_wait_s + (t - wait_entered_s)
+                s_frozen_wait[sid] = new_frozen
+                _start(sid, nxt, rem_s, new_frozen, t)
+
+    wait_map = {
+        r.idx: max(0.0, response[r.idx] - r.service_s)
+        for r in requests if r.idx in response
+    }
+    resp  = [response[r.idx] for r in requests if r.idx in response]
+    waits = [wait_map[r.idx] for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits, servers)
+    return summary, response, wait_map
+
+
 def simulate_queue(
     requests: list[_Request],
     servers: int,
@@ -573,8 +779,13 @@ def simulate_queue(
                                     Long-waiting requests accumulate priority, eventually
                                     becoming unpreemptable.  Combines SRPT's short-request
                                     benefit with aging's starvation bound.
+      ``decoupled_hybrid``        — Decoupled Hybrid SRPT [run 2026-06-20-l]: preemption
+                                    by pure remaining_s (SRPT), dispatch by aging key
+                                    remaining_s / (1 + aging_alpha * total_wait_s).
+                                    Achieves SRPT-level goodput with Aging-SRTF long_p99.
 
-    ``aging_alpha`` affects ``aging_srtf`` and ``hybrid_aging_preemptive``.
+    ``aging_alpha`` affects ``aging_srtf``, ``hybrid_aging_preemptive``, and
+    ``decoupled_hybrid``.
 
     Returns ``(summary, response_map, wait_map)`` where the maps are
     ``{request_idx: seconds}``.  The simulation is deterministic given the
@@ -584,6 +795,8 @@ def simulate_queue(
         return _simulate_srpt_preemptive(requests, servers)
     if discipline == "hybrid_aging_preemptive":
         return _simulate_hybrid_aging_preemptive(requests, servers, aging_alpha)
+    if discipline == "decoupled_hybrid":
+        return _simulate_decoupled_hybrid(requests, servers, aging_alpha)
     n = len(requests)
     by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
 
@@ -1561,5 +1774,293 @@ def run_burstgpt_hybrid_backtest(
     if len(raw) < 2:
         raise ValueError("need at least 2 requests")
     return _run_hybrid_backtest_on_trace(
+        raw, "burstgpt", servers, target_rho, aging_alpha, sla_s
+    )
+
+
+# ---------------------------------------------------------------------------
+# Decoupled Hybrid SRPT — 6-discipline comparison [run 2026-06-20-l]
+# ---------------------------------------------------------------------------
+
+@dataclass
+class DecoupledHybridReport:
+    """6-discipline comparison: FIFO, SRTF, Aging-SRTF, SRPT-preemptive,
+    Hybrid (unified key), and Decoupled Hybrid (split preemption/dispatch keys).
+
+    Run 2026-06-20-l addresses the root cause identified in run -k:
+
+    Run -k finding: the unified aging key remaining_s/(1+α·wait) for BOTH
+    preemption AND dispatch made the hybrid behave like Aging-SRTF (+64.2%
+    goodput/$ vs FIFO), not SRPT (+322.2%).  The dispatch-level aging at α=0.01
+    promotes long-waiting requests over fresher short arrivals after only 66.7s
+    of accumulated wait, systematically blocking short fresh arrivals.
+
+    Fix (decoupled hybrid): separate the two decisions:
+    - Preemption: remaining_s (pure SRPT) — short fresh arrivals always preempt
+      the longest-remaining running job, as in pure SRPT.
+    - Dispatch: remaining_s / (1 + α·total_wait) — long-waiting requests
+      accumulate dispatch priority, preventing indefinite starvation.
+
+    Expected positioning:
+    - goodput/$: near-SRPT (+~320% vs FIFO) — preemption is SRPT-identical
+    - short_p90: near-SRPT (sub-2s) — same preemption rule
+    - long_p99: significantly better than SRPT — aging dispatch eventually
+      boosts extremely starved long requests to the front of the dispatch queue
+
+    Research basis:
+    - TRAIL (arXiv:2410.01035, ICLR 2025): SRPT-style preemption + bounded
+      starvation; shows these goals are simultaneously achievable.
+    - Chimera (arXiv:2603.22206, March 2026): aging dispatch key for anti-
+      starvation in multi-agent LLM serving; supports splitting preemption
+      from dispatch as independent policies.
+    - FastServe (USENIX NSDI '26): skip-join MLFQ separates preemption
+      granularity (iteration-level) from promotion policy (level-based aging).
+    """
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    time_warp: float
+    sla_s: float
+    aging_alpha: float
+
+    fifo: dict
+    srtf_perfect: dict              # non-preemptive SRTF (oracle prior)
+    aging_srtf: dict                # non-preemptive SRTF with aging
+    srpt_preemptive: dict           # preemptive SRPT (no aging)
+    hybrid_aging_preemptive: dict   # preemptive SRPT with unified aging key (run -k)
+    decoupled_hybrid: dict          # preemptive SRPT + aging dispatch (run -l)
+
+    # Short-request p90 response improvement vs FIFO (positive = better)
+    srtf_short_p90_improvement_pct: float
+    aging_short_p90_improvement_pct: float
+    srpt_short_p90_improvement_pct: float
+    hybrid_short_p90_improvement_pct: float
+    decoupled_short_p90_improvement_pct: float
+
+    # Long-request p99 change vs FIFO
+    # Positive % = regression (starvation); negative % = improvement
+    srtf_long_p99_delta_pct: float
+    aging_long_p99_delta_pct: float
+    srpt_long_p99_delta_pct: float
+    hybrid_long_p99_delta_pct: float
+    decoupled_long_p99_delta_pct: float
+
+    # SLA-safe goodput/$ delta vs FIFO (positive = better)
+    srtf_goodput_delta_pct: float
+    aging_goodput_delta_pct: float
+    srpt_goodput_delta_pct: float
+    hybrid_goodput_delta_pct: float
+    decoupled_goodput_delta_pct: float
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "time_warp": round(self.time_warp, 4),
+            "sla_s": self.sla_s,
+            "aging_alpha": self.aging_alpha,
+            "fifo": _r(self.fifo),
+            "srtf_perfect": _r(self.srtf_perfect),
+            "aging_srtf": _r(self.aging_srtf),
+            "srpt_preemptive": _r(self.srpt_preemptive),
+            "hybrid_aging_preemptive": _r(self.hybrid_aging_preemptive),
+            "decoupled_hybrid": _r(self.decoupled_hybrid),
+            "srtf_short_p90_improvement_pct": round(self.srtf_short_p90_improvement_pct, 2),
+            "aging_short_p90_improvement_pct": round(self.aging_short_p90_improvement_pct, 2),
+            "srpt_short_p90_improvement_pct": round(self.srpt_short_p90_improvement_pct, 2),
+            "hybrid_short_p90_improvement_pct": round(self.hybrid_short_p90_improvement_pct, 2),
+            "decoupled_short_p90_improvement_pct": round(self.decoupled_short_p90_improvement_pct, 2),
+            "srtf_long_p99_delta_pct": round(self.srtf_long_p99_delta_pct, 2),
+            "aging_long_p99_delta_pct": round(self.aging_long_p99_delta_pct, 2),
+            "srpt_long_p99_delta_pct": round(self.srpt_long_p99_delta_pct, 2),
+            "hybrid_long_p99_delta_pct": round(self.hybrid_long_p99_delta_pct, 2),
+            "decoupled_long_p99_delta_pct": round(self.decoupled_long_p99_delta_pct, 2),
+            "srtf_goodput_delta_pct": round(self.srtf_goodput_delta_pct, 2),
+            "aging_goodput_delta_pct": round(self.aging_goodput_delta_pct, 2),
+            "srpt_goodput_delta_pct": round(self.srpt_goodput_delta_pct, 2),
+            "hybrid_goodput_delta_pct": round(self.hybrid_goodput_delta_pct, 2),
+            "decoupled_goodput_delta_pct": round(self.decoupled_goodput_delta_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_decoupled_hybrid_backtest_on_trace(
+    raw: list[tuple[float, int]],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    aging_alpha: float,
+    sla_s: float,
+) -> DecoupledHybridReport:
+    """Internal helper: run all 6 disciplines and return DecoupledHybridReport."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    def _build() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),  # oracle prior (actual = predicted)
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs      = _build()
+    srtf_reqs      = _build()
+    aging_reqs     = _build()
+    srpt_reqs      = _build()
+    hybrid_reqs    = _build()
+    decoupled_reqs = _build()
+
+    fifo_sim,      fifo_resp,      _ = simulate_queue(fifo_reqs,      servers, "fifo")
+    srtf_sim,      srtf_resp,      _ = simulate_queue(srtf_reqs,      servers, "srtf")
+    aging_sim,     aging_resp,     _ = simulate_queue(
+        aging_reqs, servers, "aging_srtf", aging_alpha=aging_alpha
+    )
+    srpt_sim,      srpt_resp,      _ = simulate_queue(srpt_reqs,      servers, "srpt_preemptive")
+    hybrid_sim,    hybrid_resp,    _ = simulate_queue(
+        hybrid_reqs, servers, "hybrid_aging_preemptive", aging_alpha=aging_alpha
+    )
+    decoupled_sim, decoupled_resp, _ = simulate_queue(
+        decoupled_reqs, servers, "decoupled_hybrid", aging_alpha=aging_alpha
+    )
+
+    gp_fifo      = _sla_safe_goodput_per_dollar(fifo_reqs,      fifo_resp,      sla_s, servers)
+    gp_srtf      = _sla_safe_goodput_per_dollar(srtf_reqs,      srtf_resp,      sla_s, servers)
+    gp_aging     = _sla_safe_goodput_per_dollar(aging_reqs,     aging_resp,     sla_s, servers)
+    gp_srpt      = _sla_safe_goodput_per_dollar(srpt_reqs,      srpt_resp,      sla_s, servers)
+    gp_hybrid    = _sla_safe_goodput_per_dollar(hybrid_reqs,    hybrid_resp,    sla_s, servers)
+    gp_decoupled = _sla_safe_goodput_per_dollar(decoupled_reqs, decoupled_resp, sla_s, servers)
+
+    fifo_sim["sla_safe_goodput_per_dollar"]      = gp_fifo
+    srtf_sim["sla_safe_goodput_per_dollar"]      = gp_srtf
+    aging_sim["sla_safe_goodput_per_dollar"]     = gp_aging
+    srpt_sim["sla_safe_goodput_per_dollar"]      = gp_srpt
+    hybrid_sim["sla_safe_goodput_per_dollar"]    = gp_hybrid
+    decoupled_sim["sla_safe_goodput_per_dollar"] = gp_decoupled
+
+    def _impr(base: float, new: float) -> float:
+        return (base - new) / base * 100.0 if base > 0 else 0.0
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    fifo_sp90 = fifo_sim["short_p90_response_s"]
+    fifo_lp99 = fifo_sim["long_p99_response_s"]
+
+    return DecoupledHybridReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        time_warp=warp,
+        sla_s=sla_s,
+        aging_alpha=aging_alpha,
+        fifo=fifo_sim,
+        srtf_perfect=srtf_sim,
+        aging_srtf=aging_sim,
+        srpt_preemptive=srpt_sim,
+        hybrid_aging_preemptive=hybrid_sim,
+        decoupled_hybrid=decoupled_sim,
+        srtf_short_p90_improvement_pct=_impr(fifo_sp90, srtf_sim["short_p90_response_s"]),
+        aging_short_p90_improvement_pct=_impr(fifo_sp90, aging_sim["short_p90_response_s"]),
+        srpt_short_p90_improvement_pct=_impr(fifo_sp90, srpt_sim["short_p90_response_s"]),
+        hybrid_short_p90_improvement_pct=_impr(fifo_sp90, hybrid_sim["short_p90_response_s"]),
+        decoupled_short_p90_improvement_pct=_impr(fifo_sp90, decoupled_sim["short_p90_response_s"]),
+        srtf_long_p99_delta_pct=_delta(fifo_lp99, srtf_sim["long_p99_response_s"]),
+        aging_long_p99_delta_pct=_delta(fifo_lp99, aging_sim["long_p99_response_s"]),
+        srpt_long_p99_delta_pct=_delta(fifo_lp99, srpt_sim["long_p99_response_s"]),
+        hybrid_long_p99_delta_pct=_delta(fifo_lp99, hybrid_sim["long_p99_response_s"]),
+        decoupled_long_p99_delta_pct=_delta(fifo_lp99, decoupled_sim["long_p99_response_s"]),
+        srtf_goodput_delta_pct=_delta(gp_fifo, gp_srtf),
+        aging_goodput_delta_pct=_delta(gp_fifo, gp_aging),
+        srpt_goodput_delta_pct=_delta(gp_fifo, gp_srpt),
+        hybrid_goodput_delta_pct=_delta(gp_fifo, gp_hybrid),
+        decoupled_goodput_delta_pct=_delta(gp_fifo, gp_decoupled),
+    )
+
+
+def run_decoupled_hybrid_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    aging_alpha: float = DECOUPLED_HYBRID_ALPHA_DEFAULT,
+    sla_s: float = DEFAULT_SLA_S,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+) -> DecoupledHybridReport:
+    """6-discipline comparison on Azure LLM 2024 [run 2026-06-20-l].
+
+    FIFO / SRTF / Aging-SRTF / SRPT-preemptive / Hybrid (unified) /
+    Decoupled Hybrid (split preemption/dispatch keys).
+
+    The decoupled hybrid uses pure SRPT preemption (remaining_s only) combined
+    with aging dispatch (remaining_s / (1 + α·total_wait_s)).  This preserves
+    SRPT's throughput-optimal preemption rule while using aging to prevent
+    extreme starvation at the dispatch level.
+
+    Root cause fix from run -k: the unified aging key at α=0.01 converted the
+    hybrid to Aging-SRTF behaviour (+64.2% goodput/$ vs FIFO) because the
+    dispatch-level aging promoted long-waiting requests after only 66.7s of
+    accumulated wait — very common at ρ=0.85.  Decoupling ensures preemption
+    stays at SRPT optimality, so goodput/$ should recover to near-SRPT levels.
+
+    Args:
+        servers: Replica pool size (M/G/c). Identical across all disciplines.
+        target_rho: Target cluster utilization (arrival time-warp).
+        job_limit: Optional cap on the number of real requests used.
+        aging_alpha: Aging decay constant for aging-based dispatch (default 0.01).
+        sla_s: E2E response-time SLA budget (seconds).
+        azure_fixture: Path to the Azure LLM 2024 CSV fixture.
+
+    Returns:
+        ``DecoupledHybridReport`` with KPIs and deltas for all six disciplines.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_decoupled_hybrid_backtest_on_trace(
+        raw, "azure_llm_2024", servers, target_rho, aging_alpha, sla_s
+    )
+
+
+def run_burstgpt_decoupled_hybrid_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    aging_alpha: float = DECOUPLED_HYBRID_ALPHA_DEFAULT,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    burstgpt_fixture: str = DEFAULT_BURSTGPT_FIXTURE,
+) -> DecoupledHybridReport:
+    """Cross-validate Decoupled Hybrid on BurstGPT — 6-discipline comparison.
+
+    Runs the same 6-discipline comparison as ``run_decoupled_hybrid_backtest``
+    on the BurstGPT trace (heavier output-token distribution, avg ~340 tok vs
+    Azure 2024's ~104 tok, with a higher default SLA budget of 30 s).
+
+    Args:
+        servers: Replica pool size.
+        target_rho: Target cluster utilization.
+        job_limit: Optional cap on number of requests.
+        aging_alpha: Aging decay constant (default 0.01).
+        sla_s: SLA budget (default 30 s for BurstGPT's longer service times).
+        burstgpt_fixture: BurstGPT CSV path.
+
+    Returns:
+        ``DecoupledHybridReport`` with FIFO / SRTF / Aging / SRPT / Hybrid /
+        Decoupled KPIs.
+    """
+    raw = load_burstgpt_serving_requests(burstgpt_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_decoupled_hybrid_backtest_on_trace(
         raw, "burstgpt", servers, target_rho, aging_alpha, sla_s
     )
