@@ -631,7 +631,7 @@ class TestDecoupledPublicAPI:
             )
 
     def test_alpha_default_constant(self):
-        assert DECOUPLED_HYBRID_ALPHA_DEFAULT == 0.01
+        assert DECOUPLED_HYBRID_ALPHA_DEFAULT == 0.001
 
 
 # ---------------------------------------------------------------------------

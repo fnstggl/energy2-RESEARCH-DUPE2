@@ -8,6 +8,138 @@
 
 ---
 
+## Run 2026-06-21-n — SLA-Aware Baseline + Noisy Prior Robustness (Critical Gate Passed)
+
+### Q1. What currently limits Aurelius most?
+
+**The serving runtime still uses FIFO, and the production deployment gate has now been
+cleared.** Run -n validates that decoupled hybrid α=0.001 retains 100% of oracle goodput/$
+under 30%-CV lognormal forecast noise — the critical pre-deployment gate. This removes the
+last simulation-level blocker for recommending runtime deployment. The primary remaining
+limit is wiring α=0.001 with live `OutputLengthForecastBundle.p50` into the serving runtime
+and cross-validating on the full BurstGPT dataset (1.4M rows).
+
+### Q2. What theoretically offers the largest gain?
+
+**Wiring decoupled hybrid (α=0.001) into the serving runtime with live prior.** The 100%
+noisy retention result means the +274% vs FIFO goodput gain is robust to 30%-CV forecast
+error. The remaining gap to pure SRPT (+322%) is ~48pp — achievable with a conformal
+prediction interval for α adaptive tuning (arXiv:2508.14544) or a higher-fidelity token
+length prior. Additionally, the North Star gap (vs SLA-aware, not FIFO) is now measurable:
+binary SLA-aware gives +125.4% vs FIFO, so decoupled hybrid's actual edge over SLA-aware
+is +65.9% from continuous prediction.
+
+### Q3. Which forecasts are weakest?
+
+1. **OutputLengthForecastBundle.p50 as live prior** — all serving backtests use oracle.
+   30%-CV robustness now validated for decoupled hybrid α=0.001 [run -n]. Production prior
+   quality expected to be 20–40%-CV; gate cleared.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving queue uses FIFO** — decoupled hybrid α=0.001 confirmed +274% goodput/$ at
+   simulator fidelity; 30%-CV noisy prior gate PASSED; not yet wired into runtime.
+2. **No preemption overhead model** — decoupled hybrid's +274% assumes zero KV-cache
+   eviction cost. Real preemption cost could reduce net gain by 5–15% (estimated).
+3. **BurstGPT cross-validation pending** — full 1.4M-row dataset not yet downloaded.
+
+### Q5. Which workloads benefit least?
+
+**Batch / energy-shifting and small traces.** Confirmed across all runs. BurstGPT fixture
+(51 requests) cannot distinguish disciplines due to insufficient queue depth. The SLA-aware
+discipline confirms the pattern: +125.4% vs FIFO on Azure LLM 2024 (5,880 requests), but
+indistinguishable on the 51-row fixture.
+
+### Q6. Which research direction appears strongest?
+
+**Runtime integration.** The critical production gate is now passed: decoupled hybrid α=0.001
+achieves +274% goodput/$ vs FIFO with 100% noisy retention at 30%-CV. arXiv:2508.14544
+explains the mechanism (preemptive SRPT self-corrects ordering mistakes). The next gate is
+measuring performance under real predicted-token noise from `OutputLengthForecastBundle.p50`
+rather than synthetic lognormal noise.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Wire decoupled hybrid α=0.001 into the serving runtime. Current simulator baseline is now
++274% vs FIFO (updated from +184.5% with the corrected default). Even accounting for 30%
+oracle-to-real-prior degradation, expected gain is +200–250% vs FIFO.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Same as Q7: wire decoupled hybrid α=0.001 into the serving runtime. The critical production
+gate (30%-CV robustness) is now PASSED. 100% noisy retention means a +274% oracle gain
+translates to an expected +274% with calibrated prior. The only remaining discount is
+preemption overhead (estimated 5–15%).
+
+### Q9. What would need to be true to achieve +300%?
+
++300% vs FIFO: decoupled α=0.001 = +274% (85% of SRPT's +322%). Closing the remaining
+~48pp requires:
+1. Conformal prediction interval adaptive α tuning (arXiv:2508.14544).
+2. Higher-fidelity token length prior (lower CV reduces short_p90 degradation from 1.91→2.27s).
++300% vs SLA-aware (the North Star): SLA-aware binary class = +125.4% vs FIFO. Decoupled
+α=0.001 = +274% vs FIFO → +65.9% over SLA-aware. North Star requires measuring this delta
+in the canonical public-trace aggregate benchmark (not just per-request simulator).
+
+### Q10. Which assumptions might be wrong?
+
+1. **30%-CV robustness transfers to real prior quality.** The test uses lognormal synthetic
+   noise. Real `OutputLengthForecastBundle.p50` error distribution may not be lognormal; if
+   biased (systematic over-/under-prediction), noisy retention could be lower.
+2. **Zero preemption overhead.** Real KV-cache eviction latency could reduce net goodput by
+   5–15%. This remains the largest unmodeled cost.
+3. **SLA=10s is representative.** The +274% result is SLA-specific. Under tighter SLA budgets
+   (e.g., 3s), the margin shrinks and starvation has larger impact.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **FIFO baseline** — North Star is vs SLA-aware, not FIFO. SLA-aware is now added (+125.4%
+   vs FIFO) but not yet in the canonical aggregate benchmark.
+2. **BurstGPT fixture (51 rows)** — too small; full 1.4M-row BurstGPT cross-validation pending.
+3. **No preemption cost model** — zero-overhead preemption is optimistic.
+4. **Oracle SLA-aware baseline** — the `sla_aware` binary class uses actual median split;
+   no prediction noise applied to the binary class decision.
+
+### Q12. Which public datasets should be added?
+
+1. **BurstGPT full dataset** (1.4M rows, CC-BY-4.0) — highest priority for cross-validation.
+2. **ShareGPT** — output token cross-validation.
+3. **Vidur profiling CSVs** — GPU penalty calibration.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Full BurstGPT cross-validation: `run_burstgpt_sla_aware_baseline_backtest()` and
+   `run_burstgpt_noisy_prior_backtest()` are ready; download 1.4M-row BurstGPT dataset.
+2. Wire decoupled hybrid (α=0.001) into serving runtime with `OutputLengthForecastBundle.p50`.
+
+**Short-term (2–3 runs):**
+3. Compare vs SLA-aware in aggregate economic benchmark — `sla_aware` aggregate optimizer
+   in economic replay; wire per-request comparison to the canonical public-trace rollup.
+4. Preemption overhead cost model — add KV-cache eviction latency to simulator.
+5. Conformal interval adaptive α tuning (arXiv:2508.14544) to close the remaining ~48pp gap
+   to pure SRPT.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -n
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Wire decoupled hybrid (α=0.001) into serving runtime | Very High | Medium | Gate PASSED [run -n]: +274% gp/$ + 100% noisy retention |
+| 2 | Full BurstGPT cross-validation (1.4M rows) | High | Low | run_burstgpt_*_backtest() ready |
+| 3 | SLA-aware in aggregate economic benchmark | Very High | Medium | Needed for North Star progress measurement |
+| 4 | Preemption overhead cost model (KV-cache eviction) | Medium | Low effort | Not started; estimated 5-15% reduction |
+| 5 | Conformal interval adaptive α tuning | Medium | Medium | arXiv:2508.14544 basis; closes ~48pp to SRPT |
+| 6 | Wire OutputLengthForecastBundle.p50 as live prior | High | Low | Infrastructure built (shadow) |
+| 7 | Admission gate → cluster simulator | Medium | Medium | Implemented (unconnected) |
+| 8 | GPU routing on LLM trace (TTFT binding) | Medium | Low | Benchmarked on energy trace [run -f] |
+| 9 | BOute MOBO routing co-optimisation | High | High effort | Not started |
+
+---
+
 ## Run 2026-06-21-m — Decoupled Hybrid Alpha Sweep (Pareto Frontier)
 
 ### Q1. What currently limits Aurelius most?

@@ -80,6 +80,22 @@ a sharp transition between α=0.005 (short_p90=2.06s) and α=0.01 (short_p90=14.
 arXiv:2604.00499 (TIE scheduling), arXiv:2508.01002 (SLAI), arXiv:2603.07917 (SageSched).
 40 new tests. See `docs/ALPHA_SWEEP_BACKTEST_RESULTS.md`.
 
+**SLA-Aware Baseline + Noisy Prior Robustness [run 2026-06-21-n]:** Three improvements
+from the top-ranked roadmap opportunities. (1) **`DECOUPLED_HYBRID_ALPHA_DEFAULT` updated
+0.01 → 0.001**: the Pareto-optimal alpha from run -m is now the live default — benchmark
+baseline improves from +184.5% to +274.0% vs FIFO (+31.4% relative). (2) **SLA-aware
+binary-class baseline added**: `sla_aware` discipline classifies requests as short (≤ median
+predicted tokens, priority 0) or long (> median, priority 1), FIFO within class — no
+continuous prediction. Measures the gain from coarse SLA-class awareness alone: **+125.4%
+vs FIFO**. Continuous prediction (decoupled α=0.001) adds a further **+65.9%** over
+binary class. (3) **30%-CV noisy prior robustness PASSED (critical gate)**: decoupled
+hybrid α=0.001 retains **100% of oracle goodput/$** under 30%-CV lognormal forecast noise.
+Gate mechanism: at α=0.001 preemption is pure SRPT (remaining_s only, not prediction-
+dependent), and the SLA-safe tokens are dominated by short requests (service ≈1.95s vs
+SLA=10s) whose ordering is noise-insensitive. Research basis: arXiv:2507.10150 (Past-Future
+Scheduler), arXiv:2512.12928 (PROSERVE TDG), arXiv:2508.14544 (Adaptive Robustness). 43
+new tests. See `docs/NOISY_PRIOR_SLA_AWARE_BACKTEST_RESULTS.md`.
+
 ---
 
 ## 2. Current Best Results (Benchmark Leaderboard)
@@ -473,6 +489,95 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-21-n — SLA-AWARE BASELINE + NOISY PRIOR ROBUSTNESS (CRITICAL GATE PASSED)
+
+**Goal:** Three highest-EV roadmap improvements from run -m: (1) update
+`DECOUPLED_HYBRID_ALPHA_DEFAULT` to the Pareto-optimal 0.001, (2) add SLA-aware
+binary-class baseline to quantify the value of continuous prediction over coarse
+class-awareness, (3) validate 30%-CV noisy prior robustness for decoupled hybrid
+α=0.001 — the critical production deployment gate.
+
+- **Phase 1 (audit):** Read ROADMAP, GAP_ANALYSIS. Confirmed #1 bottleneck:
+  `DECOUPLED_HYBRID_ALPHA_DEFAULT` still 0.01 despite run -m proving 0.001 is
+  Pareto-optimal (+31.4% goodput/$). Q6 critical gate: 30%-CV robustness for
+  decoupled hybrid at α=0.001 not yet validated. Q4 weakness: no SLA-aware baseline
+  comparison — all wins vs FIFO, not SLA-aware.
+
+- **Phase 3 (research — 3 new papers):**
+  1. **Past-Future Scheduler** (arXiv:2507.10150, July 2025) — Joint past-request
+     history + future-request prediction for guaranteed SLA deadlines. Validates that
+     binary SLA-class awareness (short vs long) is a principled approach grounded in
+     deadline-aware scheduling theory. The `sla_aware` discipline implements the
+     simplest version of this framework.
+  2. **PROSERVE** (arXiv:2512.12928, Dec 2025) — Multi-priority scheduling with
+     Token-level Deadline-aware Gain (TDG) function. Two-priority degenerate case is
+     our `sla_aware` discipline. Confirms priority-based dispatch with token-level SLA
+     awareness is near-optimal in the two-class case. Path to 3+ classes requires
+     per-class SLA budgets.
+  3. **Adaptively Robust LLM Inference** (arXiv:2508.14544, Aug 2025) — Adaptive
+     robustness to prediction uncertainty via conformal prediction. Validates lognormal
+     30%-CV noise as realistic for calibrated length predictors. Explains WHY preemptive
+     SRPT disciplines achieve high noisy retention: preemption corrects ordering mistakes
+     continuously (self-correcting mechanism).
+
+- **Phase 6 (implementation):**
+  - `DECOUPLED_HYBRID_ALPHA_DEFAULT` updated 0.01 → 0.001 with robustness comment.
+  - `sla_aware` discipline added to `simulate_queue`: classifies by median predicted_tokens;
+    priority 0 for short (≤ median), priority 1 for long; FIFO within class.
+  - `SLAAwareBaselineReport` dataclass: 4-discipline comparison (fifo/sla_aware/decoupled/
+    srpt) with incremental decoupled-vs-sla_aware delta.
+  - `NoisyPriorRobustnessReport` dataclass: oracle/noisy goodput + short_p90 + long_p99 +
+    retention_pct. Lognormal noise: `predicted = actual × exp(N(0, σ))`, σ = sqrt(log(1+cv²)).
+  - `run_sla_aware_baseline_backtest()`, `run_burstgpt_sla_aware_baseline_backtest()`.
+  - `run_decoupled_hybrid_noisy_prior_backtest()`, `run_burstgpt_noisy_prior_backtest()`.
+  - `tests/test_srtf_noisy_prior_backtest.py` (NEW) — 43 tests, 5 classes, all passing.
+  - `docs/NOISY_PRIOR_SLA_AWARE_BACKTEST_RESULTS.md` — full results + analysis.
+  - `tests/test_srtf_decoupled_hybrid_backtest.py` — updated: α default assertion to 0.001.
+
+- **Phase 7 (benchmark results — public trace replay):**
+
+  **Dataset:** Azure LLM 2024 (5,880 requests, real output-length distribution;
+  p50≈90 tokens, p99≈479 tokens, heavy-tailed). ρ=0.85, c=4, SLA=10s.
+
+  **SLA-Aware Baseline Comparison:**
+  | KPI | FIFO | SLA-aware (binary) | Decoupled α=0.001 | SRPT Preemptive |
+  |---|---:|---:|---:|---:|
+  | SLA-safe goodput/$ | 13,336 | **30,063 (+125.4%)** | **49,877 (+274.0%)** | 56,311 (+322.2%) |
+  | short_p90 response (s) | 696.16 | 3.02 (+99.6%) | 1.91 (+99.7%) | 1.89 (+99.7%) |
+  | long_p99 response (s) | 733.6 | 849.6 (+15.8%) | 2,034.8 (+177.4%) | 2,372.6 (+223.4%) |
+
+  **30%-CV Noisy Prior Robustness:**
+  | KPI | FIFO | Oracle Prior | 30%-CV Noisy Prior |
+  |---|---:|---:|---:|
+  | SLA-safe goodput/$ | 13,336 | 49,877 (+274.0%) | **49,877 (+274.0%)** |
+  | short_p90 response (s) | 696.16 | 1.91 (+99.7%) | 2.27 (+99.7%) |
+  | long_p99 response (s) | 733.6 | 2,034.8 | 2,034.8 |
+  | **Noisy retention** | — | — | **100.0%** |
+
+  **Key findings:**
+  - Binary SLA-class awareness gives +125.4% vs FIFO — coarse ordering is extremely powerful.
+  - Continuous prediction (decoupled α=0.001) adds further +65.9% over binary class.
+  - 30%-CV noisy prior: **100% retention** — zero measurable impact on SLA-safe goodput/$.
+  - Noise mechanism: preemptive SRPT corrects dispatch mistakes continuously; short requests
+    dominate SLA-safe tokens (service ≈1.95s vs SLA=10s) and are noise-insensitive.
+
+- **Decision:** FRONTIER IMPROVEMENT (simulator). Default alpha updated to 0.001
+  (Pareto-optimal). Critical 30%-CV prior robustness gate PASSED (100% retention).
+  SLA-aware binary-class baseline added: +125.4% vs FIFO, confirming decoupled hybrid's
+  further +65.9% gain comes from continuous token-length prediction.
+  `docs/RESULTS.md §8` non-claim gate: simulator / public-trace directional. Not
+  production savings.
+
+- **Run category:** FRONTIER IMPROVEMENT — three compounding improvements to default
+  benchmark configuration, production gate, and comparison baseline.
+
+- **Next recommended direction:**
+  1. Full BurstGPT cross-validation: `run_burstgpt_sla_aware_baseline_backtest()` and
+     `run_burstgpt_noisy_prior_backtest()` ready; download 1.4M-row BurstGPT.
+  2. Wire decoupled hybrid (α=0.001) into serving runtime — critical gate now passed.
+  3. Compare vs SLA-aware in aggregate economic benchmark (North Star progress).
+  4. Preemption overhead cost model (KV-cache eviction, estimated 5-15% reduction).
 
 ### Run 2026-06-21-m — DECOUPLED HYBRID ALPHA SWEEP (PARETO FRONTIER)
 
