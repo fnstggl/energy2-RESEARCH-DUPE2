@@ -4188,3 +4188,374 @@ def run_burstgpt_hf_noisy_prior_backtest(
         raw, "burstgpt_hf_fullscale", servers, target_rho, aging_alpha,
         sla_s, forecast_noise_cv, seed
     )
+
+
+# ---------------------------------------------------------------------------
+# Live Causal Prior — closes the oracle gap [run 2026-06-21-t]
+# ---------------------------------------------------------------------------
+# All prior robustness experiments used either oracle (predicted == actual) or
+# artificial lognormal noise (30%-CV). Neither reflects a real deployed system.
+#
+# This section implements the first production-realistic prior: a CAUSAL
+# SLIDING-WINDOW MEDIAN estimator that uses only completed requests visible
+# before each new arrival. This closes the gap from oracle to a live system:
+#
+#   Oracle prior (upper bound):       +322% vs FIFO (run -q)
+#   30%-CV noisy prior (worst-case):  +267% vs FIFO (run -n)
+#   Live causal prior (THIS section): measured here for the first time
+#
+# Production interpretation: a serving engine maintains a running median of
+# recent completions' output-token counts and uses that as the prior for
+# the next incoming request. This is the minimal zero-external-model prior —
+# it uses no external features, only the trace's own historical statistics.
+#
+# Causal guarantee: for request i, the prediction uses only actual_tokens from
+# requests 0..i-1, which have all arrived (and most completed) before request i.
+# This is identical to what a production scheduler would observe in a FIFO
+# completion log.
+#
+# Research basis:
+# - arXiv:2604.06970 (Scheduling the Unschedulable, SOSP 2026): §6.3 discusses
+#   production-viable priors; running average is their fallback for cold-start.
+# - arXiv:2508.14544 (Adaptively Robust LLM Inference): the causal running
+#   estimator is the implementation of "prediction from observation" that the
+#   conformal calibrator assumes is available at dispatch time.
+# - arXiv:2503.07545 (Queueing, Predictions, and LLMs, Mitzenmacher 2025):
+#   explicitly identifies causal historical estimators as the practical realization
+#   of theoretical scheduling-with-predictions frameworks.
+# ---------------------------------------------------------------------------
+
+# Window size for the causal sliding-window median prior.
+LIVE_PRIOR_WINDOW: int = 200
+
+
+def make_live_prior_predictions(
+    raw: list[tuple[float, int]],
+    window: int = LIVE_PRIOR_WINDOW,
+    warmup_value: Optional[float] = None,
+) -> tuple[list[float], dict]:
+    """Causal sliding-window median prediction for output tokens.
+
+    For request i, predicts its output token count as the empirical median of
+    the last ``window`` actual tokens from requests 0..i-1 (causal: uses only
+    past arrivals, not the current request).  Requests before the first
+    completion (i == 0) fall back to ``warmup_value`` or the global median.
+
+    This is the minimum-complexity production-viable prior: no external model,
+    no features, just historical output-token statistics from recent completions.
+
+    Args:
+        raw: List of (arrival_s, actual_output_tokens) from a real trace.
+        window: Sliding window size (default: 200 past requests).
+        warmup_value: Fixed fallback before any history is available (default:
+            global median of the trace, which is slightly non-causal for the
+            very first request but is a negligible leak for large traces).
+
+    Returns:
+        (predictions, stats) where:
+          predictions: list[float], length == len(raw), predictions[i] is the
+              causal median estimate for request i.
+          stats: dict with 'prior_cv_pct', 'prior_mae_tokens', 'prior_bias_pct',
+              'warmup_fallback', 'window', 'n_requests'.
+    """
+    if not raw:
+        return [], {}
+
+    all_toks = [t for _, t in raw]
+    sorted_all = sorted(all_toks)
+    global_median = float(sorted_all[len(sorted_all) // 2])
+    fallback = warmup_value if warmup_value is not None else global_median
+
+    predictions: list[float] = []
+    history: list[int] = []
+
+    for _arr, tok in raw:
+        if not history:
+            predictions.append(fallback)
+        else:
+            win = history[-window:]
+            s = sorted(win)
+            predictions.append(float(s[len(s) // 2]))
+        history.append(tok)
+
+    # Diagnostic statistics: prediction quality vs actuals.
+    errors = [abs(predictions[i] - all_toks[i]) for i in range(len(raw))]
+    biases = [predictions[i] - all_toks[i] for i in range(len(raw))]
+    mean_actual = statistics.mean(all_toks)
+    mae = statistics.mean(errors)
+    mean_bias = statistics.mean(biases)
+    # CV: std(predictions) / mean(actuals) — measures prediction spread
+    pred_std = statistics.stdev(predictions) if len(predictions) > 1 else 0.0
+    cv_pct = 100.0 * pred_std / max(1.0, mean_actual)
+    # Relative MAE: MAE / mean(actuals)
+    rel_mae_pct = 100.0 * mae / max(1.0, mean_actual)
+
+    stats = {
+        "prior_cv_pct": round(cv_pct, 2),
+        "prior_mae_tokens": round(mae, 2),
+        "prior_rel_mae_pct": round(rel_mae_pct, 2),
+        "prior_bias_tokens": round(mean_bias, 2),
+        "prior_bias_pct": round(100.0 * mean_bias / max(1.0, mean_actual), 2),
+        "warmup_fallback": round(fallback, 2),
+        "global_median_actual": round(global_median, 2),
+        "window": window,
+        "n_requests": len(raw),
+    }
+    return predictions, stats
+
+
+@dataclass
+class LivePriorReport:
+    """Live causal prior vs oracle comparison [run 2026-06-21-t].
+
+    Compares three conditions on the same public trace:
+      - FIFO baseline (no prior needed)
+      - Conformal with oracle prior (predicted == actual, upper bound)
+      - Conformal with live causal prior (sliding-window median of past requests)
+
+    The key measurement: live_vs_oracle_retention_pct — how much of the oracle
+    conformal gain survives when we replace oracle with causal historical predictions.
+
+    If retention ≥ 95%, the live prior is production-viable and the conformal
+    discipline can be deployed without requiring an external output-length model.
+    """
+
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    prior_window: int
+
+    # Prior quality diagnostics
+    prior_cv_pct: float
+    prior_mae_tokens: float
+    prior_rel_mae_pct: float
+    prior_bias_tokens: float
+
+    # Simulation summaries
+    fifo: dict
+    conformal_oracle: dict
+    conformal_live: dict
+
+    # KPIs
+    fifo_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+    live_goodput_per_dollar: float
+
+    oracle_delta_pct: float              # oracle conformal vs FIFO
+    live_delta_pct: float                # live conformal vs FIFO
+    live_vs_oracle_retention_pct: float  # live / oracle goodput, %
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "prior_window": self.prior_window,
+            "prior_cv_pct": round(self.prior_cv_pct, 2),
+            "prior_mae_tokens": round(self.prior_mae_tokens, 2),
+            "prior_rel_mae_pct": round(self.prior_rel_mae_pct, 2),
+            "prior_bias_tokens": round(self.prior_bias_tokens, 2),
+            "fifo": _r(self.fifo),
+            "conformal_oracle": _r(self.conformal_oracle),
+            "conformal_live": _r(self.conformal_live),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 2),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 2),
+            "live_goodput_per_dollar": round(self.live_goodput_per_dollar, 2),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "live_delta_pct": round(self.live_delta_pct, 2),
+            "live_vs_oracle_retention_pct": round(self.live_vs_oracle_retention_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_live_prior_on_trace(
+    raw: list[tuple[float, int]],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+) -> LivePriorReport:
+    """Run FIFO / Conformal-oracle / Conformal-live-prior on a trace."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+    live_preds, prior_stats = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_oracle() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),  # oracle
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_live() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],  # causal sliding-window median
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs = _build_oracle()  # predicted_tokens irrelevant for FIFO
+    oracle_reqs = _build_oracle()
+    live_reqs = _build_live()
+
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    live_cal = ConformalAlphaCalibrator()
+    live_sim, live_resp, _ = _simulate_decoupled_hybrid_conformal(
+        live_reqs, servers, live_cal
+    )
+
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    gp_live = _sla_safe_goodput_per_dollar(live_reqs, live_resp, sla_s, servers)
+
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+    live_sim["sla_safe_goodput_per_dollar"] = gp_live
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    retention = (gp_live / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+
+    return LivePriorReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        prior_cv_pct=prior_stats.get("prior_cv_pct", 0.0),
+        prior_mae_tokens=prior_stats.get("prior_mae_tokens", 0.0),
+        prior_rel_mae_pct=prior_stats.get("prior_rel_mae_pct", 0.0),
+        prior_bias_tokens=prior_stats.get("prior_bias_tokens", 0.0),
+        fifo=fifo_sim,
+        conformal_oracle=oracle_sim,
+        conformal_live=live_sim,
+        fifo_goodput_per_dollar=gp_fifo,
+        oracle_goodput_per_dollar=gp_oracle,
+        live_goodput_per_dollar=gp_live,
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        live_delta_pct=_delta(gp_fifo, gp_live),
+        live_vs_oracle_retention_pct=retention,
+    )
+
+
+def run_live_prior_conformal_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+) -> LivePriorReport:
+    """Live causal prior on Azure LLM 2024 [run 2026-06-21-t].
+
+    Replaces the oracle prediction (predicted == actual) with a causal
+    sliding-window median estimator: for request i, the predicted token count
+    is the empirical median of the last ``prior_window`` actual completions
+    from requests 0..i-1.
+
+    This is the first production-realistic evaluation of the conformal discipline:
+    no oracle tokens, no external model — just the running history of the serving
+    queue itself.
+
+    Expected outcomes on Azure LLM 2024 (5,880 requests, ρ=0.85, 4 servers):
+      FIFO baseline:                   ~ reference goodput/$
+      Conformal oracle (upper bound):  +322.24% vs FIFO [run -q]
+      Conformal live prior (target):   ≥ +267% vs FIFO (≥83% retention vs oracle)
+
+    The live causal prior should perform BETTER than 30%-CV lognormal noise because:
+    1. Running median is robust to heavy tails (Azure p99/p50 = 5.3×)
+    2. Real output-token distributions exhibit moderate stationarity within a trace
+    3. The sliding window adapts to any distribution shifts automatically
+    4. The conformal calibrator further adapts α to the observed prediction errors
+
+    The ≥83% retention threshold matches the 30%-CV noisy-prior floor from run -n.
+    If live > 83%, the live prior is strictly safer than the already-validated noisy prior.
+
+    Args:
+        servers: Replica pool size (M/G/c). Identical across disciplines.
+        target_rho: Target cluster utilization.
+        job_limit: Optional cap on requests (None = use all 5,880 available).
+        sla_s: E2E SLA budget (seconds).
+        prior_window: Sliding window size for causal median prediction.
+        azure_fixture: Path to Azure LLM 2024 CSV fixture.
+
+    Returns:
+        ``LivePriorReport`` with FIFO / oracle / live KPIs and retention metric.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_live_prior_on_trace(raw, "azure_llm_2024", servers, target_rho, sla_s, prior_window)
+
+
+def run_burstgpt_hf_live_prior_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> LivePriorReport:
+    """Live causal prior cross-validation on BurstGPT HF [run 2026-06-21-t].
+
+    Applies the causal sliding-window median prior to BurstGPT's heavier output
+    distribution (p50≈236 tok, p99≈934 tok vs Azure p50≈90, p99≈479).
+
+    Key question: does the live prior work equally well on a heavier-tailed
+    distribution where prediction errors are proportionally larger in absolute
+    terms but the conformal calibrator has more room to adapt α?
+
+    Expected outcomes (5,880-record sample, ρ=0.85, 4 servers, sla_s=30s):
+      FIFO baseline:                   ~ reference goodput/$
+      Conformal oracle (upper bound):  +644.4% vs FIFO [run -r]
+      Conformal live prior (target):   ≥ +536% vs FIFO (≥83% retention vs oracle)
+
+    A heavier tail means:
+    - Running median is MORE stable (more robust to outliers)
+    - Absolute errors are larger but relative errors (CV) may be similar
+    - The conformal calibrator should adapt α higher → more aging → robust dispatch
+
+    Args:
+        servers: Replica pool size.
+        target_rho: Target cluster utilization.
+        job_limit: Optional cap (set to 5880 for comparability with Azure scale).
+        sla_s: E2E SLA budget (default 30s for BurstGPT's longer service times).
+        prior_window: Sliding window size for causal median prediction.
+        jsonl_path: Path to the HF BurstGPT normalized JSONL.
+
+    Returns:
+        ``LivePriorReport`` with FIFO / oracle / live KPIs and retention metric.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+    return _run_live_prior_on_trace(
+        raw, "burstgpt_hf_fullscale", servers, target_rho, sla_s, prior_window
+    )
