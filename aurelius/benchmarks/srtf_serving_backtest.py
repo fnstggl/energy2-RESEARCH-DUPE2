@@ -178,6 +178,14 @@ DEFAULT_BURSTGPT_FIXTURE = os.path.join(
     _REPO_ROOT, "tests", "fixtures", "burstgpt_sample.csv"
 )
 
+# HuggingFace BurstGPT normalized sample — 59,999 records, CC-BY-4.0.
+# Fields: request_arrival_ts_s (float), output_tokens (int), input_tokens, model_id.
+# Used for full-scale cross-validation that the 54-row fixture cannot support.
+DEFAULT_BURSTGPT_HF_JSONL = os.path.join(
+    _REPO_ROOT, "data", "external", "hf", "lzzmm__BurstGPT",
+    "burstgpt_1_full", "processed", "normalized_sample.jsonl"
+)
+
 
 # ---------------------------------------------------------------------------
 # Real trace loading
@@ -249,6 +257,49 @@ def load_burstgpt_serving_requests(
     if limit is not None:
         out = out[:limit]
     return out
+
+
+def load_burstgpt_serving_requests_jsonl(
+    path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    limit: Optional[int] = None,
+) -> list[tuple[float, int]]:
+    """Return ``(arrival_s, output_tokens)`` from a BurstGPT HF normalized JSONL.
+
+    Each line is a JSON object with at minimum:
+      ``request_arrival_ts_s`` (float) — arrival timestamp in seconds
+      ``output_tokens``         (int)  — response token count
+
+    Failures (output_tokens == 0) are excluded.  Results are sorted by arrival
+    time with t0 normalized to 0.
+
+    Used for full-scale BurstGPT cross-validation [run 2026-06-21-p]:
+    the HF normalized sample has 59,999 records (CC-BY-4.0) vs the 54-row
+    fixture which is too small to demonstrate SRPT > FIFO.
+    """
+    import json as _json
+
+    rows: list[tuple[float, int]] = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = _json.loads(line)
+                ts = float(d["request_arrival_ts_s"])
+                out_tok = int(d.get("output_tokens") or 0)
+            except (KeyError, ValueError, TypeError):
+                continue
+            if out_tok > 0:
+                rows.append((ts, out_tok))
+    rows.sort(key=lambda r: r[0])
+    if not rows:
+        return []
+    t0 = rows[0][0]
+    result = [(ts - t0, tok) for ts, tok in rows]
+    if limit is not None:
+        result = result[:limit]
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -3289,4 +3340,79 @@ def run_burstgpt_preemption_overhead_backtest(
         raise ValueError("need at least 2 requests")
     return _run_preemption_overhead_on_trace(
         raw, "burstgpt", servers, target_rho, aging_alpha, sla_s, overhead_values_s
+    )
+
+
+# ---------------------------------------------------------------------------
+# Full-scale BurstGPT cross-validation [run 2026-06-21-p]
+# ---------------------------------------------------------------------------
+#
+# Bottleneck addressed: BurstGPT fixture (54 rows) is too small to show SRPT >
+# FIFO — insufficient queue depth for the scheduling signal.  The HF normalized
+# sample (59,999 records, CC-BY-4.0) provides the statistical mass needed to
+# cross-validate the decoupled hybrid result beyond the Azure LLM 2024 trace.
+#
+# BurstGPT characteristics (heavier distribution than Azure LLM 2024):
+#   output_tokens: p50=236, p95=634, p99=934 (vs Azure: p50≈90, p99≈479)
+#   service_s at p50: 0.15 + 236×0.02 = 4.87s (vs Azure p50: ≈1.95s)
+#   SLA budget: 30s (set higher to account for longer service times)
+#
+# Research basis:
+#   - BurstGPT (arXiv:2401.17644): real LLM inference trace from production
+#     ChatGPT API calls; heavy-tailed output distribution and burst structure.
+#   - SRPT multiserver (arXiv:1805.07686): SRPT throughput optimality holds
+#     for M/G/c with heavy-tailed (Pareto-like) service times — BurstGPT's
+#     longer outputs should show the SRPT benefit more strongly.
+#   - TIE scheduling (arXiv:2604.00499): distributional ordering outperforms
+#     point estimates for heavy-tailed lengths — BurstGPT is a better testbed.
+
+
+def run_burstgpt_hf_decoupled_hybrid_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    aging_alpha: float = DECOUPLED_HYBRID_ALPHA_DEFAULT,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> DecoupledHybridReport:
+    """Full-scale BurstGPT cross-validation: 6-discipline SRTF comparison [run 2026-06-21-p].
+
+    Runs the same 6-discipline comparison (FIFO / SRTF / Aging-SRTF /
+    SRPT-preemptive / Hybrid / Decoupled Hybrid) as ``run_decoupled_hybrid_backtest``
+    but on the HF BurstGPT normalized sample (59,999 records, CC-BY-4.0) rather
+    than the 54-row fixture.
+
+    The 54-row fixture cannot demonstrate SRPT > FIFO because there is not enough
+    queue depth for the scheduling signal to appear — requests clear before a
+    backlog forms.  With 59,999 records at ρ=0.85 and 4 servers, the queue builds
+    a realistic backlog and the ordering benefit is measurable.
+
+    BurstGPT has a heavier output-token distribution than Azure LLM 2024
+    (p50≈236 vs p50≈90) so:
+      - Service times are longer (p50≈4.87s vs ≈1.95s).
+      - SLA budget is set higher (30s vs 10s).
+      - Short-request p90 improvement should be similar or larger (SRPT theory
+        predicts larger gains with heavier tails).
+      - Long-request p99 regression may be larger (fewer short requests to
+        hide behind when the queue is predominantly long).
+
+    Args:
+        servers: Replica pool size (M/G/c). Identical across disciplines.
+        target_rho: Target cluster utilization (arrival time-warp applied equally).
+        job_limit: Optional cap on requests (None = use all 59,999 records).
+        aging_alpha: Aging decay for dispatch key; default=DECOUPLED_HYBRID_ALPHA_DEFAULT.
+        sla_s: E2E response-time SLA budget (seconds); default=30s for BurstGPT.
+        jsonl_path: Path to the HF BurstGPT normalized JSONL.
+
+    Returns:
+        ``DecoupledHybridReport`` with KPIs for all 6 disciplines.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests. "
+            "Ensure the file exists and contains valid records."
+        )
+    return _run_decoupled_hybrid_backtest_on_trace(
+        raw, "burstgpt_hf_fullscale", servers, target_rho, aging_alpha, sla_s
     )
