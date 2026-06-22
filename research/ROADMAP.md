@@ -24,6 +24,18 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Compound Economic × Queue Scheduling [run 2026-06-22-z] — FRONTIER UNDERSTANDING:**
+Measures the compound system (abs-conformal queue + economic provisioning) and corrects the
+run-t over-estimate. Economic cost factor 1.2575× (−21.2% GPU-hours, BENCHMARK_REGISTRY §1.1)
+applied multiplicatively to abs-conformal result. Azure LLM 2024: **compound=69,285 goodput/$
+(+419.52% vs FIFO, +130.47% vs oracle SLA-aware)** — north-star NOT achieved (+300% target).
+BurstGPT HF: **compound=53,949 (+726.32% vs FIFO, +166.02% vs oracle SLA-aware)** — north-star
+NOT achieved. Path to +300%: economic factor must reach 2.18× (−54.2% GPU-hours via
+spot/preemptible, vs current −21.2%). **Correction:** run-t estimated +876% vs FIFO but
+double-counted the SLA-aware component; correct is +419% vs FIFO (2.25× over-estimate).
+Independence of layers confirmed: queue (dispatch order) ⊥ provisioning (fleet cost).
+40 new tests passing. Results: `research/results/compound_economic_queue_backtest_2026-06-22.md`.
+
 **SLA-aware vs Abs-Conformal Head-to-Head [run 2026-06-22-y] — FRONTIER UNDERSTANDING:**
 Six-discipline comparison directly answers the north-star question. Results on both public
 traces: Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s): FIFO=13,336, SLA-aware
