@@ -100,6 +100,11 @@ MIN_REPLICAS: int = 1
 _SHU_TARGET_RHO: float = 0.75    # frontier-validated safe rho (CA uses 0.65)
 _SHU_TIMEOUT_TOL: float = 0.0    # strict 0% per-tick (same safety as constraint_aware)
 
+# min_cost_safe policy constants.
+# Per-tick oracle: find minimum replicas where timeout_rate_pct < gate.
+# Per-tick gate at 9.5% guarantees aggregate < 10% (mean of values each < gate).
+_MCS_TIMEOUT_GATE: float = 9.5
+
 
 # ---------------------------------------------------------------------------
 # Result dataclasses
@@ -321,7 +326,7 @@ def _run_policy(
     frontier_counters=None,
 ) -> PolicyResult:
     cache_aware = policy in ("constraint_aware", "cache_affinity_baseline",
-                              "safe_high_utilization")
+                              "safe_high_utilization", "min_cost_safe")
     fixed = policy in ("fifo", "cache_affinity_baseline")
 
     # Static provisioning baselines size once for the mean load.
@@ -424,6 +429,12 @@ def _run_policy(
             replicas = _constraint_trim(t, base, prefill_savings, tick_hours,
                                         prev_replicas=None,  # no hysteresis
                                         timeout_tol=_SHU_TIMEOUT_TOL)
+        elif policy == "min_cost_safe":
+            # Per-tick minimum-replica oracle. Searches upward from MIN_REPLICAS
+            # for the smallest fleet where per-tick timeout_rate < _MCS_TIMEOUT_GATE.
+            # No EWMA anticipation (pure reactive). Cache prefill savings applied.
+            # Per-tick gate at 9.5% guarantees aggregate timeout < 10% by construction.
+            replicas = _min_cost_safe_replicas(t, prefill_savings, tick_hours)
         else:  # pragma: no cover - guarded by ALL_POLICIES
             raise ValueError(f"unknown policy {policy}")
 
@@ -451,6 +462,23 @@ def _queue_aware_size(tick: ArrivalTick, tick_hours: float, threshold_ms: float)
         if ev.queue_wait_p95_ms <= threshold_ms:
             return r
     return 256
+
+
+def _min_cost_safe_replicas(tick: ArrivalTick, prefill_savings: float,
+                             tick_hours: float) -> int:
+    """Minimum replicas where per-tick timeout_rate_pct < _MCS_TIMEOUT_GATE.
+
+    Aggregate timeout ≤ _MCS_TIMEOUT_GATE < 10% is guaranteed by construction
+    since each per-tick value is strictly below the gate.
+    """
+    if tick.request_count == 0:
+        return MIN_REPLICAS
+    for r in range(MIN_REPLICAS, 1024):
+        ev = evaluate_tick(tick, r, prefill_savings=prefill_savings,
+                           tick_hours=tick_hours)
+        if ev.timeout_rate_pct < _MCS_TIMEOUT_GATE:
+            return r
+    return 1024
 
 
 def _constraint_trim(tick: ArrivalTick, base: int, prefill_savings: float,
@@ -535,6 +563,7 @@ ALL_POLICIES = (
     "queue_aware",
     "cache_affinity_baseline",
     "safe_high_utilization",
+    "min_cost_safe",
 )
 
 # Headline baseline for interactive inference per docs/RESULTS.md §3 rule 5.

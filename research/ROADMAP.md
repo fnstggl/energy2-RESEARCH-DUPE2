@@ -262,16 +262,20 @@ new tests. See `docs/NOISY_PRIOR_SLA_AWARE_BACKTEST_RESULTS.md`.
 
 See `docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md` for full table.
 
-| trace | workload class | CA goodput/$ | strongest safe baseline | margin | safety |
-|---|---|---:|---|---:|---|
-| BurstGPT | llm_serving | 1,615,694 | cache_affinity_baseline | **+1.77%** | SAFE |
-| Azure LLM 2023 conv | llm_serving | 2,326,157 | sla_aware | **+19.86%** | SAFE |
-| Azure LLM 2024 week | llm_serving | 2,555,325 | sla_aware | **+25.75%** | SAFE |
-| Alibaba GenAI 2026 | llm_serving | 9.84 | sla_aware | **+89.46%** | SAFE |
-| Alibaba GPU v2023 | gpu_packing | — | best_fit | **tie** | SAFE |
-| MIT Supercloud bounded | training | — | best_fit | **+16%** | SAFE |
-| Philly training | training | — | best_fit | **tie** | SAFE |
-| Canonical energy | energy_flex | — | current_price_only | **+11%** | SAFE |
+| trace | workload class | best policy | gpd/$ | vs strongest safe baseline | safety |
+|---|---|---|---:|---:|---|
+| BurstGPT | llm_serving | constraint_aware | 1,615,694 | **+1.77%** vs cache_affinity | SAFE |
+| Azure LLM 2023 conv | llm_serving | constraint_aware | 2,326,157 | **+19.86%** vs sla_aware | SAFE |
+| Azure LLM 2024 week | llm_serving | safe_high_utilization¹ | 2,886,961 | **+12.97%** vs CA | SAFE |
+| Azure LLM 2024 fixture 500× | llm_serving | **min_cost_safe** | **2,657,445** | **+24.55%** vs SHU, +52.07% vs CA | SAFE |
+| BurstGPT HF fixture 500× | llm_serving | **min_cost_safe** | **1,715,477** | **+2.57%** vs SHU, +16.35% vs CA | SAFE |
+| Alibaba GenAI 2026 | llm_serving | constraint_aware | 9.84 | **+89.46%** vs sla_aware | SAFE |
+| Alibaba GPU v2023 | gpu_packing | — | — | **tie** vs best_fit | SAFE |
+| MIT Supercloud bounded | training | — | — | **+16%** vs best_fit | SAFE |
+| Philly training | training | — | — | **tie** vs best_fit | SAFE |
+| Canonical energy | energy_flex | — | — | **+11%** vs current_price_only | SAFE |
+
+¹ Full Azure 2024 week trace frontier-validated. `min_cost_safe` replaces SHU at high load; full-trace audit pending.
 
 **Request-level serving queue (SRTF simulator — separate from aggregate CA leaderboard):**
 
@@ -2100,3 +2104,67 @@ complementary, see the cross-reference at the end.)
   3. Investigate adaptive rho (demand-responsive rho between 0.65 and 0.75) for
      further safe utilization margin at varying load levels.
   4. Add SHU to BENCHMARK_REGISTRY as canonical headline policy.
+
+---
+
+### Run 2026-06-22 — MIN_COST_SAFE POLICY (PER-TICK MINIMUM-REPLICA ORACLE)
+
+- **Phase 1 (audit):** Previous run merged `safe_high_utilization` (SHU, rho=0.75, +12.97%
+  over CA on full Azure 2024 week). The existing comment in backtest.py noted that relaxed
+  per-tick timeout tolerance would push aggregate above the 10% gate at rho=0.75 — i.e.,
+  SHU cannot simply relax its 0% trim tolerance. The open question: can a per-tick ORACLE
+  (search for minimum replicas directly against the 9.5% gate, rather than from a rho-target)
+  reduce GPU-hours further while keeping the aggregate gate? This avoids the rho-parameterization
+  entirely and is a genuinely different mechanism from SHU.
+
+- **Phase 2 (mechanism analysis):**
+  SHU: `base = _size_for_target(max(current, ewma), rho=0.75)` — EWMA-anticipatory,
+  never under-provisions during ramp-up, but over-provisions during ramp-down.
+  `min_cost_safe`: `_min_cost_safe_replicas(tick)` searches from 1 upward for minimum r
+  where `evaluate_tick(t, r).timeout_rate_pct < 9.5%`. Purely reactive — no EWMA, no rho
+  target. Per-tick gate at 9.5% guarantees aggregate ≤ 9.5% < 10% by construction (mean of
+  values each < gate ≤ gate).
+
+- **Phase 3 (implementation):**
+  - `aurelius/traces/backtest.py` — Added `_MCS_TIMEOUT_GATE = 9.5`, helper function
+    `_min_cost_safe_replicas(tick, prefill_savings, tick_hours)`, policy branch
+    `min_cost_safe` in `_run_policy`, cache_aware=True (same savings proxy as CA/SHU),
+    updated `ALL_POLICIES`.
+  - `tests/test_min_cost_safe_policy.py` — 11 new tests (all passing).
+  - `scripts/run_min_cost_safe_backtest.py` — New public backtest script.
+
+- **Phase 4 (benchmarks — PUBLIC TRACE REPLAY):**
+  All results at aggregate timeout safely below gate:
+
+  | dataset | scale | MCS gpd/$ | SHU gpd/$ | MCS vs SHU % | MCS timeout % | verdict |
+  |---|---:|---:|---:|---:|---:|---|
+  | burstgpt | 1× | 8,692 | 8,692 | 0.00% | 4.21% | TIE |
+  | burstgpt | 300× | 448,129 | 448,129 | 0.00% | 4.73% | TIE |
+  | azure_2024 | 1× | 12,511 | 12,511 | 0.00% | 2.00% | TIE |
+  | azure_2024 | 50× | 604,601 | 604,601 | 0.00% | 3.32% | TIE |
+  | **azure_2024** | **500×** | **2,657,445** | **2,133,670** | **+24.55%** | **7.05%** | **ALPHA_WIN** |
+  | burstgpt_hf | 100× | 450,119 | 450,119 | 0.00% | 2.14% | TIE |
+  | **burstgpt_hf** | **500×** | **1,715,477** | **1,672,445** | **+2.57%** | **2.59%** | **ALPHA_WIN** |
+
+  GPU-hours at Azure 500×: MCS=0.12h vs SHU=0.15h (20% fewer) vs CA=0.18h (33% fewer).
+  Low-scale TIE is expected (same ceiling arithmetic at rates < ~10 rps — same result as SHU).
+  Primary evidence: Azure 500× and BurstGPT HF 500× demonstrate the mechanism at realistic
+  higher-load operating points.
+
+- **Decision:** **ALPHA_WIN — Merge.** `min_cost_safe` is strictly cheaper than SHU at high
+  load (+24.5% gpd/$ at Azure 500×, +2.6% at BurstGPT HF 500×) and the safety guarantee is
+  STRONGER than SHU — per-tick gate at 9.5% bounds aggregate by construction, vs SHU's
+  aggregate result requiring validation. 11 integration tests passing. Fixture TIE is the
+  same expected low-rate artifact as for SHU.
+
+- **Run category:** Frontier Improvement (economic scheduler leaderboard)
+
+- **Next recommended direction:**
+  1. Run full-trace frontier audit for `min_cost_safe` (equivalent of
+     `run_azure_2024_safe_utilization_frontier.py` for SHU) to measure MCS vs SHU on the
+     full Azure 2024 7-day trace.
+  2. Wire decoupled hybrid conformal into canonical economic backtest to compound queue gains
+     with MCS's economic gain.
+  3. Investigate adaptive gate (per-tick gate as function of load level) for further safe
+     utilization margin at varying load.
+  4. Update BENCHMARK_REGISTRY to use `min_cost_safe` as canonical headline economic policy.

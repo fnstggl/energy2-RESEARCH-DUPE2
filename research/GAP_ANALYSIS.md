@@ -3446,3 +3446,125 @@ suggests ~0.10 rho increment per safety tier. The next natural extension:
 - Time-of-day rho: lower rho during burst hours, higher during trough
 - Per-instance rho: heterogeneous sizing based on per-server KV fill rate
 All three require real-time KV fill telemetry — blocked on production pilot data.
+
+---
+
+## Run 2026-06-22 (MCS) — min_cost_safe Policy (Per-Tick Minimum-Replica Oracle)
+
+### Q1. What currently limits Aurelius most?
+
+**Economic provisioning factor vs north-star.** After SHU (+12.97% vs CA, merged), the binding
+economic constraint is the provisioning factor: current best is ~1.46× over FIFO, but north-star
+needs 2.18×. `min_cost_safe` addresses this by finding the minimum replica count per tick (oracle
+for the per-tick gate), avoiding SHU's EWMA over-provisioning during ramp-down.
+
+### Q2. What theoretically offers the largest gain?
+
+**Compound economic × queue scheduling** (unchanged). MCS improves the economic provisioning
+factor for the LLM serving workload at high load. The queue scheduling gain (conformal SRPT)
+remains the larger multiplicative lever, still unmeasured end-to-end with the economic layer.
+
+### Q3. Which forecasts are weakest?
+
+Same as previous run: TTFT p99 at `baseline_fallback` (67% fallback rate). MCS is pure-reactive
+and makes no forecasts — it directly evaluates replica counts against the physics model per tick.
+
+### Q4. Where is the serving physics most uncertain?
+
+Same as SHU run. `min_cost_safe` directly searches the physics model (Erlang-C + tail multipliers)
+for the minimum safe replica count — no rho-parameterization uncertainty. The main uncertainty
+is the BurstGPT token-distribution representativeness.
+
+### Q5. What is the north-star gap today?
+
+After MCS integration at high load:
+- Fixture scales (1×, 50×): TIE with SHU and CA — same ceiling arithmetic
+- Azure 500×: MCS = +24.55% vs SHU, +52.07% vs CA, 7.05% aggregate timeout (SAFE)
+- BurstGPT HF 500×: MCS = +2.57% vs SHU, +16.35% vs CA, 2.59% timeout (SAFE)
+
+The compound KPI trajectory (at high load where policies differentiate):
+- `sla_aware` baseline: 1× reference
+- `constraint_aware`: +25.75% vs sla_aware (full Azure 2024 week)
+- `safe_high_utilization`: ~+41.9% vs sla_aware (frontier-validated)
+- `min_cost_safe` (fixture 500×): ~+78% vs sla_aware (extrapolated; full-trace audit pending)
+
+North-star is +300% vs sla_aware. The compound queue + economic gain remains the
+primary path; MCS improves the economic factor but does not close the north-star gap alone.
+
+### Q6. What safety gates are proven?
+
+`min_cost_safe` has a STRONGER safety guarantee than SHU:
+- **Per-tick gate**: each tick's timeout_rate_pct < 9.5% (strict inequality)
+- **Aggregate guarantee**: mean(values each < 9.5%) < 9.5% < 10% — by construction
+- SHU achieves 9.465% aggregate on the full Azure 2024 trace (close to gate)
+- MCS achieves 7.05% aggregate on Azure 500× fixture (1.95pp lower than SHU aggregate)
+
+### Q7. What is the MCS vs SHU mechanism difference?
+
+SHU: EWMA-anticipatory → sizes for `max(current_rate, ewma_rate)` → protects against
+ramp-up but over-provisions during ramp-down (ewma_rate lags behind falling load).
+
+MCS: per-tick oracle → `min r: evaluate_tick(t, r).timeout_rate_pct < 9.5%` → always
+finds the true minimum safe replica count for the CURRENT tick's actual load. During
+ramp-down, MCS immediately drops replicas (no EWMA lag). During sudden ramp-up,
+MCS may be 1 tick slower than SHU (no anticipation).
+
+Net effect at high load: MCS uses ~20% fewer GPU-hours than SHU at Azure 500× (0.12 vs 0.15).
+
+### Q8. Why does MCS tie with SHU at low scales?
+
+At low arrival rates (< ~10 rps), even 1 replica has timeout_rate_pct = 0% (well below the
+9.5% gate), so `_min_cost_safe_replicas` returns MIN_REPLICAS=1 — same as SHU's ceiling
+arithmetic (base=1 for both rho=0.65 and rho=0.75 at these rates). Differentiation only
+appears when load is high enough that 1 replica would breach the 9.5% gate and the optimal
+count is 2+ replicas, creating room for MCS to use fewer than SHU's EWMA-inflated estimate.
+
+### Q9. What is the compute cost of MCS?
+
+`_min_cost_safe_replicas` runs an upward search from MIN_REPLICAS, calling `evaluate_tick`
+once per replica count. At high load (e.g., Azure 500×, answer=2-3 replicas), this is 2-3
+physics evaluations per tick — same order as `_constraint_trim` which also calls evaluate_tick
+per probe. The per-tick cost is O(r*) where r* is the optimal replica count (typically 1-10).
+
+### Q10. What residual risk does MCS carry?
+
+The main residual risk is burst under-provisioning: if load spikes suddenly between ticks,
+SHU's EWMA would have already sized up (max of current + ewma_rate) while MCS only uses
+the current tick's stats. At the fixture scale-500× simulated load pattern, this reactive
+gap costs 0% (TIE at 100× where rates are moderate) to +2.57% at 500× (MCS still wins
+because ramp-down savings outweigh ramp-up latency). A full-trace frontier audit would
+quantify this tradeoff on real burst patterns.
+
+### Q11. What policies should be tested next?
+
+1. **Full-trace MCS frontier audit** on Azure 2024 7-day trace (equivalent of
+   `run_azure_2024_safe_utilization_frontier.py` for SHU).
+2. **Adaptive gate MCS**: per-tick gate tracks load trend (lower gate during ramp-up,
+   higher gate during ramp-down) to combine SHU's anticipatory protection with MCS's
+   minimum-cost oracle.
+3. **Compound MCS + conformal queue**: wire min_cost_safe into the economic backtest
+   alongside the conformal SRPT serving layer to measure the true compound gain.
+
+### Q12. How does MCS relate to the architecture audit findings?
+
+MCS lives entirely in `aurelius/traces/backtest.py` (the public LLM serving leaderboard layer),
+orthogonal to `JobScheduler` (energy scheduling), `srtf_serving_backtest.py` (queue discipline),
+and `frontier/` (rho controllers). This is consistent with the architecture audit's finding
+that the economic provisioning layer and the serving queue layer are independent. MCS improves
+the economic provisioning side; the queue-discipline improvements (+557% from conformal SRPT)
+remain in the serving layer. These are multiplicatively compoundable.
+
+### Q13. What should be attempted next?
+
+**Highest priority:** Full-trace frontier audit for `min_cost_safe` to validate the +24.5% fixture
+result holds on the full Azure 2024 week trace. This requires running `min_cost_safe` against the
+raw 7-day trace (same setup as the SHU frontier audit).
+
+**Second priority:** Wire the compound economic × queue backtest: run SLA-safe goodput/$ for the
+joint (min_cost_safe economic provisioning) + (conformal SRPT queue discipline) system, replacing
+the independence assumption with a measured compound result.
+
+**Current binding constraint:** The economic provisioning factor (MCS at fixture 500×: ~1.78× vs
+sla_aware, extrapolated) needs to reach 2.18× for north-star. MCS gets closer than SHU (1.46×)
+but the gap remains. Spot/preemptible pricing (projected 2.88× combined) remains the highest
+expected-value unlocking mechanism if the full-trace MCS audit confirms the fixture gains.
