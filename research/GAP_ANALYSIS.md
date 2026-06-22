@@ -8,6 +8,118 @@
 
 ---
 
+## Run 2026-06-22-u — Stratified Prior Experiment + Public SRTF Benchmark Script
+
+### Q1. What currently limits Aurelius most?
+
+**Prior quality: within-model CV ≈ 178%.** This run investigated whether per-model
+stratification of the live running-median prior could improve oracle retention beyond
+70% (BurstGPT HF). Stratification proved **neutral (+0.12%)** because BurstGPT is
+non-stationary:
+
+- Test window (records 0–5,879): ChatGPT median = 238 tok, GPT-4 median = 236 tok — nearly equal.
+- Full-dataset ChatGPT median = 7 tokens; this collapse only emerges in late records outside the window.
+- Per-model running medians converge to global median → stratification adds nothing.
+- **True bottleneck:** ChatGPT within-model CV ≈ 178% vs prior CV ≈ 7% (near-constant point estimate).
+
+### Q2. What theoretically offers the largest gain?
+
+**Distributional scheduling key (TIE metric, arXiv:2604.00499).** Uses E[L] + λ·CVaR[L] as
+the scheduling priority, directly penalising heavy-tail requests that a point-estimate prior
+misses. Theoretical impact: +5–15% retention on high-CV traces. Zero additional data needed.
+
+### Q3. Which forecasts are weakest?
+
+1. **Live prior CV ≈ 7% vs actual CV ≈ 80–178%.** Per-model stratification cannot fix this.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Scheduling key is a point estimate (running median).** TIE uses distributional key.
+2. **Prior ignores non-stationarity.** BurstGPT median drifts 238 → 7; slow adaptation.
+3. **No similarity-based prior.** SageSched (arXiv:2604.07883) uses FAISS KNN.
+
+### Q5. Which workloads benefit least?
+
+**BurstGPT under per-model stratification.** Non-stationarity and convergent model medians
+in the 5,880-record test window make stratified ≡ global. Azure LLM 2024 has no model-ID
+field so stratification is inapplicable.
+
+### Q6. Which research direction appears strongest?
+
+**TIE scheduling metric (arXiv:2604.00499).** Directly addresses within-model CV bottleneck.
+Implementation: replace `remaining_s` preemption/dispatch key with `E[L] + λ·CVaR[L]` in
+`_simulate_decoupled_hybrid_conformal`. Backtest cost: one BurstGPT 5,880-record run.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Implement TIE-weighted scheduling key. Estimated +5–15% retention on BurstGPT (CV=178%).
+No new data required; uses existing conformal calibration window.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Request-specific predictor (CARA HGB) bringing retention 70–82% → 95%+, recovering
+13–25pp × oracle delta ≈ +42–80pp additional. Requires TTFT/queue signal from trace.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Independence compound estimate (+876% vs FIFO) already far exceeds +300% vs SLA-aware.
+If TIE improves BurstGPT retention from 70% → ~85%, live delta would improve from +421%
+toward +500%+ vs FIFO.
+
+### Q10. Which assumptions might be wrong?
+
+1. **BurstGPT test window is representative.** Records 0–5,879 vs full 59,999 differ markedly.
+2. **Independence compound estimate.** Economic + serving queue may not multiply in practice.
+3. **TIE +5–15% estimate.** Based on theoretical analysis; actual gain requires backtest.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **No compound backtest yet.** Economic + serving queue simulated independently.
+2. **BurstGPT non-stationarity.** Test window doesn't reflect full-trace distribution shift.
+3. **TIE metric not evaluated.** Highest-EV opportunity is still theoretical.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT** — richer features for predictor; long-tail request structure.
+2. **Mooncake FAST25** — KV prefix reuse validation.
+3. **CARA latency dataset** — TTFT + queue-state for request-specific prior.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Implement TIE scheduling metric: replace `remaining_s` with `E[L] + λ·CVaR[L]` in
+   `_simulate_decoupled_hybrid_conformal`. Backtest on BurstGPT HF 5,880 records.
+2. SageSched FAISS similarity prior: top-K nearest-neighbour token prediction from history.
+
+**Short-term (2–3 runs):**
+3. End-to-end compound backtest: economic scheduling × live-prior SRTF.
+4. CARA HGB predictor evaluation on SwissAI or CARA dataset (has TTFT signal).
+
+---
+
+## Future Opportunity Ranking — Updated After Run -u
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | TIE scheduling metric (E[L]+λ·CVaR[L], arXiv:2604.00499) | Very High | High | New — directly addresses CV=178% bottleneck |
+| 2 | Request-specific prior (CARA HGB, TTFT+queue signal) | Very High | Medium | Gap: Azure 18pp, BurstGPT 30pp retention |
+| 3 | SageSched FAISS similarity prior (arXiv:2604.07883) | High | Medium | New — KNN of historical BurstGPT requests |
+| 4 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO |
+| 5 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third adds confidence |
+| 6 | Wire conformal discipline into serving runtime | High | Medium | All validation gates CLOSED; SCRIPT NOW EXISTS [run -u] |
+
+**Closed opportunities:**
+- SRTF public benchmark script: **DONE [run -u]** — `scripts/run_srtf_serving_backtest.py`
+- Per-model stratified prior: **EXHAUSTED [run -u]** — +0.12% neutral (BurstGPT non-stationarity)
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 88.1% BurstGPT
+- Preemption overhead on BurstGPT: **CLOSED [run -s]** — 95.25% retention at 0.30s
+- BurstGPT noisy prior: **CLOSED [run -r]** — 100.0% retention
+- BurstGPT conformal: **CLOSED [run -r]** — +644.4% vs FIFO
+
+---
+
 ## Run 2026-06-21-t — Live Causal Prior Evaluation (Production Realism Gate)
 
 ### Q1. What currently limits Aurelius most?

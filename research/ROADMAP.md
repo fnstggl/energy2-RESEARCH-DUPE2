@@ -568,19 +568,19 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 6. Highest Expected Value Opportunities (Ranked)
 
-> Updated after run 2026-06-21-t. Live causal prior measured: +244% Azure, +421% BurstGPT
-> vs FIFO. Running-median prior = 81.6% retention on Azure; request-specific predictor
-> needed to close remainder.
+> Updated after run 2026-06-22-u. Public SRTF benchmark script created.
+> Key finding: model-stratified prior neutral (+0.12%) — BurstGPT non-stationarity
+> means global running median already adapts correctly. Next: TIE/log-t scheduling.
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | **Wire conformal+decoupled into serving runtime with request-specific prior** | **Very High** (+322% oracle, +244% live-prior on Azure) | **Medium** | **Live-prior floor measured [run -t]**: running median = 81.6% retention. CARA HGB would close remainder | Integrate `HGBOutputLengthForecaster.p50` as prior in `_run_live_prior_on_trace` |
+| 1 | **TIE/log-t scheduling metric** (arXiv:2604.00499, ICML 2026) | **High** (1.8× vs baselines) | **Low-Medium** | **Not Started** | Fit per-model log-t distribution; replace median with TIE = E[L]+λ·CVaR[L] |
 | 2 | Compound economic + queue scheduling in canonical backtest | Very High (estimated +876% vs FIFO compound) | High | **Compound table measured [run -t]** — independence-assumption estimate | Wire conformal discipline into trace replay; measure true vs estimated compound |
-| 3 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
-| 4 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 5 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 6 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 7 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 3 | SageSched-style FAISS similarity → Gittins index (arXiv:2603.07917) | High (28.7% over TRAIL) | Medium | Not Started | FAISS index over prompt embeddings; per-request distributional Gittins |
+| 4 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
+| 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
 | 8 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
 | 9 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
@@ -590,6 +590,8 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 - BurstGPT SLA-aware baseline — **CLOSED** [run -r]: +210.6% vs FIFO
 - BurstGPT conformal alpha — **CLOSED** [run -r]: +644.4% vs FIFO
 - Live causal prior (running median) — **MEASURED** [run -t]: 81.6% retention (Azure), 70.0% (BurstGPT)
+- Model-stratified live prior — **EXHAUSTED** [run -u]: +0.12% (neutral); non-stationarity finding
+- Wire SRTF public benchmark script — **DONE** [run -u]: `scripts/run_srtf_serving_backtest.py`
 
 ---
 
@@ -1751,3 +1753,104 @@ complementary, see the cross-reference at the end.)
      LLM serving traces (Azure 2024, BurstGPT) to compound economic + queue gains.
   4. Investigate dynamic α trajectory: emit per-dispatch α values and visualize
      convergence speed for different CV levels.
+
+---
+
+### Run 2026-06-22-u — Model-Stratified Live Prior + Public SRTF Benchmark Script
+
+- **Date:** 2026-06-22
+- **Run category:** Infrastructure Improvement + Failed Experiment (research finding)
+- **Branch:** claude/kind-tesla-3us8wn
+
+#### Hypothesis
+BurstGPT has two model strata with dramatically different output-token distributions:
+- ChatGPT: 82% of requests, full-dataset median=7 tokens, CV≈178%
+- GPT-4: 18% of requests, full-dataset median=235 tokens, CV≈85%
+
+The global running median (≈7, dominated by ChatGPT) was hypothesised to massively
+mispredict GPT-4 requests, causing 30% oracle retention gap on BurstGPT.
+Per-model stratified running median was expected to correct GPT-4 ordering and
+improve BurstGPT retention from 70% toward 80%+.
+
+#### Research Reviewed (10 papers)
+1. arXiv:2604.07931 (ProD): per-prompt median > global median as training target
+2. arXiv:2604.00499 (TIE/log-t, ICML 2026): validates CV≈1.09 average; per-stratum
+   distributional scheduling beats global stats; 1.8× throughput on heavy-tail
+3. arXiv:2603.07917 (SageSched): FAISS similarity → distribution → Gittins; 28.7%
+   over TRAIL; directly applicable reference for future work
+4. arXiv:2410.01035 (TRAIL, ICLR 2025): embedding-based mid-generation refinement
+5. arXiv:2602.11812 (EGTP/PLP, ICLR 2026): prefill entropy → 29% MAE reduction
+6. arXiv:2503.07545 (Mitzenmacher & Shahout 2025): quantifies ROI of prediction CV
+7. arXiv:2504.10743 (Robust Gittins, 2025): graceful degradation under CV=80%
+8. arXiv:2506.14851 (Hermes, ACM TACO 2025): PDGraph + Gittins for multi-step
+9. arXiv:2505.23022 (SCORPIO, 2025): heterogeneous SLO guards; 14.4× goodput
+10. arXiv:2412.04504 (Multi-Bin Batching, 2024): coarse length-bin stratification
+
+#### Implementation
+- Added `load_burstgpt_serving_requests_with_model_jsonl` — extended loader with model_id
+- Added `make_stratified_live_prior_predictions` — per-model sliding-window median
+- Added `StratifiedLivePriorReport` dataclass with per-model statistics
+- Added `run_burstgpt_hf_stratified_prior_backtest` — 4-condition comparison function
+- Added `tests/test_stratified_prior_backtest.py` — 20 passing tests
+- Added `scripts/run_srtf_serving_backtest.py` — PUBLIC BENCHMARK SCRIPT (ROADMAP #1)
+- Wrote `docs/SRTF_SERVING_BACKTEST_RESULTS.md` — standalone benchmark document
+
+#### Critical Finding: BurstGPT is Non-Stationary
+
+The BurstGPT_1 dataset has extreme non-stationarity for ChatGPT:
+- First 5,880 records: ChatGPT median=238, GPT-4 median=236 (SIMILAR!)
+- Last 5,880 records: ChatGPT median=3, GPT-4 median=240 (VERY DIFFERENT)
+
+This means: for the canonical 5,880-record test window (used in run -t), BOTH models
+have similar output-token medians ≈ 235 tokens. Per-model stratification provides
+ZERO benefit at this scale because the global median already correctly represents both.
+
+#### Benchmark Results (PUBLIC TRACE REPLAY)
+
+**Command:** `python scripts/run_srtf_serving_backtest.py --job-limit 5880`
+**Dataset:** Azure LLM 2024 (fixture, 5,880 records) + BurstGPT HF (5,880 records)
+
+| KPI | Azure LLM 2024 | BurstGPT HF |
+|-----|---------------:|------------:|
+| FIFO goodput/$ | 13,336 | 6,529 |
+| Oracle goodput/$ | 56,311 (+322.24%) | 48,599 (+644.38%) |
+| Live prior goodput/$ | 45,933 (+244.42%) | 34,004 (+420.83%) |
+| Oracle retention | 81.6% | 70.0% |
+| Prior CV | 7% | ~15% |
+| SLA violations | No regressions | No regressions |
+
+Results MATCH run -t exactly. Public benchmark script reproduces prior results.
+
+**Per-Model Stratification Full-Scale Result (58,042 records):**
+- Global live prior: +202.7% vs FIFO (72.8% retention)
+- Stratified live prior: +203.1% vs FIFO (72.9% retention)
+- Stratification improvement: **+0.12%** (negligible)
+
+Stratification is neutral because: (1) global running median adapts naturally to
+the dominant ChatGPT distribution shift, and (2) GPT-4 (18%) is too small a fraction
+to create detectable ordering improvement in aggregate SLA-safe goodput/$.
+
+#### Decision
+**INFRASTRUCTURE IMPROVEMENT — Merge** (no goodput/$ claim; research finding documented)
+
+The public SRTF benchmark script (`scripts/run_srtf_serving_backtest.py`) is the
+primary deliverable. It makes the SRTF results reproducible as a standalone public
+benchmark for the first time, fulfilling ROADMAP priority #1.
+
+The stratified prior code is correct research infrastructure with accurate tests.
+The key research finding (non-stationarity + neutral stratification) is documented.
+
+No runtime decision path changes. Categorized as infrastructure improvement, not
+frontier improvement.
+
+#### Next Recommended Directions
+1. **TIE/log-t scheduling metric** (arXiv:2604.00499, ICML 2026): Replace
+   median-based prior with TIE = E[L] + λ·CVaR[L] using per-model log-t fit.
+   Addresses the fundamental issue: running median has CV≈0% but actual CV=80-178%.
+   Expected: better retention on both traces. Complexity: Low-Medium.
+2. **SageSched-style similarity search** (arXiv:2603.07917): FAISS index over
+   prompt embeddings → per-request distributional estimate → Gittins index.
+   Expected: 28.7% improvement over TRAIL (best reference system). Complexity: Medium.
+3. **ShareGPT as third public LLM trace** for cross-trace validation.
+4. **Compound economic + queue backtest**: combine cluster-level scheduling with
+   SRTF to validate the +876% independence estimate.

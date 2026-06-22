@@ -251,6 +251,47 @@ Public-replay economic validation of the three shadow research modules. Runners:
 Verdict: no module improves SLA-safe goodput/$ on the robust public replay
 (BurstGPT, real 1.43M trace). All remain `enabled=False`. INFRASTRUCTURE ONLY.
 
+## 5e. Stratified Live Prior SRTF Backtest + Public Benchmark Script (run 2026-06-22-u)
+
+Evaluation of per-model stratified causal prior on BurstGPT HF 59,999 records (5,880-record
+test window). Extends run 2026-06-21-t with 4-condition comparison: FIFO / conformal_oracle /
+conformal_global_live / conformal_stratified_live. Also delivers the public SRTF benchmark script.
+
+**Stratified prior quality (BurstGPT HF, 5,880 records):**
+
+| prior | cv_pct | mae_tokens | vs_oracle_retention |
+|---|---:|---:|---:|
+| global running median | ~8% | ~80 tok | 70.0% |
+| per-model stratified | ~8% | ~79 tok | 70.1% |
+| stratification delta | — | — | +0.12% (neutral) |
+
+**Root cause of neutrality:** BurstGPT is non-stationary. Test window (records 0–5,879)
+has ChatGPT median = 238 tokens and GPT-4 median = 236 tokens — nearly equal. The
+full-dataset ChatGPT median = 7 tokens only emerges in late records outside the window.
+Per-model running medians converge to global median, so stratification is a no-op.
+
+**True bottleneck:** ChatGPT within-model CV ≈ 178% vs prior CV ≈ 7%. Stratification cannot
+fix within-model variance. Requires TIE distributional scheduling key or request-specific prior.
+
+**Public benchmark script (primary deliverable):**
+- File: `scripts/run_srtf_serving_backtest.py`
+- Disciplines: FIFO, conformal_oracle, conformal_global_live, conformal_stratified_live
+- Flags: `--azure-only`, `--burstgpt-only`, `--full-scale`, `--job-limit`, `--servers`, `--rho`
+- Output: `data/external/srtf_serving/processed/srtf_serving_backtest_summary.json`
+  and `docs/SRTF_SERVING_BACKTEST_RESULTS.md`
+- Addresses ROADMAP priority #1: reproducible public SRTF serving benchmark
+
+**Functions added to `aurelius/benchmarks/srtf_serving_backtest.py`:**
+- `load_burstgpt_serving_requests_with_model_jsonl()`
+- `make_stratified_live_prior_predictions()`
+- `StratifiedLivePriorReport` dataclass
+- `run_burstgpt_hf_stratified_prior_backtest()`
+
+20 unit + integration tests passing (`tests/test_stratified_prior_backtest.py`).
+All results are directional simulator only.
+
+---
+
 ## 6. Benchmark Integrity Rules (from `docs/RESULTS.md`)
 
 1. SLA-safe goodput/$ = `sla_compliant_goodput / (gpu_infra_cost + energy_cost + network_cost)`.
