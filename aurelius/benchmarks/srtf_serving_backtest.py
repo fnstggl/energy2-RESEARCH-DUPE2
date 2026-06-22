@@ -4985,6 +4985,427 @@ def _run_stratified_prior_on_trace_with_features(
     )
 
 
+# ---------------------------------------------------------------------------
+# ML PRIOR (HGB) [run 2026-06-22-v]
+#
+# Why this is different from the stratified causal prior (run -u):
+#
+# Run -u confirmed that ANY running-statistics prior (global or stratified)
+# is capped at alpha=2×alpha_max=0.002 by the conformal calibrator.  The
+# root cause: GPT-4 requests (15.8% of BurstGPT) have rel_err≈0.96 under
+# the global running median, pushing the p90 error above the 2× cap threshold
+# (p90_err ≥ 0.80 → ratio=min(2.0,...) → capped).
+#
+# The stratified prior (run -u) ALSO hit the cap despite using model_id:
+#   - Global running median:   p90 rel_err ≈ 0.96 (GPT-4 errors dominate)
+#   - Stratified running median: p90 rel_err ≈ 0.95 (surprise-long ChatGPT now dominates)
+# Both keep ratio ≥ 2.0 → alpha = 0.002.
+#
+# The ML-HGB prior with model_id is DIFFERENT because HGB:
+# 1. Learns the EXACT per-model token distribution from warmup data (not just
+#    a single running median per stratum — a full learned distribution).
+# 2. Can exploit continuous input_tokens × model_id interactions.
+#
+# But the critical question is: does model_id alone break the 2× cap?
+#
+# Mathematical argument:
+#   With model_id feature, HGB learns GPT-4 → ~235 tokens correctly.
+#   GPT-4 errors drop from rel_err≈0.96 to rel_err≈0.02.
+#   Now only surprise-long ChatGPT (~8.4% of traffic) has high rel_err≈0.95.
+#   8.4% of requests fall above the 91.6th percentile.
+#   The p90 is now in the ChatGPT-normal range: rel_err≈0.43.
+#   ratio = 0.43/0.40 ≈ 1.075 → alpha ≈ 0.001075 (near fixed α=0.001).
+#
+# This is precisely the difference vs run -u:
+#   Stratified prior (run -u): still had GPT-4 at poor stratum predictions
+#     during the first 20 completions, and its per-model median converges the
+#     same way as the global in the long run for GPT-4.
+#     Wait — actually run -u DID use model_id and still got -0.12%.
+#
+# Why did run -u's model_id stratification fail?
+#   The stratified prior uses a RUNNING MEDIAN for each model. After 20+
+#   GPT-4 completions, the per-model running median converges to ~235 tokens
+#   correctly. So the stratified prior SHOULD have fixed GPT-4 predictions.
+#   But run -u showed identical goodput/$.
+#
+# Resolution: both the global and stratified priors gave alpha=0.002 CAPPED.
+#   If the stratified prior already fixes GPT-4, but STILL gets p90≈0.95...
+#   That means surprise-long ChatGPT (8.4%) has already moved to the 90th
+#   percentile when GPT-4 is fixed (91.6% of traffic < surprise-long level).
+#   And 8.4% > 10% → surprise-long requests ARE within the top-10% errors.
+#
+# So the ML-HGB prior faces the SAME ceiling as the stratified prior:
+#   - Fix GPT-4: yes (same as stratified after warmup)
+#   - Fix surprise-long ChatGPT: impossible without features not in BurstGPT
+#   - p90 error still ≈ 0.95 → still capped at 2×
+#
+# HOWEVER: the HGB prior has one genuine advantage over running median:
+#   The continuous learned function may reduce ChatGPT-normal prediction errors
+#   below the stratified median (especially for high-input-token ChatGPT).
+#   This is marginal but potentially measurable.
+#
+# ALSO: the HGB may learn that ChatGPT with very long input → longer output,
+#   partially identifying some surprise-long requests (those with longer inputs).
+#   Even 20-30% identification rate would help.
+#
+# Research basis:
+# - "Scheduling the Unschedulable" (arXiv:2604.06970): model-type features
+#   are the strongest signal for output length in production LLM serving.
+# - "Predicting LLM Output Length" (arXiv:2602.11812): model_id + prompt
+#   features achieve -29.16% MAE; model_id alone is the largest contributor.
+# - "TIE scheduling" (arXiv:2604.00499): distributional ordering by model type
+#   improves dispatch for mixed-model traffic.
+# ---------------------------------------------------------------------------
+
+ML_PRIOR_WARMUP_N: int = 1000
+
+
+def make_ml_prior_predictions_burstgpt(
+    raw: list[tuple[float, int]],
+    features: list[dict],
+    warmup_n: int = ML_PRIOR_WARMUP_N,
+) -> tuple[list[float], dict]:
+    """HGB ML causal prior using model_id + input_tokens for BurstGPT.
+
+    Causal two-phase design:
+      Phase 1 (i < warmup_n): running median — identical to live prior [run -t].
+      Phase 2 (i >= warmup_n): HGB p50 trained on Phase 1 observations only.
+
+    Feature set: [model_id_encoded, input_tokens] — both available at request
+    arrival before output generation begins.  model_id encodes the serving-engine
+    identity (e.g. 'ChatGPT', 'GPT-4'); input_tokens is the prompt length.
+
+    Model_id is the primary signal: BurstGPT mixes ChatGPT (p50=7 tok) and GPT-4
+    (p50=235 tok).  The HGB trained on warmup_n completions learns the per-model
+    distribution, dramatically reducing prediction error for GPT-4 requests.
+
+    Args:
+        raw:      [(arrival_s, output_tokens), ...] — same format as load functions.
+        features: [{'model_id': str, 'input_tokens': int}, ...] — parallel to raw.
+        warmup_n: Number of initial requests used as HGB training data.  These
+                  requests receive running-median predictions during Phase 1.
+
+    Returns:
+        (predictions, stats) where predictions[i] is the causal ML prediction
+        for request i.  Phase 1 predictions are running medians; Phase 2
+        predictions are HGB p50 outputs.  All predictions are clipped to ≥ 1.0.
+    """
+    n = len(raw)
+    assert len(features) == n, "raw and features must be same length"
+    if n == 0:
+        return [], {}
+
+    all_toks = [t for _, t in raw]
+    sorted_all = sorted(all_toks)
+    global_median = float(sorted_all[len(sorted_all) // 2])
+
+    predictions: list[float] = []
+    history: list[int] = []
+
+    # Phase 1: running median (causal, no HGB yet)
+    phase1_n = min(warmup_n, n)
+    for i in range(phase1_n):
+        tok = all_toks[i]
+        if not history:
+            predictions.append(global_median)
+        else:
+            win = history[-LIVE_PRIOR_WINDOW:]
+            s = sorted(win)
+            predictions.append(float(s[len(s) // 2]))
+        history.append(tok)
+
+    if phase1_n >= n:
+        errors = [abs(predictions[i] - all_toks[i]) for i in range(n)]
+        mae = statistics.mean(errors) if errors else 0.0
+        mean_actual = statistics.mean(all_toks)
+        pred_std = statistics.stdev(predictions) if n > 1 else 0.0
+        cv_pct = 100.0 * pred_std / max(1.0, mean_actual)
+        return predictions, {
+            "prior_type": "ml_hgb_warmup_only",
+            "warmup_n": warmup_n,
+            "n_requests": n,
+            "n_model_ids": 0,
+            "phase2_n": 0,
+            "prior_cv_pct": round(cv_pct, 2),
+            "prior_mae_tokens": round(mae, 2),
+            "prior_rel_mae_pct": round(100.0 * mae / max(1.0, mean_actual), 2),
+            "prior_bias_tokens": 0.0,
+            "global_median_actual": round(global_median, 2),
+        }
+
+    # Phase 2: train HGB on Phase 1 data (causal — only past completions)
+    try:
+        import numpy as _np
+        from sklearn.ensemble import HistGradientBoostingRegressor as _HGB
+    except ImportError:
+        fallback, fstats = make_live_prior_predictions(raw, window=LIVE_PRIOR_WINDOW)
+        fstats["prior_type"] = "ml_hgb_sklearn_unavailable_fallback"
+        fstats["n_model_ids"] = 0
+        fstats["phase2_n"] = 0
+        return fallback, fstats
+
+    warmup_feats = features[:phase1_n]
+    warmup_toks = all_toks[:phase1_n]
+
+    # model_id encoding: sorted across full trace (schema-level, not prediction-time).
+    all_model_ids = sorted(set(f.get("model_id", "unknown") for f in features))
+    mid_map = {mid: float(i) for i, mid in enumerate(all_model_ids)}
+
+    def _encode(f: dict) -> list[float]:
+        return [
+            mid_map.get(f.get("model_id", "unknown"), 0.0),
+            float(f.get("input_tokens", 0)),
+        ]
+
+    X_train = _np.array([_encode(f) for f in warmup_feats], dtype=_np.float64)
+    y_train = _np.array(warmup_toks, dtype=_np.float64)
+
+    hgb = _HGB(
+        loss="quantile",
+        quantile=0.50,
+        max_iter=200,
+        max_leaf_nodes=31,
+        min_samples_leaf=max(5, phase1_n // 20),
+        learning_rate=0.1,
+        random_state=42,
+    )
+    hgb.fit(X_train, y_train)
+
+    phase2_n = n - phase1_n
+    X_pred = _np.array(
+        [_encode(features[i]) for i in range(phase1_n, n)], dtype=_np.float64
+    )
+    preds_arr = hgb.predict(X_pred)
+    for p in preds_arr:
+        predictions.append(max(1.0, float(p)))
+
+    errors = [abs(predictions[i] - all_toks[i]) for i in range(n)]
+    biases = [predictions[i] - all_toks[i] for i in range(n)]
+    mae = statistics.mean(errors)
+    mean_bias = statistics.mean(biases)
+    mean_actual = statistics.mean(all_toks)
+    pred_std = statistics.stdev(predictions) if n > 1 else 0.0
+    cv_pct = 100.0 * pred_std / max(1.0, mean_actual)
+
+    return predictions, {
+        "prior_type": "ml_hgb_p50",
+        "warmup_n": phase1_n,
+        "n_model_ids": len(all_model_ids),
+        "n_requests": n,
+        "phase2_n": phase2_n,
+        "prior_cv_pct": round(cv_pct, 2),
+        "prior_mae_tokens": round(mae, 2),
+        "prior_rel_mae_pct": round(100.0 * mae / max(1.0, mean_actual), 2),
+        "prior_bias_tokens": round(mean_bias, 2),
+        "global_median_actual": round(global_median, 2),
+    }
+
+
+@dataclass
+class MLPriorReport:
+    """ML-HGB prior vs oracle comparison [run 2026-06-22-v].
+
+    Compares four conditions on the same public trace:
+      - FIFO baseline
+      - Conformal oracle (upper bound, predicted == actual)
+      - Conformal global prior (running median — run -t baseline)
+      - Conformal ML-HGB prior (model_id + input_tokens, trained on warmup data)
+
+    Key measurement: ml_vs_oracle_retention_pct — how much of the oracle gain
+    survives when we replace oracle with the ML-HGB prior.
+    Also: ml_vs_global_improvement_pct — gain of ML prior over running median.
+    """
+
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    warmup_n: int
+    n_model_ids: int
+
+    global_prior_cv_pct: float
+    global_prior_mae_tokens: float
+    global_prior_rel_mae_pct: float
+
+    ml_prior_cv_pct: float
+    ml_prior_mae_tokens: float
+    ml_prior_rel_mae_pct: float
+
+    fifo: dict
+    conformal_oracle: dict
+    conformal_global: dict
+    conformal_ml: dict
+
+    fifo_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+    global_goodput_per_dollar: float
+    ml_goodput_per_dollar: float
+
+    oracle_delta_pct: float
+    global_delta_pct: float
+    ml_delta_pct: float
+    global_vs_oracle_retention_pct: float
+    ml_vs_oracle_retention_pct: float
+    ml_vs_global_improvement_pct: float
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "warmup_n": self.warmup_n,
+            "n_model_ids": self.n_model_ids,
+            "global_prior_cv_pct": round(self.global_prior_cv_pct, 2),
+            "global_prior_mae_tokens": round(self.global_prior_mae_tokens, 2),
+            "global_prior_rel_mae_pct": round(self.global_prior_rel_mae_pct, 2),
+            "ml_prior_cv_pct": round(self.ml_prior_cv_pct, 2),
+            "ml_prior_mae_tokens": round(self.ml_prior_mae_tokens, 2),
+            "ml_prior_rel_mae_pct": round(self.ml_prior_rel_mae_pct, 2),
+            "fifo": _r(self.fifo),
+            "conformal_oracle": _r(self.conformal_oracle),
+            "conformal_global": _r(self.conformal_global),
+            "conformal_ml": _r(self.conformal_ml),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 2),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 2),
+            "global_goodput_per_dollar": round(self.global_goodput_per_dollar, 2),
+            "ml_goodput_per_dollar": round(self.ml_goodput_per_dollar, 2),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "global_delta_pct": round(self.global_delta_pct, 2),
+            "ml_delta_pct": round(self.ml_delta_pct, 2),
+            "global_vs_oracle_retention_pct": round(self.global_vs_oracle_retention_pct, 2),
+            "ml_vs_oracle_retention_pct": round(self.ml_vs_oracle_retention_pct, 2),
+            "ml_vs_global_improvement_pct": round(self.ml_vs_global_improvement_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_ml_prior_on_trace_with_features(
+    raw: list[tuple[float, int]],
+    features: list[dict],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    warmup_n: int,
+) -> MLPriorReport:
+    """Run FIFO / oracle / global-prior / ML-HGB-prior on a feature-annotated trace."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    global_preds, global_stats = make_live_prior_predictions(raw, window=LIVE_PRIOR_WINDOW)
+    ml_preds, ml_stats = make_ml_prior_predictions_burstgpt(raw, features, warmup_n=warmup_n)
+
+    n_model_ids = ml_stats.get("n_model_ids", 0)
+
+    def _build_oracle() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_global() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=global_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_ml() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=ml_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs = _build_oracle()
+    oracle_reqs = _build_oracle()
+    global_reqs = _build_global()
+    ml_reqs = _build_ml()
+
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    global_cal = ConformalAlphaCalibrator()
+    global_sim, global_resp, _ = _simulate_decoupled_hybrid_conformal(
+        global_reqs, servers, global_cal
+    )
+    ml_cal = ConformalAlphaCalibrator()
+    ml_sim, ml_resp, _ = _simulate_decoupled_hybrid_conformal(
+        ml_reqs, servers, ml_cal
+    )
+
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    gp_global = _sla_safe_goodput_per_dollar(global_reqs, global_resp, sla_s, servers)
+    gp_ml = _sla_safe_goodput_per_dollar(ml_reqs, ml_resp, sla_s, servers)
+
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+    global_sim["sla_safe_goodput_per_dollar"] = gp_global
+    ml_sim["sla_safe_goodput_per_dollar"] = gp_ml
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    global_ret = (gp_global / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+    ml_ret = (gp_ml / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+
+    return MLPriorReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        warmup_n=warmup_n,
+        n_model_ids=n_model_ids,
+        global_prior_cv_pct=global_stats.get("prior_cv_pct", 0.0),
+        global_prior_mae_tokens=global_stats.get("prior_mae_tokens", 0.0),
+        global_prior_rel_mae_pct=global_stats.get("prior_rel_mae_pct", 0.0),
+        ml_prior_cv_pct=ml_stats.get("prior_cv_pct", 0.0),
+        ml_prior_mae_tokens=ml_stats.get("prior_mae_tokens", 0.0),
+        ml_prior_rel_mae_pct=ml_stats.get("prior_rel_mae_pct", 0.0),
+        fifo=fifo_sim,
+        conformal_oracle=oracle_sim,
+        conformal_global=global_sim,
+        conformal_ml=ml_sim,
+        fifo_goodput_per_dollar=gp_fifo,
+        oracle_goodput_per_dollar=gp_oracle,
+        global_goodput_per_dollar=gp_global,
+        ml_goodput_per_dollar=gp_ml,
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        global_delta_pct=_delta(gp_fifo, gp_global),
+        ml_delta_pct=_delta(gp_fifo, gp_ml),
+        global_vs_oracle_retention_pct=global_ret,
+        ml_vs_oracle_retention_pct=ml_ret,
+        ml_vs_global_improvement_pct=_delta(gp_global, gp_ml),
+    )
+
+
 def run_burstgpt_hf_stratified_prior_backtest(
     servers: int = 4,
     target_rho: float = 0.85,
@@ -5055,4 +5476,73 @@ def run_burstgpt_hf_stratified_prior_backtest(
         sla_s=sla_s,
         prior_window=prior_window,
         min_stratum_history=min_stratum_history,
+    )
+
+
+def run_burstgpt_hf_ml_prior_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    warmup_n: int = ML_PRIOR_WARMUP_N,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> MLPriorReport:
+    """ML-HGB prior on BurstGPT HF [run 2026-06-22-v].
+
+    Replaces the running-median prior (run -t, 70% retention) with an HGB model
+    trained on per-request features (model_id, input_tokens) using a causal
+    time-split: HGB is trained on the first ``warmup_n`` completions, then used
+    to predict all subsequent requests.
+
+    Research question:
+      Can a trained ML predictor break the running-statistics ceiling (70% retention)?
+
+    Mechanism:
+      GPT-4 requests (15.8% of BurstGPT) have p50=235 tokens, but the global
+      running median (~10 tokens) under-predicts them by 23×.  With 15.8% of
+      requests at rel_err≈0.96, the p90 error exceeds 0.80, capping the
+      conformal calibrator at α=2×alpha_max=0.002.  The HGB with model_id
+      feature correctly predicts GPT-4 → ~235 tokens, dropping their errors
+      to near 0.  With GPT-4 errors eliminated, p90 error falls to ~0.43
+      (ChatGPT-normal tier), moving α from 0.002 to ~0.001 → dispatch
+      becomes more SRPT-like → goodput/$ improves.
+
+    Comparison conditions (all on BurstGPT HF, same fixture as run -t/-u):
+      1. FIFO baseline
+      2. Conformal oracle: +644.4% vs FIFO [run -r]
+      3. Conformal global prior: +420.83% vs FIFO, 70.0% retention [run -t]
+      4. Conformal ML-HGB prior: target ≥ +450% vs FIFO, ≥ 70% retention [NEW]
+
+    Honesty note:
+      Surprise-long ChatGPT requests (~8.4% of traffic, short input → long output)
+      cannot be predicted by model_id or input_tokens alone.  They will continue
+      to have large prediction errors (rel_err≈0.95) in Phase 2.  Whether they
+      remain above or below the p90 error threshold determines whether the ML
+      prior breaks the ceiling or merely approaches the stratified-prior result.
+
+    Args:
+        servers:    Replica pool size (M/G/c).
+        target_rho: Target cluster utilization.
+        job_limit:  Optional request cap (None = use all available).
+        sla_s:      E2E SLA budget (seconds).
+        warmup_n:   Requests to use as HGB training data.
+        jsonl_path: Path to BurstGPT HF normalized JSONL.
+
+    Returns:
+        ``MLPriorReport`` with FIFO / oracle / global / ML-HGB KPIs.
+    """
+    raw, features = load_burstgpt_serving_requests_jsonl_with_features(
+        jsonl_path, limit=job_limit
+    )
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 valid requests."
+        )
+    return _run_ml_prior_on_trace_with_features(
+        raw, features,
+        trace_name="burstgpt_hf_ml_prior",
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        warmup_n=warmup_n,
     )

@@ -8,6 +8,136 @@
 
 ---
 
+## Run 2026-06-22-v — ML-HGB Prior (Validated Null Result)
+
+### Q1. What currently limits Aurelius most?
+
+**The conformal calibrator p90-relative-error formula is the binding constraint, not prediction accuracy.**
+Run -v tests a HistGradientBoostingRegressor (quantile p50, causal two-phase warmup) as the
+output-token prior on BurstGPT HF. Results:
+- FIFO: 6,529 goodput/$
+- Oracle: 48,599 goodput/$ (+644%)
+- Global prior (live running median): 34,004 goodput/$ (+420.83%, 70.0% retention)
+- ML-HGB prior: 33,962 goodput/$ (+420.2%, 69.88% retention)
+- **ml_vs_global_improvement_pct = −0.12%** (within noise; NOT an improvement)
+- Both priors: conformal_mean_alpha = 0.002 (identical — both capped)
+- ML prior IS more accurate: CV 15.34%→43.03%, MAE 166.93→162.82 tokens (−2.5%)
+- **But the calibrator cap persists** — p90 relative error ≥ 0.80 in both cases
+
+Root cause: ChatGPT intra-class variance is so large (p5=1 tok, p95=800+ tok) that
+even a correct model_id-based predictor cannot reduce the p90 tail error below the 0.80
+cap threshold. The calibrator formula `α = alpha_max × min(2.0, p90_err / target_p90_error)`
+with target=0.40 caps at α=0.002 for both priors.
+
+### Q2. What theoretically offers the largest gain?
+
+**Per-class conformal calibration.** A separate calibrator for ChatGPT vs GPT-4 would:
+1. Correctly assess that GPT-4 has LOWER residual uncertainty than ChatGPT
+2. Allow lower α for GPT-4 requests → more SRPT-like dispatch for the 15.8% of requests
+   that actually have predictable lengths
+3. Break the monolithic calibrator cap
+
+Alternatively: change the calibrator metric from p90 relative error to absolute error
+or p50 relative error, which would be less dominated by ChatGPT's long tail.
+
+### Q3. Which forecasts are weakest?
+
+1. **Live prior** — three variants now exhausted: global median, stratified median, ML-HGB.
+   All cap at α=0.002. The binding constraint is the calibrator formula, not prediction quality.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Conformal calibrator uses single p90 relative error across all request classes.**
+   With multi-class data (ChatGPT + GPT-4), the p90 is always dominated by ChatGPT's
+   long tail, preventing GPT-4's lower uncertainty from being utilized.
+2. **Serving queue not wired into runtime** — unchanged from prior runs.
+3. **North Star gap** — unchanged.
+
+### Q5. Which workloads benefit least?
+
+**BurstGPT HF with any monolithic conformal calibrator.** The bimodal ChatGPT distribution
+creates an irreducible worst-case error floor that dominates the p90 metric, regardless of
+predictor quality.
+
+### Q6. Which research direction appears strongest?
+
+**Per-class conformal calibration.** Three negative results (global median [run -t],
+stratified median [run -u], ML-HGB [run -v]) definitively close the "better predictor"
+branch for BurstGPT with the current calibrator formula. The opportunity now is to change
+the calibrator architecture, not the predictor.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Split the conformal calibrator: one calibrator for ChatGPT requests, one for GPT-4.
+Measure separate p90 errors per class, compute per-class α. On dispatch, use the
+per-class α for each request. This directly targets the observed failure mode.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Per-class calibration breaking the GPT-4 cap (currently ~15.8% of requests could see α→0
+if calibrated independently), combined with the compound economic scheduling backtest.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Same as run -u. Live prior already gives +420.83% vs FIFO on BurstGPT. Compound with
+economic scheduling estimate: +876% vs FIFO (independence assumption, unverified end-to-end).
+
+### Q10. Which assumptions might be wrong?
+
+1. **Calibrator cap is truly binding (not just local optimum).** The HGB IS learning
+   model_id distinctions (CV 15→43%). Perhaps with a much larger warmup (10,000+ requests)
+   the HGB would reduce p90 error below 0.80 on real BurstGPT. We tested warmup_n=1000.
+2. **Per-class calibration would use model_id at prediction time.** At arrival, model_id
+   is known (from the request). A per-class calibrator is causally valid.
+3. **The −0.12% difference is pure noise.** The two priors produce statistically identical
+   scheduling decisions because both hit α=0.002.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Predictor class now exhausted for BurstGPT with current calibrator.** Global median,
+   stratified median, ML-HGB — all three measured; all cap at α=0.002.
+2. **Azure trace lacks model_id for ML predictor validation.** Cannot test per-class
+   calibration on Azure until model_id feature is available.
+3. **Compound gain remains independence-assumption only.** End-to-end backtest still pending.
+
+### Q12. Which public datasets should be added?
+
+Same as run -u. ShareGPT, CARA telemetry, Mooncake FAST25.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Per-class conformal calibration: separate α calibrators for ChatGPT vs GPT-4.
+   Hypothesis: GPT-4's lower residual uncertainty would be correctly captured, allowing α→0
+   for the 15.8% of GPT-4 requests and potentially improving goodput/$ by 5-15%.
+2. End-to-end compound backtest (economic × queue scheduling).
+
+**Short-term (2–3 runs):**
+3. Calibrator metric change: absolute error instead of p90 relative error.
+4. Wire conformal discipline into serving runtime (all gates closed).
+
+---
+
+## Future Opportunity Ranking — Updated After Run -v
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Per-class conformal calibration (separate α per model_id) | Very High | High | Root cause confirmed [run -v]: monolithic calibrator cap dominates |
+| 2 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO; end-to-end unverified |
+| 3 | Calibrator metric change (absolute error vs p90 relative) | High | High | Simple formula change; directly targets ChatGPT tail-dominated cap |
+| 4 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 5 | Wire conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+| 6 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
+
+**Closed/characterized opportunities:**
+- ML-HGB prior (HGB quantile p50): **NEGATIVE [run -v]** — −0.12% vs global prior; conformal cap persists
+- Stratified causal prior: **NEGATIVE [run -u]** — −0.12% goodput/$; confirms running-statistics ceiling
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 70.0% BurstGPT
+
+---
+
 ## Run 2026-06-22-u — Stratified Feature-Aware Causal Prior (Research Discovery — Negative)
 
 ### Q1. What currently limits Aurelius most?
