@@ -58,7 +58,6 @@ from .eval_workload_safety import (
     classify_eval_point_safety,
 )
 
-
 # Public-benchmark priors. Mirrored verbatim from
 # ``aurelius/traces/backtest.py`` so the eval frontier and the serving
 # replay share a consistent cost basis.
@@ -144,7 +143,6 @@ def _evaluate_for_candidate(
     per_replica = cfg.per_replica_decode_tokens_per_s
 
     total_tokens = _total_eval_tokens(requests)
-    n_requests = len(requests)
     if total_tokens <= 0 or concurrency <= 0 or per_replica <= 0 or eff <= 0:
         return {
             "predicted_goodput_per_dollar": 0.0,

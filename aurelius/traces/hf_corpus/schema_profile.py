@@ -30,8 +30,7 @@ import hashlib
 import json
 import os
 import statistics
-from typing import Iterable, Optional
-
+from typing import Optional
 
 # Sentinel values that should be treated as missing for numeric counts.
 # SwissAI's trace.jsonl uses ``-1`` for unavailable token counts; CARA uses

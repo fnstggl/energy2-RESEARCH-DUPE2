@@ -124,7 +124,7 @@ import math
 import os
 import random
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -2941,10 +2941,7 @@ def _run_alpha_sweep_on_trace(
         n_violated = sum(1 for v in dh_resp.values() if v > sla_s) if n_total else 0
         sla_viol_rate = n_violated / n_total if n_total else 0.0
 
-        # Flip-point: use p99 service time as "long" and p90 short service as "short".
-        long_p99_svc = TTFT_BASE_S + srpt_sim.get("long_p99_response_s", 100.0) * TPOT_S
-        short_p90_svc = TTFT_BASE_S + fifo_sp90 * TPOT_S
-        # Simpler: use Azure 2024 empirical percentiles (p99≈479 tok, p50≈90 tok).
+        # Use Azure 2024 empirical percentiles (p99≈479 tok, p50≈90 tok).
         _long_svc_s = _service_time_s(479)   # p99 output tokens Azure 2024
         _short_svc_s = _service_time_s(90)   # p50 output tokens Azure 2024
         flip_s = _compute_flip_point_s(alpha, _long_svc_s, _short_svc_s)

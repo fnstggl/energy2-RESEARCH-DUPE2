@@ -59,10 +59,15 @@ VALIDATION vs INTEGRATION:
 """
 
 # Heterogeneous GPU placement scorer (shadow-only; research basis: arXiv:2604.07472, arXiv:2604.16682)
-from .gpu_placement_scorer import (
-    GpuPlacementConfig,
-    GpuPlacementScore,
-    GpuPlacementScorer,
+# Legacy forecasters (still available for backwards compatibility)
+# Simple baseline forecasters
+# Baseline regression
+from .baseline import (
+    BaselineForecaster,
+    BaselineRegressionConfig,
+    BaselineRegressor,
+    generate_carbon_scenario,
+    generate_price_scenario,
 )
 
 # CARA output length forecaster (shadow-only; research basis: arXiv:2604.06970, arXiv:2602.11812)
@@ -75,23 +80,17 @@ from .cara_output_length_forecaster import (
     compute_bias_stats,
     compute_percentile_stats,
 )
-
-# Legacy forecasters (still available for backwards compatibility)
-# Simple baseline forecasters
-# Baseline regression
-from .baseline import (
-    BaselineForecaster,
-    BaselineRegressionConfig,
-    BaselineRegressor,
-    generate_carbon_scenario,
-    generate_price_scenario,
-)
 from .carbon_model import (
     CarbonForecast,
     CarbonForecaster,
     CarbonModelConfig,
     CarbonQuantileForecast,
     CarbonQuantileForecaster,
+)
+from .gpu_placement_scorer import (
+    GpuPlacementConfig,
+    GpuPlacementScore,
+    GpuPlacementScorer,
 )
 
 # Quantile forecasting

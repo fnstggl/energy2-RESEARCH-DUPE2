@@ -16,21 +16,18 @@ Validates:
 from __future__ import annotations
 
 import importlib
-import math
-from unittest.mock import MagicMock
 
 import pytest
 
 from aurelius.forecasting.gpu_placement_scorer import (
+    SHADOW_TAG,
     GpuPlacementConfig,
     GpuPlacementScore,
     GpuPlacementScorer,
-    SHADOW_TAG,
     _bin_label,
     _peer_relative_penalty,
 )
 from aurelius.forecasting.ttft_shadow_prior import TTFTShadowPrior
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -405,7 +402,7 @@ class TestModuleIsolation:
         assert src_file is not None
         src_text = open(src_file).read()
         for forbidden in self.FORBIDDEN_MODULES:
-            dot_forbidden = forbidden.replace(".", r"\.")
+            dot_forbidden = forbidden.replace(".", r"\.")  # noqa: F841
             # Simple substring check (not regex)
             assert f"from {forbidden}" not in src_text, (
                 f"gpu_placement_scorer must not import from {forbidden}"

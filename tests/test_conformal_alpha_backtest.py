@@ -35,7 +35,6 @@ Invariants tested:
 
 from __future__ import annotations
 
-import math
 import os
 import random
 
@@ -44,26 +43,21 @@ import pytest
 from aurelius.benchmarks.srtf_serving_backtest import (
     CONFORMAL_ALPHA_MAX,
     CONFORMAL_TARGET_P90_ERROR,
-    CONFORMAL_WARMUP,
-    CONFORMAL_WINDOW,
+    DECOUPLED_HYBRID_ALPHA_DEFAULT,
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
-    DEFAULT_BURSTGPT_SLA_S,
     DEFAULT_SLA_S,
-    DECOUPLED_HYBRID_ALPHA_DEFAULT,
     ConformalAlphaCalibrator,
     ConformalAlphaReport,
     _Request,
     _simulate_decoupled_hybrid_conformal,
     _sla_safe_goodput_per_dollar,
     calibrate_time_warp,
-    load_burstgpt_serving_requests,
     load_serving_requests,
     run_burstgpt_conformal_alpha_backtest,
     run_conformal_alpha_backtest,
     simulate_queue,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -122,7 +116,7 @@ class TestConformalAlphaCalibrator:
             alpha_max=0.001, warmup=10, window=500,
             target_p90_error=CONFORMAL_TARGET_P90_ERROR,
         )
-        rng = random.Random(42)
+        rng = random.Random(42)  # noqa: F841
         # Inject residuals at exactly the target p90 level: ~40% error for most.
         for _ in range(500):
             cal.update(0.60, 1)   # rel_err = |0.60 - 1| / 1 = 0.40
@@ -339,7 +333,6 @@ class TestConformalNoisyPriorRobustness:
         if not os.path.exists(DEFAULT_AZURE_FIXTURE):
             pytest.skip("Azure LLM 2024 fixture not present")
         noisy_reqs = self._noisy_requests(cv=0.30)
-        from aurelius.benchmarks.srtf_serving_backtest import _service_time_s
 
         cal_conf  = ConformalAlphaCalibrator()
         conf_sim, conf_resp, _ = _simulate_decoupled_hybrid_conformal(

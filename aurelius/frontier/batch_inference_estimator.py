@@ -19,12 +19,11 @@ is tuned. Real cluster execution is disabled by default at the controller.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional
 
 from .batch_inference_models import (
     BatchInferenceFrontierCandidate,
     BatchInferenceFrontierPoint,
-    BatchInferenceFrontierSchemaError,
     BatchInferenceSafetyStatus,
     BatchInferenceWorkloadProfile,
 )
@@ -32,7 +31,6 @@ from .batch_inference_safety import (
     BatchInferenceSafetyConfig,
     classify_batch_point_safety,
 )
-
 
 ANTICIPATORY = "anticipatory"
 REACTIVE = "reactive"

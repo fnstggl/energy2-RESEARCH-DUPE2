@@ -22,7 +22,11 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from aurelius.frontier import (  # noqa: E402
     batch_inference_estimator as bie,
+)
+from aurelius.frontier import (
     batch_inference_models as bim,
+)
+from aurelius.frontier import (
     batch_inference_safety as bis,
 )
 from aurelius.frontier.batch_inference_controller import (  # noqa: E402

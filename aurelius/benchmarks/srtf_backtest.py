@@ -36,8 +36,7 @@ Design rules
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from ..models import Job, OptimizationConfig
 from .canonical_backtests import build_canonical_jobs, load_canonical_price_data
@@ -172,7 +171,6 @@ def _compute_schedule_metrics(
     migration_network_usd: float = 0.5,
 ) -> tuple[float, float, int]:
     """Return (sla_safe_goodput_per_dollar, realized_cost, deadline_misses)."""
-    from datetime import timedelta
 
     from ..backtesting.evaluator import evaluate_schedule
 
@@ -183,7 +181,6 @@ def _compute_schedule_metrics(
     energy_cost = realized.total_energy_cost_usd
 
     job_by_id = {j.job_id: j for j in jobs}
-    baseline_sched_by_id = {}  # no baseline region needed for simple cost
     gpu_infra = 0.0
     migrations = 0
     deadline_misses = 0

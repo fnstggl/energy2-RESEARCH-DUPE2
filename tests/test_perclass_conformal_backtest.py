@@ -15,25 +15,19 @@ Validates:
 
 from __future__ import annotations
 
-import math
 from typing import Optional
 
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     CONFORMAL_ALPHA_MAX,
-    CONFORMAL_TARGET_P90_ERROR,
-    CONFORMAL_WARMUP,
-    CONFORMAL_WINDOW,
     ConformalAlphaCalibrator,
-    PerClassConformalAlphaReport,
     PerClassConformalCalibrator,
     _Request,
     _run_perclass_conformal_on_trace_with_features,
     _service_time_s,
     _simulate_decoupled_hybrid_perclass_conformal,
 )
-
 
 # ---------------------------------------------------------------------------
 # PerClassConformalCalibrator unit tests

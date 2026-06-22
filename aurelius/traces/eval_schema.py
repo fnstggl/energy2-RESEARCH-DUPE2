@@ -37,7 +37,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Optional
 
-
 # Allowed token-count source labels. The ingester records WHICH source the
 # numeric fields came from so the frontier can refuse to draw a conclusion
 # from a proxy when a real signal is required.

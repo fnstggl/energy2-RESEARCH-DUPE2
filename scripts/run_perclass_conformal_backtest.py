@@ -54,10 +54,10 @@ def main() -> None:
 
     try:
         from aurelius.benchmarks.srtf_serving_backtest import (
+            DEFAULT_BURSTGPT_HF_JSONL,
             DEFAULT_BURSTGPT_SLA_S,
             LIVE_PRIOR_WINDOW,
             run_burstgpt_hf_perclass_conformal_backtest,
-            DEFAULT_BURSTGPT_HF_JSONL,
         )
     except ImportError as exc:
         print(f"Import error: {exc}", file=sys.stderr)
@@ -101,34 +101,34 @@ def main() -> None:
     print(f"  Trace:                        {result['trace']}", file=sys.stderr)
     print(f"  Requests:                     {result['total_requests']}", file=sys.stderr)
     print(f"  Servers:                      {result['servers']} (ρ={result['target_rho']})", file=sys.stderr)
-    print(f"", file=sys.stderr)
-    print(f"  ── Goodput/$ ─────────────────────────────────────────────────", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  ── Goodput/$ ─────────────────────────────────────────────────", file=sys.stderr)
     print(f"  FIFO baseline:                {result['fifo_goodput_per_dollar']:>12,.2f}", file=sys.stderr)
     print(f"  Oracle (upper bound):         {result['oracle_goodput_per_dollar']:>12,.2f}", file=sys.stderr)
     print(f"  Global prior mono:            {result['global_mono_goodput_per_dollar']:>12,.2f}", file=sys.stderr)
     print(f"  Stratified prior mono:        {result['stratified_mono_goodput_per_dollar']:>12,.2f}", file=sys.stderr)
     print(f"  Stratified prior per-class:   {result['stratified_perclass_goodput_per_dollar']:>12,.2f}", file=sys.stderr)
-    print(f"", file=sys.stderr)
-    print(f"  ── Delta vs FIFO ─────────────────────────────────────────────", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  ── Delta vs FIFO ─────────────────────────────────────────────", file=sys.stderr)
     print(f"  Oracle delta:                 {result['oracle_delta_pct']:>+.2f}%", file=sys.stderr)
     print(f"  Global mono delta:            {result['global_mono_delta_pct']:>+.2f}%", file=sys.stderr)
     print(f"  Stratified mono delta:        {result['stratified_mono_delta_pct']:>+.2f}%", file=sys.stderr)
     print(f"  Stratified per-class delta:   {result['stratified_perclass_delta_pct']:>+.2f}%", file=sys.stderr)
-    print(f"", file=sys.stderr)
-    print(f"  ── Oracle Retention ──────────────────────────────────────────", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  ── Oracle Retention ──────────────────────────────────────────", file=sys.stderr)
     print(f"  Global mono retention:        {result['global_vs_oracle_retention_pct']:>+.1f}%", file=sys.stderr)
     print(f"  Stratified mono retention:    {result['stratified_mono_vs_oracle_retention_pct']:>+.1f}%", file=sys.stderr)
     print(f"  Stratified per-class ret:     {result['stratified_perclass_vs_oracle_retention_pct']:>+.1f}%", file=sys.stderr)
     print(f"  Per-class vs mono gain:       {result['perclass_vs_mono_improvement_pct']:>+.2f}%", file=sys.stderr)
-    print(f"", file=sys.stderr)
-    print(f"  ── Prior Quality ─────────────────────────────────────────────", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  ── Prior Quality ─────────────────────────────────────────────", file=sys.stderr)
     print(f"  Global prior MAE (tokens):    {result['global_prior_mae_tokens']:>+.1f}", file=sys.stderr)
     print(f"  Stratified prior MAE (tokens):{result['stratified_prior_mae_tokens']:>+.1f}", file=sys.stderr)
     print(f"  Stratified stratum usage:     {result['stratified_stratum_pct']:>+.1f}%", file=sys.stderr)
     print(f"  Stratified model usage:       {result['stratified_model_pct']:>+.1f}%", file=sys.stderr)
     print(f"  Stratified fallback usage:    {result['stratified_fallback_pct']:>+.1f}%", file=sys.stderr)
-    print(f"", file=sys.stderr)
-    print(f"  ── Per-Class Calibrator Diagnostics ──────────────────────────", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  ── Per-Class Calibrator Diagnostics ──────────────────────────", file=sys.stderr)
     for cls, info in result.get("perclass_diagnostics", {}).items():
         if isinstance(info, dict):
             n_comp = info.get("n_completed", "?")

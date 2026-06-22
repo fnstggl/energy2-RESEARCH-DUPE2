@@ -46,10 +46,10 @@ sys.path.insert(0, str(_REPO_ROOT / "aurelius"))
 
 import pandas as pd
 
-from aurelius.backtesting.engine import BacktestEngine
 from aurelius.backtesting.baselines import ALL_BASELINES
-from aurelius.ingestion.job_logs import JobLogIngester
+from aurelius.backtesting.engine import BacktestEngine
 from aurelius.ingestion.grid_apis.csv_importer import CSVPriceImporter
+from aurelius.ingestion.job_logs import JobLogIngester
 from aurelius.models import OptimizationConfig
 
 # Optional DB persistence — no-op when DATABASE_URL is not set
@@ -200,7 +200,7 @@ MAX_MISSING_PRICE_PCT = 5.0      # max % of hours using fallback price
 def _get_ml_forecaster_cls():
     """Import ML forecaster class; returns None if unavailable."""
     try:
-        from aurelius.forecasting.price_model import PriceQuantileForecaster, PriceModelConfig
+        from aurelius.forecasting.price_model import PriceModelConfig, PriceQuantileForecaster
         return PriceQuantileForecaster, PriceModelConfig
     except ImportError:
         return None, None
@@ -1021,7 +1021,7 @@ def main() -> int:
         if non_error and all_pcts:
             f.write(f"\nMean: {mean_pct:.1f}%  Min: {min(all_pcts):.1f}%  Max: {max(all_pcts):.1f}%\n")
         if regressions:
-            f.write(f"\nREGRESSIONS:\n")
+            f.write("\nREGRESSIONS:\n")
             for reg in regressions:
                 f.write(f"  {reg}\n")
     print(f"Summary saved:  {summary_file}\n")

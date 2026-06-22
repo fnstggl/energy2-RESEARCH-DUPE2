@@ -73,7 +73,6 @@ from aurelius.forecasting.cara_output_length_forecaster import (
     compute_percentile_stats,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic data helpers
 # ---------------------------------------------------------------------------

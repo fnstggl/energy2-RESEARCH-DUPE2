@@ -23,10 +23,8 @@ Hard rules:
 from __future__ import annotations
 
 import json
-import math
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass
 from typing import Iterable, Optional, Sequence
-
 
 # ---------------------------------------------------------------------------
 # Models — JSON round-trippable dataclasses.
@@ -324,7 +322,6 @@ def compute_calibration_record(
     conservative_miss = False
     if oracle is not None and oracle.best_safe_rho is not None:
         rec = prediction.recommended_rho
-        cur = prediction.current_rho
         kept_low = ((rec is not None and rec < oracle.best_safe_rho - 1e-9)
                     or (prediction.action == "LOWER_RHO"))
         if kept_low:

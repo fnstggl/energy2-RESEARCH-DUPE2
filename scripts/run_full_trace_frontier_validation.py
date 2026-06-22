@@ -53,7 +53,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 import time
@@ -62,8 +61,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aurelius.constraints.frontier_integration import (  # noqa: E402
     CONSTRAINT_AWARE_DEFAULT_RHO,
-    FrontierIntegrationConfig,
-    FrontierIntegrationCounters,
 )
 from aurelius.frontier import (  # noqa: E402
     SHADOW_MODE,

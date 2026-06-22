@@ -92,7 +92,7 @@ def test_no_raw_files_tracked_by_git():
 def test_committed_normalized_sample_exists_and_under_50_mb(
     dataset_id: str, config: str,
 ) -> None:
-    pd = _processed_dir(dataset_id, config)
+    pd = _processed_dir(dataset_id, config)  # noqa: F841
     s = _load_summary(dataset_id, config)
     rel = s.get("committed_normalized_sample_path")
     assert rel, f"{dataset_id}@{config}: summary missing committed_normalized_sample_path"

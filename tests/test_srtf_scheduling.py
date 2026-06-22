@@ -17,9 +17,8 @@ from typing import Optional
 
 import pytest
 
-from aurelius.models import Job, OptimizationConfig, ScheduleDecision
+from aurelius.models import Job, OptimizationConfig
 from aurelius.optimization.scheduler import JobScheduler
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -157,11 +156,7 @@ class TestGreedySortKey:
         j_long = _make_job("j_long", runtime_hours=8.0,
                             predicted_output_tokens=8_000_000.0,
                             slack_hours=48.0)
-        scheduler = JobScheduler(OptimizationConfig(
-            default_region="us-west", min_power_fraction=1.0,
-        ))
         # Build sort keys directly
-        k_short = scheduler._solve_greedy.__func__  # access via class
         rank = JobScheduler._SLA_CLASS_RANK
         key_s = (-j_short.priority, rank.get(j_short.sla_class, 2),
                  j_short.predicted_output_tokens, j_short.deadline)
@@ -355,7 +350,7 @@ class TestAugmentJobsWithSRTFPriors:
 # ---------------------------------------------------------------------------
 
 class TestSRTFBacktestReport:
-    def _make_report(self, delta_pct: float = 0.0) -> "SRTFBacktestReport":
+    def _make_report(self, delta_pct: float = 0.0):
         from aurelius.benchmarks.srtf_backtest import SRTFBacktestReport
         return SRTFBacktestReport(
             total_jobs=1000,

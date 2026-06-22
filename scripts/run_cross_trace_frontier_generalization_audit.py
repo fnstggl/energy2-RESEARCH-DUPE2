@@ -33,10 +33,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1033,7 +1032,7 @@ def _write_md(path: str, payload: dict) -> None:
       f"`{syn['generalizes']}`.")
     A(f"- **A. Generally superior?** "
       f"{'Yes, on the applicable LLM serving traces (no regression observed).' if syn['verdict_counts']['FRONTIER_LOSS'] == 0 and syn['verdict_counts']['FRONTIER_WIN'] > 0 else 'No — see verdict counts.'}")
-    A(f"- **B. Workload-dependent?** Yes — the safe peak rho varies by trace "
+    A("- **B. Workload-dependent?** Yes — the safe peak rho varies by trace "
       "(see distribution above); the bin-packing / training-job traces are "
       "structurally outside the frontier-controller scope.")
     A(f"- **C. Should it be integrated into `constraint_aware`?** "

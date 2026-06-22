@@ -39,15 +39,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from aurelius.frontier import (  # noqa: E402
     PHILLY_POLICY_CANDIDATES,
     TrainingControllerConfig,
-    TrainingFrontierAction,
     TrainingSafetyConfig,
     TrainingSafetyStatus,
-    TrainingWorkloadProfile,
     choose_training_frontier_target,
     estimate_alibaba_gpu_training_frontier,
     estimate_philly_training_frontier,
-    load_alibaba_gpu_summary,
-    load_philly_summary,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -213,9 +209,9 @@ def _write_md(path: str, payload: dict) -> None:
 
     cfg = payload["config"]
     A("## 1. Configuration\n")
-    A(f"- **Trace sources:** Philly + Alibaba GPU v2023")
+    A("- **Trace sources:** Philly + Alibaba GPU v2023")
     A(f"- **Tie band:** ±{cfg['tie_band_pct']} % goodput/$")
-    A(f"- **Default safety thresholds:**")
+    A("- **Default safety thresholds:**")
     A(f"  - `max_queue_wait_p95_s`: {cfg['max_queue_wait_p95_s']}")
     A(f"  - `max_queue_wait_p99_s`: {cfg['max_queue_wait_p99_s']}")
     A(f"  - `max_starvation_rate_pct`: {cfg['max_starvation_rate_pct']}")
@@ -224,7 +220,7 @@ def _write_md(path: str, payload: dict) -> None:
     A(f"  - `max_gang_scheduling_failure_pct`: "
       f"{cfg['max_gang_scheduling_failure_pct']} "
       "*(disabled for Philly — see §3 missing-signals note)*")
-    A(f"- **Real-cluster execution:** disabled by default.\n")
+    A("- **Real-cluster execution:** disabled by default.\n")
 
     A("## 2. Per-trace summary\n")
     A("| trace | current_policy | current goodput/$ | training_frontier_v1 | "

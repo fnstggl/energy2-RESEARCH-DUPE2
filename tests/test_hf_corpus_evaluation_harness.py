@@ -6,13 +6,11 @@ import json
 import os
 import sys
 
-import pytest
-
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from aurelius.traces.hf_corpus import evaluation, ingestion, promotion  # noqa: E402
+from aurelius.traces.hf_corpus import evaluation, ingestion  # noqa: E402
 
 
 def _registry_entry(**overrides):

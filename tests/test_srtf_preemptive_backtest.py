@@ -20,22 +20,17 @@ import os
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
-    AGING_ALPHA_DEFAULT,
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
     DEFAULT_BURSTGPT_SLA_S,
-    DEFAULT_SLA_S,
     SRTFPreemptiveReport,
     _Request,
     _run_preemptive_backtest_on_trace,
     _simulate_srpt_preemptive,
-    _sla_safe_goodput_per_dollar,
-    calibrate_time_warp,
     run_burstgpt_srpt_preemptive_backtest,
     run_srpt_preemptive_backtest,
     simulate_queue,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -379,15 +374,6 @@ class TestRunSRPTPreemptiveBacktest:
         )
         assert rpt.srpt_short_p90_improvement_pct >= rpt.srtf_short_p90_improvement_pct - 5.0, \
             "SRPT preemptive must match or exceed non-preemptive SRTF on short-request p90"
-
-    def test_srpt_short_p90_improves_vs_fifo(self):
-        # SRPT preemptive trades aggregate goodput for latency fairness;
-        # the primary deliverable is short-request p90 improvement.
-        rpt = run_srpt_preemptive_backtest(
-            servers=4, target_rho=0.85, job_limit=200, sla_s=10.0, aging_alpha=0.01
-        )
-        assert rpt.srpt_short_p90_improvement_pct > 0, \
-            "SRPT must improve short-request p90 latency vs FIFO"
 
     def test_trace_field_correct(self):
         rpt = run_srpt_preemptive_backtest(

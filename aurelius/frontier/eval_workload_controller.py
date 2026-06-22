@@ -14,14 +14,13 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 from .eval_workload_models import (
+    EXECUTION_MODE_SHADOW,
     EvalWorkloadFrontierAction,
     EvalWorkloadFrontierCandidate,
     EvalWorkloadFrontierDecision,
     EvalWorkloadFrontierPoint,
-    EvalWorkloadFrontierSchemaError,
     EvalWorkloadProfile,
     EvalWorkloadSafetyStatus,
-    EXECUTION_MODE_SHADOW,
 )
 
 

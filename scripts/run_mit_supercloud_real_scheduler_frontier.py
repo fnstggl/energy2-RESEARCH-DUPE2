@@ -53,18 +53,15 @@ import math
 import os
 import sys
 import time
-from typing import Iterable, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aurelius.frontier import (  # noqa: E402
     PHILLY_POLICY_CANDIDATES,
     TrainingControllerConfig,
-    TrainingFrontierAction,
     TrainingFrontierCandidate,
     TrainingFrontierPoint,
     TrainingSafetyConfig,
-    TrainingSafetyStatus,
     choose_training_frontier_target,
     classify_training_frontier_point,
 )
@@ -345,7 +342,7 @@ def _write_md(path: str, payload: dict) -> None:
         A("")
 
     A("## 5. Training-frontier capacity sensitivity sweep\n")
-    A(f"- MIT does NOT publish per-node capacity. The fleet is "
+    A("- MIT does NOT publish per-node capacity. The fleet is "
       "synthesized at three pre-registered sizing points (small / "
       "medium / large) so the verdict is reported against capacity, "
       "not against a single tuned fleet.\n")

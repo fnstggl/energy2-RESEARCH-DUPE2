@@ -14,4 +14,5 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-"scripts/*" = ["F841"]   # unused local vars in standalone scripts are common
+"scripts/*" = ["F841", "N818", "E731"]   # unused vars, non-Error exception names, lambda assignments common in scripts
+"benchmarks/*" = ["E701", "E702", "E731", "I001", "F841", "F821"]   # benchmark scripts use compact semicolon style

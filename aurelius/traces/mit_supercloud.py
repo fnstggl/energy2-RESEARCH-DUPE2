@@ -39,12 +39,11 @@ Honesty rules (asserted by tests):
 from __future__ import annotations
 
 import csv
-import json
 import os
 import random
 import re
-from dataclasses import asdict, dataclass, field
-from typing import Iterable, Iterator, Optional, Sequence
+from dataclasses import asdict, dataclass
+from typing import Iterator, Optional, Sequence
 
 from .schema import NormalizedGPUJob, TraceSchemaError, percentile
 
@@ -415,8 +414,6 @@ def load_scheduler_log(path: str, *,
                 _row_get(row, "mem_req", "req_mem", "ReqMem"))
 
             parsed = parse_tres_req(tres_req, tres_mapping)
-            cpu_milli = (int(parsed.get("cpu") * 1000)
-                          if parsed.get("cpu") else None)
             memory_mib = (int(parsed.get("mem"))
                            if parsed.get("mem") else None)
 
@@ -793,9 +790,6 @@ def compute_join_quality(
             matched_left=0, matched_right=0, confidence="none",
             notes="node-data.csv not loaded")
     else:
-        nodes_with_jobs = sum(
-            1 for j in jobs if j.nodes is not None
-            and j.start_time_s is not None and j.end_time_s is not None)
         node_set = {s.node_id for s in node_samples}
         # Heuristic match: any job whose nodelist intersects the node
         # snapshot set AND has a [start, end] window.
@@ -893,8 +887,6 @@ def summarize_jobs(jobs: Sequence[NormalizedMITTrainingJob]) -> dict:
     subs = [j.submit_time_s for j in jobs if j.submit_time_s is not None]
     durations = [j.duration_s for j in jobs if j.duration_s and j.duration_s > 0]
     waits = [j.queue_wait_s for j in jobs if j.queue_wait_s is not None]
-    gpu_counts = [j.gpu_count_requested for j in jobs
-                  if j.gpu_count_requested is not None]
     gpu_jobs = [j for j in jobs if (j.gpu_count_requested or 0) > 0]
     labelled = [j for j in jobs if j.workload_label]
 

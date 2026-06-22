@@ -33,7 +33,6 @@ from aurelius.frontier.admission import (
 )
 from aurelius.frontier.dynamic_models import ServingTelemetryTick
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -221,7 +220,7 @@ class TestDeferKVPressure:
 
 class TestDeferQueuePressure:
     def test_high_queue_p99_defers_batch(self):
-        cfg = _enabled_cfg(
+        cfg = _enabled_cfg(  # noqa: F841
             kv_soft_ceiling=0.80,  # KV pressure absent
             risk_config=type(
                 "R", (), {"max_queue_p99_ms": 2000.0,

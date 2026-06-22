@@ -56,12 +56,12 @@ import dataclasses
 import math
 import os
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from ..models import Job, OptimizationConfig, ScheduleDecision
-from .canonical_backtests import REGION_CAISO, _load_price_csv, CANONICAL_DA_FILES
+from .canonical_backtests import CANONICAL_DA_FILES, REGION_CAISO, _load_price_csv
 
 # ---------------------------------------------------------------------------
 # Proxy constants (documented; identical across every variant)

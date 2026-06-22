@@ -29,7 +29,11 @@ Usage:
   python benchmarks/weather_alpha_eval.py --quick    # 4 folds, fast smoke
 """
 from __future__ import annotations
-import argparse, json, sys, warnings
+
+import argparse
+import json
+import sys
+import warnings
 from datetime import timedelta
 from pathlib import Path
 
@@ -38,8 +42,8 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 
+from aurelius.forecasting.price_model import PriceModelConfig, PriceQuantileForecaster
 from aurelius.models import EnergyPrice
-from aurelius.forecasting.price_model import PriceQuantileForecaster, PriceModelConfig
 
 REPO = Path(__file__).resolve().parent.parent
 PRICE_FILE = REPO / "data/combined_2025_2026/3region_dam.csv"
@@ -152,7 +156,7 @@ def main():
     seeds = list(range(42, 42 + args.seeds))
 
     print(f"Price {pmin.date()}..{pmax.date()} | {len(folds)} folds x {len(seeds)} seeds")
-    print(f"Modes: none | observed(leaky perfect-foresight) | forecast(day-ahead, honest)\n")
+    print("Modes: none | observed(leaky perfect-foresight) | forecast(day-ahead, honest)\n")
 
     # collect per (fold,region,seed) metrics
     records = []

@@ -210,7 +210,7 @@ def test_script_does_not_hardcode_license_redistribution_status(
     # at the start of an indented docstring (col_offset == 0). The
     # module/function docstrings are the only Constant string nodes
     # at col_offset==0, so anything else is a real code occurrence.
-    code_uses = [(ln, v) for (ln, v) in offending if True]
+    code_uses = [(ln, v) for (ln, v) in offending if True]  # noqa: F841
     # We allow occurrences in docstrings (which sit inside Expr nodes
     # whose parent is the Module or a FunctionDef body[0]). The
     # docstrings in this script appear at module level (col_offset=0)
