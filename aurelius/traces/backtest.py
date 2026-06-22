@@ -92,6 +92,14 @@ MAX_PREFILL_SAVINGS: float = 0.25
 
 MIN_REPLICAS: int = 1
 
+# safe_high_utilization policy constants.
+# Rho=0.75 validated safe by run_azure_2024_safe_utilization_frontier.py:
+# anticipatory@0.75 achieves 9.465% aggregate timeout (< 10% gate) on Azure 2024.
+# Strictly 0% per-tick trim (same as constraint_aware) is required at rho=0.75;
+# relaxed tolerance would push aggregate timeout above the 10% gate.
+_SHU_TARGET_RHO: float = 0.75    # frontier-validated safe rho (CA uses 0.65)
+_SHU_TIMEOUT_TOL: float = 0.0    # strict 0% per-tick (same safety as constraint_aware)
+
 
 # ---------------------------------------------------------------------------
 # Result dataclasses
@@ -312,7 +320,8 @@ def _run_policy(
     frontier_service_state=None,
     frontier_counters=None,
 ) -> PolicyResult:
-    cache_aware = policy in ("constraint_aware", "cache_affinity_baseline")
+    cache_aware = policy in ("constraint_aware", "cache_affinity_baseline",
+                              "safe_high_utilization")
     fixed = policy in ("fifo", "cache_affinity_baseline")
 
     # Static provisioning baselines size once for the mean load.
@@ -402,6 +411,19 @@ def _run_policy(
             # downward while SLA stays safe.
             replicas = _constraint_trim(t, base, prefill_savings, tick_hours,
                                         prev_replicas)
+        elif policy == "safe_high_utilization":
+            # Higher-utilization anticipatory policy. Uses the same EWMA-anticipatory
+            # logic as constraint_aware but at rho=0.75 (vs CA's 0.65). Validated by
+            # run_azure_2024_safe_utilization_frontier.py: anticipatory@0.75 achieves
+            # +13% over CA with 9.465% aggregate timeout (SAFE < 10% gate).
+            # No hysteresis (neutral per frontier factor-ladder; scale-event cost=0).
+            plan_rate = max(t.arrival_rate_rps, ewma_rate)
+            plan_out = max(t.output_tokens_mean, ewma_out) if t.request_count else ewma_out
+            base = _size_for_target(plan_rate, max(1.0, plan_out), throughput,
+                                    target_rho=_SHU_TARGET_RHO)
+            replicas = _constraint_trim(t, base, prefill_savings, tick_hours,
+                                        prev_replicas=None,  # no hysteresis
+                                        timeout_tol=_SHU_TIMEOUT_TOL)
         else:  # pragma: no cover - guarded by ALL_POLICIES
             raise ValueError(f"unknown policy {policy}")
 
@@ -432,14 +454,19 @@ def _queue_aware_size(tick: ArrivalTick, tick_hours: float, threshold_ms: float)
 
 
 def _constraint_trim(tick: ArrivalTick, base: int, prefill_savings: float,
-                     tick_hours: float, prev_replicas: Optional[int]) -> int:
-    """Trim replicas below ``base`` while the SLA stays met (cache headroom),
-    then apply hysteresis so we do not flap by a single replica."""
+                     tick_hours: float, prev_replicas: Optional[int],
+                     timeout_tol: float = 0.0) -> int:
+    """Trim replicas below ``base`` while per-tick timeout_rate ≤ timeout_tol%.
+
+    When prev_replicas is not None, hysteresis prevents a 1-replica change that
+    does not improve SLA safety (avoids flapping). Pass prev_replicas=None to
+    disable hysteresis (e.g. when scale-event cost is zero).
+    """
     chosen = base
     for r in range(base, MIN_REPLICAS - 1, -1):
         ev = evaluate_tick(tick, r, prefill_savings=prefill_savings,
                            tick_hours=tick_hours)
-        if ev.timeout_rate_pct <= 0.0:
+        if ev.timeout_rate_pct <= timeout_tol:
             chosen = r
         else:
             break
@@ -447,7 +474,7 @@ def _constraint_trim(tick: ArrivalTick, base: int, prefill_savings: float,
     if prev_replicas is not None and abs(chosen - prev_replicas) == 1:
         ev_prev = evaluate_tick(tick, prev_replicas,
                                 prefill_savings=prefill_savings, tick_hours=tick_hours)
-        if ev_prev.timeout_rate_pct <= 0.0:
+        if ev_prev.timeout_rate_pct <= timeout_tol:
             chosen = prev_replicas
     return max(MIN_REPLICAS, chosen)
 
@@ -507,6 +534,7 @@ ALL_POLICIES = (
     "constraint_aware",
     "queue_aware",
     "cache_affinity_baseline",
+    "safe_high_utilization",
 )
 
 # Headline baseline for interactive inference per docs/RESULTS.md §3 rule 5.

@@ -2013,3 +2013,41 @@ complementary, see the cross-reference at the end.)
      LLM serving traces (Azure 2024, BurstGPT) to compound economic + queue gains.
   4. Investigate dynamic α trajectory: emit per-dispatch α values and visualize
      convergence speed for different CV levels.
+
+### Run 2026-06-22 — SAFE HIGH UTILIZATION POLICY (rho=0.75 EWMA-ANTICIPATORY)
+- **Phase 1 (audit):** Previous run -q completed conformal adaptive α (+322.24% vs
+  FIFO, ALPHA_WIN). This run targets GAP_ANALYSIS Rank 2 proxy: higher GPU
+  utilization via safe rho expansion (rho=0.65 → 0.75) while maintaining < 10%
+  timeout gate.
+- **Phase 2 (research/frontier):** Frontier audit (`run_azure_2024_safe_utilization_frontier.py`)
+  swept rho=0.45–0.95 on the full Azure 2024 7-day trace:
+  - `anticipatory@0.75` = 2,886,960 gpd/$ (+12.97% over CA), timeout=9.465% SAFE.
+  - `anticipatory@0.85` = UNSAFE (11.648% > 10% gate).
+  - Hysteresis is neutral (step=0.0); EWMA costs −39k gpd/$ vs reactive.
+  - rho=0.75 is the boundary of the safe anticipatory frontier.
+- **Phase 3 (implementation):**
+  - `aurelius/traces/backtest.py` — Added `_SHU_TARGET_RHO = 0.75`,
+    `_SHU_TIMEOUT_TOL = 0.0`, `safe_high_utilization` policy (EWMA-anticipatory
+    at rho=0.75, strict 0% per-tick trim, no hysteresis), updated `ALL_POLICIES`,
+    updated `_constraint_trim` to accept `timeout_tol` keyword argument.
+  - `aurelius/traces/burstgpt.py` — Added `load_hf_jsonl` for BurstGPT HF JSONL.
+  - `tests/test_safe_utilization_policy.py` — 13 new tests (all passing).
+  - `scripts/run_safe_utilization_backtest.py` — New public backtest script.
+- **Phase 4 (benchmarks — PUBLIC TRACE REPLAY):**
+  - Primary evidence: frontier audit on full Azure 2024 trace: +12.97% vs CA, SAFE.
+  - BurstGPT HF JSONL (20k req) scale 500×: SHU +13.43% vs CA, timeout=2.49% SAFE.
+  - Azure fixture scale 500×: SHU +22.09% vs CA, timeout=4.04% SAFE.
+  - Fixture-scale TIE (1×, 50×, 300×): expected — rates below ~10 rps give same
+    ceiling-arithmetic base for rho=0.65 vs 0.75. Not a regression.
+  - Overall backtest verdict: MIXED_ALPHA_WIN_TIE (ALPHA_WIN at meaningful load).
+- **Decision:** **ALPHA_WIN — Merge.** rho=0.75 is frontier-validated SAFE (+12.97%
+  over CA on full Azure 2024). All 13 integration tests pass. Fixture TIE is an
+  expected artifact of low-rate ceiling arithmetic, not a policy regression.
+- **Run category:** Frontier Improvement (economic scheduler leaderboard)
+- **Next recommended direction:**
+  1. Cross-validate conformal α on BurstGPT HF fullscale to confirm +322% ceiling.
+  2. Wire decoupled hybrid conformal into canonical economic backtest to compound
+     queue gains with SHU's +12.97% economic gain.
+  3. Investigate adaptive rho (demand-responsive rho between 0.65 and 0.75) for
+     further safe utilization margin at varying load levels.
+  4. Add SHU to BENCHMARK_REGISTRY as canonical headline policy.
