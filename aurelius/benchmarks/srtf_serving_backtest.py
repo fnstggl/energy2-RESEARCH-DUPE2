@@ -215,6 +215,7 @@ class _Request:
     actual_tokens: int
     predicted_tokens: float
     service_s: float
+    model_id: str = ""   # optional class label for per-class conformal calibration
 
 
 def _service_time_s(output_tokens: int) -> float:
@@ -1154,6 +1155,9 @@ def simulate_queue(
     if discipline == "decoupled_hybrid_conformal":
         cal = ConformalAlphaCalibrator()
         return _simulate_decoupled_hybrid_conformal(requests, servers, cal, preemption_overhead_s)
+    if discipline == "decoupled_hybrid_per_class_conformal":
+        cal = PerClassConformalCalibrator()
+        return _simulate_decoupled_hybrid_per_class_conformal(requests, servers, cal, preemption_overhead_s)
     n = len(requests)
     by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
 
@@ -5545,4 +5549,542 @@ def run_burstgpt_hf_ml_prior_backtest(
         target_rho=target_rho,
         sla_s=sla_s,
         warmup_n=warmup_n,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Per-Class Conformal Calibration [run 2026-06-22-w]
+# ---------------------------------------------------------------------------
+#
+# BOTTLENECK IDENTIFICATION
+# ─────────────────────────
+# Runs -t (live causal prior), -u (stratified), -v (ML-HGB) all confirmed the
+# "running-statistics ceiling": BurstGPT achieves 70–82% oracle retention and
+# no further improvement is possible from better prediction alone.
+#
+# Root cause (confirmed diagnostics):
+#   BurstGPT mixes ChatGPT (p50=7 tok, high intra-class variance, p5=1/p95=800+)
+#   and GPT-4 (p50≈235 tok, tight distribution).  The global p90 relative
+#   prediction error is dominated by ChatGPT's long-tail "surprise" requests
+#   (8.4% of traffic, rel_err≈0.95), keeping p90_err ≥ 0.80 regardless of
+#   predictor quality.  This pushes the conformal calibrator's ratio to 2.0 →
+#   global α capped at 0.002 for ALL requests.
+#
+#   Meanwhile, GPT-4 requests are predicted accurately by ML-HGB (rel_err≈0.02),
+#   yet they also receive the globally-capped α=0.002 — preventing them from
+#   benefiting from near-SRPT dispatch that their accurate predictions could enable.
+#
+# STRUCTURAL FIX: PER-CLASS CONFORMAL CALIBRATION
+# ────────────────────────────────────────────────
+# Instead of one global sliding window of residuals → one global α:
+#   - Maintain a ConformalAlphaCalibrator per model class (model_id).
+#   - On each completion, update the per-class calibrator for that request's class.
+#   - At dispatch, use the per-class α for each waiting request's class.
+#   - Fall back to the global calibrator for classes with insufficient data.
+#
+# Expected effect:
+#   GPT-4 class:     per-class p90 rel_err ≈ 0.02 → α ≈ 0 → near-SRPT dispatch
+#   ChatGPT class:   per-class p90 rel_err high  → α ≈ 0.002 (capped, same as global)
+#   Mixed queue:     GPT-4 competes by pure remaining service; ChatGPT gets aging guard
+#   Global result:   GPT-4 short requests better prioritized → more SLA-safe tokens
+#
+# Research basis:
+# - RC3P (arXiv:2406.06818): class-conditional conformal prediction with class-wise
+#   thresholding achieves 26.25% reduction in prediction-set sizes vs uniform CP.
+# - TIE scheduling (arXiv:2604.00499): distributional ordering by model type
+#   improves dispatch for mixed-model traffic.
+# - Group-conditional conformal (ICCV 2023W Melki et al.): separate quantile
+#   calibration per group achieves group-conditional coverage guarantees.
+# - arXiv:2503.07545 (Mitzenmacher & Shahout 2025): identifies per-class
+#   calibration as the open problem for production LLM schedulers.
+# ---------------------------------------------------------------------------
+
+# Minimum completions per class before using its per-class α (vs global fallback).
+PER_CLASS_WARMUP_MIN: int = CONFORMAL_WARMUP // 2   # 50 completions per class
+
+
+class PerClassConformalCalibrator:
+    """Per-class conformal α calibrator for mixed-model LLM serving queues.
+
+    Maintains one ``ConformalAlphaCalibrator`` per model_id class and a global
+    fallback calibrator for classes with insufficient data.
+
+    Key property: classes with accurate predictions (low per-class p90 rel_err)
+    converge to α ≈ 0 independently of other classes' error rates.  This breaks
+    the "running-statistics ceiling" where a single noisy class (ChatGPT) caps
+    the global α for all other classes (GPT-4).
+
+    Args:
+        alpha_max:         Same as ``ConformalAlphaCalibrator``.
+        warmup:            Per-class warmup completions (global calibrator uses
+                           the full ``warmup``; per-class starts at warmup//2).
+        window:            Sliding window per calibrator.
+        target_p90_error:  Target p90 relative error for α=alpha_max mapping.
+    """
+
+    def __init__(
+        self,
+        alpha_max: float = CONFORMAL_ALPHA_MAX,
+        warmup: int = CONFORMAL_WARMUP,
+        window: int = CONFORMAL_WINDOW,
+        target_p90_error: float = CONFORMAL_TARGET_P90_ERROR,
+    ) -> None:
+        self.alpha_max = alpha_max
+        self.warmup = warmup
+        self.window = window
+        self.target_p90_error = target_p90_error
+        self._global = ConformalAlphaCalibrator(alpha_max, warmup, window, target_p90_error)
+        self._classes: dict[str, ConformalAlphaCalibrator] = {}
+        self._class_counts: dict[str, int] = {}
+        self._per_class_alpha_sum: dict[str, float] = {}
+        self._per_class_alpha_count: dict[str, int] = {}
+
+    def update(self, predicted_tokens: float, actual_tokens: int, model_id: str = "") -> None:
+        """Record a completed request's residual in its class and the global calibrator."""
+        self._global.update(predicted_tokens, actual_tokens)
+        if model_id:
+            if model_id not in self._classes:
+                self._classes[model_id] = ConformalAlphaCalibrator(
+                    self.alpha_max, PER_CLASS_WARMUP_MIN, self.window, self.target_p90_error
+                )
+            self._classes[model_id].update(predicted_tokens, actual_tokens)
+            self._class_counts[model_id] = self._class_counts.get(model_id, 0) + 1
+
+    def current_alpha(self, model_id: str = "") -> float:
+        """Return calibrated dispatch α for the given model class.
+
+        Uses per-class calibrator if the class has seen ≥ PER_CLASS_WARMUP_MIN
+        completions (i.e., its warmup is satisfied).  Otherwise falls back to
+        the global calibrator to avoid cold-start instability.
+        """
+        if model_id and model_id in self._classes:
+            cls_cal = self._classes[model_id]
+            if cls_cal._n_completed >= PER_CLASS_WARMUP_MIN:
+                alpha = cls_cal.current_alpha()
+                self._per_class_alpha_sum[model_id] = (
+                    self._per_class_alpha_sum.get(model_id, 0.0) + alpha
+                )
+                self._per_class_alpha_count[model_id] = (
+                    self._per_class_alpha_count.get(model_id, 0) + 1
+                )
+                return alpha
+        return self._global.current_alpha()
+
+    def mean_alpha(self) -> float:
+        """Global mean α across all dispatch events (including per-class ones)."""
+        return self._global.mean_alpha()
+
+    def per_class_mean_alpha(self) -> dict[str, float]:
+        """Diagnostic: mean α per class (only classes that reached per-class warmup)."""
+        return {
+            mid: (self._per_class_alpha_sum.get(mid, 0.0) /
+                  max(1, self._per_class_alpha_count.get(mid, 1)))
+            for mid in self._classes
+            if self._class_counts.get(mid, 0) >= PER_CLASS_WARMUP_MIN
+        }
+
+    def class_counts(self) -> dict[str, int]:
+        """Number of completions seen per class."""
+        return dict(self._class_counts)
+
+
+def _simulate_decoupled_hybrid_per_class_conformal(
+    requests: list[_Request],
+    servers: int,
+    calibrator: PerClassConformalCalibrator,
+    preemption_overhead_s: float = 0.0,
+) -> tuple[dict, dict, dict]:
+    """Decoupled Hybrid SRPT with Per-Class Conformal Adaptive α [run 2026-06-22-w].
+
+    Identical to ``_simulate_decoupled_hybrid_conformal`` except that the dispatch
+    aging parameter α is calibrated *per model class* (request.model_id) rather
+    than globally.  Each class independently adapts its α from its own empirical
+    p90 prediction error.
+
+    **Preemption key (on new arrival r):**
+        remaining_s  [pure SRPT — same as global conformal variant]
+
+    **Dispatch key (when server becomes free):**
+        key(entry, t) = remaining_s / (1 + α_class(entry.model_id, t) × total_wait_s)
+    where α_class = calibrator.current_alpha(model_id) is re-evaluated per request.
+
+    With accurate predictions for a class (e.g. GPT-4, rel_err≈0.02):
+      α_class → 0 after per-class warmup  →  dispatch is pure SRPT for that class.
+    With noisy predictions (e.g. ChatGPT, rel_err≈0.95):
+      α_class → 0.002 (capped)  →  same as global conformal variant.
+
+    Research basis:
+    - RC3P (arXiv:2406.06818): class-conditional conformal achieves group coverage
+      guarantees while reducing prediction set sizes 26.25% vs uniform CP.
+    - TIE scheduling (arXiv:2604.00499): distributional ordering by model type.
+    - Group-conditional conformal (Melki et al., ICCV 2023W): per-group calibration.
+    - arXiv:2503.07545: per-class calibration as open problem for LLM schedulers.
+    """
+    n = len(requests)
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+    _npreempt = [0]
+
+    s_req:          list = [None] * servers
+    s_start:        list = [0.0] * servers
+    s_rem0:         list = [0.0] * servers
+    s_ver:          list = [0]   * servers
+    s_frozen_wait:  list = [0.0] * servers
+
+    waiting: list = []
+
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _remaining(sid: int, t: float) -> float:
+        return max(0.0, s_rem0[sid] - (t - s_start[sid]))
+
+    def _per_class_dispatch_key(entry: tuple, t: float) -> tuple:
+        rem_s, frozen_wait_s, wait_entered_s, req = entry
+        current_wait = t - wait_entered_s
+        total_wait = frozen_wait_s + current_wait
+        alpha = calibrator.current_alpha(req.model_id)
+        ek = rem_s / max(1e-9, 1.0 + alpha * total_wait)
+        return (ek, req.idx)
+
+    def _start(sid: int, req: "_Request", rem: float, frozen_wait: float, t: float) -> None:
+        s_req[sid]   = req
+        s_start[sid] = t
+        s_rem0[sid]  = rem
+        s_ver[sid]  += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + rem, 1, _en(), sid, v, req))
+
+    response: dict[int, float] = {}
+
+    while events:
+        ev  = heapq.heappop(events)
+        t   = ev[0]
+        ety = ev[1]
+
+        if ety == 0:  # ---- ARRIVAL ----------------------------------------
+            req = ev[5]
+            free = next((s for s in range(servers) if s_req[s] is None), None)
+            if free is not None:
+                s_frozen_wait[free] = 0.0
+                _start(free, req, req.service_s, 0.0, t)
+            else:
+                # PURE SRPT PREEMPTION: no aging on preemption key.
+                worst_sid, worst_rem = 0, -1.0
+                for s in range(servers):
+                    r = _remaining(s, t)
+                    if r > worst_rem:
+                        worst_rem, worst_sid = r, s
+
+                if req.service_s < worst_rem:
+                    preempted = s_req[worst_sid]
+                    prem = _remaining(worst_sid, t)
+                    pfrozen = s_frozen_wait[worst_sid]
+                    s_req[worst_sid]  = None
+                    s_ver[worst_sid] += 1
+                    s_frozen_wait[worst_sid] = 0.0
+                    _start(worst_sid, req, req.service_s, 0.0, t)
+                    _npreempt[0] += 1
+                    waiting.append((prem + preemption_overhead_s, pfrozen, t, preempted))
+                else:
+                    waiting.append((req.service_s, 0.0, t, req))
+
+        else:  # ---- COMPLETION ---------------------------------------------
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue
+            response[req.idx] = t - req.arrival_s
+
+            # Update per-class calibrator with this request's residual.
+            calibrator.update(req.predicted_tokens, req.actual_tokens, req.model_id)
+
+            s_req[sid]  = None
+            s_ver[sid] += 1
+
+            if waiting:
+                # PER-CLASS CONFORMAL DISPATCH: α recalibrated per class after each completion.
+                best_i = min(
+                    range(len(waiting)),
+                    key=lambda i: _per_class_dispatch_key(waiting[i], t),
+                )
+                rem_s, frozen_wait_s, wait_entered_s, nxt = waiting.pop(best_i)
+                new_frozen = frozen_wait_s + (t - wait_entered_s)
+                s_frozen_wait[sid] = new_frozen
+                _start(sid, nxt, rem_s, new_frozen, t)
+
+    wait_map = {
+        r.idx: max(0.0, response[r.idx] - r.service_s)
+        for r in requests if r.idx in response
+    }
+    resp  = [response[r.idx] for r in requests if r.idx in response]
+    waits = [wait_map[r.idx] for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits, servers)
+    summary["preemption_count"] = _npreempt[0]
+    summary["per_class_mean_alpha"] = calibrator.per_class_mean_alpha()
+    summary["class_counts"] = calibrator.class_counts()
+    return summary, response, wait_map
+
+
+# ---------------------------------------------------------------------------
+# Per-Class Conformal Report and Backtest [run 2026-06-22-w]
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PerClassConformalReport:
+    """Comparison: FIFO / Oracle conformal / Global conformal / Per-class conformal.
+
+    [run 2026-06-22-w] Validates that per-class conformal calibration breaks
+    the running-statistics ceiling identified in runs -t/-u/-v.
+
+    Primary hypothesis: classes with accurate predictions (GPT-4, rel_err≈0.02)
+    converge to α≈0 independently, achieving near-SRPT dispatch for those
+    requests while ChatGPT requests retain the safe α≈0.002 starvation guard.
+
+    KPI columns:
+      *_goodput_per_dollar     — SLA-safe tokens / (GPU-hour-dollars).
+      *_delta_pct              — vs FIFO baseline.
+      per_class_mean_alpha     — per-class mean α at dispatch (diagnostic).
+      class_counts             — completions seen per class (diagnostic).
+      per_class_vs_global_pct  — improvement of per-class over global conformal.
+      per_class_vs_oracle_retention_pct — fraction of oracle gain achieved.
+    """
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    n_model_ids: int
+
+    fifo_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+    global_goodput_per_dollar: float
+    per_class_goodput_per_dollar: float
+
+    oracle_delta_pct: float
+    global_delta_pct: float
+    per_class_delta_pct: float
+
+    global_vs_oracle_retention_pct: float
+    per_class_vs_oracle_retention_pct: float
+    per_class_vs_global_pct: float
+
+    global_mean_alpha: float
+    per_class_mean_alpha: dict
+    class_counts: dict
+
+    fifo_sim: dict
+    oracle_sim: dict
+    global_sim: dict
+    per_class_sim: dict
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "n_model_ids": self.n_model_ids,
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 2),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 2),
+            "global_goodput_per_dollar": round(self.global_goodput_per_dollar, 2),
+            "per_class_goodput_per_dollar": round(self.per_class_goodput_per_dollar, 2),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "global_delta_pct": round(self.global_delta_pct, 2),
+            "per_class_delta_pct": round(self.per_class_delta_pct, 2),
+            "global_vs_oracle_retention_pct": round(self.global_vs_oracle_retention_pct, 2),
+            "per_class_vs_oracle_retention_pct": round(self.per_class_vs_oracle_retention_pct, 2),
+            "per_class_vs_global_pct": round(self.per_class_vs_global_pct, 2),
+            "global_mean_alpha": round(self.global_mean_alpha, 6),
+            "per_class_mean_alpha": {
+                k: round(v, 6) for k, v in (self.per_class_mean_alpha or {}).items()
+            },
+            "class_counts": self.class_counts,
+            "fifo_sim": _r(self.fifo_sim),
+            "oracle_sim": _r(self.oracle_sim),
+            "global_sim": _r(self.global_sim),
+            "per_class_sim": _r(self.per_class_sim),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_per_class_conformal_on_trace(
+    raw: list[tuple[float, int]],
+    features: list[dict],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    ml_warmup_n: int,
+) -> "PerClassConformalReport":
+    """Run 4-discipline comparison: FIFO / oracle / global conformal / per-class conformal.
+
+    Uses ML-HGB predictions (model_id + input_tokens) as the shared prior for
+    both global-conformal and per-class-conformal disciplines.  The only
+    difference is the calibrator: global uses one window for all requests;
+    per-class uses one window per model_id.
+    """
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    # Generate ML-HGB predictions (same as run -v, causal two-phase).
+    ml_preds, ml_stats = make_ml_prior_predictions_burstgpt(raw, features, warmup_n=ml_warmup_n)
+    # Use unique model IDs from features (more reliable than ml_stats for n_model_ids).
+    n_model_ids = len(set(f.get("model_id", "") for f in features if f.get("model_id")))
+
+    def _build_oracle() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+                model_id=features[i].get("model_id", "") if i < len(features) else "",
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_ml() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=ml_preds[i],
+                service_s=_service_time_s(tok),
+                model_id=features[i].get("model_id", "") if i < len(features) else "",
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs        = _build_oracle()
+    oracle_reqs      = _build_oracle()
+    global_conf_reqs = _build_ml()
+    per_cls_reqs     = _build_ml()
+
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+
+    global_cal = ConformalAlphaCalibrator()
+    global_sim, global_resp, _ = _simulate_decoupled_hybrid_conformal(
+        global_conf_reqs, servers, global_cal
+    )
+    gp_global = _sla_safe_goodput_per_dollar(global_conf_reqs, global_resp, sla_s, servers)
+    global_sim["sla_safe_goodput_per_dollar"] = gp_global
+
+    per_cls_cal = PerClassConformalCalibrator()
+    per_cls_sim, per_cls_resp, _ = _simulate_decoupled_hybrid_per_class_conformal(
+        per_cls_reqs, servers, per_cls_cal
+    )
+    gp_per_cls = _sla_safe_goodput_per_dollar(per_cls_reqs, per_cls_resp, sla_s, servers)
+    per_cls_sim["sla_safe_goodput_per_dollar"] = gp_per_cls
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    def _retention(oracle_delta: float, candidate_delta: float) -> float:
+        return candidate_delta / oracle_delta * 100.0 if oracle_delta > 0 else 0.0
+
+    oracle_delta  = _delta(gp_fifo, gp_oracle)
+    global_delta  = _delta(gp_fifo, gp_global)
+    per_cls_delta = _delta(gp_fifo, gp_per_cls)
+
+    return PerClassConformalReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        n_model_ids=n_model_ids,
+        fifo_goodput_per_dollar=gp_fifo,
+        oracle_goodput_per_dollar=gp_oracle,
+        global_goodput_per_dollar=gp_global,
+        per_class_goodput_per_dollar=gp_per_cls,
+        oracle_delta_pct=oracle_delta,
+        global_delta_pct=global_delta,
+        per_class_delta_pct=per_cls_delta,
+        global_vs_oracle_retention_pct=_retention(oracle_delta, global_delta),
+        per_class_vs_oracle_retention_pct=_retention(oracle_delta, per_cls_delta),
+        per_class_vs_global_pct=_delta(gp_global, gp_per_cls),
+        global_mean_alpha=global_cal.mean_alpha(),
+        per_class_mean_alpha=per_cls_cal.per_class_mean_alpha(),
+        class_counts=per_cls_cal.class_counts(),
+        fifo_sim=fifo_sim,
+        oracle_sim=oracle_sim,
+        global_sim=global_sim,
+        per_class_sim=per_cls_sim,
+    )
+
+
+def run_burstgpt_per_class_conformal_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    ml_warmup_n: int = 300,
+) -> "PerClassConformalReport":
+    """Per-class conformal calibration backtest on BurstGPT HF [run 2026-06-22-w].
+
+    Tests the hypothesis that per-class conformal calibration breaks the
+    running-statistics ceiling identified in runs -t/-u/-v.
+
+    Key question: does per-class α for GPT-4 (which ML-HGB predicts accurately)
+    converge to near-0 independently of ChatGPT's high-variance errors?
+
+    Disciplines compared:
+      1. FIFO (baseline)
+      2. Conformal oracle — upper bound (predicted == actual, global calibrator)
+      3. Conformal ML-HGB global — replicates run -v result (~70% retention)
+      4. Conformal ML-HGB per-class — NEW: per-class α → 0 for GPT-4 class
+
+    Expected outcome (BurstGPT HF, ρ=0.85, 4 servers, SLA=30s):
+      FIFO:                 reference goodput/$
+      Oracle conformal:     +644.4% vs FIFO [run -r]
+      Global conformal:     +420.83% vs FIFO [run -t] or ~-0.12% vs global-prior [run -v]
+      Per-class conformal:  >+420.83% vs FIFO — GPT-4 class achieves near-SRPT
+
+    Args:
+        servers:      Replica pool size (M/G/c).
+        target_rho:   Target cluster utilization.
+        job_limit:    Optional request cap (None = use all available).
+        sla_s:        E2E SLA budget.
+        jsonl_path:   BurstGPT HF JSONL path with model_id features.
+        ml_warmup_n:  HGB training window size.
+
+    Returns:
+        ``PerClassConformalReport`` with 4-discipline KPIs and per-class diagnostics.
+    """
+    raw, features = load_burstgpt_serving_requests_jsonl_with_features(
+        jsonl_path, limit=job_limit
+    )
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 valid requests."
+        )
+    return _run_per_class_conformal_on_trace(
+        raw, features,
+        trace_name="burstgpt_hf_per_class_conformal",
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        ml_warmup_n=ml_warmup_n,
     )
