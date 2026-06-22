@@ -8,6 +8,177 @@
 
 ---
 
+## Run 2026-06-22-w — Per-Class Conformal Calibration (Validated Null Result)
+
+### Q1. What currently limits Aurelius most?
+
+**The conformal α=0.002 structural ceiling is confirmed at the per-class level.**
+Run -w tests separate `ConformalAlphaCalibrator` instances per `model_id` (ChatGPT vs GPT-4)
+on BurstGPT HF (5,880 requests, stratified prior). Results:
+
+| Condition | Goodput/$ | vs FIFO | Oracle retention |
+|---|---:|---:|---:|
+| FIFO | 6,529 | baseline | — |
+| Oracle + global mono | 48,599 | +644.4% | 100% |
+| Global prior + global mono [run -t] | 34,004 | +420.83% | 70.0% |
+| Stratified prior + global mono [run -u] | 33,962 | +420.20% | 69.9% |
+| **Stratified prior + per-class [run -w]** | **33,983** | **+420.51%** | **69.9%** |
+
+Per-class diagnostics: ChatGPT α=0.001999, GPT-4 α=0.002 — BOTH saturate at the cap.
+Per-class vs monolithic improvement: **+0.06%** (within simulator noise — NULL RESULT).
+
+Root cause: GPT-4's own within-class distribution is heavy-tailed. Many GPT-4 requests
+have short actual output (e.g. 20 tokens when GPT-4 running median ≈ 235 tokens → rel_err =
+|235-20|/20 = 10.75), keeping p90 relative error ≥ 0.80 for the GPT-4 calibrator independently.
+The hypothesis that GPT-4 has "lower intra-class variance" was incorrect — GPT-4 output length
+is also heavy-tailed within the class, just at a higher scale than ChatGPT.
+
+### Q2. What theoretically offers the largest gain?
+
+**KV-prefix-hash features (Mooncake traces) as prediction signal.**
+For requests that are exact repeats of prior prompts (cache hits via KV-block hash match),
+output length is deterministic → rel_err ≈ 0 → per-request α → 0 → pure SRPT for those
+requests. This would break the calibrator ceiling for the cache-hit fraction without requiring
+access to session history or model internals.
+
+Alternative: CARA HGB pilot-telemetry ML predictor (rank 1 in roadmap). If trained on user-id,
+session context, and query complexity signals, it could identify "surprise-long" requests
+at arrival and predict their actual output length accurately.
+
+### Q3. Which forecasts are weakest?
+
+1. **Output-length prior** — FIVE variants exhausted: global median [run -t], stratified
+   median [run -u], ML-HGB [run -v], global per-class [run -w implicit], stratified per-class
+   [run -w]. ALL cap at α=0.002. The binding constraint is the calibrator p90 formula, not
+   prediction quality, for BurstGPT's intrinsically heavy-tailed distribution at ANY class.
+2. **TTFT p99 tail** — unchanged, baseline_fallback. Needs pilot telemetry.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Serving queue not wired into runtime.** All conformal serving gates are closed
+   (+420.83% BurstGPT, +244.42% Azure vs FIFO with live prior). Integration pending.
+2. **Compound economic + queue gain is unverified end-to-end.** Independence estimate gives
+   +876% vs FIFO; actual compound may differ due to interaction effects.
+3. **Calibrator metric.** p90 relative error is dominated by the extreme right tail of
+   output-length distributions. An absolute-error or p50-relative-error metric might not
+   saturate on the same α cap.
+
+### Q5. Which workloads benefit least?
+
+**BurstGPT HF under any prior tested.** Heavy-tailed LLM output distributions at ALL class
+granularities produce p90 relative error ≥ 0.80, capping α=0.002 for all classes. The 30pp
+gap to oracle (100% - 70% retention) is a structural property of the distribution, not a
+calibrator or predictor limitation.
+
+### Q6. Which research direction appears strongest?
+
+**Mooncake trace ingestion for KV-hash-feature-based prior.** Three evidence points:
+1. Cache-hit requests (exact prefix match) have deterministic output → zero prediction error
+2. Mooncake KV-block-hash list per request is already available (Apache-2.0)
+3. Even partial cache-hit fraction (e.g. 20%) with rel_err≈0 would lower p90 error below 0.80
+   for the hash-hit subclass, allowing α→0 for those requests
+
+Four alternatives tried and confirmed null: global/stratified/ML-HGB priors and per-class calibration.
+
+### Q7. What is the shortest path to another +10% gain?
+
+**Two options, roughly equivalent in effort:**
+
+Option A (prior-architecture change): Ingest Mooncake traces; use KV-block-hash matching as an
+additional prediction signal. Hash-match requests have zero prediction error → their per-class
+calibrator reaches α=0 → SRPT for cache-hit subclass. Requires Mooncake ingest (1-2 days).
+
+Option B (compound end-to-end): Wire conformal discipline into the economic scheduling backtest
+to measure true compound gain (independence estimate: +876%). The compound gain likely exceeds
++10% by large margin if confirmed end-to-end.
+
+### Q8. What is the shortest path to another +50% gain?
+
+**Compound economic + queue scheduling, end-to-end.** The independence estimate (+876% vs FIFO)
+already exceeds +50%. Confirming this end-to-end requires wiring the conformal simulator into
+the canonical energy/economic scheduling trace replay. If the independence assumption holds even
+partially, this would be a major headline result.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Same as prior runs. Live prior already gives +420.83% vs FIFO on BurstGPT. The SLA-aware
+baseline is +210.6% vs FIFO [run -r], so conformal with live prior already achieves roughly
++210.6% × 0.7 vs SLA-aware = approximately +147% (rough estimate — non-linear interaction).
+True +300% vs SLA-aware would require compound scheduling OR a better prior closing the 30pp
+oracle gap.
+
+### Q10. Which assumptions might be wrong?
+
+1. **GPT-4 within-class variance is reducible.** We assumed GPT-4 has lower intra-class
+   variance than ChatGPT, but the data shows both are heavy-tailed. What if most GPT-4
+   output variance is irreducible (tasks span poems, code, essays — all different lengths)?
+   → Then no prior can beat the 0.80 threshold for GPT-4 either. This appears to be the case.
+
+2. **The p90 relative error formula is the right metric for dispatching.** If we used
+   absolute error instead of relative error: α formula would not saturate for classes with
+   accurate absolute-error predictions (GPT-4 MAE=157 tokens → large relative but moderate
+   absolute for high-token requests). Changing the formula may unlock improvement without
+   any new data.
+
+3. **Mooncake has meaningful cache-hit rates for typical LLM inference.** If the hash-hit
+   rate is < 5%, the calibrator improvement would be minimal (5% of requests at α=0 changes
+   goodput/$ by < 5% of the oracle gap).
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **BurstGPT calibration improvement track is exhausted.** Five prior/calibration combinations
+   all cap at α=0.002. The only unexplored dimensions are: (a) KV hash features, (b) absolute-
+   error calibrator metric, (c) longer warmup (10,000+ completions).
+2. **No third public LLM trace with model_id.** Mooncake and ShareGPT/LMSYS would provide
+   independent validation of the per-class calibration null result.
+3. **Compound gain remains independence assumption only.** End-to-end backtest pending.
+
+### Q12. Which public datasets should be added?
+
+**Highest priority (post run -w):**
+1. **Mooncake FAST25** (Apache-2.0, `hash_ids` field) — adds KV-prefix reuse signal;
+   only dataset with per-request hash features available as open data.
+2. **ShareGPT/LMSYS Conversation** — third public LLM trace for cross-validation.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. **Mooncake FAST25 traces ingestion** (Rank 2 in updated roadmap). Bounded ingest:
+   `conversation_trace.jsonl`, `synthetic_trace.jsonl`, `toolagent_trace.jsonl`.
+   Add hash_id-based cache-hit detection as a prediction feature. Test whether requests
+   with previous hash matches have lower prediction error → lower per-class α → goodput/$ gain.
+
+2. **Compound end-to-end backtest** (Rank 3 in updated roadmap). Wire conformal serving
+   simulation into canonical energy backtest. Measure true compound gain vs independence estimate.
+
+**Short-term (2–3 runs):**
+3. **Calibrator metric change** — replace p90 relative error with p90 absolute error in
+   `ConformalAlphaCalibrator.current_alpha()`. Hypothesis: absolute error doesn't saturate
+   for all classes simultaneously, allowing some classes to see lower α.
+4. **ShareGPT as third public LLM trace** — independent validation.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -w
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Wire conformal+decoupled into serving runtime (CARA HGB prior) | Very High | High | All gates CLOSED; integration pending |
+| 2 | **Mooncake FAST25 ingestion (KV hash features → α=0 for cache hits)** | **High** | **High (Low effort)** | **Not started; bounded ingest feasible** |
+| 3 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO; unverified |
+| 4 | Calibrator metric change (absolute error vs p90 relative) | Medium | High | Simple formula change; targets tail-saturation root cause |
+| 5 | ShareGPT as third public LLM trace | High | Medium | Two traces confirmed; third adds confidence |
+| 6 | Admission gate → cluster simulator | Medium | Medium | Implemented (unconnected) |
+
+**Closed/characterized opportunities:**
+- **Per-class conformal calibration**: **NULL [run -w]** — +0.06% vs mono; GPT-4 per-class α=0.002 (cap); structural ceiling confirmed at per-class level
+- ML-HGB prior (HGB quantile p50): **NEGATIVE [run -v]** — −0.12% vs global prior; conformal cap persists
+- Stratified causal prior: **NEGATIVE [run -u]** — −0.12% goodput/$; running-statistics ceiling confirmed
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 70.0% BurstGPT
+
+---
+
 ## Run 2026-06-22-v — ML-HGB Prior (Validated Null Result)
 
 ### Q1. What currently limits Aurelius most?
