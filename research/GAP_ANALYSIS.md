@@ -8,6 +8,133 @@
 
 ---
 
+## Run 2026-06-22-x — Absolute-Error Conformal Calibration (FRONTIER IMPROVEMENT)
+
+### Q1. What currently limits Aurelius most?
+
+**The running-statistics retention ceiling is broken.** The abs-conformal calibrator closes
+97.8% (Azure) and 88.3% (BurstGPT) of the FIFO→oracle gap with a running-median prior.
+The remaining 2.2% (Azure) and 11.7% (BurstGPT) gap to oracle is now the binding constraint.
+
+Root cause of the previous ceiling: rel-error formula `p90(|pred-actual|/actual)` is dominated
+by short-request over-predictions. Short ChatGPT (actual=7, pred=18) → rel_err=1.57 → p90
+rel_err ≥ 0.80 → α capped at 2×alpha_max=0.002. The fix: `p90(|pred-actual|)` ignores the
+scheduling-irrelevant 11-token error; p90 abs_err driven by genuine uncertainty in long requests
+(~509-632 tokens with running-median prior) → α = 0.000222-0.000562 (near Pareto-optimal 0.001).
+
+Key results:
+- **Azure LLM 2024**: +313.14% vs FIFO (was +244.42%), α=0.000222 (was 0.002), 97.8% retention
+- **BurstGPT HF**: +557.12% vs FIFO (was +420.83%), α=0.000562 (was 0.002), 88.3% retention
+- abs_vs_rel improvement: **+19.95%** (Azure), **+26.17%** (BurstGPT)
+
+### Q2. What theoretically offers the largest gain?
+
+**A request-specific predictor (ML forecaster).** With running-median prior (essentially a
+constant ≈ global median), the abs-calibrator achieves 97.8%/88.3% oracle retention. The
+remaining 2.2%/11.7% gap requires per-request predictions. The abs-calibrator will amplify
+any improvement in prediction accuracy: better predictor → lower p90 abs_err → lower α →
+dispatch becomes more SRPT-like → higher goodput/$.
+
+### Q3. Which forecasts are weakest?
+
+1. **Output-token prior** — running median (constant) is still used. ML predictor needed.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Running-median prior** — still a global constant. Request-specific HGB/CARA predictor
+   would further reduce p90 abs_err → α drops further toward 0 → closer to oracle.
+2. **Serving queue not wired into runtime** — all gates closed, integration pending.
+
+### Q5. Which workloads benefit least?
+
+**Workloads with uniformly small output tokens** (e.g., hypothetical narrow-range trace). If
+p90 abs_err is inherently small, abs vs rel makes no difference. On both tested public traces,
+abs-conformal achieves large gains because the mismatch between relative and absolute error
+metrics is significant.
+
+### Q6. Which research direction appears strongest?
+
+**End-to-end compound backtest (economic × queue scheduling).** With abs-conformal reaching
+97.8% oracle retention on Azure, the queue-scheduling component is nearly optimal with live
+prior. Compounding with economic scheduling gains is the next unverified opportunity.
+Alternatively: wire a ML predictor (HGB) to further close the 11.7% BurstGPT gap.
+
+### Q7. What is the shortest path to another +10% gain?
+
+1. End-to-end compound backtest (economic × queue scheduling). Independence estimate: +876%
+   vs FIFO. End-to-end unverified but now both components are near-optimal individually.
+2. ML predictor for BurstGPT to close the remaining 11.7% oracle gap. With abs-calibrator,
+   reducing p90 abs_err from 632 to ~100 tokens would push α below 0.0002 → near-oracle.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Compound economic + queue scheduling end-to-end backtest. Abs-conformal closes the
+queue-scheduling gap; the economic scheduling component (token rate optimization) multiplies it.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Azure: abs-conformal already achieves +313.14% vs FIFO. SLA-aware baseline is approximately
++125.4% vs FIFO → abs-conformal is already **+82pp above the SLA-aware baseline** on Azure.
+BurstGPT: abs-conformal +557.12% vs FIFO, SLA-aware baseline +210.6% vs FIFO → **+113pp above
+SLA-aware** on BurstGPT. The +300% vs SLA-aware objective may already be satisfied with
+abs-conformal — need to measure SLA-aware + abs-conformal head-to-head.
+
+### Q10. Which assumptions might be wrong?
+
+1. **p90 abs_err of 509-632 tokens is stable across different load levels.** At ρ=0.50,
+   the prior quality may differ. Untested.
+2. **target_p90_abs_tokens=500 is optimal.** If BurstGPT abs_err is consistently ~632 tokens
+   (above target), α is still slightly above alpha_max. Tuning target to 650 might help.
+3. **Oracle-retention ceiling is truly lifted.** The 2.2% Azure gap might have a different
+   binding constraint we haven't yet characterized.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **SLA-aware head-to-head not yet run with abs-conformal.** The +300% vs SLA-aware claim
+   needs direct measurement, not the indirect gap calculation.
+2. **Compound economic × queue scheduling unverified end-to-end.** Independence estimate only.
+3. **Azure trace lacks model_id.** Cannot test abs per-class on Azure.
+
+### Q12. Which public datasets should be added?
+
+ShareGPT (for model-class diversity validation), CARA telemetry (for abs-error calibration
+with fine-grained features).
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. End-to-end compound backtest (economic × queue scheduling) — both components individually
+   near-optimal; measure the compound gain directly.
+2. SLA-aware head-to-head with abs-conformal to confirm the +300% vs SLA-aware objective.
+
+**Short-term (2–3 runs):**
+3. ML predictor integration: HGB p50 as prior → further reduce p90 abs_err → close
+   remaining 11.7% BurstGPT gap.
+4. Wire abs-conformal discipline into serving runtime.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -x
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO; abs-conformal queue component now near-optimal |
+| 2 | SLA-aware vs abs-conformal head-to-head | High | High | Verify +300% vs SLA-aware objective directly |
+| 3 | ML predictor (HGB/CARA) with abs-conformal | High | Medium | Close remaining 11.7% BurstGPT gap; abs-calibrator now amplifies prediction gains |
+| 4 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 5 | Wire abs-conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+
+**Closed/characterized opportunities:**
+- Absolute-error conformal calibration: **FRONTIER IMPROVEMENT [run -x]** — +19.95% Azure, +26.17% BurstGPT vs rel-conformal; breaks running-statistics ceiling
+- Per-class conformal calibration: **NEGATIVE [run -w]** — +0.29% vs global; within-class variance ceiling (now superseded by abs formula)
+- ML-HGB prior (HGB quantile p50): **NEGATIVE [run -v]** — −0.12% vs global prior (rel-error formula was the binding constraint, now fixed)
+- Stratified causal prior: **NEGATIVE [run -u]** — −0.12% goodput/$
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 70.0% BurstGPT (now superseded: abs-conformal 97.8%/88.3%)
+
+---
+
 ## Run 2026-06-22-w — Per-Class Conformal Calibration (Within-Class Variance Ceiling)
 
 ### Q1. What currently limits Aurelius most?

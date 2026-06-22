@@ -186,6 +186,18 @@ CONFORMAL_TARGET_P90_ERROR: float = 0.40
 CONFORMAL_WARMUP: int = 100
 # Sliding-window size for error estimation.
 CONFORMAL_WINDOW: int = 200
+# ---------------------------------------------------------------------------
+# Absolute-Error Conformal α — constants [run 2026-06-22-x]
+# ---------------------------------------------------------------------------
+# Target p90 absolute prediction error (in output tokens) for α = alpha_max.
+# Calibration: with a running-median prior on BurstGPT, p90 abs error ≈ 300–600
+# tokens (driven by GPT-4 and surprise-long ChatGPT requests).  Setting
+# target=500 means: if p90_abs_err ≤ 500 tokens the calibrator outputs α ≤ alpha_max.
+# Contrast with relative error (CONFORMAL_TARGET_P90_ERROR=0.40): short ChatGPT
+# over-predictions (predict=18, actual=7) produce rel_err=1.57 >> 0.40, capping
+# the calibrator at 2×alpha_max=0.002.  Absolute error correctly ignores those tiny
+# absolute misses and reports only large-absolute-error (long-request) uncertainty.
+CONFORMAL_ABS_TARGET_P90_TOKENS: float = 500.0
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_AZURE_FIXTURE = os.path.join(
@@ -944,6 +956,96 @@ class ConformalAlphaCalibrator:
         return self._alpha_sum / max(1, self._alpha_count)
 
 
+class AbsoluteErrorConformalCalibrator:
+    """Conformal α calibrator using absolute token-count error instead of relative error.
+
+    **Motivation [run 2026-06-22-x]:**
+
+    The ``ConformalAlphaCalibrator`` (run 2026-06-21-q) uses *relative* prediction
+    error: ``rel_err = |predicted − actual| / actual``.  On BurstGPT the relative
+    error formula caps the calibrator at 2×alpha_max=0.002 for the running-median
+    prior, because short ChatGPT requests (actual=7 tokens, predicted=18) produce
+    rel_err=1.57 >> target=0.40 — even though the *absolute* misprediction is only
+    11 tokens and has negligible scheduling impact.
+
+    This class replaces relative error with *absolute* error:
+        abs_err = |predicted − actual|   (in output tokens)
+
+    The p90 absolute error is driven by long GPT-4 / surprise-long ChatGPT requests
+    (abs_err ≈ 300–600 tokens for running-median prior) rather than by small over-
+    predictions of short ChatGPT requests (abs_err ≤ 18 tokens).
+
+    Formula:
+        α = alpha_max × min(2.0, p90_abs_err / target_p90_abs_tokens)
+
+    With running-median prior on BurstGPT (p90_abs ≈ 300–600 tokens, target=500):
+        ratio ≈ 0.6–1.2  →  α ≈ 0.0006–0.0012 (near or below alpha_max=0.001)
+
+    With oracle prior (predicted == actual):
+        abs_err → 0  →  α → 0  →  dispatch = pure SRPT (same as rel-error calibrator)
+
+    The key property: small absolute misses (short-request over-predictions) no
+    longer cap the calibrator above alpha_max.
+
+    Args:
+        alpha_max:              Maximum α (same as fixed best α = 0.001).
+        warmup:                 Completions required before α adaptation begins.
+        window:                 Sliding-window size for error estimation.
+        target_p90_abs_tokens:  Absolute token error at which α = alpha_max.
+                                Set to ≈ expected p90 abs error with a "neutral" prior.
+    """
+
+    def __init__(
+        self,
+        alpha_max: float = CONFORMAL_ALPHA_MAX,
+        warmup: int = CONFORMAL_WARMUP,
+        window: int = CONFORMAL_WINDOW,
+        target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    ) -> None:
+        self.alpha_max = alpha_max
+        self.warmup = warmup
+        self.window = window
+        self.target_p90_abs_tokens = target_p90_abs_tokens
+        self._residuals: list[float] = []
+        self._n_completed: int = 0
+        self._alpha_sum: float = 0.0
+        self._alpha_count: int = 0
+
+    def update(self, predicted_tokens: float, actual_tokens: int) -> None:
+        """Record a completed request's absolute prediction error (tokens)."""
+        self._n_completed += 1
+        abs_err = abs(predicted_tokens - actual_tokens)
+        self._residuals.append(abs_err)
+        if len(self._residuals) > self.window:
+            self._residuals.pop(0)
+
+    def current_alpha(self) -> float:
+        """Return calibrated dispatch α from empirical p90 absolute prediction error."""
+        if self._n_completed < self.warmup or len(self._residuals) < self.warmup // 2:
+            alpha = self.alpha_max
+        else:
+            sorted_r = sorted(self._residuals)
+            p90_idx = min(len(sorted_r) - 1, int(0.90 * len(sorted_r)))
+            p90_abs_err = sorted_r[p90_idx]
+            ratio = min(2.0, p90_abs_err / max(self.target_p90_abs_tokens, 1e-9))
+            alpha = self.alpha_max * ratio
+        self._alpha_sum += alpha
+        self._alpha_count += 1
+        return alpha
+
+    def mean_alpha(self) -> float:
+        """Diagnostic: mean α across all dispatch events."""
+        return self._alpha_sum / max(1, self._alpha_count)
+
+    def p90_abs_err_tokens(self) -> float:
+        """Diagnostic: current p90 absolute error in the sliding window."""
+        if len(self._residuals) < self.warmup // 2:
+            return float("nan")
+        sorted_r = sorted(self._residuals)
+        p90_idx = min(len(sorted_r) - 1, int(0.90 * len(sorted_r)))
+        return sorted_r[p90_idx]
+
+
 def _simulate_decoupled_hybrid_conformal(
     requests: list[_Request],
     servers: int,
@@ -1155,6 +1257,9 @@ def simulate_queue(
     if discipline == "decoupled_hybrid_conformal":
         cal = ConformalAlphaCalibrator()
         return _simulate_decoupled_hybrid_conformal(requests, servers, cal, preemption_overhead_s)
+    if discipline == "decoupled_hybrid_abs_conformal":
+        cal = AbsoluteErrorConformalCalibrator()
+        return _simulate_decoupled_hybrid_abs_conformal(requests, servers, cal, preemption_overhead_s)
     if discipline == "decoupled_hybrid_per_class_conformal":
         cal = PerClassConformalCalibrator()
         return _simulate_decoupled_hybrid_per_class_conformal(requests, servers, cal, preemption_overhead_s)
@@ -5688,6 +5793,150 @@ class PerClassConformalCalibrator:
         return dict(self._class_counts)
 
 
+def _simulate_decoupled_hybrid_abs_conformal(
+    requests: list["_Request"],
+    servers: int,
+    calibrator: "AbsoluteErrorConformalCalibrator",
+    preemption_overhead_s: float = 0.0,
+) -> tuple[dict, dict, dict]:
+    """Decoupled Hybrid SRPT with Absolute-Error Conformal Adaptive α [run 2026-06-22-x].
+
+    Identical to ``_simulate_decoupled_hybrid_conformal`` except that the dispatch
+    aging parameter α is recalibrated from the empirical p90 *absolute* prediction
+    error (|predicted − actual| in output tokens) rather than the p90 *relative*
+    prediction error (|predicted − actual| / actual).
+
+    **Why absolute error [run 2026-06-22-x]:**
+
+    On BurstGPT HF with a running-median prior (~18 tokens), the relative-error
+    calibrator caps at α = 2×alpha_max = 0.002 because short ChatGPT requests
+    (actual=7, predicted=18) produce rel_err=1.57 — far above target=0.40 — even
+    though the absolute misprediction (11 tokens ≈ 1 second of service) is negligible
+    for scheduling purposes.
+
+    The absolute-error formula correctly ignores these small absolute misses and
+    instead reports uncertainty only where it matters: long requests (GPT-4, surprise-
+    long ChatGPT) with abs_err ≈ 200–600 tokens.  With target=500 tokens, the live
+    running-median prior yields ratio ≈ 0.6–1.0 → α ≈ 0.0006–0.001 — at or below
+    the Pareto-optimal fixed α = 0.001, instead of 2× above it.
+
+    **Preemption key (on new arrival r):**
+        remaining_s  [pure SRPT — unchanged]
+
+    **Dispatch key (when server becomes free):**
+        key(entry, t) = remaining_s / (1 + α(t) × total_wait_s)
+    where α(t) = abs_calibrator.current_alpha() recalibrated from p90 abs error.
+
+    Research basis:
+    - GAP_ANALYSIS.md run -w Q2/Q7 (absolute error as calibrator metric)
+    - arXiv:2508.14544 (Adaptively Robust LLM Inference)
+    - arXiv:1902.00732 (Scheduling with Predictions, Mitzenmacher 2019)
+    """
+    n = len(requests)
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+    _npreempt = [0]
+
+    s_req:          list = [None] * servers
+    s_start:        list = [0.0] * servers
+    s_rem0:         list = [0.0] * servers
+    s_ver:          list = [0]   * servers
+    s_frozen_wait:  list = [0.0] * servers
+
+    waiting: list = []
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _remaining(sid: int, t: float) -> float:
+        return max(0.0, s_rem0[sid] - (t - s_start[sid]))
+
+    def _abs_dispatch_key(entry: tuple, t: float, alpha: float) -> tuple:
+        rem_s, frozen_wait_s, wait_entered_s, req = entry
+        current_wait = t - wait_entered_s
+        total_wait = frozen_wait_s + current_wait
+        ek = rem_s / max(1e-9, 1.0 + alpha * total_wait)
+        return (ek, req.idx)
+
+    def _start(sid: int, req: "_Request", rem: float, frozen_wait: float, t: float) -> None:
+        s_req[sid]   = req
+        s_start[sid] = t
+        s_rem0[sid]  = rem
+        s_ver[sid]  += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + rem, 1, _en(), sid, v, req))
+
+    response: dict[int, float] = {}
+
+    while events:
+        ev  = heapq.heappop(events)
+        t   = ev[0]
+        ety = ev[1]
+
+        if ety == 0:  # ---- ARRIVAL ----------------------------------------
+            req = ev[5]
+            free = next((s for s in range(servers) if s_req[s] is None), None)
+            if free is not None:
+                s_frozen_wait[free] = 0.0
+                _start(free, req, req.service_s, 0.0, t)
+            else:
+                worst_sid, worst_rem = 0, -1.0
+                for s in range(servers):
+                    r = _remaining(s, t)
+                    if r > worst_rem:
+                        worst_rem, worst_sid = r, s
+
+                if req.service_s < worst_rem:
+                    preempted = s_req[worst_sid]
+                    prem = _remaining(worst_sid, t)
+                    pfrozen = s_frozen_wait[worst_sid]
+                    s_req[worst_sid]  = None
+                    s_ver[worst_sid] += 1
+                    s_frozen_wait[worst_sid] = 0.0
+                    _start(worst_sid, req, req.service_s, 0.0, t)
+                    _npreempt[0] += 1
+                    waiting.append((prem + preemption_overhead_s, pfrozen, t, preempted))
+                else:
+                    waiting.append((req.service_s, 0.0, t, req))
+
+        else:  # ---- COMPLETION ---------------------------------------------
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue
+            response[req.idx] = t - req.arrival_s
+
+            calibrator.update(req.predicted_tokens, req.actual_tokens)
+
+            s_req[sid]  = None
+            s_ver[sid] += 1
+
+            if waiting:
+                alpha = calibrator.current_alpha()
+                best_i = min(
+                    range(len(waiting)),
+                    key=lambda i: _abs_dispatch_key(waiting[i], t, alpha),
+                )
+                rem_s, frozen_wait_s, wait_entered_s, nxt = waiting.pop(best_i)
+                new_frozen = frozen_wait_s + (t - wait_entered_s)
+                s_frozen_wait[sid] = new_frozen
+                _start(sid, nxt, rem_s, new_frozen, t)
+
+    wait_map = {
+        r.idx: max(0.0, response[r.idx] - r.service_s)
+        for r in requests if r.idx in response
+    }
+    resp  = [response[r.idx] for r in requests if r.idx in response]
+    waits = [wait_map[r.idx] for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits, servers)
+    summary["preemption_count"] = _npreempt[0]
+    return summary, response, wait_map
+
+
 def _simulate_decoupled_hybrid_per_class_conformal(
     requests: list[_Request],
     servers: int,
@@ -6087,4 +6336,293 @@ def run_burstgpt_per_class_conformal_backtest(
         target_rho=target_rho,
         sla_s=sla_s,
         ml_warmup_n=ml_warmup_n,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Absolute-Error Conformal Backtest [run 2026-06-22-x]
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AbsConformalReport:
+    """Comparison: FIFO / Oracle / Rel-conformal (live prior) / Abs-conformal (live prior).
+
+    [run 2026-06-22-x] Tests whether replacing relative error with absolute error
+    in the conformal calibrator breaks the calibrator cap and improves goodput/$.
+
+    **Root cause being addressed:**
+    Runs -t/-u/-v/-w confirmed that the relative-error calibrator caps at
+    2×alpha_max=0.002 on BurstGPT HF because short ChatGPT requests (actual=7,
+    predicted=18) produce rel_err=1.57 >> target=0.40, even though the absolute
+    misprediction (11 tokens) is scheduling-irrelevant.
+
+    Absolute error drives α from the genuine long-request uncertainty (300–600
+    tokens), yielding α ≈ 0.0006–0.001 (near Pareto-optimal) instead of 0.002.
+
+    **Disciplines compared:**
+      1. FIFO                 — baseline
+      2. Conformal oracle     — upper bound (predicted == actual)
+      3. Rel-conformal live   — current best [run -t]: rel error, running median prior
+      4. Abs-conformal live   — NEW: abs error, running median prior
+
+    KPI columns:
+      *_goodput_per_dollar     — SLA-safe tokens / (GPU-hour-dollars), primary metric.
+      *_delta_pct              — vs FIFO (positive = better).
+      abs_vs_rel_delta_pct     — improvement of abs-conformal over rel-conformal (key finding).
+      abs_mean_alpha           — mean α of abs calibrator at dispatch (diagnostic).
+      rel_mean_alpha           — mean α of rel calibrator at dispatch (diagnostic).
+      abs_p90_abs_err_tokens   — p90 absolute error seen by abs calibrator (diagnostic).
+      abs_vs_oracle_retention  — abs-conformal goodput/$ as fraction of oracle (%).
+    """
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    time_warp: float
+    sla_s: float
+    target_p90_abs_tokens: float
+
+    fifo: dict
+    conformal_oracle: dict
+    rel_conformal_live: dict
+    abs_conformal_live: dict
+
+    fifo_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+    rel_conformal_goodput_per_dollar: float
+    abs_conformal_goodput_per_dollar: float
+
+    oracle_delta_pct: float
+    rel_conformal_delta_pct: float
+    abs_conformal_delta_pct: float
+    abs_vs_rel_delta_pct: float
+    abs_vs_oracle_retention_pct: float
+    rel_vs_oracle_retention_pct: float
+
+    abs_mean_alpha: float
+    rel_mean_alpha: float
+    abs_p90_abs_err_tokens: float
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: round(v, 4) if isinstance(v, float) else v for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "target_p90_abs_tokens": self.target_p90_abs_tokens,
+            "fifo": _r(self.fifo),
+            "conformal_oracle": _r(self.conformal_oracle),
+            "rel_conformal_live": _r(self.rel_conformal_live),
+            "abs_conformal_live": _r(self.abs_conformal_live),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 4),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 4),
+            "rel_conformal_goodput_per_dollar": round(self.rel_conformal_goodput_per_dollar, 4),
+            "abs_conformal_goodput_per_dollar": round(self.abs_conformal_goodput_per_dollar, 4),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "rel_conformal_delta_pct": round(self.rel_conformal_delta_pct, 2),
+            "abs_conformal_delta_pct": round(self.abs_conformal_delta_pct, 2),
+            "abs_vs_rel_delta_pct": round(self.abs_vs_rel_delta_pct, 2),
+            "abs_vs_oracle_retention_pct": round(self.abs_vs_oracle_retention_pct, 2),
+            "rel_vs_oracle_retention_pct": round(self.rel_vs_oracle_retention_pct, 2),
+            "abs_mean_alpha": round(self.abs_mean_alpha, 6),
+            "rel_mean_alpha": round(self.rel_mean_alpha, 6),
+            "abs_p90_abs_err_tokens": round(self.abs_p90_abs_err_tokens, 1),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_abs_conformal_on_trace(
+    raw: list[tuple[float, int]],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+) -> AbsConformalReport:
+    """Four-discipline comparison: FIFO / Oracle / Rel-conformal / Abs-conformal."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_oracle() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_live() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs    = _build_oracle()
+    oracle_reqs  = _build_oracle()
+    rel_reqs     = _build_live()
+    abs_reqs     = _build_live()
+
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+
+    rel_cal = ConformalAlphaCalibrator()
+    rel_sim, rel_resp, _ = _simulate_decoupled_hybrid_conformal(
+        rel_reqs, servers, rel_cal
+    )
+    gp_rel = _sla_safe_goodput_per_dollar(rel_reqs, rel_resp, sla_s, servers)
+    rel_sim["sla_safe_goodput_per_dollar"] = gp_rel
+
+    abs_cal = AbsoluteErrorConformalCalibrator(
+        target_p90_abs_tokens=target_p90_abs_tokens
+    )
+    abs_sim, abs_resp, _ = _simulate_decoupled_hybrid_abs_conformal(
+        abs_reqs, servers, abs_cal
+    )
+    gp_abs = _sla_safe_goodput_per_dollar(abs_reqs, abs_resp, sla_s, servers)
+    abs_sim["sla_safe_goodput_per_dollar"] = gp_abs
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    return AbsConformalReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        time_warp=warp,
+        sla_s=sla_s,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+        fifo=fifo_sim,
+        conformal_oracle=oracle_sim,
+        rel_conformal_live=rel_sim,
+        abs_conformal_live=abs_sim,
+        fifo_goodput_per_dollar=gp_fifo,
+        oracle_goodput_per_dollar=gp_oracle,
+        rel_conformal_goodput_per_dollar=gp_rel,
+        abs_conformal_goodput_per_dollar=gp_abs,
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        rel_conformal_delta_pct=_delta(gp_fifo, gp_rel),
+        abs_conformal_delta_pct=_delta(gp_fifo, gp_abs),
+        abs_vs_rel_delta_pct=_delta(gp_rel, gp_abs),
+        abs_vs_oracle_retention_pct=(gp_abs / gp_oracle * 100.0) if gp_oracle > 0 else 0.0,
+        rel_vs_oracle_retention_pct=(gp_rel / gp_oracle * 100.0) if gp_oracle > 0 else 0.0,
+        abs_mean_alpha=abs_cal.mean_alpha(),
+        rel_mean_alpha=rel_cal.mean_alpha(),
+        abs_p90_abs_err_tokens=abs_cal.p90_abs_err_tokens(),
+    )
+
+
+def run_abs_conformal_azure_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+) -> AbsConformalReport:
+    """Absolute-error conformal calibration on Azure LLM 2024 [run 2026-06-22-x].
+
+    Tests whether replacing relative error with absolute error in the conformal
+    calibrator breaks the calibrator cap observed in runs -t/-u/-v/-w.
+
+    Disciplines compared:
+      1. FIFO                     — baseline
+      2. Conformal oracle         — upper bound (+322.24% vs FIFO expected [run -q])
+      3. Rel-conformal live prior — current best (+244.42% vs FIFO expected [run -t])
+      4. Abs-conformal live prior — NEW: does lower α improve goodput/$?
+
+    Expected outcome if hypothesis is correct:
+      Abs-conformal mean_α < rel-conformal mean_α (less capping from short misses).
+      Abs-conformal goodput/$ > rel-conformal goodput/$ (closer to Pareto-optimal α=0.001).
+      Abs-conformal goodput/$ > +244.42% vs FIFO — frontier improvement.
+
+    Args:
+        servers:               Replica pool size.
+        target_rho:            Target cluster utilization.
+        job_limit:             Optional request cap.
+        sla_s:                 E2E SLA budget (seconds).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Calibration target (tokens) for α = alpha_max.
+        azure_fixture:         Path to Azure LLM 2024 CSV fixture.
+
+    Returns:
+        ``AbsConformalReport`` comparing all four disciplines.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_abs_conformal_on_trace(
+        raw, "azure_llm_2024", servers, target_rho, sla_s,
+        prior_window=prior_window,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+    )
+
+
+def run_abs_conformal_burstgpt_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> AbsConformalReport:
+    """Absolute-error conformal calibration on BurstGPT HF [run 2026-06-22-x].
+
+    Cross-validates abs-conformal on BurstGPT HF (heavier tail: p99≈934 tokens,
+    bimodal ChatGPT + GPT-4 structure).  BurstGPT is the primary test trace because
+    the relative-error calibrator is most severely capped here (ChatGPT short
+    requests with rel_err=1.57 >> 0.40).
+
+    Expected outcome if hypothesis is correct:
+      Abs-conformal mean_α ≈ 0.0005–0.001 (vs rel-conformal 0.002 — capped).
+      Abs-conformal goodput/$ > +420.83% vs FIFO (current live-prior best [run -t]).
+      Frontier improvement confirmed if abs > rel by ≥ 1%.
+
+    Args:
+        servers:               Replica pool size.
+        target_rho:            Target cluster utilization.
+        job_limit:             Request cap (default 5880 for Azure comparability).
+        sla_s:                 E2E SLA budget (seconds).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Calibration target for α = alpha_max.
+        jsonl_path:            Path to BurstGPT HF JSONL dataset.
+
+    Returns:
+        ``AbsConformalReport`` comparing all four disciplines.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 valid requests."
+        )
+    return _run_abs_conformal_on_trace(
+        raw, "burstgpt_hf_abs_conformal", servers, target_rho, sla_s,
+        prior_window=prior_window,
+        target_p90_abs_tokens=target_p90_abs_tokens,
     )
