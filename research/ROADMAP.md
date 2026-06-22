@@ -338,6 +338,30 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 - `aurelius/frontier/safety.py` — SLA / queue / latency / thermal /
   topology / memory / churn veto gates (hard safety — not weights).
 
+### Architecture coherence note [audit 2026-06-22]
+The stacks above are **not a single connected optimizer** — see
+`research/OPTIMIZER_ARCHITECTURE_AUDIT.md` (full evidence). Summary of findings:
+- There are **≥3 independent decision engines** and **4 independent replay
+  loops**, diverging at the optimizer node: `JobScheduler` (energy cost, the
+  only CI-gated/productized core), `ConstraintAwareEngine`, the inline
+  replica-provisioning policies in `traces/backtest.py` (the public LLM
+  leaderboard), and the discrete-event serving disciplines in
+  `benchmarks/srtf_serving_backtest.py` (the Era-2 SRPT+conformal research).
+- The serving disciplines produce **every recent headline number**
+  (+313%/+557% vs FIFO) but share **zero code** with `JobScheduler` and are
+  **not wired into any runtime** ("integration pending" — the #1 open item in
+  every gap analysis). They were built because the batch scheduler "cannot
+  express the SRTF benefit at all" (`srtf_serving_backtest.py:14-21`).
+- The 26-file `forecasting/` stack is **advisory-only by contract**
+  (`forecasting/__init__.py:52`) and feeds no production decision.
+- `frontier/` has **5 parallel families**, none enabled by default, none used by
+  any benchmark; EVAL_WORKLOAD and BATCH_INFERENCE are dead copy-paste duplicates.
+- The 3 shadow modules (admission / output-length / GPU-placement) are
+  benchmarked NEUTRAL / HURT / regressed and stay `enabled=False`.
+Proposed convergence and a phased, benchmark-gated migration are in
+`research/CANONICAL_AURELIUS_OPTIMIZER.md` and
+`research/OPTIMIZER_UNIFICATION_PLAN.md`. No code was changed by this audit.
+
 ---
 
 ## 4. Research Areas
@@ -639,6 +663,29 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ---
 
 ## 7. Experiment History
+
+### Audit 2026-06-22 — OPTIMIZER ARCHITECTURE AUDIT (NO CODE CHANGED)
+
+**Goal:** Determine whether Aurelius is a coherent optimization system or a set
+of partially-connected optimizers / schedulers / benchmark policies / shadow
+modules. Architecture analysis only — no merge, no refactor, no optimizer
+replaced, no benchmark/replay/eval logic touched.
+
+**Finding:** Not coherent. ≥3 independent decision engines (`JobScheduler`
+energy-cost core; `ConstraintAwareEngine`; `traces/backtest.py` inline serving
+policies; `srtf_serving_backtest.py` discrete-event SRPT+conformal disciplines)
+and 4 independent replay loops, with no shared optimization core between the
+energy world and the serving world. The recent headline results
+(+313%/+557% vs FIFO) come entirely from the serving simulator, which is
+explicitly **not wired into runtime**. The `forecasting/` stack is advisory-only
+by contract; `frontier/` has 5 parallel families (none default-on, 2 dead
+duplicates); the 3 shadow modules are benchmarked NEUTRAL/HURT/regressed.
+
+**Deliverables:** `research/OPTIMIZER_ARCHITECTURE_AUDIT.md` (inventory +
+decision-flow trace + fragmentation + research review),
+`research/CANONICAL_AURELIUS_OPTIMIZER.md` (proposed unified architecture),
+`research/OPTIMIZER_UNIFICATION_PLAN.md` (phased, benchmark-gated migration +
+impact analysis). Outcome: left as a review PR, not merged.
 
 ### Run 2026-06-22-w — PER-CLASS CONFORMAL CALIBRATION (RESEARCH DISCOVERY — WITHIN-CLASS CEILING)
 

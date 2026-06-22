@@ -8,6 +8,56 @@
 
 ---
 
+## Audit 2026-06-22 — Optimizer Architecture Audit (STRUCTURAL — NO CODE CHANGED)
+
+> Architecture-coherence audit, not a benchmark run. Full evidence in
+> `research/OPTIMIZER_ARCHITECTURE_AUDIT.md`; target architecture in
+> `research/CANONICAL_AURELIUS_OPTIMIZER.md`; migration in
+> `research/OPTIMIZER_UNIFICATION_PLAN.md`. No optimizer, benchmark, replay, or
+> evaluation logic was modified.
+
+### A1. Is Aurelius a coherent optimization system?
+**No.** It is two eras of optimization plus a large research/shadow periphery.
+There are **≥3 independent decision engines** (`JobScheduler` energy-cost core;
+`ConstraintAwareEngine`; the inline replica-provisioning policies in
+`traces/backtest.py` that produce the public LLM leaderboard; the discrete-event
+SRPT+conformal disciplines in `benchmarks/srtf_serving_backtest.py`) and **4
+independent replay loops**, with **no shared optimization core** between the
+energy world and the serving world.
+
+### A2. What is the single biggest structural gap?
+**The headline metric cannot be influenced at runtime.** The Era-2 serving
+disciplines produce every recent headline (+313%/+557% vs FIFO) but live only in
+a 6,628-LOC benchmark file that imports nothing from `optimization/`,
+`frontier/`, or the runtime replay engine — `grep -rln srtf_serving_backtest
+aurelius/ | grep -v benchmarks/` → empty. This matches the long-standing
+self-reported gap "serving queue not wired into runtime — integration pending."
+
+### A3. Which modules are disconnected from runtime decisions?
+The Era-2 serving research; all 5 `frontier/` families (none default-on; none
+imported by any benchmark; EVAL_WORKLOAD + BATCH_INFERENCE are dead duplicates);
+the entire `forecasting/` stack (advisory-only by contract,
+`forecasting/__init__.py:52`); `residency/` (standalone, `MUTATION_ALLOWED=False`);
+the 3 shadow modules (NEUTRAL/HURT/regressed, `enabled=False`); migration/MPC in
+`JobScheduler` (test-only). No default path can mutate real infrastructure.
+
+### A4. Which modules duplicate each other?
+Frontier EVAL_WORKLOAD/BATCH_INFERENCE (copy-paste of BASE); **3 inline conformal
+calibrators** in `srtf_serving_backtest.py` (+ a 4th in `cara_latency_calibration.py`);
+**2 DCGM connectors**; **4 replay loops**; the term "constraint_aware" denotes
+three different implementations.
+
+### A5. What should change (and what must not)?
+Converge on one optimizer / one objective (SLA-safe goodput/$) / one replay
+engine, promoting the SRPT+conformal discipline into a real (shadow-gated)
+serving path and the frontier into a constraint. Do **not** integrate the 3
+shadow modules (negative evidence). Do **not** change benchmark definitions,
+public replay logic, evaluation infra, or the pinned energy core. Migration is
+phased and 0%-delta-gated; see the plan. This run produced **review documents
+only** and is **not merged**.
+
+---
+
 ## Run 2026-06-22-x — Absolute-Error Conformal Calibration (FRONTIER IMPROVEMENT)
 
 ### Q1. What currently limits Aurelius most?
