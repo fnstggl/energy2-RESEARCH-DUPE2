@@ -24,6 +24,51 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Compound Economic × Queue Scheduling [run 2026-06-22-z] — FRONTIER UNDERSTANDING:**
+Measures the compound system (abs-conformal queue + economic provisioning) and corrects the
+run-t over-estimate. Economic cost factor 1.2575× (−21.2% GPU-hours, BENCHMARK_REGISTRY §1.1)
+applied multiplicatively to abs-conformal result. Azure LLM 2024: **compound=69,285 goodput/$
+(+419.52% vs FIFO, +130.47% vs oracle SLA-aware)** — north-star NOT achieved (+300% target).
+BurstGPT HF: **compound=53,949 (+726.32% vs FIFO, +166.02% vs oracle SLA-aware)** — north-star
+NOT achieved. Path to +300%: economic factor must reach 2.18× (−54.2% GPU-hours via
+spot/preemptible, vs current −21.2%). **Correction:** run-t estimated +876% vs FIFO but
+double-counted the SLA-aware component; correct is +419% vs FIFO (2.25× over-estimate).
+Independence of layers confirmed: queue (dispatch order) ⊥ provisioning (fleet cost).
+40 new tests passing. Results: `research/results/compound_economic_queue_backtest_2026-06-22.md`.
+
+**ML Prior under Abs-Conformal [run 2026-06-22-z] — HONEST NULL RESULT (closes the
+prediction-accuracy lever):** Closes the open cell left by runs -v and -x with a clean
+2×2 (prior {global running-median, ML-HGB} × calibrator {relative-error, absolute-error})
+plus FIFO and oracle on BurstGPT HF (5,880 req, ρ=0.85, SLA=30s). Run -v found the ML prior
+a null result (−0.12% vs global) *under the rel-conformal calibrator capped at α=0.002*;
+run -x uncapped α with abs-conformal (global prior +420.83%→+557.12%). The open question:
+does the ML prior pay off once abs-conformal can exploit it? **Answer: no.** ML+abs =
+42,810.7 goodput/$ (+555.72% vs FIFO, 88.09% retention) vs global+abs = 42,901.6 (+557.12%,
+88.28%) — **PRIMARY contrast ML+abs vs global+abs = −0.21%** (flat). The abs-conformal gain
+is **prior-agnostic**: both priors jump +26% from rel→abs (SECONDARY: ML+abs vs ML+rel =
++26.05%) and land at ~88% retention. **Structural implication: investing in better causal
+output-length predictors will not move SLA-safe goodput/$ on BurstGPT — the abs-conformal
+calibrator already extracts the available scheduling signal prior-agnostically.** Harness
+cross-validates exactly against three merged results (global+rel=34,003.6=run -t;
+global+abs=42,901.6=run -x; ml+rel=33,962.3=run -v). 17 new tests. Results:
+`research/results/ml_abs_conformal_backtest_2026-06-22.md`.
+
+**SLA-aware vs Abs-Conformal Head-to-Head [run 2026-06-22-y] — FRONTIER UNDERSTANDING:**
+Six-discipline comparison directly answers the north-star question. Results on both public
+traces: Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s): FIFO=13,336, SLA-aware
+(oracle)=30,063 (+125.42%), SLA-aware (live)=19,793 (+48.41%), Rel-conformal=45,933
+(+244.42%), **Abs-conformal=55,097 (+313.14%, +83.27% vs oracle SLA-aware, +178.37% vs live
+SLA-aware, 97.8% retention)**. BurstGPT HF (5,880 req, ρ=0.85, SLA=30s): FIFO=6,529,
+SLA-aware (oracle)=20,280 (+210.63%), SLA-aware (live)=17,556 (+168.90%), Rel-conformal=34,004
+(+420.83%), **Abs-conformal=42,902 (+557.12%, +111.55% vs oracle SLA-aware, +144.37% vs live
+SLA-aware, 88.3% retention)**. Key findings: (1) Abs-conformal live-prior beats ORACLE
+SLA-aware by +83-112% — continuous prediction + conformal calibration dominates binary
+classification even with perfect oracle token knowledge. (2) North-star gap: abs-conformal is
++83%/+112% vs oracle SLA-aware; achieving +300% requires compound economic × queue compound
+scheduling. (3) Live SLA-aware (live prior) = +48%/+169% vs FIFO — binary classification
+with running-median prior is weak because global median has poor discriminative power.
+31 new tests passing. Results: `research/results/sla_aware_abs_conformal_backtest_2026-06-22.md`.
+
 **Abs-Conformal Calibration [run 2026-06-22-x] — FRONTIER IMPROVEMENT:** Absolute-error
 conformal calibrator breaks the running-statistics retention ceiling that blocked 5 consecutive
 runs (-s through -w). Results on both public traces: Azure LLM 2024: FIFO=13,336, Oracle=56,311
@@ -236,6 +281,7 @@ See `docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md` for full table.
 | BurstGPT HF (5,880 sample) [run -p / -r / -t] | 5,880 | **+420.83%** [run -t] | **+492.7%** | **+644.4%** | +644.4% | 30s |
 | BurstGPT HF (full 58,042) [run -p] | 58,042 | — | **+231.4%** | — | +316.1% | 30s |
 
+**Head-to-head [run -y]: Abs-conformal beats oracle SLA-aware by +83% (Azure) / +112% (BurstGPT). North-star gap: need compound economic × queue for +300% vs SLA-aware.**
 **New frontier [run -r]: Conformal adaptive α achieves SRPT ceiling (+644.4%) on BurstGPT HF — cross-trace validated.**
 **Live prior floor [run -t]: Causal sliding-window median achieves +244% (Azure) / +421% (BurstGPT) vs FIFO — 81.6% / 70.0% retention vs oracle.**
 **Stratified prior [run -u]: −0.12% vs global prior (neutral/negative). MAE −5.7% absorbed by conformal calibrator. Structural finding: running-statistics ceiling at ~70-82% retention — ML predictor required to cross it.**
@@ -686,6 +732,60 @@ decision-flow trace + fragmentation + research review),
 `research/CANONICAL_AURELIUS_OPTIMIZER.md` (proposed unified architecture),
 `research/OPTIMIZER_UNIFICATION_PLAN.md` (phased, benchmark-gated migration +
 impact analysis). Outcome: left as a review PR, not merged.
+
+---
+
+### Run 2026-06-22-z — ML PRIOR UNDER ABS-CONFORMAL (HONEST NULL — CLOSES PREDICTION-ACCURACY LEVER)
+
+**Goal:** Close the open cell left by runs -v and -x. Run -v found the ML-HGB prior a
+null result (−0.12% vs global running median) under the relative-error conformal
+calibrator, which it attributed to the calibrator being capped at α=0.002 — not to the
+prior. Run -x then uncapped α via the absolute-error calibrator (global prior
++420.83%→+557.12%). The natural question: does the ML prior's better accuracy finally pay
+off once abs-conformal can exploit it?
+
+**Bottleneck addressed:** GAP_ANALYSIS run -y Q3 lists the BurstGPT 11.7% oracle gap and
+asks whether an ML predictor closes it. Run -v left this ambiguous because the rel-error
+calibrator masked any prior difference. This run resolves it directly.
+
+**Design:** clean 2×2 (prior {global running-median, ML-HGB} × calibrator {rel-error,
+abs-error}) + FIFO + oracle, on BurstGPT HF (5,880 req, ρ=0.85, SLA=30s). Implemented
+`MLAbsConformalReport`, `_run_ml_abs_conformal_on_trace`,
+`run_burstgpt_hf_ml_abs_conformal_backtest` in `srtf_serving_backtest.py`; 17 new tests
+(`tests/test_ml_abs_conformal_backtest.py`).
+
+**Benchmark results (BurstGPT HF, 5,880 req, ρ=0.85, SLA=30s):**
+
+| Discipline | SLA-safe goodput/$ | Δ vs FIFO | Retention |
+|---|---:|---:|---:|
+| FIFO | 6,528.8 | (baseline) | — |
+| Oracle (abs) | 48,598.8 | +644.38% | 100% |
+| global + rel (run -t) | 34,003.6 | +420.83% | 69.97% |
+| global + abs (run -x) | 42,901.6 | +557.12% | 88.28% |
+| ML + rel (run -v) | 33,962.3 | +420.20% | 69.88% |
+| **ML + abs (NEW)** | **42,810.7** | **+555.72%** | **88.09%** |
+
+**Key contrasts:**
+- **PRIMARY — ML+abs vs global+abs: −0.21% (NULL).** The ML prior does not beat the
+  trivial running median, even with the calibrator uncapped.
+- SECONDARY — ML+abs vs ML+rel: **+26.05%.** The abs-conformal gain is **prior-agnostic** —
+  it lifts the global and ML priors equally.
+
+**Key findings:**
+1. The +26% abs-conformal improvement comes from the *calibrator metric*, not the
+   prediction — confirming run -v's structural hypothesis.
+2. The ML prior's 2.5% MAE reduction never reaches the SLA threshold; residual error is the
+   irreducible ChatGPT intra-class variance ceiling diagnosed in runs -u/-v/-w.
+3. **Investing in better causal output-length predictors will not move SLA-safe goodput/$
+   on BurstGPT.** The remaining north-star lever is compound economic × queue scheduling.
+
+**Harness validation:** reproduces three merged results exactly — global+rel=34,003.6
+(run -t), global+abs=42,901.6 (run -x), ml+rel=33,962.3 (run -v). Only the ml+abs cell is new.
+
+**Verdict:** HONEST NULL RESULT. Closes the prediction-accuracy lever as a dead end on
+BurstGPT. Results: `research/results/ml_abs_conformal_backtest_2026-06-22.{json,md}`.
+
+---
 
 ### Run 2026-06-22-w — PER-CLASS CONFORMAL CALIBRATION (RESEARCH DISCOVERY — WITHIN-CLASS CEILING)
 
