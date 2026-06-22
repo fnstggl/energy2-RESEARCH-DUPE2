@@ -3389,3 +3389,60 @@ Priority order:
 | 6 | CARA train.jsonl TPOT expansion | Medium | Low | build_after_data |
 | 7 | Hermes PDGraph agentic routing | High | High effort | Not Started |
 | 8 | Carbon-power MILP joint optimization | Medium | High effort | Not Started |
+
+---
+
+## Run 2026-06-22 — Q&A Updates
+
+### Q14. What is the `safe_high_utilization` policy and why does it help?
+
+`safe_high_utilization` uses the same EWMA-anticipatory sizing as
+`constraint_aware` but at rho=0.75 (vs CA's 0.65). This targets higher
+GPU utilization, allowing more tokens served per GPU-hour, while maintaining
+strict 0% per-tick timeout tolerance. The frontier audit on the full Azure 2024
+trace confirmed rho=0.75 is the boundary of the safe anticipatory frontier:
+- `anticipatory@0.75`: +12.97% vs CA, timeout=9.465% (SAFE < 10% gate)
+- `anticipatory@0.85`: UNSAFE (11.648% > 10% gate)
+
+Key design choices validated by frontier decomposition:
+- No hysteresis (step=0.0 neutral contribution)
+- EWMA anticipation over reactive (reactive@0.75 was unsafe)
+- Strict 0% per-tick timeout_tol (relaxed tol would push aggregate above gate)
+
+### Q15. Why do fixture-scale backtests show TIE vs CA?
+
+At arrival rates below ~10 rps, `_size_for_target` ceiling arithmetic gives
+the same base replica count for rho=0.65 and rho=0.75:
+
+  base = ceil(plan_rate / (mu * rho))
+
+When plan_rate is small, ceil(rate/(mu*0.65)) == ceil(rate/(mu*0.75)) == 1.
+This is not a policy regression — it reflects that SHU improvement requires
+sufficient load to push past the ceiling boundary. The mechanism is validated
+at higher scales:
+- BurstGPT HF JSONL scale 500×: +13.43% vs CA (SAFE, 2.49% timeout)
+- Azure fixture scale 500×: +22.09% vs CA (SAFE, 4.04% timeout)
+- Full Azure 2024 trace frontier: +12.97% vs CA (SAFE, 9.465% timeout)
+
+### Q16. What is the current compound gain over sla_aware baseline?
+
+The compound KPI trajectory:
+- `sla_aware` baseline: 1× reference
+- `constraint_aware` (+25.75% vs sla_aware): economic sizing + cache savings
+- `safe_high_utilization` (+12.97% over CA): rho=0.75 utilization expansion
+  → estimated ~+41.9% compound vs sla_aware at realistic load
+
+The north-star remains +300% vs sla_aware. Current gap drivers:
+1. Serving-queue gains (conformal SRPT: +322% in queue simulator) are not yet
+   compounded with economic gains — wiring queue+economic is the next major lever.
+2. Semi-clairvoyant scheduling (output length prediction) not yet integrated.
+3. Heterogeneous GPU placement scorer not yet built.
+
+### Q17. What's the safe rho expansion feasibility for other policy dimensions?
+
+The frontier pattern (rho=0.75 safe, rho=0.85 unsafe, rho=0.65 conservative)
+suggests ~0.10 rho increment per safety tier. The next natural extension:
+- Adaptive rho: demand-responsive rho ∈ [0.65, 0.75] based on EWMA load trend
+- Time-of-day rho: lower rho during burst hours, higher during trough
+- Per-instance rho: heterogeneous sizing based on per-server KV fill rate
+All three require real-time KV fill telemetry — blocked on production pilot data.

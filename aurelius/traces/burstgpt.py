@@ -33,6 +33,7 @@ Important honesty notes:
 from __future__ import annotations
 
 import csv
+import json
 import random
 from typing import Iterable, Optional
 
@@ -220,6 +221,76 @@ def load_csv(
         requests = warped
 
     return requests
+
+
+def load_hf_jsonl(
+    path: str,
+    *,
+    limit: Optional[int] = None,
+    seed: int = 0,
+) -> list[NormalizedLLMRequest]:
+    """Load a BurstGPT HF normalized JSONL into NormalizedLLMRequest objects.
+
+    The HF normalized JSONL (lzzmm/BurstGPT, CC-BY-4.0) has fields:
+      request_arrival_ts_s, input_tokens, output_tokens, total_tokens,
+      model_id, log_type.
+
+    Failures (output_tokens == 0) are excluded. Timestamps are zero-normalized.
+    ``limit`` sub-samples deterministically (seeded) before sorting.
+    """
+    rows: list[NormalizedLLMRequest] = []
+    with open(path) as fh:
+        for i, line in enumerate(fh):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = json.loads(line)
+                ts = float(d["request_arrival_ts_s"])
+                out_tok = int(d.get("output_tokens") or 0)
+                in_tok = int(d.get("input_tokens") or 0)
+                model = str(d.get("model_id") or "ChatGPT")
+                log_type = str(d.get("log_type") or "Conversation log")
+            except (KeyError, ValueError, TypeError):
+                continue
+            if out_tok <= 0:
+                continue
+            rows.append(NormalizedLLMRequest(
+                request_id=f"hf_{i}",
+                timestamp_s=ts,
+                session_id=None,
+                model=model,
+                prompt_tokens=in_tok,
+                output_tokens=out_tok,
+                total_tokens=in_tok + out_tok,
+                elapsed_s=None,
+                log_type=log_type,
+                is_failure=False,
+                cache_affinity_key=f"model:{model}",
+            ))
+    if limit is not None and limit < len(rows):
+        rng = random.Random(seed)
+        rows = rng.sample(rows, limit)
+    rows.sort(key=lambda r: r.timestamp_s)
+    if not rows:
+        return []
+    t0 = rows[0].timestamp_s
+    return [
+        NormalizedLLMRequest(
+            request_id=r.request_id,
+            timestamp_s=r.timestamp_s - t0,
+            session_id=r.session_id,
+            model=r.model,
+            prompt_tokens=r.prompt_tokens,
+            output_tokens=r.output_tokens,
+            total_tokens=r.total_tokens,
+            elapsed_s=r.elapsed_s,
+            log_type=r.log_type,
+            is_failure=r.is_failure,
+            cache_affinity_key=r.cache_affinity_key,
+        )
+        for r in rows
+    ]
 
 
 def summarize(requests, *, bin_seconds: float = 60.0):
