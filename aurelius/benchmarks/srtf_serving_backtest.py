@@ -6988,3 +6988,318 @@ def run_sla_aware_abs_conformal_burstgpt_backtest(
         prior_window=prior_window,
         target_p90_abs_tokens=target_p90_abs_tokens,
     )
+
+
+# ---------------------------------------------------------------------------
+# ML Prior under Absolute-Error Conformal — Run 2026-06-22-z
+#
+# Run -v found the ML-HGB prior (model_id + input_tokens) to be a NULL RESULT
+# on BurstGPT: ml_vs_global_improvement = -0.12% under the RELATIVE-error
+# conformal calibrator. But run -v explicitly identified the cause: the
+# relative-error calibrator was CAPPED at mean_α = 0.002 for BOTH the global
+# and ML priors, because p90 relative prediction error stayed >= 0.80 in both
+# cases (ChatGPT short-request rel_err dominates). The calibrator — not the
+# prior accuracy — was the binding constraint.
+#
+# Run -x then REMOVED that cap with the absolute-error conformal calibrator,
+# lifting the global running-median prior from +420.83% (70.0% retention) to
+# +557.12% (88.3% retention) on BurstGPT.
+#
+# This run closes the obvious open question left by runs -v and -x:
+#   Does the ML-HGB prior — whose accuracy IS better than the running median
+#   (run -v measured MAE -2.5%, and far better per-model centering) — finally
+#   translate into a goodput gain once the absolute-error calibrator can
+#   exploit it (α no longer capped)?
+#
+# Design: a clean 2x2 (prior {global running-median, ML-HGB}) x (calibrator
+# {relative-error, absolute-error}), plus FIFO and oracle. This isolates the
+# two factors:
+#   - global+rel  : run -t baseline      (+420.83%, 70.0% retention)
+#   - global+abs  : run -x result        (+557.12%, 88.3% retention)
+#   - ml+rel      : run -v null result   (+420.2%,  69.88% retention)
+#   - ml+abs      : NEW — the open cell
+#
+# Falsifiable hypothesis: ml+abs > global+abs by >= 1% (frontier improvement),
+# because the abs calibrator rewards the ML prior's better long-request
+# centering that the rel calibrator masked.
+#
+# Research basis:
+# - GAP_ANALYSIS run -v Q-conclusion (rel-error formula is the binding
+#   constraint, not prediction accuracy)
+# - run -x (absolute-error conformal breaks the running-statistics ceiling)
+# - arXiv:2508.14544 (Adaptively Robust LLM Inference)
+# - arXiv:1902.00732 (Scheduling with Predictions, Mitzenmacher 2019)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MLAbsConformalReport:
+    """ML prior x {rel, abs} conformal 2x2 comparison [run 2026-06-22-z].
+
+    Six conditions on one public trace:
+      - FIFO                        — baseline
+      - Conformal oracle (abs)      — upper bound (perfect token prediction)
+      - global + rel-conformal      — run -t baseline
+      - global + abs-conformal      — run -x result
+      - ML-HGB + rel-conformal      — run -v null result
+      - ML-HGB + abs-conformal      — NEW (this run)
+
+    Primary measurement: ml_abs_vs_global_abs_pct — does the ML prior beat the
+    running-median prior once the absolute-error calibrator can use it?
+    Secondary: ml_abs_vs_ml_rel_pct — does abs-conformal unlock the ML prior
+    that rel-conformal capped (run -v)?
+    """
+
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    warmup_n: int
+    n_model_ids: int
+    target_p90_abs_tokens: float
+
+    # Prior quality diagnostics
+    global_prior_cv_pct: float
+    global_prior_mae_tokens: float
+    ml_prior_cv_pct: float
+    ml_prior_mae_tokens: float
+
+    # Calibrator diagnostics
+    global_rel_mean_alpha: float
+    global_abs_mean_alpha: float
+    ml_rel_mean_alpha: float
+    ml_abs_mean_alpha: float
+
+    # Simulation summaries
+    fifo: dict
+    conformal_oracle: dict
+    global_rel: dict
+    global_abs: dict
+    ml_rel: dict
+    ml_abs: dict
+
+    # KPIs (SLA-safe goodput/$)
+    fifo_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+    global_rel_goodput_per_dollar: float
+    global_abs_goodput_per_dollar: float
+    ml_rel_goodput_per_dollar: float
+    ml_abs_goodput_per_dollar: float
+
+    # Deltas vs FIFO
+    oracle_delta_pct: float
+    global_rel_delta_pct: float
+    global_abs_delta_pct: float
+    ml_rel_delta_pct: float
+    ml_abs_delta_pct: float
+
+    # Retention vs oracle
+    global_abs_retention_pct: float
+    ml_abs_retention_pct: float
+
+    # The two key contrasts
+    ml_abs_vs_global_abs_pct: float   # PRIMARY: ML vs running-median under abs-conformal
+    ml_abs_vs_ml_rel_pct: float       # SECONDARY: does abs unlock the ML prior?
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "warmup_n": self.warmup_n,
+            "n_model_ids": self.n_model_ids,
+            "target_p90_abs_tokens": self.target_p90_abs_tokens,
+            "global_prior_cv_pct": round(self.global_prior_cv_pct, 2),
+            "global_prior_mae_tokens": round(self.global_prior_mae_tokens, 2),
+            "ml_prior_cv_pct": round(self.ml_prior_cv_pct, 2),
+            "ml_prior_mae_tokens": round(self.ml_prior_mae_tokens, 2),
+            "global_rel_mean_alpha": round(self.global_rel_mean_alpha, 6),
+            "global_abs_mean_alpha": round(self.global_abs_mean_alpha, 6),
+            "ml_rel_mean_alpha": round(self.ml_rel_mean_alpha, 6),
+            "ml_abs_mean_alpha": round(self.ml_abs_mean_alpha, 6),
+            "fifo": _r(self.fifo),
+            "conformal_oracle": _r(self.conformal_oracle),
+            "global_rel": _r(self.global_rel),
+            "global_abs": _r(self.global_abs),
+            "ml_rel": _r(self.ml_rel),
+            "ml_abs": _r(self.ml_abs),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 4),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 4),
+            "global_rel_goodput_per_dollar": round(self.global_rel_goodput_per_dollar, 4),
+            "global_abs_goodput_per_dollar": round(self.global_abs_goodput_per_dollar, 4),
+            "ml_rel_goodput_per_dollar": round(self.ml_rel_goodput_per_dollar, 4),
+            "ml_abs_goodput_per_dollar": round(self.ml_abs_goodput_per_dollar, 4),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "global_rel_delta_pct": round(self.global_rel_delta_pct, 2),
+            "global_abs_delta_pct": round(self.global_abs_delta_pct, 2),
+            "ml_rel_delta_pct": round(self.ml_rel_delta_pct, 2),
+            "ml_abs_delta_pct": round(self.ml_abs_delta_pct, 2),
+            "global_abs_retention_pct": round(self.global_abs_retention_pct, 2),
+            "ml_abs_retention_pct": round(self.ml_abs_retention_pct, 2),
+            "ml_abs_vs_global_abs_pct": round(self.ml_abs_vs_global_abs_pct, 2),
+            "ml_abs_vs_ml_rel_pct": round(self.ml_abs_vs_ml_rel_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_ml_abs_conformal_on_trace(
+    raw: list[tuple[float, int]],
+    features: list[dict],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    warmup_n: int,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+) -> MLAbsConformalReport:
+    """2x2 (prior x calibrator) + FIFO + oracle on a feature-annotated trace [run -z]."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    global_preds, global_stats = make_live_prior_predictions(raw, window=LIVE_PRIOR_WINDOW)
+    ml_preds, ml_stats = make_ml_prior_predictions_burstgpt(raw, features, warmup_n=warmup_n)
+    n_model_ids = ml_stats.get("n_model_ids", 0)
+
+    def _build(preds: Optional[list[float]]) -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=(float(tok) if preds is None else preds[i]),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # FIFO
+    fifo_reqs = _build(None)
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+
+    # Oracle (abs-conformal calibrator; α→0 with perfect prediction)
+    oracle_reqs = _build(None)
+    oracle_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_abs_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+
+    # global + rel-conformal (run -t baseline)
+    gr_reqs = _build(global_preds)
+    gr_cal = ConformalAlphaCalibrator()
+    gr_sim, gr_resp, _ = _simulate_decoupled_hybrid_conformal(gr_reqs, servers, gr_cal)
+    gp_gr = _sla_safe_goodput_per_dollar(gr_reqs, gr_resp, sla_s, servers)
+    gr_sim["sla_safe_goodput_per_dollar"] = gp_gr
+
+    # global + abs-conformal (run -x result)
+    ga_reqs = _build(global_preds)
+    ga_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    ga_sim, ga_resp, _ = _simulate_decoupled_hybrid_abs_conformal(ga_reqs, servers, ga_cal)
+    gp_ga = _sla_safe_goodput_per_dollar(ga_reqs, ga_resp, sla_s, servers)
+    ga_sim["sla_safe_goodput_per_dollar"] = gp_ga
+
+    # ML + rel-conformal (run -v null result)
+    mr_reqs = _build(ml_preds)
+    mr_cal = ConformalAlphaCalibrator()
+    mr_sim, mr_resp, _ = _simulate_decoupled_hybrid_conformal(mr_reqs, servers, mr_cal)
+    gp_mr = _sla_safe_goodput_per_dollar(mr_reqs, mr_resp, sla_s, servers)
+    mr_sim["sla_safe_goodput_per_dollar"] = gp_mr
+
+    # ML + abs-conformal (NEW — the open cell)
+    ma_reqs = _build(ml_preds)
+    ma_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    ma_sim, ma_resp, _ = _simulate_decoupled_hybrid_abs_conformal(ma_reqs, servers, ma_cal)
+    gp_ma = _sla_safe_goodput_per_dollar(ma_reqs, ma_resp, sla_s, servers)
+    ma_sim["sla_safe_goodput_per_dollar"] = gp_ma
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    return MLAbsConformalReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        warmup_n=warmup_n,
+        n_model_ids=n_model_ids,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+        global_prior_cv_pct=global_stats.get("prior_cv_pct", 0.0),
+        global_prior_mae_tokens=global_stats.get("prior_mae_tokens", 0.0),
+        ml_prior_cv_pct=ml_stats.get("prior_cv_pct", 0.0),
+        ml_prior_mae_tokens=ml_stats.get("prior_mae_tokens", 0.0),
+        global_rel_mean_alpha=gr_cal.mean_alpha(),
+        global_abs_mean_alpha=ga_cal.mean_alpha(),
+        ml_rel_mean_alpha=mr_cal.mean_alpha(),
+        ml_abs_mean_alpha=ma_cal.mean_alpha(),
+        fifo=fifo_sim,
+        conformal_oracle=oracle_sim,
+        global_rel=gr_sim,
+        global_abs=ga_sim,
+        ml_rel=mr_sim,
+        ml_abs=ma_sim,
+        fifo_goodput_per_dollar=gp_fifo,
+        oracle_goodput_per_dollar=gp_oracle,
+        global_rel_goodput_per_dollar=gp_gr,
+        global_abs_goodput_per_dollar=gp_ga,
+        ml_rel_goodput_per_dollar=gp_mr,
+        ml_abs_goodput_per_dollar=gp_ma,
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        global_rel_delta_pct=_delta(gp_fifo, gp_gr),
+        global_abs_delta_pct=_delta(gp_fifo, gp_ga),
+        ml_rel_delta_pct=_delta(gp_fifo, gp_mr),
+        ml_abs_delta_pct=_delta(gp_fifo, gp_ma),
+        global_abs_retention_pct=(gp_ga / gp_oracle * 100.0) if gp_oracle > 0 else 0.0,
+        ml_abs_retention_pct=(gp_ma / gp_oracle * 100.0) if gp_oracle > 0 else 0.0,
+        ml_abs_vs_global_abs_pct=_delta(gp_ga, gp_ma),
+        ml_abs_vs_ml_rel_pct=_delta(gp_mr, gp_ma),
+    )
+
+
+def run_burstgpt_hf_ml_abs_conformal_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    warmup_n: int = ML_PRIOR_WARMUP_N,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> MLAbsConformalReport:
+    """ML-HGB prior under absolute-error conformal calibration on BurstGPT HF [run -z].
+
+    Closes the open question from runs -v and -x: run -v found the ML prior to be
+    a null result (-0.12% vs global) under the RELATIVE-error calibrator, which was
+    capped at mean_α=0.002 for both priors. Run -x removed the cap via the
+    absolute-error calibrator (global prior: +420.83% → +557.12%). This backtest
+    tests whether the ML prior's better accuracy finally pays off once abs-conformal
+    can exploit it.
+
+    Six disciplines on BurstGPT HF (default 5,880 requests, ρ=0.85, SLA=30s):
+      FIFO / oracle(abs) / global+rel / global+abs / ml+rel / ml+abs.
+
+    Falsifiable hypothesis: ml_abs_vs_global_abs_pct >= 1% (frontier improvement).
+
+    Returns:
+        ``MLAbsConformalReport`` with the full 2x2 + FIFO + oracle comparison.
+    """
+    raw, features = load_burstgpt_serving_requests_jsonl_with_features(
+        jsonl_path, limit=job_limit
+    )
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 valid requests."
+        )
+    return _run_ml_abs_conformal_on_trace(
+        raw, features, "burstgpt_hf_ml_abs_conformal",
+        servers, target_rho, sla_s, warmup_n,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+    )

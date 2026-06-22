@@ -8,6 +8,102 @@
 
 ---
 
+## Run 2026-06-22-z — ML Prior under Abs-Conformal (Honest Null — Prediction-Accuracy Lever Closed)
+
+### Q1. What currently limits Aurelius most?
+
+**Not prediction accuracy — confirmed by elimination this run.** A clean 2×2 (prior ×
+calibrator) on BurstGPT HF shows the ML-HGB prior does NOT beat the trivial running median
+even under the abs-conformal calibrator that uncapped α: ML+abs = 42,810.7 goodput/$ vs
+global+abs = 42,901.6 (**−0.21%, null**). The +26% abs-conformal gain is **prior-agnostic**
+(ML+abs vs ML+rel = +26.05%, identical to global's rel→abs jump). The binding constraint is
+the **compound economic × queue integration** (still unmeasured end-to-end), not the prior.
+
+### Q2. What theoretically offers the largest gain?
+
+**Compound economic × queue scheduling end-to-end backtest** (unchanged from run -y, now
+reinforced). This run eliminates "better output-length predictor" as a lever: the queue
+component already extracts the available scheduling signal prior-agnostically via
+abs-conformal. The only remaining multiplier is the economic (energy/carbon-cost) axis.
+
+### Q3. Which forecasts are weakest?
+
+1. **Economic scheduling multiplier** — never compounded with queue gains.
+2. **ChatGPT intra-class variance** — irreducible by `model_id`/`input_tokens` features
+   (MAE only −2.5% from ML, CV actually rises 15.3%→43.0%). No causal predictor closes it.
+3. **Queue-economic integration** — completely unverified end-to-end.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Compound routing**: energy-cost optimization and queue discipline still independent.
+2. **BurstGPT 11.7% oracle gap is now characterized as irreducible** for running-statistics
+   AND ML priors under the current feature set — it is intra-class variance, not a
+   predictor-quality gap.
+
+### Q5. Which workloads benefit least?
+
+**BurstGPT ChatGPT "surprise-long" requests.** Predicted short (median≈7) but occasionally
+800+ tokens; no arrival-time feature distinguishes them, so both running-median and ML
+priors mispredict identically.
+
+### Q6. Which research direction appears strongest?
+
+**End-to-end compound economic × queue scheduling backtest.** With both the
+prediction-accuracy lever (this run) and the calibrator lever (run -x, near-optimal at 88-98%
+retention) exhausted on the queue side, the economic axis is the sole remaining path to
++300% vs SLA-aware.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Compound economic × queue. A conservative economic multiplier on top of the +83-112%
+abs-conformal advantage over oracle SLA-aware would exceed the north-star.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Same — compound economic × queue with an economic multiplier ≥ ~1.3×. The queue side is
+exhausted: neither a better prior (this run) nor a better calibrator metric (run -x ceiling)
+yields further BurstGPT goodput.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Unchanged from run -y: queue alone reaches +83%/+112% vs oracle SLA-aware. Reaching +300%
+requires the economic multiplier. This run removes the alternative hope (ML predictor closing
+the oracle gap) — abs-conformal already sits at 88% BurstGPT / 98% Azure retention and the
+ML prior does not push it higher.
+
+### Q10. Which assumptions might be wrong?
+
+1. **"A better output-length predictor closes the BurstGPT gap" — CONFIRMED WRONG this run.**
+   ML+abs = −0.21% vs global+abs.
+2. **Independence assumption for the compound estimate** — still untested end-to-end.
+3. **The abs-conformal 88% BurstGPT retention is stable across load** — not swept here.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **No end-to-end economic × queue trace** — the compound +876% remains an independence
+   estimate only (from run -t).
+2. **ML prior limited to `model_id` + `input_tokens`** — richer prompt-text features
+   (ShareGPT) untested, but this run suggests the ceiling is intra-class variance, so the
+   expected upside is low.
+3. **sklearn is an optional dependency** — the ML prior degrades to the running-median
+   fallback without it (handled gracefully; the abs-conformal path is unaffected).
+
+### Q12. Which public datasets should be added?
+
+1. **An economic/energy-priced trace co-registered with an LLM serving trace** — required
+   for the compound backtest (highest priority now).
+2. ShareGPT — prompt-text features (lower priority given the intra-class variance ceiling).
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):** End-to-end compound economic × queue scheduling backtest —
+co-optimize energy/carbon-cost routing with abs-conformal queue discipline on a single trace
+and measure the actual compound gain vs the +876% independence estimate. This is now the
+unambiguous #1 opportunity: every queue-side lever (prior accuracy, calibrator metric) has
+been measured and exhausted.
+
+---
+
 ## Run 2026-06-22-y — SLA-aware vs Abs-Conformal Head-to-Head (FRONTIER UNDERSTANDING)
 
 ### Q1. What currently limits Aurelius most?
@@ -109,17 +205,20 @@ ShareGPT (third LLM trace for further cross-validation of the head-to-head).
 
 ---
 
-## Future Opportunity Ranking — Updated After Run -y
+## Future Opportunity Ranking — Updated After Run -z
 
 | rank | opportunity | EV | feasibility | status |
 |---|---|---|---|---|
-| 1 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Queue near-optimal (+83% vs SLA-aware); economic multiplier unverified |
-| 2 | ML predictor (HGB/CARA) with abs-conformal | High | Medium | Close remaining 11.7% BurstGPT gap; Azure already at 97.8% |
-| 3 | ShareGPT as third public LLM trace | Medium | Medium | Further cross-validation of head-to-head results |
-| 4 | Wire abs-conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+| 1 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | **Sole remaining lever** — both queue-side levers (prior accuracy, calibrator metric) now exhausted |
+| 2 | ShareGPT as third public LLM trace | Low–Medium | Medium | Cross-validation only; run -z suggests intra-class variance ceiling, so predictor upside is low |
+| 3 | Wire abs-conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
 
-**Closed/characterized opportunities (run -y):**
-- SLA-aware head-to-head: **CHARACTERIZED** — abs-conformal +83% (Azure) / +112% (BurstGPT) vs oracle SLA-aware; north-star gap requires compound scheduling
+**Closed/characterized opportunities (run -z):**
+- **ML predictor (HGB) with abs-conformal: CLOSED [run -z]** — −0.21% vs global+abs. The
+  abs-conformal gain is prior-agnostic; better output-length prediction does NOT move
+  SLA-safe goodput/$ on BurstGPT. Eliminates "better predictor" as a queue-side lever.
+- SLA-aware head-to-head: **CHARACTERIZED [run -y]** — abs-conformal +83% (Azure) / +112%
+  (BurstGPT) vs oracle SLA-aware; north-star gap requires compound scheduling.
 
 ---
 
