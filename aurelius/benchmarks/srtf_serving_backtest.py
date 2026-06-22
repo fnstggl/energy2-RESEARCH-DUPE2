@@ -5,8 +5,10 @@ SRTF-with-Aging anti-starvation guard [run 2026-06-20-i], Preemptive SRPT
 Decoupled Hybrid SRPT [run 2026-06-20-l], Alpha Sweep [run 2026-06-21-m],
 SLA-aware baseline + Noisy Prior Robustness [run 2026-06-21-n],
 Preemption Overhead Sensitivity [run 2026-06-21-o],
-BurstGPT HF Cross-Validation [run 2026-06-21-p], and
-Conformal Adaptive α [run 2026-06-21-q].
+BurstGPT HF Cross-Validation [run 2026-06-21-p],
+Conformal Adaptive α [run 2026-06-21-q],
+Absolute-Error Conformal Calibration [run 2026-06-22-x], and
+SLA-aware vs Abs-Conformal Head-to-Head [run 2026-06-22-y].
 
 Why this module exists
 ----------------------
@@ -6623,6 +6625,366 @@ def run_abs_conformal_burstgpt_backtest(
         )
     return _run_abs_conformal_on_trace(
         raw, "burstgpt_hf_abs_conformal", servers, target_rho, sla_s,
+        prior_window=prior_window,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+    )
+
+
+# ---------------------------------------------------------------------------
+# SLA-aware vs Abs-Conformal Head-to-Head [run 2026-06-22-y]
+# ---------------------------------------------------------------------------
+# Directly answers the north-star question: does abs-conformal (live prior)
+# outperform SLA-aware scheduling by +300%?
+#
+# Compares six disciplines on identical simulator physics:
+#   1. fifo               — arrival-order baseline
+#   2. sla_aware_oracle   — binary short/long split on actual token counts (oracle)
+#   3. sla_aware_live     — binary short/long split on running-median prediction (live)
+#   4. rel_conformal_live — decoupled hybrid + relative-error conformal calibrator (live)
+#   5. abs_conformal_live — decoupled hybrid + absolute-error conformal calibrator (live)
+#   6. conformal_oracle   — decoupled hybrid + conformal calibrator, oracle prior (upper bound)
+#
+# Primary finding: abs_conformal_vs_sla_aware_oracle_delta_pct
+#   If abs-conformal live-prior beats oracle SLA-aware, continuous prediction
+#   dominates binary SLA classification regardless of prediction quality.
+#
+# Research basis:
+#   - "Efficient Serving of LLM Applications with Probabilistic Demand Modeling"
+#     (arXiv:2506.14851, Jun 2026): probabilistic request modeling shows that
+#     continuous output-length uncertainty is more informative than binary SLA classes.
+#   - "GoodServe: Towards High-Goodput Serving of Agentic LLM Inferences over
+#     Heterogeneous Resources" (arXiv:2605.16867, May 2026): goodput and SLO
+#     violation ratio as co-equal scheduling metrics — motivates head-to-head.
+#   - "Flow-Controlled Scheduling for LLM Inference with Provable Stability
+#     Guarantees" (arXiv:2604.11001, Apr 2026): flow control complements SRPT;
+#     stability under different scheduling regimes.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SLAAwareAbsConformalReport:
+    """Six-discipline comparison: FIFO / SLA-aware (oracle+live) / conformal / oracle.
+
+    [run 2026-06-22-y] Directly measures abs-conformal vs SLA-aware to answer
+    whether abs-conformal achieves the north-star +300% vs SLA-aware schedulers.
+
+    Disciplines:
+      fifo                — FIFO (no ordering), oracle prior for token counts.
+      sla_aware_oracle    — binary short/long split using ACTUAL token counts (oracle).
+                            Upper bound for SLA-aware: knows the exact output length
+                            but only uses binary classification.
+      sla_aware_live      — binary short/long split using running-median prior (live).
+                            Fair comparison: same prediction quality as abs-conformal.
+      rel_conformal_live  — decoupled hybrid + relative-error conformal, live prior.
+                            Current run-t best.
+      abs_conformal_live  — decoupled hybrid + absolute-error conformal, live prior.
+                            Current frontier [run 2026-06-22-x].
+      conformal_oracle    — decoupled hybrid + rel-error conformal, oracle prior.
+                            Upper bound: perfect token predictions.
+
+    Primary KPI:
+      abs_vs_sla_aware_oracle_delta_pct
+        If > 0: abs-conformal with running-median prior beats oracle SLA-aware.
+        This proves continuous token prediction + conformal calibration dominates
+        binary SLA classification regardless of prediction accuracy.
+
+      abs_vs_sla_aware_live_delta_pct
+        Incremental gain of abs-conformal over live-prior SLA-aware.
+        Quantifies the value of continuous ordering over binary classification
+        when both use the same (running-median) prior.
+    """
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    time_warp: float
+    sla_s: float
+    target_p90_abs_tokens: float
+
+    fifo: dict
+    sla_aware_oracle: dict
+    sla_aware_live: dict
+    rel_conformal_live: dict
+    abs_conformal_live: dict
+    conformal_oracle: dict
+
+    fifo_goodput_per_dollar: float
+    sla_aware_oracle_goodput_per_dollar: float
+    sla_aware_live_goodput_per_dollar: float
+    rel_conformal_goodput_per_dollar: float
+    abs_conformal_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+
+    # All deltas vs FIFO
+    sla_aware_oracle_delta_pct: float
+    sla_aware_live_delta_pct: float
+    rel_conformal_delta_pct: float
+    abs_conformal_delta_pct: float
+    oracle_delta_pct: float
+
+    # Key head-to-head deltas (primary finding of run -y)
+    abs_vs_sla_aware_oracle_delta_pct: float  # abs-conformal vs oracle SLA-aware
+    abs_vs_sla_aware_live_delta_pct: float    # abs-conformal vs live-prior SLA-aware
+    abs_vs_rel_delta_pct: float               # abs-conformal vs rel-conformal (run-x)
+
+    # Retention metrics (fraction of oracle goodput achieved)
+    abs_vs_oracle_retention_pct: float
+    rel_vs_oracle_retention_pct: float
+    sla_aware_oracle_retention_pct: float
+    sla_aware_live_retention_pct: float
+
+    # Calibrator diagnostics
+    abs_mean_alpha: float
+    rel_mean_alpha: float
+    abs_p90_abs_err_tokens: float
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: round(v, 4) if isinstance(v, float) else v for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "time_warp": round(self.time_warp, 6),
+            "sla_s": self.sla_s,
+            "target_p90_abs_tokens": self.target_p90_abs_tokens,
+            "fifo": _r(self.fifo),
+            "sla_aware_oracle": _r(self.sla_aware_oracle),
+            "sla_aware_live": _r(self.sla_aware_live),
+            "rel_conformal_live": _r(self.rel_conformal_live),
+            "abs_conformal_live": _r(self.abs_conformal_live),
+            "conformal_oracle": _r(self.conformal_oracle),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 4),
+            "sla_aware_oracle_goodput_per_dollar": round(self.sla_aware_oracle_goodput_per_dollar, 4),
+            "sla_aware_live_goodput_per_dollar": round(self.sla_aware_live_goodput_per_dollar, 4),
+            "rel_conformal_goodput_per_dollar": round(self.rel_conformal_goodput_per_dollar, 4),
+            "abs_conformal_goodput_per_dollar": round(self.abs_conformal_goodput_per_dollar, 4),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 4),
+            "sla_aware_oracle_delta_pct": round(self.sla_aware_oracle_delta_pct, 2),
+            "sla_aware_live_delta_pct": round(self.sla_aware_live_delta_pct, 2),
+            "rel_conformal_delta_pct": round(self.rel_conformal_delta_pct, 2),
+            "abs_conformal_delta_pct": round(self.abs_conformal_delta_pct, 2),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "abs_vs_sla_aware_oracle_delta_pct": round(self.abs_vs_sla_aware_oracle_delta_pct, 2),
+            "abs_vs_sla_aware_live_delta_pct": round(self.abs_vs_sla_aware_live_delta_pct, 2),
+            "abs_vs_rel_delta_pct": round(self.abs_vs_rel_delta_pct, 2),
+            "abs_vs_oracle_retention_pct": round(self.abs_vs_oracle_retention_pct, 2),
+            "rel_vs_oracle_retention_pct": round(self.rel_vs_oracle_retention_pct, 2),
+            "sla_aware_oracle_retention_pct": round(self.sla_aware_oracle_retention_pct, 2),
+            "sla_aware_live_retention_pct": round(self.sla_aware_live_retention_pct, 2),
+            "abs_mean_alpha": round(self.abs_mean_alpha, 6),
+            "rel_mean_alpha": round(self.rel_mean_alpha, 6),
+            "abs_p90_abs_err_tokens": round(self.abs_p90_abs_err_tokens, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_sla_aware_abs_conformal_on_trace(
+    raw: list[tuple[float, int]],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+) -> SLAAwareAbsConformalReport:
+    """Six-discipline comparison: FIFO / SLA-aware / conformal (rel+abs) / oracle."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_oracle() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_live() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # Build request lists (each discipline gets its own copy)
+    fifo_reqs          = _build_oracle()
+    sla_oracle_reqs    = _build_oracle()  # SLA-aware with oracle token counts
+    sla_live_reqs      = _build_live()    # SLA-aware with live-prior predictions
+    rel_reqs           = _build_live()    # Rel-conformal with live prior
+    abs_reqs           = _build_live()    # Abs-conformal with live prior
+    oracle_conf_reqs   = _build_oracle()  # Conformal with oracle prior (upper bound)
+
+    # Run all six disciplines
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+
+    sla_oracle_sim, sla_oracle_resp, _ = simulate_queue(sla_oracle_reqs, servers, "sla_aware")
+    gp_sla_oracle = _sla_safe_goodput_per_dollar(sla_oracle_reqs, sla_oracle_resp, sla_s, servers)
+    sla_oracle_sim["sla_safe_goodput_per_dollar"] = gp_sla_oracle
+
+    sla_live_sim, sla_live_resp, _ = simulate_queue(sla_live_reqs, servers, "sla_aware")
+    gp_sla_live = _sla_safe_goodput_per_dollar(sla_live_reqs, sla_live_resp, sla_s, servers)
+    sla_live_sim["sla_safe_goodput_per_dollar"] = gp_sla_live
+
+    rel_cal = ConformalAlphaCalibrator()
+    rel_sim, rel_resp, _ = _simulate_decoupled_hybrid_conformal(rel_reqs, servers, rel_cal)
+    gp_rel = _sla_safe_goodput_per_dollar(rel_reqs, rel_resp, sla_s, servers)
+    rel_sim["sla_safe_goodput_per_dollar"] = gp_rel
+
+    abs_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    abs_sim, abs_resp, _ = _simulate_decoupled_hybrid_abs_conformal(abs_reqs, servers, abs_cal)
+    gp_abs = _sla_safe_goodput_per_dollar(abs_reqs, abs_resp, sla_s, servers)
+    abs_sim["sla_safe_goodput_per_dollar"] = gp_abs
+
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_conf_reqs, servers, oracle_cal
+    )
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_conf_reqs, oracle_resp, sla_s, servers)
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    def _retention(gp: float) -> float:
+        return (gp / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+
+    return SLAAwareAbsConformalReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        time_warp=warp,
+        sla_s=sla_s,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+        fifo=fifo_sim,
+        sla_aware_oracle=sla_oracle_sim,
+        sla_aware_live=sla_live_sim,
+        rel_conformal_live=rel_sim,
+        abs_conformal_live=abs_sim,
+        conformal_oracle=oracle_sim,
+        fifo_goodput_per_dollar=gp_fifo,
+        sla_aware_oracle_goodput_per_dollar=gp_sla_oracle,
+        sla_aware_live_goodput_per_dollar=gp_sla_live,
+        rel_conformal_goodput_per_dollar=gp_rel,
+        abs_conformal_goodput_per_dollar=gp_abs,
+        oracle_goodput_per_dollar=gp_oracle,
+        sla_aware_oracle_delta_pct=_delta(gp_fifo, gp_sla_oracle),
+        sla_aware_live_delta_pct=_delta(gp_fifo, gp_sla_live),
+        rel_conformal_delta_pct=_delta(gp_fifo, gp_rel),
+        abs_conformal_delta_pct=_delta(gp_fifo, gp_abs),
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        abs_vs_sla_aware_oracle_delta_pct=_delta(gp_sla_oracle, gp_abs),
+        abs_vs_sla_aware_live_delta_pct=_delta(gp_sla_live, gp_abs),
+        abs_vs_rel_delta_pct=_delta(gp_rel, gp_abs),
+        abs_vs_oracle_retention_pct=_retention(gp_abs),
+        rel_vs_oracle_retention_pct=_retention(gp_rel),
+        sla_aware_oracle_retention_pct=_retention(gp_sla_oracle),
+        sla_aware_live_retention_pct=_retention(gp_sla_live),
+        abs_mean_alpha=abs_cal.mean_alpha(),
+        rel_mean_alpha=rel_cal.mean_alpha(),
+        abs_p90_abs_err_tokens=abs_cal.p90_abs_err_tokens(),
+    )
+
+
+def run_sla_aware_abs_conformal_azure_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+) -> SLAAwareAbsConformalReport:
+    """Six-discipline head-to-head on Azure LLM 2024 [run 2026-06-22-y].
+
+    Directly measures whether abs-conformal (live prior) outperforms oracle
+    SLA-aware scheduling to answer the north-star question.
+
+    Disciplines compared (identical M/G/c physics):
+      1. fifo               — FIFO baseline
+      2. sla_aware_oracle   — binary short/long using actual token counts (oracle)
+      3. sla_aware_live     — binary short/long using running-median prior
+      4. rel_conformal_live — decoupled hybrid + relative-error conformal, live
+      5. abs_conformal_live — decoupled hybrid + absolute-error conformal, live
+      6. conformal_oracle   — decoupled hybrid + conformal, oracle prior (ceiling)
+
+    Primary finding: ``abs_vs_sla_aware_oracle_delta_pct``
+      If positive, abs-conformal with live prior beats oracle SLA-aware —
+      continuous prediction dominates binary classification regardless of
+      prediction quality.
+
+    Args:
+        servers:               Replica pool size (M/G/c).
+        target_rho:            Target cluster utilization.
+        job_limit:             Request cap.
+        sla_s:                 E2E response-time SLA budget (seconds).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Calibration target for abs-error calibrator.
+        azure_fixture:         Path to the Azure LLM 2024 CSV fixture.
+
+    Returns:
+        ``SLAAwareAbsConformalReport`` with all six discipline KPIs.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+    return _run_sla_aware_abs_conformal_on_trace(
+        raw, "azure_llm_2024_sla_aware_vs_abs_conformal",
+        servers, target_rho, sla_s,
+        prior_window=prior_window,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+    )
+
+
+def run_sla_aware_abs_conformal_burstgpt_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> SLAAwareAbsConformalReport:
+    """Six-discipline head-to-head on BurstGPT HF [run 2026-06-22-y].
+
+    Cross-validates the Azure LLM 2024 head-to-head on BurstGPT HF
+    (heavier output-token distribution — stronger test of continuous prediction).
+
+    Args:
+        servers:               Replica pool size (M/G/c).
+        target_rho:            Target cluster utilization.
+        job_limit:             Request cap (default 5880 for Azure comparability).
+        sla_s:                 E2E SLA budget (default 30s for BurstGPT).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Calibration target for abs-error calibrator.
+        jsonl_path:            Path to BurstGPT HF JSONL dataset.
+
+    Returns:
+        ``SLAAwareAbsConformalReport`` with all six discipline KPIs.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 valid requests."
+        )
+    return _run_sla_aware_abs_conformal_on_trace(
+        raw, "burstgpt_hf_sla_aware_vs_abs_conformal",
+        servers, target_rho, sla_s,
         prior_window=prior_window,
         target_p90_abs_tokens=target_p90_abs_tokens,
     )
