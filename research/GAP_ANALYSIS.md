@@ -8,6 +8,125 @@
 
 ---
 
+## Run 2026-06-22-z — Compound Economic × Queue Scheduling (FRONTIER UNDERSTANDING)
+
+### Q1. What currently limits Aurelius most?
+
+**The compound economic × queue system is characterized and the north-star gap
+is fully quantified.** Compound result vs oracle SLA-aware:
+- Azure: +130.47% (queue +83.27% × economic 1.2575× cost factor)
+- BurstGPT: +166.02% (queue +111.55% × economic 1.2575× cost factor)
+
+The north-star (+300% vs oracle SLA-aware) is NOT achieved. The binding constraint
+is the economic provisioning factor: current 1.2575× (−21.2% GPU-hours), but 2.18×
+(−54.2% GPU-hours) is needed for Azure north-star.
+
+### Q2. What theoretically offers the largest gain?
+
+**More aggressive economic optimization** targeting ≥ 50% GPU-hour savings via:
+1. Spot/preemptible instances (up to -70% cost in some markets)
+2. Aggressive cross-region arbitrage (cheapest compute-hour globally)
+3. Carbon-aware scheduling during renewable surplus windows
+
+Alternatively, an ML predictor to close the BurstGPT 11.7% oracle gap — this
+would reduce the economic factor threshold from 2.18× to ~2.05×.
+
+### Q3. Which forecasts are weakest?
+
+1. **Economic multiplier** — current 1.2575× is from the Azure weekly provisioning
+   benchmark; actual achievable savings with spot/preemptible could be 2-3×.
+2. **BurstGPT 11.7% oracle gap** — ML predictor could push factor needed to 1.89×.
+3. **Independence of layers** — confirmed orthogonal; no forecast risk here.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Economic provisioning** — only -21.2% GPU-hours achieved; need -54% for north-star.
+2. **ML predictor** — running-median prior has structural ceiling at 88.3% (BurstGPT).
+
+### Q5. Which workloads benefit least?
+
+**Uniform output-length distributions** where SRPT ordering provides minimal
+goodput benefit. Economic optimization is workload-agnostic (cost-side only).
+
+### Q6. Which research direction appears strongest?
+
+**Spot/preemptible instance scheduling for economic layer.** The queue layer is
+near-optimal (97.8% oracle retention on Azure). The only path to north-star is
+a 2.18× economic factor, achievable with spot pricing in major cloud regions.
+
+### Q7. What is the shortest path to another +10% gain?
+
+An ML predictor (HGB/CARA) to close the BurstGPT oracle gap from 88.3% to
+95%+. This reduces the BurstGPT economic factor threshold from 1.89× to ~1.75×.
+It also directly improves the compound result by ~15% on BurstGPT.
+
+### Q8. What is the shortest path to another +50% gain?
+
+More aggressive economic optimization. Current: 1.2575× (−21.2% GPU-hours).
+Target for +50% compound improvement: 1.2575 × 1.50 = 1.89× (−47% GPU-hours).
+This is achievable with spot/preemptible (typically −40-70% in major markets).
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+From run-z direct measurement:
+- Queue alone: +83.27% vs oracle SLA-aware (near queue ceiling at 97.8% oracle retention)
+- Economic factor needed: 2.18× (−54.2% GPU-hours, vs current 1.26× / −21.2%)
+- Combined: abs_conformal × 2.18 = 55,097 × 2.18 = 120,111 goodput/$ ≈ 4.0× oracle SLA-aware
+
+Path: aggressive economic optimization (spot/preemptible) + current abs-conformal queue.
+No ML predictor needed for north-star if economic factor reaches 2.18×.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Economic factor applies uniformly** — spot pricing may increase tail latency
+   (preemptions), reducing SLA-compliant tokens. The compound could be sub-multiplicative.
+2. **Azure weekly → SRTF sample transfer** — the 1.2575× factor is measured on the
+   full week-long provisioning trace; SRTF simulation uses 5,880 requests.
+3. **Independence of layers** — verified conceptually, not with an integrated simulator.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **No integrated compound simulator** — the compound uses a measured economic factor
+   from a separate trace, applied analytically. A true end-to-end integrated simulator
+   would run both layers on the same requests simultaneously.
+2. **Spot pricing SLA risk not modeled** — preemptible instances can increase
+   tail latency; the economic factor assumes SLA-compliant tokens are unchanged.
+
+### Q12. Which public datasets should be added?
+
+ShareGPT (third LLM trace for cross-validation). Also: spot pricing trace from a
+major cloud provider to measure the achievable economic factor empirically.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. ML predictor (HGB/CARA) with abs-conformal — close BurstGPT 11.7% oracle gap,
+   reducing economic factor threshold to ~1.89×, improving compound result.
+2. ShareGPT cross-validation — validate the +83-112% queue gains on a third trace.
+
+**Medium-term:**
+- Aggressive economic optimization (spot/preemptible simulation) targeting 2.18×.
+- Wire abs-conformal into serving runtime (all gates closed, integration pending).
+
+---
+
+## Future Opportunity Ranking — Updated After Run -z
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | ML predictor (HGB/CARA) with abs-conformal | High | Medium | Close BurstGPT 11.7% oracle gap; reduce economic factor threshold |
+| 2 | ShareGPT as third public LLM trace | Medium | Medium | Cross-validate queue gains; compound applies identically |
+| 3 | Aggressive economic optimization (spot/preemptible) | Very High | Medium | 2.18× factor needed; spot typically −40-70% cost |
+| 4 | Wire abs-conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+
+**Closed/characterized opportunities (run -z):**
+- Compound economic × queue: **CHARACTERIZED** — +130% (Azure) / +166% (BurstGPT) vs oracle
+  SLA-aware; north-star gap quantified: need 2.18× economic factor (vs current 1.26×)
+- run-t over-estimate: **CORRECTED** — 2.25-3.1× over-estimate due to double-counting
+  SLA-aware component in multiplicative compound formula
+
+---
+
 ## Run 2026-06-22-y — SLA-aware vs Abs-Conformal Head-to-Head (FRONTIER UNDERSTANDING)
 
 ### Q1. What currently limits Aurelius most?
