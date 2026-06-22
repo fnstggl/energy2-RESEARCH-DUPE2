@@ -4559,3 +4559,421 @@ def run_burstgpt_hf_live_prior_backtest(
     return _run_live_prior_on_trace(
         raw, "burstgpt_hf_fullscale", servers, target_rho, sla_s, prior_window
     )
+
+
+# ---------------------------------------------------------------------------
+# Model-Stratified Prior — Run 2026-06-22-u
+#
+# The global sliding-window median (run -t) achieves only 70% retention on
+# BurstGPT vs oracle, because BurstGPT mixes two dramatically different model
+# populations in the same trace:
+#
+#   ChatGPT: n=50,494 (84.2%), median_output=7 tokens, mean=101
+#   GPT-4:   n=9,505  (15.8%), median_output=212 tokens, mean=233
+#
+# The global running median ≈ 14 tokens — close to ChatGPT but 15× too low
+# for GPT-4. A GPT-4 request predicted as 14 tokens gets SRPT priority over
+# short ChatGPT requests (actual ~7) — the exact wrong ordering.
+#
+# Research basis:
+# - EWSJF (arXiv:2601.21758, KDD '26): unsupervised partitioning discovers
+#   performance-homogeneous request groups; per-group SJF achieves 30%+
+#   throughput gain and 4× TTFT reduction. Validates per-group stratification.
+# - Predicting LLM Output Length via Entropy-Guided Representations
+#   (arXiv:2602.11812, ICLR 2026): confirms that output length distributions
+#   are model-specific; p95/p50 ratios range from 1.7 to 20.5 across models
+#   — making cross-model prediction collapse a key source of scheduling error.
+# - BurstGPT (arXiv:2401.17644, KDD 2025): dataset paper; notes ChatGPT vs
+#   GPT-4 heterogeneity and different output distributions as a key challenge
+#   for scheduling.
+# ---------------------------------------------------------------------------
+
+# Minimum completions per model group before switching from global to per-model median.
+MODEL_STRATIFIED_WARMUP: int = 50
+
+
+def load_burstgpt_serving_requests_with_model_ids(
+    path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    limit: Optional[int] = None,
+) -> list[tuple[float, int, str]]:
+    """Return ``(arrival_s, output_tokens, model_id)`` from BurstGPT HF JSONL.
+
+    Extends ``load_burstgpt_serving_requests_jsonl`` to also carry the model_id
+    field, enabling model-stratified prior predictions [run 2026-06-22-u].
+
+    Fields: ``request_arrival_ts_s``, ``output_tokens``, ``model_id``.
+    Failures (output_tokens == 0) are excluded.
+    """
+    import json as _json
+
+    rows: list[tuple[float, int, str]] = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = _json.loads(line)
+                ts = float(d["request_arrival_ts_s"])
+                out_tok = int(d.get("output_tokens") or 0)
+                model = str(d.get("model_id") or "unknown")
+            except (KeyError, ValueError, TypeError):
+                continue
+            if out_tok > 0:
+                rows.append((ts, out_tok, model))
+    rows.sort(key=lambda r: r[0])
+    if not rows:
+        return []
+    t0 = rows[0][0]
+    result = [(ts - t0, tok, mid) for ts, tok, mid in rows]
+    if limit is not None:
+        result = result[:limit]
+    return result
+
+
+def make_model_stratified_prior_predictions(
+    raw_with_models: list[tuple[float, int, str]],
+    window: int = LIVE_PRIOR_WINDOW,
+    warmup: int = MODEL_STRATIFIED_WARMUP,
+) -> tuple[list[float], dict]:
+    """Per-model sliding-window median prior (causal; no future leakage).
+
+    For request i with model_id M, predicts output tokens as:
+      - per-model running median of last ``window`` completions from model M
+        (if M has ≥ ``warmup`` past completions), OR
+      - global running median of last ``window`` completions across all models
+        (fallback when model M has insufficient history).
+
+    This is the natural extension of the global running median to the
+    multi-model setting: each model has its own characteristic output-length
+    distribution, so a per-model median is a strictly better estimator.
+
+    Args:
+        raw_with_models: List of (arrival_s, output_tokens, model_id).
+        window: Sliding window size per model (and global fallback).
+        warmup: Minimum per-model completions before using per-model median.
+
+    Returns:
+        (predictions, stats) where:
+          predictions: list[float] of length len(raw_with_models).
+          stats: dict with global metrics plus per_model breakdown.
+    """
+    if not raw_with_models:
+        return [], {}
+
+    all_toks = [t for _, t, _ in raw_with_models]
+    sorted_all = sorted(all_toks)
+    global_median_static = float(sorted_all[len(sorted_all) // 2])
+
+    predictions: list[float] = []
+    global_history: list[int] = []
+    model_history: dict[str, list[int]] = {}
+    model_use_count: dict[str, int] = {}
+
+    for _arr, tok, model in raw_with_models:
+        # --- predict for this request ---
+        m_hist = model_history.get(model, [])
+        if len(m_hist) >= warmup:
+            # sufficient per-model history: use per-model sliding-window median
+            win = m_hist[-window:]
+            s = sorted(win)
+            pred = float(s[len(s) // 2])
+            model_use_count[model] = model_use_count.get(model, 0) + 1
+        elif global_history:
+            # fall back to global sliding-window median
+            win = global_history[-window:]
+            s = sorted(win)
+            pred = float(s[len(s) // 2])
+        else:
+            pred = global_median_static
+
+        predictions.append(pred)
+
+        # --- update histories (causal: AFTER predicting) ---
+        if model not in model_history:
+            model_history[model] = []
+        model_history[model].append(tok)
+        global_history.append(tok)
+
+    # Diagnostic statistics
+    errors = [abs(predictions[i] - all_toks[i]) for i in range(len(raw_with_models))]
+    biases = [predictions[i] - all_toks[i] for i in range(len(raw_with_models))]
+    mean_actual = statistics.mean(all_toks)
+    mae = statistics.mean(errors)
+    mean_bias = statistics.mean(biases)
+    pred_std = statistics.stdev(predictions) if len(predictions) > 1 else 0.0
+    cv_pct = 100.0 * pred_std / max(1.0, mean_actual)
+    rel_mae_pct = 100.0 * mae / max(1.0, mean_actual)
+
+    # Per-model breakdown
+    per_model: dict[str, dict] = {}
+    for model, hist in model_history.items():
+        m_toks = [all_toks[i] for i, (_, _, mid) in enumerate(raw_with_models) if mid == model]
+        m_preds = [predictions[i] for i, (_, _, mid) in enumerate(raw_with_models) if mid == model]
+        if m_toks:
+            m_mae = statistics.mean(abs(p - a) for p, a in zip(m_preds, m_toks))
+            m_med_actual = float(sorted(m_toks)[len(m_toks) // 2])
+            per_model[model] = {
+                "n": len(m_toks),
+                "median_actual": round(m_med_actual, 1),
+                "mean_actual": round(statistics.mean(m_toks), 1),
+                "mae": round(m_mae, 1),
+                "stratified_uses": model_use_count.get(model, 0),
+            }
+
+    stats = {
+        "prior_cv_pct": round(cv_pct, 2),
+        "prior_mae_tokens": round(mae, 2),
+        "prior_rel_mae_pct": round(rel_mae_pct, 2),
+        "prior_bias_tokens": round(mean_bias, 2),
+        "window": window,
+        "warmup": warmup,
+        "n_requests": len(raw_with_models),
+        "n_models": len(model_history),
+        "per_model": per_model,
+    }
+    return predictions, stats
+
+
+@dataclass
+class StratifiedPriorReport:
+    """Model-stratified prior vs global prior vs oracle [run 2026-06-22-u].
+
+    Compares four conditions on BurstGPT HF:
+      - FIFO (no prior)
+      - Conformal with global sliding-window median (run -t baseline)
+      - Conformal with model-stratified sliding-window median (this run)
+      - Conformal with oracle prior (upper bound)
+
+    Key measurements:
+      - global_retention_pct: global live prior retention vs oracle (from run -t)
+      - stratified_retention_pct: model-stratified prior retention vs oracle
+      - stratified_vs_global_gain_pct: additional gain from stratification
+    """
+
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    prior_window: int
+
+    # Prior quality
+    global_prior_cv_pct: float
+    global_prior_mae_tokens: float
+    stratified_prior_cv_pct: float
+    stratified_prior_mae_tokens: float
+    per_model_stats: dict
+
+    # Simulation summaries
+    fifo: dict
+    conformal_global_live: dict
+    conformal_stratified: dict
+    conformal_oracle: dict
+
+    # KPIs
+    fifo_goodput_per_dollar: float
+    global_live_goodput_per_dollar: float
+    stratified_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+
+    global_live_delta_pct: float       # global live vs FIFO
+    stratified_delta_pct: float        # stratified vs FIFO
+    oracle_delta_pct: float            # oracle vs FIFO
+    global_retention_pct: float        # global / oracle
+    stratified_retention_pct: float    # stratified / oracle
+    stratified_vs_global_gain_pct: float  # stratified / global - 1
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "prior_window": self.prior_window,
+            "global_prior_cv_pct": round(self.global_prior_cv_pct, 2),
+            "global_prior_mae_tokens": round(self.global_prior_mae_tokens, 2),
+            "stratified_prior_cv_pct": round(self.stratified_prior_cv_pct, 2),
+            "stratified_prior_mae_tokens": round(self.stratified_prior_mae_tokens, 2),
+            "per_model_stats": self.per_model_stats,
+            "fifo": _r(self.fifo),
+            "conformal_global_live": _r(self.conformal_global_live),
+            "conformal_stratified": _r(self.conformal_stratified),
+            "conformal_oracle": _r(self.conformal_oracle),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 2),
+            "global_live_goodput_per_dollar": round(self.global_live_goodput_per_dollar, 2),
+            "stratified_goodput_per_dollar": round(self.stratified_goodput_per_dollar, 2),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 2),
+            "global_live_delta_pct": round(self.global_live_delta_pct, 2),
+            "stratified_delta_pct": round(self.stratified_delta_pct, 2),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "global_retention_pct": round(self.global_retention_pct, 2),
+            "stratified_retention_pct": round(self.stratified_retention_pct, 2),
+            "stratified_vs_global_gain_pct": round(self.stratified_vs_global_gain_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def run_burstgpt_hf_model_stratified_prior_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    warmup: int = MODEL_STRATIFIED_WARMUP,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+) -> StratifiedPriorReport:
+    """Model-stratified sliding-window median prior on BurstGPT HF [run 2026-06-22-u].
+
+    Compares the global running median (run -t baseline) against a per-model
+    running median on BurstGPT's two-population mixture:
+      ChatGPT: median_output=7 tokens  (84.2% of requests)
+      GPT-4:  median_output=212 tokens (15.8% of requests)
+
+    The global running median ≈ 14 tokens collapses these distributions.
+    With model-stratified prediction, GPT-4 requests are correctly identified
+    as LONG (predicted ≈ 212), improving SRPT ordering and closing the oracle gap.
+
+    Four disciplines compared on identical public-trace simulator:
+      FIFO                          — no prior, arrival-order dispatch
+      Conformal global live         — global sliding-window median (run -t)
+      Conformal model-stratified    — per-model sliding-window median (new)
+      Conformal oracle              — perfect token prediction (upper bound)
+
+    Args:
+        servers: Replica pool size (M/G/c).
+        target_rho: Target cluster utilization.
+        job_limit: Optional cap on requests (default: 5,880 for Azure comparability).
+        sla_s: SLA budget in seconds (default: 30s for BurstGPT).
+        prior_window: Sliding-window size for both global and per-model medians.
+        warmup: Min per-model completions before switching to per-model median.
+        jsonl_path: Path to BurstGPT HF normalized JSONL.
+
+    Returns:
+        ``StratifiedPriorReport`` comparing all four conditions.
+    """
+    raw_with_models = load_burstgpt_serving_requests_with_model_ids(
+        jsonl_path, limit=job_limit
+    )
+    if len(raw_with_models) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 requests."
+        )
+
+    # Strip model IDs for global prior (same format as existing infrastructure)
+    raw = [(arr, tok) for arr, tok, _ in raw_with_models]
+
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    # --- Compute prior predictions (causal) ---
+    global_preds, global_stats = make_live_prior_predictions(raw, window=prior_window)
+    stratified_preds, stratified_stats = make_model_stratified_prior_predictions(
+        raw_with_models, window=prior_window, warmup=warmup
+    )
+
+    def _build_oracle() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_global_live() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=global_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_stratified() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=stratified_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs = _build_oracle()
+    oracle_reqs = _build_oracle()
+    global_live_reqs = _build_global_live()
+    stratified_reqs = _build_stratified()
+
+    # --- Run simulators ---
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    global_cal = ConformalAlphaCalibrator()
+    global_sim, global_resp, _ = _simulate_decoupled_hybrid_conformal(
+        global_live_reqs, servers, global_cal
+    )
+    stratified_cal = ConformalAlphaCalibrator()
+    strat_sim, strat_resp, _ = _simulate_decoupled_hybrid_conformal(
+        stratified_reqs, servers, stratified_cal
+    )
+
+    # --- Goodput/$ ---
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    gp_global = _sla_safe_goodput_per_dollar(global_live_reqs, global_resp, sla_s, servers)
+    gp_strat = _sla_safe_goodput_per_dollar(stratified_reqs, strat_resp, sla_s, servers)
+
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+    global_sim["sla_safe_goodput_per_dollar"] = gp_global
+    strat_sim["sla_safe_goodput_per_dollar"] = gp_strat
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    global_ret = (gp_global / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+    strat_ret = (gp_strat / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+    strat_vs_global = _delta(gp_global, gp_strat)
+
+    return StratifiedPriorReport(
+        trace="burstgpt_hf",
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        global_prior_cv_pct=global_stats.get("prior_cv_pct", 0.0),
+        global_prior_mae_tokens=global_stats.get("prior_mae_tokens", 0.0),
+        stratified_prior_cv_pct=stratified_stats.get("prior_cv_pct", 0.0),
+        stratified_prior_mae_tokens=stratified_stats.get("prior_mae_tokens", 0.0),
+        per_model_stats=stratified_stats.get("per_model", {}),
+        fifo=fifo_sim,
+        conformal_global_live=global_sim,
+        conformal_stratified=strat_sim,
+        conformal_oracle=oracle_sim,
+        fifo_goodput_per_dollar=gp_fifo,
+        global_live_goodput_per_dollar=gp_global,
+        stratified_goodput_per_dollar=gp_strat,
+        oracle_goodput_per_dollar=gp_oracle,
+        global_live_delta_pct=_delta(gp_fifo, gp_global),
+        stratified_delta_pct=_delta(gp_fifo, gp_strat),
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        global_retention_pct=global_ret,
+        stratified_retention_pct=strat_ret,
+        stratified_vs_global_gain_pct=strat_vs_global,
+    )

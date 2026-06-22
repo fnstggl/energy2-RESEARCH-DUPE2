@@ -1,0 +1,58 @@
+{
+  "run_id": "2026-06-22-u",
+  "run_date": "2026-06-22",
+  "experiment": "model_stratified_prior",
+  "hypothesis": "Per-model sliding-window median should beat global median on BurstGPT HF because ChatGPT (median=7) and GPT-4 (median=212) have 30x different output lengths, so global median≈14 misclassifies all GPT-4 requests as short.",
+  "research_basis": [
+    "EWSJF (arXiv:2601.21758, KDD 2026): per-group SJF achieves 30%+ throughput gain",
+    "Entropy-Guided Output Length Prediction (arXiv:2602.11812, ICLR 2026): p95/p50 ratios 1.7-20.5 across models",
+    "BurstGPT (arXiv:2401.17644, KDD 2025): ChatGPT vs GPT-4 heterogeneity"
+  ],
+  "trace": "BurstGPT HF (lzzmm__BurstGPT, normalized_sample.jsonl)",
+  "parameters": {
+    "servers": 4,
+    "target_rho": 0.85,
+    "sla_s": 30.0,
+    "prior_window": 200,
+    "model_stratified_warmup": 50,
+    "total_requests": 58042
+  },
+  "results": {
+    "fifo_goodput_per_dollar": 11354.98,
+    "global_live_goodput_per_dollar": 34376.84,
+    "stratified_goodput_per_dollar": 34418.15,
+    "oracle_goodput_per_dollar": 47244.91,
+    "global_live_delta_pct": 202.75,
+    "stratified_delta_pct": 203.11,
+    "oracle_delta_pct": 316.07,
+    "global_retention_pct": 72.76,
+    "stratified_retention_pct": 72.85,
+    "stratified_vs_global_gain_pct": 0.12
+  },
+  "prior_quality": {
+    "global_cv_pct": 94.11,
+    "global_mae_tokens": 78.56,
+    "stratified_cv_pct": 94.33,
+    "stratified_mae_tokens": 78.51
+  },
+  "per_model_stats": {
+    "ChatGPT": {
+      "n": 49302,
+      "median_actual": 7.0,
+      "mean_actual": 103.9,
+      "mae": 66.0,
+      "stratified_uses": 49252
+    },
+    "GPT-4": {
+      "n": 8740,
+      "median_actual": 235.0,
+      "mean_actual": 253.8,
+      "mae": 149.2,
+      "stratified_uses": 8690
+    }
+  },
+  "conclusion": "NULL RESULT. Model stratification provides only +0.12% gain over global prior (72.85% vs 72.76% oracle retention). Root cause: within-model output-length variability remains extremely high (CV≈94% for both global and stratified). ChatGPT has heavy tail (median=7, mean=103.9); GPT-4 is broadly variable (median=235, mean=253.8). Per-model median is a better expected-value estimator but does not improve SRPT ordering because residual variability within each model dominates.",
+  "verdict": "CLOSED. Model-id stratification does not close the oracle gap on BurstGPT HF. Need request-specific features (context length, prompt structure, task type) to reduce within-model CV below 50%.",
+  "next_best_opportunity": "CARA HGB request-specific output-token predictor using context-length + request-type features. Historical CV on Azure: 7% for low-context-length bin. If applicable, would close 18pp Azure gap and potentially 12pp+ BurstGPT gap.",
+  "shadow_tag": "shadow_only_simulator_result_not_production_savings"
+}

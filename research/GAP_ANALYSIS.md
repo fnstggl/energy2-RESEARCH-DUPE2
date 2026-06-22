@@ -8,6 +8,115 @@
 
 ---
 
+## Run 2026-06-22-u — Model-Stratified Prior (Honest Null Result)
+
+### Q1. What currently limits Aurelius most?
+
+**Within-model output-length variance, not cross-model heterogeneity.** This run tested
+whether the BurstGPT oracle gap (70% retention in run -t) was caused by its two-population
+mixture — ChatGPT (median=7) and GPT-4 (median=212). The hypothesis was that a per-model
+running median would correctly classify GPT-4 requests as LONG and improve SRPT ordering.
+**It was falsified: +0.12% gain over global prior (72.85% vs 72.76% retention).** The real
+limiter is within-model variance: ChatGPT CV is enormous (median=7 but mean=103.9), and
+GPT-4 is broadly variable (median=235, mean=253.8). Knowing the model barely helps because
+the spread *inside* each model dominates the spread *between* models. Both global and
+stratified priors have CV≈94%.
+
+### Q2. What theoretically offers the largest gain?
+
+**A request-specific output-token predictor — confirmed again, even more strongly.** Run -t
+showed the running median carries near-zero request-specific signal. Run -u shows that
+adding the single most obvious grouping variable (model_id) does NOT help. Only features
+that reduce *within-model* variance (context length, prompt structure, task type, decode
+entropy) can close the gap. The oracle ceiling is +316% vs FIFO on BurstGPT; the live prior
+sits at +203%.
+
+### Q3. Which forecasts are weakest?
+
+1. **Live prior (global AND stratified)** — both have CV≈94% vs actual CV ~94%. Neither
+   sharpens ordering. Model-id stratification adds no information.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Prior is still a population/group median, not request-specific.** 27pp gap to oracle
+   on BurstGPT remains after stratification (72.85% retention).
+2. **Serving queue uses FIFO** — conformal live prior achieves +203% vs FIFO on the full
+   58k BurstGPT trace; still not wired into runtime.
+3. **North Star gap (vs SLA-aware)** — unchanged.
+
+### Q5. Which workloads benefit least?
+
+**BurstGPT GPT-4 subpopulation.** GPT-4 requests (n=8,740) have MAE=149.2 tokens even with
+per-model prediction — the highest of any group. Their broad output distribution
+(median=235, mean=253.8) means no single point prediction orders them well.
+
+### Q6. Which research direction appears strongest?
+
+**Request-specific predictor using within-request features.** Both run -t and run -u now
+falsify the "better aggregate statistics" path (running median, per-model median). The
+remaining direction is per-request features. EWSJF's per-group benefit requires that groups
+be performance-homogeneous; BurstGPT's model_id groups are NOT (within-group CV≈94%).
+
+### Q7. What is the shortest path to another +10% gain?
+
+A feature that reduces within-model CV. Context length is the natural candidate — but Azure
+showed r(context, output)=-0.022. BurstGPT carries input_tokens; testing
+r(input_tokens, output_tokens) per model is the cheapest next experiment.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Close the 27pp BurstGPT retention gap (72.85% → ~95%+). Requires a predictor whose per-model
+CV drops below ~50%. If input_tokens correlate with output_tokens within a model, a
+per-model linear/GBM predictor could achieve this. If not (as on Azure), the trace itself
+lacks the signal and a richer trace (ShareGPT) is needed.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Unchanged from run -t. The live prior gives +203% vs FIFO on full BurstGPT; SLA-aware
+≈ +210% vs FIFO on BurstGPT [run -r]. Stratification did not move this. Reaching +300% vs
+SLA-aware requires a materially better prior (request-specific) or compounding with economic
+scheduling.
+
+### Q10. Which assumptions might be wrong?
+
+1. **"Model-id is a performance-homogeneous grouping" — CONFIRMED WRONG this run.** Within-
+   model CV≈94%, nearly identical to global.
+2. **"Cross-model heterogeneity is the dominant error source" — CONFIRMED WRONG.** Within-
+   model variance dominates by an order of magnitude.
+3. **Warmup=50 sufficient.** With 49,252/49,302 ChatGPT and 8,690/8,740 GPT-4 requests using
+   the per-model median (stratified_uses), warmup is not the limiter — the per-model median
+   itself is the limiter.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **BurstGPT input_tokens not yet tested as a predictor feature.** The trace carries
+   input_tokens; per-model r(input, output) is the obvious next measurement.
+2. **No request-text features** — same as run -t; need ShareGPT for prompt-level signal.
+3. **Oracle still used as ceiling** — appropriate; the gap is now well-characterized.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT** — prompt text enables per-request features that model_id cannot provide.
+2. **CARA latency dataset** — TTFT + queue state for request-specific prior.
+3. **Mooncake FAST25** — KV prefix reuse signal.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Measure per-model r(input_tokens, output_tokens) on BurstGPT HF. If non-trivial, build a
+   per-model input-length-conditioned predictor (the cheapest request-specific feature
+   available in the existing trace).
+2. If BurstGPT input_tokens are uninformative (like Azure), pivot to ShareGPT as the third
+   trace with genuine prompt-text features.
+
+**Short-term (2–3 runs):**
+3. End-to-end compound backtest: economic scheduling × live-prior SRTF in single trace run.
+4. CARA HGB predictor if a trace with TTFT/queue-state signal is ingested.
+
+---
+
 ## Run 2026-06-21-t — Live Causal Prior Evaluation (Production Realism Gate)
 
 ### Q1. What currently limits Aurelius most?
@@ -109,18 +218,20 @@ Independence estimate: +876% compound vs FIFO → far exceeds +300% vs SLA-aware
 
 ---
 
-## Future Opportunity Ranking — Updated After Run -t
+## Future Opportunity Ranking — Updated After Run -u
 
 | rank | opportunity | EV | feasibility | status |
 |---|---|---|---|---|
-| 1 | Request-specific output-token predictor (CARA HGB or prompt features) | Very High | Medium | Gap quantified: 18pp Azure, 12pp BurstGPT |
-| 2 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO |
-| 3 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 1 | Per-model input-length-conditioned predictor on BurstGPT (test r(input,output) first) | High | High | Cheapest request-specific feature in existing trace; untested |
+| 2 | ShareGPT as third public LLM trace (genuine prompt-text features) | Very High | Medium | model_id stratification falsified — need per-request signal |
+| 3 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO |
 | 4 | Wire conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
-| 5 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
-| 6 | GPU routing on LLM trace (TTFT binding) | Medium | Low | benchmarked on energy trace [run -f] |
+| 5 | CARA HGB predictor (needs TTFT/queue-state trace) | High | Low | requires richer trace ingestion |
+| 6 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
 
 **Closed opportunities:**
+- Model-id stratification: **FALSIFIED [run -u]** — +0.12% over global prior; within-model
+  CV≈94% dominates cross-model heterogeneity. Coarse group medians do not close the gap.
 - Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 88.1% BurstGPT
 - Preemption overhead on BurstGPT: **CLOSED** [run -s] — 95.25% retention at 0.30s
 - BurstGPT noisy prior: **CLOSED** [run -r] — 100.0% retention

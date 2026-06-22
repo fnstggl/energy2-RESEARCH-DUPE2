@@ -24,6 +24,27 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Model-Stratified Prior [run 2026-06-22-u] — HONEST NULL RESULT:** Tested the
+#1-ranked hypothesis that per-model output-length stratification closes the BurstGPT
+oracle gap. BurstGPT mixes ChatGPT (n=49,302, median=7 tokens) and GPT-4 (n=8,740,
+median=235 tokens) — a 30× difference that the global running median (≈14) collapses.
+Hypothesis: per-model sliding-window median should give GPT-4 requests correct SRPT
+priority. **Result: +0.12% over global prior** (stratified 72.85% vs global 72.76%
+oracle retention on 58,042-request full-scale run; +203.11% vs +202.75% vs FIFO).
+**The hypothesis was falsified.** Root cause: within-model variability dominates —
+both global and stratified priors have CV≈94%. ChatGPT has a heavy tail (median=7 but
+mean=103.9, MAE=66); GPT-4 is broadly variable (median=235, mean=253.8, MAE=149).
+Knowing the model type barely improves token prediction because residual within-model
+variance is enormous. Per-model median is a better *expected-value* estimator but does
+not sharpen *SRPT ordering*. **Verdict: model-id stratification CLOSED.** The oracle gap
+requires request-specific features (context length, prompt structure, task type) to drive
+within-model CV below 50%, not coarser group medians. This negative result is consistent
+with run -t's finding that the running median carries almost no request-specific signal.
+Research basis (correctly applied, hypothesis still falsified): EWSJF (arXiv:2601.21758,
+KDD 2026), Entropy-Guided Output Length (arXiv:2602.11812, ICLR 2026), BurstGPT
+(arXiv:2401.17644). 20 new tests. Results:
+`research/results/model_stratified_prior_backtest_2026-06-22.md`.
+
 **Live Causal Prior [run 2026-06-21-t]:** First production-realistic prior evaluation.
 Causal sliding-window median (window=200) achieves **+244.42% vs FIFO** on Azure LLM 2024
 (81.6% oracle retention) and **+420.83% vs FIFO** on BurstGPT HF (70.0% retention). Prior
@@ -594,6 +615,111 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-22-u — MODEL-STRATIFIED PRIOR (HONEST NULL RESULT)
+
+**Goal:** Test the #1-ranked roadmap hypothesis — that per-model output-length
+stratification closes the BurstGPT oracle gap (run -t left 30% on the table at 70%
+retention). BurstGPT mixes two model populations with a 30× difference in median
+output length, which the global running median collapses into a single uninformative
+prediction.
+
+**Bottleneck addressed:** Run -t established that the global running median achieves
+only 70% oracle retention on BurstGPT vs 81.6% on Azure. The leading hypothesis (Q1,
+Q13 in GAP_ANALYSIS) was that BurstGPT's lower retention is caused by its two-population
+mixture: ChatGPT (84.2%, median=7 tokens) and GPT-4 (15.8%, median=212 tokens). The
+global median ≈ 14 is close to ChatGPT but ~15× too low for GPT-4, so GPT-4 requests are
+predicted SHORT and given incorrect SRPT priority.
+
+**Hypothesis (falsifiable):** A per-model sliding-window median (each model_id keeps its
+own running median, with global fallback during warmup) should correctly predict GPT-4
+requests as LONG, improve SRPT ordering, and lift retention from 70% toward 85–95%.
+
+**Implementation:**
+- Added `MODEL_STRATIFIED_WARMUP = 50` constant to `srtf_serving_backtest.py`
+- Added `load_burstgpt_serving_requests_with_model_ids()` — loads (arrival_s,
+  output_tokens, model_id) tuples from BurstGPT HF JSONL
+- Added `make_model_stratified_prior_predictions()` — causal per-model sliding-window
+  median with global fallback before per-model warmup; full diagnostic stats incl.
+  per-model breakdown
+- Added `StratifiedPriorReport` dataclass — compares FIFO / global-live / stratified /
+  oracle with retention metrics
+- Added `run_burstgpt_hf_model_stratified_prior_backtest()` — full 4-discipline backtest
+- Created `tests/test_model_stratified_prior_backtest.py` — 20 tests (causal order,
+  warmup activation, global fallback, sliding window, loader correctness, serialization,
+  fixture integration)
+
+**Benchmark results (public trace: BurstGPT HF, 58,042 requests, ρ=0.85, 4 servers, SLA=30s):**
+
+| Discipline | SLA-safe goodput/$ | vs FIFO | vs Oracle |
+|---|---:|---:|---:|
+| FIFO | 11,354.98 | (baseline) | — |
+| Conformal oracle | 47,244.91 | +316.07% | — |
+| Conformal global live (run -t) | 34,376.84 | +202.75% | 72.76% retention |
+| **Conformal model-stratified (this run)** | **34,418.15** | **+203.11%** | **72.85% retention** |
+
+**Stratified vs global gain: +0.12% — NULL RESULT. The hypothesis is FALSIFIED.**
+
+Prior quality (essentially identical):
+
+| Metric | Global | Stratified |
+|---|---:|---:|
+| CV (%) | 94.11 | 94.33 |
+| MAE (tokens) | 78.56 | 78.51 |
+
+Per-model breakdown (the smoking gun):
+
+| Model | n | median_actual | mean_actual | MAE |
+|---|---:|---:|---:|---:|
+| ChatGPT | 49,302 | 7.0 | 103.9 | 66.0 |
+| GPT-4 | 8,740 | 235.0 | 253.8 | 149.2 |
+
+**Why the hypothesis failed — within-model variability dominates:**
+
+1. **Per-model median is a better point estimate but does not sharpen SRPT ordering.**
+   Both global and stratified priors have CV≈94%. The model-id only shifts the *center*
+   of the prediction; the *spread* within each model is enormous.
+
+2. **ChatGPT has a massive heavy tail.** median=7 but mean=103.9 (15× higher) and MAE=66.
+   Most ChatGPT requests are tiny, but a long tail of large generations means a per-model
+   median of 7 is wrong for exactly the requests whose ordering matters most.
+
+3. **GPT-4 is broadly variable, not consistently long.** median=235, mean=253.8, MAE=149.
+   Predicting 235 for every GPT-4 request is wrong by ~150 tokens on average.
+
+4. **Conformal α already absorbs systematic bias.** The model-level correction is
+   systematic (constant per-model offset); the ConformalAlphaCalibrator was already
+   partially compensating for the global median's GPT-4 underestimate via adaptive α.
+
+**Verdict:** MODEL-ID STRATIFICATION CLOSED. Coarse group medians do not close the
+oracle gap. The path forward is request-specific features (context length, prompt
+structure, task type) that reduce within-model CV below 50% — confirming run -t's
+core finding that the running median carries almost no request-specific signal. This is
+a genuine negative result, recorded honestly: the research papers (EWSJF, Entropy-Guided)
+were correctly applied, but their per-group benefit does not transfer because BurstGPT's
+within-model variance is far higher than the cross-model variance.
+
+**Research papers reviewed:**
+1. EWSJF (arXiv:2601.21758, KDD 2026) — unsupervised partitioning, per-group SJF +30%
+   throughput. Predicts stratification should help; falsified here because the grouping
+   variable (model_id) doesn't reduce within-group variance.
+2. Entropy-Guided Output Length Prediction (arXiv:2602.11812, ICLR 2026) — p95/p50 ratios
+   1.7–20.5 across models. Confirms heterogeneity exists but also implies large *within*-
+   model spread.
+3. BurstGPT (arXiv:2401.17644, KDD 2025) — dataset provenance and model heterogeneity.
+
+**Before vs After:**
+
+| Metric | Before (run -t) | After (this run) |
+|---|---:|---:|
+| BurstGPT global-live retention | 70.0% (5,880) / 72.76% (58k) | 72.76% (unchanged) |
+| BurstGPT stratified retention | unknown | **72.85%** |
+| Stratification net gain | hypothesized +15-25pp | **+0.12% (null)** |
+| #1 opportunity (model stratification) | OPEN | **CLOSED (falsified)** |
+
+Results written to `research/results/model_stratified_prior_backtest_2026-06-22.{json,md}`.
+
+---
 
 ### Run 2026-06-21-t — LIVE CAUSAL PRIOR + COMPOUND TABLE (RESEARCH DISCOVERY)
 
