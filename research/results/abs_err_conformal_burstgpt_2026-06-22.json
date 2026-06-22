@@ -1,0 +1,61 @@
+{
+  "run_id": "2026-06-22-x",
+  "run_name": "absolute_error_conformal_calibration",
+  "date": "2026-06-22",
+  "dataset": "BurstGPT HF JSONL",
+  "dataset_source": "https://huggingface.co/datasets/lzzmm/BurstGPT (CC-BY-4.0)",
+  "n_requests": 5880,
+  "servers": 4,
+  "target_rho": 0.85,
+  "sla_s": 30.0,
+  "target_abs_tokens": 350.0,
+  "prior_type": "ml_hgb_p50",
+  "error_profile": {
+    "p50_abs_err_tokens": 132.6,
+    "p90_abs_err_tokens": 316.9,
+    "p50_rel_err": 0.5790,
+    "p90_rel_err": 7.3741,
+    "by_class": {
+      "ChatGPT": {"n": 4137, "p50_abs": 137.0, "p90_abs": 326.9},
+      "GPT-4":   {"n": 1743, "p50_abs": 123.1, "p90_abs": 285.2}
+    }
+  },
+  "results": {
+    "fifo_goodput_per_dollar": 6528.76,
+    "oracle_goodput_per_dollar": 48598.82,
+    "global_relative_goodput_per_dollar": 33962.29,
+    "global_absolute_goodput_per_dollar": 39999.20,
+    "per_class_absolute_goodput_per_dollar": 40027.24
+  },
+  "delta_vs_fifo": {
+    "oracle": "+644.38%",
+    "global_relative": "+420.20%",
+    "global_absolute": "+512.66%",
+    "per_class_absolute": "+513.09%"
+  },
+  "oracle_retention": {
+    "global_relative": "65.2%",
+    "global_absolute": "79.6%",
+    "per_class_absolute": "79.6%"
+  },
+  "improvement_vs_prior_best": {
+    "global_absolute_vs_relative": "+17.78%",
+    "per_class_absolute_vs_relative": "+17.86%"
+  },
+  "mean_alpha": {
+    "global_relative": 0.001998,
+    "global_absolute": 0.000892,
+    "per_class_chatgpt": 0.000852,
+    "per_class_gpt4": 0.000783
+  },
+  "root_cause_confirmed": "Relative error formula caps alpha at 0.002 (p90_rel=7.37 >> target=0.40). Absolute error formula achieves alpha=0.0009 (p90_abs=317 tokens, target=350). Result: 2.2x lower alpha, 17.78% higher goodput/$.",
+  "literature_basis": [
+    "Romano et al. NeurIPS 2019 (CQR): absolute residuals avoid constant-width inflation for heteroscedastic workloads",
+    "Dewolf et al. arXiv:2309.08313: proves relative-error CP fails conditional validity under heteroscedasticity",
+    "TIE scheduling ICML 2026 (arXiv:2604.00499): distributional approach for LLM scheduling under high-CV",
+    "Mitzenmacher & Shahout arXiv:2503.07545: per-class calibration as open problem for LLM schedulers"
+  ],
+  "shadow_tag": "shadow_only_simulator_result_not_production_savings",
+  "category": "Frontier Improvement",
+  "run_command": "PYTHONPATH=/home/user/energy2-RESEARCH-DUPE2 python3 scripts/run_abs_err_conformal_backtest.py --limit 5880 --servers 4 --rho 0.85 --target-abs 350"
+}

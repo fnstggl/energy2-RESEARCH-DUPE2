@@ -8,6 +8,110 @@
 
 ---
 
+## Run 2026-06-22-x — Absolute-Error Conformal Calibration (FRONTIER IMPROVEMENT ✓)
+
+### Q1. What currently limits Aurelius most?
+
+**The absolute-error conformal calibrator has fixed the formula-level bottleneck.**
+Global relative was always capped at α=0.002 (p90_rel=7.37 >> 0.40). Global absolute
+now achieves α=0.000892 (p90_abs=317 tokens, target=350 → ratio=0.906). Oracle retention
+improved from 65.2% to 79.6% (+14.4 pp). Goodput/$ improved from 33,962 to 39,999 (+17.78%).
+
+Current remaining bottleneck: the absolute-error calibrator is not wired into the main
+serving policy stack (only runs in the research SRPT simulator). The headline BurstGPT
+benchmark (+1.77% vs cache_affinity) and Azure LLM 2024 benchmark (+25.75% vs sla_aware)
+do not yet benefit from the conformal SRPT improvements.
+
+### Q2. What theoretically offers the largest gain?
+
+1. **Wire absolute-error conformal SRPT into serving runtime** — would bring the
+   +512.66% vs FIFO improvement from the research simulator into the main benchmark.
+2. **CQR (Conformalized Quantile Regression, Romano NeurIPS 2019)** — trains quantile
+   regression heads to produce adaptive-width intervals; could reduce effective p90_abs
+   by using interval-conditional scores rather than raw residuals.
+3. **TIE distributional scheduling (ICML 2026)** — fits log-t distribution per request,
+   uses E[X̃]+β·CVaR as job size; bypasses calibration entirely with distributional model.
+
+### Q3. Which forecasts are weakest?
+
+- SRPT dispatch α is now correctly calibrated (abs-err formula, α=0.000892)
+- ML-HGB prior MAE = 163.54 tokens (p90_abs = 317 tokens) — prediction accuracy still weak
+- TTFT p99 tail (unchanged from baseline, not wired to runtime)
+- Queue wait (proxy-only, not wired to runtime)
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+- Main serving policy (constraint_aware) does not use SRPT dispatch — still uses EWMA autoscaling
+- Absolute-error conformal calibration not integrated into main policy
+- Per-class absolute α (ChatGPT 0.000852, GPT-4 0.000783) not exploited in runtime
+
+### Q5. Which workloads benefit least?
+
+- Standard headline benchmarks (BurstGPT policy, Azure 2024) — conformal SRPT not wired
+- Energy-flexible batch workloads — SRPT is irrelevant (non-serving)
+
+### Q6. Which research direction appears strongest?
+
+**Wiring absolute-error conformal SRPT into the main serving runtime.** This takes an already-
+validated +512.66% gain from the research simulator and applies it to the headline benchmark.
+The integration requires: (1) replace queue dispatch in main policy with conformal SRPT;
+(2) wire `AbsoluteErrorConformalCalibrator` as the calibration mechanism; (3) run headline
+BurstGPT and Azure benchmarks to measure real impact.
+
+Secondary: CQR calibration could further reduce α (37% tighter intervals per Romano 2019).
+
+### Q7. Shortest path to another +10% gain?
+
+**Wire conformal SRPT into main policy** (1-2 days). The research simulator shows +512.66%
+vs FIFO; the main policy currently achieves +1.77% vs cache_affinity. If conformal SRPT
+accounts for even a fraction of that gain in the main benchmark, the +10% threshold is met.
+
+### Q8. Shortest path to +50% gain?
+
+**CQR calibration + wired conformal SRPT.** CQR reduces p90 residuals by ~37% → even lower α
+→ higher retention → closer to +644% oracle. Compound with economic scheduling.
+
+### Q9. What would need to be true for +300% vs SLA-aware?
+
+Same structural requirements as previous runs:
+- Full conformal SRPT in runtime (not just research simulator)
+- α → near-oracle (≈ 0) with accurate predictions
+- Compound economic + queue gain
+
+The conformal SRPT simulator on BurstGPT already shows +512% vs FIFO. The SLA-aware
+baseline achieves ~210% vs FIFO. So +300% vs SLA-aware = +730% vs FIFO is approximately
+achievable with oracle predictions (which give +644%). CQR + runtime integration could close
+the remaining gap.
+
+### Q10. Which assumptions might be wrong?
+
+- **Independence of economic + queue gains**: assumed +876% compound is likely too optimistic
+- **target_abs = 350 optimal for all traces**: may need per-trace calibration
+- **Service times use actual tokens in simulation**: production would use predicted → lower gains
+- **ChatGPT surprise-long (8.4%)**: this rate is trace-specific, may differ in production
+
+### Q11. Which benchmark weaknesses exist?
+
+- BurstGPT conformal track (srtf_serving_backtest.py) uses actual service times → oracle scheduling
+- Headline BurstGPT (+1.77%) does not use SRPT — different optimization lever
+- Azure LLM 2024 sample (tests/fixtures/) is used; full 44M request trace would be stronger
+
+### Q12. Which public datasets should be added?
+
+- ShareGPT / LMSYS Chatbot conversation trace (third cross-validation point)
+- Vidur profiling CSVs (per-GPU kernel latency, A100/A40/H100) for calibration
+
+### Q13. What should be attempted next?
+
+| priority | action | expected gain | effort |
+|---|---|---|---|
+| 1 | Wire `AbsoluteErrorConformalCalibrator` into main serving policy | High (measured +17.78% on conformal track) | 1-2 days |
+| 2 | CQR calibration (quantile regression heads + CQR score formula) | Very High (37% tighter intervals → lower α) | 2-4 days |
+| 3 | TIE distributional scheduling (log-t distribution model) | High (3.77× vs FCFS per ICML 2026) | 4-8 days |
+| 4 | ShareGPT trace ingestion and cross-validation | High (third public trace) | 1-2 days |
+
+---
+
 ## Run 2026-06-22-w — Per-Class Conformal Calibration (Within-Class Variance Ceiling)
 
 ### Q1. What currently limits Aurelius most?

@@ -1,0 +1,987 @@
+{
+  "datasets": {
+    "azure_llm_2024": {
+      "by_scale": {
+        "1.0": {
+          "n_ticks": 1560,
+          "outlen_fitted": true,
+          "outlen_p90_over_mean": 1.9585,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 1.04,
+              "gpu_hours": 26.0,
+              "latency_p99_ms": 9535.183,
+              "queue_p99_ms": 1.777,
+              "scale_events": 0,
+              "sla_compliant_goodput": 663601,
+              "sla_safe_goodput_per_infra_dollar": 12511.331070889983,
+              "timeout_pct_mean": 2.0005,
+              "total_cost": 53.04,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 1.04,
+              "gpu_hours": 26.0,
+              "latency_p99_ms": 9535.183,
+              "queue_p99_ms": 1.777,
+              "scale_events": 0,
+              "sla_compliant_goodput": 663601,
+              "sla_safe_goodput_per_infra_dollar": 12511.331070889983,
+              "timeout_pct_mean": 2.0005,
+              "total_cost": 53.04,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 1.04,
+              "gpu_hours": 26.0,
+              "latency_p99_ms": 9535.183,
+              "queue_p99_ms": 1.777,
+              "scale_events": 0,
+              "sla_compliant_goodput": 663601,
+              "sla_safe_goodput_per_infra_dollar": 12511.331070889983,
+              "timeout_pct_mean": 2.0005,
+              "total_cost": 53.04,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 1.04,
+              "gpu_hours": 26.0,
+              "latency_p99_ms": 9535.183,
+              "queue_p99_ms": 1.777,
+              "scale_events": 0,
+              "sla_compliant_goodput": 663601,
+              "sla_safe_goodput_per_infra_dollar": 12511.331070889983,
+              "timeout_pct_mean": 2.0005,
+              "total_cost": 53.04,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 1.04,
+              "gpu_hours": 26.0,
+              "latency_p99_ms": 9535.183,
+              "queue_p99_ms": 1.777,
+              "scale_events": 0,
+              "sla_compliant_goodput": 663601,
+              "sla_safe_goodput_per_infra_dollar": 12511.331070889983,
+              "timeout_pct_mean": 2.0005,
+              "total_cost": 53.04,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 1.04,
+              "gpu_hours": 26.0,
+              "latency_p99_ms": 9535.183,
+              "queue_p99_ms": 1.777,
+              "scale_events": 0,
+              "sla_compliant_goodput": 663601,
+              "sla_safe_goodput_per_infra_dollar": 12511.331070889983,
+              "timeout_pct_mean": 2.0005,
+              "total_cost": 53.04,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 2.79
+        },
+        "10.0": {
+          "n_ticks": 156,
+          "outlen_fitted": true,
+          "outlen_p90_over_mean": 1.9585,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 0.104,
+              "gpu_hours": 2.6,
+              "latency_p99_ms": 9587.187,
+              "queue_p99_ms": 16.933,
+              "scale_events": 0,
+              "sla_compliant_goodput": 664484,
+              "sla_safe_goodput_per_infra_dollar": 125279.78883861257,
+              "timeout_pct_mean": 2.2878,
+              "total_cost": 5.304,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 0.104,
+              "gpu_hours": 2.6,
+              "latency_p99_ms": 9587.187,
+              "queue_p99_ms": 16.933,
+              "scale_events": 0,
+              "sla_compliant_goodput": 664484,
+              "sla_safe_goodput_per_infra_dollar": 125279.78883861257,
+              "timeout_pct_mean": 2.2878,
+              "total_cost": 5.304,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 0.104,
+              "gpu_hours": 2.6,
+              "latency_p99_ms": 9587.187,
+              "queue_p99_ms": 16.933,
+              "scale_events": 0,
+              "sla_compliant_goodput": 664484,
+              "sla_safe_goodput_per_infra_dollar": 125279.78883861257,
+              "timeout_pct_mean": 2.2878,
+              "total_cost": 5.304,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 0.104,
+              "gpu_hours": 2.6,
+              "latency_p99_ms": 9587.187,
+              "queue_p99_ms": 16.933,
+              "scale_events": 0,
+              "sla_compliant_goodput": 664484,
+              "sla_safe_goodput_per_infra_dollar": 125279.78883861257,
+              "timeout_pct_mean": 2.2878,
+              "total_cost": 5.304,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 0.104,
+              "gpu_hours": 2.6,
+              "latency_p99_ms": 9587.187,
+              "queue_p99_ms": 16.933,
+              "scale_events": 0,
+              "sla_compliant_goodput": 664484,
+              "sla_safe_goodput_per_infra_dollar": 125279.78883861257,
+              "timeout_pct_mean": 2.2878,
+              "total_cost": 5.304,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 0.104,
+              "gpu_hours": 2.6,
+              "latency_p99_ms": 9587.187,
+              "queue_p99_ms": 16.933,
+              "scale_events": 0,
+              "sla_compliant_goodput": 664484,
+              "sla_safe_goodput_per_infra_dollar": 125279.78883861257,
+              "timeout_pct_mean": 2.2878,
+              "total_cost": 5.304,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 2.3
+        },
+        "150.0": {
+          "n_ticks": 11,
+          "outlen_fitted": true,
+          "outlen_p90_over_mean": 1.9585,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 0.01,
+              "gpu_hours": 0.25,
+              "latency_p99_ms": 10830.219,
+              "queue_p99_ms": 234.405,
+              "scale_events": 2,
+              "sla_compliant_goodput": 653759,
+              "sla_safe_goodput_per_infra_dollar": 1281880.392156863,
+              "timeout_pct_mean": 3.9119,
+              "total_cost": 0.51,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 0.008,
+              "gpu_hours": 0.2,
+              "latency_p99_ms": 11779.208,
+              "queue_p99_ms": 600.67,
+              "scale_events": 2,
+              "sla_compliant_goodput": 645451,
+              "sla_safe_goodput_per_infra_dollar": 1581987.7450980393,
+              "timeout_pct_mean": 5.1251,
+              "total_cost": 0.408,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 0.008,
+              "gpu_hours": 0.2,
+              "latency_p99_ms": 11779.208,
+              "queue_p99_ms": 600.67,
+              "scale_events": 2,
+              "sla_compliant_goodput": 645451,
+              "sla_safe_goodput_per_infra_dollar": 1581987.7450980393,
+              "timeout_pct_mean": 5.1251,
+              "total_cost": 0.408,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 0.0147,
+              "gpu_hours": 0.3667,
+              "latency_p99_ms": 10265.348,
+              "queue_p99_ms": 87.626,
+              "scale_events": 7,
+              "sla_compliant_goodput": 658708,
+              "sla_safe_goodput_per_infra_dollar": 880625.6684491979,
+              "timeout_pct_mean": 3.1916,
+              "total_cost": 0.748,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 0.01,
+              "gpu_hours": 0.25,
+              "latency_p99_ms": 10830.219,
+              "queue_p99_ms": 234.405,
+              "scale_events": 2,
+              "sla_compliant_goodput": 653759,
+              "sla_safe_goodput_per_infra_dollar": 1281880.392156863,
+              "timeout_pct_mean": 3.9119,
+              "total_cost": 0.51,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 0.0107,
+              "gpu_hours": 0.2667,
+              "latency_p99_ms": 10750.278,
+              "queue_p99_ms": 206.179,
+              "scale_events": 2,
+              "sla_compliant_goodput": 654459,
+              "sla_safe_goodput_per_infra_dollar": 1203049.6323529412,
+              "timeout_pct_mean": 3.8099,
+              "total_cost": 0.544,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 2.21
+        },
+        "50.0": {
+          "n_ticks": 32,
+          "outlen_fitted": true,
+          "outlen_p90_over_mean": 1.9585,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 0.0213,
+              "gpu_hours": 0.5333,
+              "latency_p99_ms": 10366.288,
+              "queue_p99_ms": 240.775,
+              "scale_events": 0,
+              "sla_compliant_goodput": 657806,
+              "sla_safe_goodput_per_infra_dollar": 604601.1029411764,
+              "timeout_pct_mean": 3.3168,
+              "total_cost": 1.088,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 0.0213,
+              "gpu_hours": 0.5333,
+              "latency_p99_ms": 10366.288,
+              "queue_p99_ms": 240.775,
+              "scale_events": 0,
+              "sla_compliant_goodput": 657806,
+              "sla_safe_goodput_per_infra_dollar": 604601.1029411764,
+              "timeout_pct_mean": 3.3168,
+              "total_cost": 1.088,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 0.0213,
+              "gpu_hours": 0.5333,
+              "latency_p99_ms": 10366.288,
+              "queue_p99_ms": 240.775,
+              "scale_events": 0,
+              "sla_compliant_goodput": 657806,
+              "sla_safe_goodput_per_infra_dollar": 604601.1029411764,
+              "timeout_pct_mean": 3.3168,
+              "total_cost": 1.088,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 0.022,
+              "gpu_hours": 0.55,
+              "latency_p99_ms": 10323.623,
+              "queue_p99_ms": 226.32,
+              "scale_events": 2,
+              "sla_compliant_goodput": 658181,
+              "sla_safe_goodput_per_infra_dollar": 586614.0819964348,
+              "timeout_pct_mean": 3.263,
+              "total_cost": 1.122,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 0.0213,
+              "gpu_hours": 0.5333,
+              "latency_p99_ms": 10366.288,
+              "queue_p99_ms": 240.775,
+              "scale_events": 0,
+              "sla_compliant_goodput": 657806,
+              "sla_safe_goodput_per_infra_dollar": 604601.1029411764,
+              "timeout_pct_mean": 3.3168,
+              "total_cost": 1.088,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 0.0213,
+              "gpu_hours": 0.5333,
+              "latency_p99_ms": 10366.288,
+              "queue_p99_ms": 240.775,
+              "scale_events": 0,
+              "sla_compliant_goodput": 657806,
+              "sla_safe_goodput_per_infra_dollar": 604601.1029411764,
+              "timeout_pct_mean": 3.3168,
+              "total_cost": 1.088,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 2.38
+        }
+      },
+      "n_requests": 5880,
+      "source": "tests/fixtures/azure_llm_2024_sample.csv"
+    },
+    "burstgpt": {
+      "by_scale": {
+        "1.0": {
+          "n_ticks": 55,
+          "outlen_fitted": false,
+          "outlen_p90_over_mean": 1.0,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 0.0409,
+              "gpu_hours": 0.9167,
+              "latency_p99_ms": 29059.259,
+              "queue_p99_ms": 12.527,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17513,
+              "sla_safe_goodput_per_infra_dollar": 8691.768742116,
+              "timeout_pct_mean": 4.2147,
+              "total_cost": 2.0149,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 0.0409,
+              "gpu_hours": 0.9167,
+              "latency_p99_ms": 29059.259,
+              "queue_p99_ms": 12.527,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17513,
+              "sla_safe_goodput_per_infra_dollar": 8691.768742116,
+              "timeout_pct_mean": 4.2147,
+              "total_cost": 2.0149,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 0.0409,
+              "gpu_hours": 0.9167,
+              "latency_p99_ms": 29059.259,
+              "queue_p99_ms": 12.527,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17513,
+              "sla_safe_goodput_per_infra_dollar": 8691.768742116,
+              "timeout_pct_mean": 4.2147,
+              "total_cost": 2.0149,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 0.0409,
+              "gpu_hours": 0.9167,
+              "latency_p99_ms": 29059.259,
+              "queue_p99_ms": 12.527,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17513,
+              "sla_safe_goodput_per_infra_dollar": 8691.768742116,
+              "timeout_pct_mean": 4.2147,
+              "total_cost": 2.0149,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 0.0409,
+              "gpu_hours": 0.9167,
+              "latency_p99_ms": 29059.259,
+              "queue_p99_ms": 12.527,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17513,
+              "sla_safe_goodput_per_infra_dollar": 8691.768742116,
+              "timeout_pct_mean": 4.2147,
+              "total_cost": 2.0149,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 0.0409,
+              "gpu_hours": 0.9167,
+              "latency_p99_ms": 29126.672,
+              "queue_p99_ms": 12.527,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17508,
+              "sla_safe_goodput_per_infra_dollar": 8689.28722303243,
+              "timeout_pct_mean": 4.2541,
+              "total_cost": 2.0149,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 1.53
+        },
+        "100.0": {
+          "n_ticks": 1,
+          "outlen_fitted": false,
+          "outlen_p90_over_mean": 1.0,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29547.623,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17491,
+              "sla_safe_goodput_per_infra_dollar": 447924.17775546067,
+              "timeout_pct_mean": 4.7687,
+              "total_cost": 0.039,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 0.0
+        },
+        "300.0": {
+          "n_ticks": 1,
+          "outlen_fitted": false,
+          "outlen_p90_over_mean": 1.0,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29547.623,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17491,
+              "sla_safe_goodput_per_infra_dollar": 447924.17775546067,
+              "timeout_pct_mean": 4.7687,
+              "total_cost": 0.039,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 0.0
+        },
+        "600.0": {
+          "n_ticks": 1,
+          "outlen_fitted": false,
+          "outlen_p90_over_mean": 1.0,
+          "rows": {
+            "ca_admission": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_admission"
+            },
+            "ca_all": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_all"
+            },
+            "ca_outlen": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_outlen"
+            },
+            "ca_outlen_p90": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "ca_outlen_p90"
+            },
+            "constraint_aware": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29460.923,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17499,
+              "sla_safe_goodput_per_infra_dollar": 448129.0484559377,
+              "timeout_pct_mean": 4.7254,
+              "total_cost": 0.039,
+              "variant": "constraint_aware"
+            },
+            "sla_aware": {
+              "energy_cost": 0.0008,
+              "gpu_hours": 0.0167,
+              "latency_p99_ms": 29547.623,
+              "queue_p99_ms": 152.189,
+              "scale_events": 0,
+              "sla_compliant_goodput": 17491,
+              "sla_safe_goodput_per_infra_dollar": 447924.17775546067,
+              "timeout_pct_mean": 4.7687,
+              "total_cost": 0.039,
+              "variant": "sla_aware"
+            }
+          },
+          "runtime_s": 0.0
+        }
+      },
+      "n_requests": 51,
+      "source": "tests/fixtures/burstgpt_sample.csv"
+    }
+  },
+  "directional_only_not_production_savings": true,
+  "generated": "2026-06-22",
+  "gpu_placement_routing": {
+    "ok": true,
+    "report": {
+      "baseline_goodput_per_dollar": 0.300667,
+      "baseline_lc_goodput_per_dollar": 0.37187,
+      "baseline_mean_gpu_penalty": 0.4295,
+      "baseline_pct_on_best_gpu": 0.033,
+      "baseline_realized_energy_cost_usd": 14561.38,
+      "best_gpu_region": "us-east",
+      "best_gpu_type": "h100",
+      "goodput_per_dollar_delta": -0.000422,
+      "gpu_routing_goodput_per_dollar": 0.300246,
+      "gpu_routing_lc_goodput_per_dollar": 0.344659,
+      "gpu_routing_mean_gpu_penalty": 0.1505,
+      "gpu_routing_pct_on_best_gpu": 0.58,
+      "gpu_routing_realized_energy_cost_usd": 14672.44,
+      "latency_critical_jobs": 150,
+      "latency_critical_pct": 15.0,
+      "lc_goodput_per_dollar_delta": -0.027211,
+      "penalty_reduction": 0.279,
+      "realized_energy_cost_delta_usd": 111.06,
+      "region_gpu_types": {
+        "us-east": "h100",
+        "us-south": "t4",
+        "us-west": "a100"
+      },
+      "routing_improvement_pp": 54.667,
+      "shadow_tag": "shadow_only_simulator_result_not_production_savings",
+      "total_jobs": 1000
+    }
+  },
+  "kpi_deltas_vs_constraint_aware": {
+    "azure_llm_2024": {
+      "ca_admission": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "10.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "150.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "50.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        }
+      },
+      "ca_all": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "10.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "150.0": {
+          "cost_delta": -0.102,
+          "goodput_per_dollar_delta_pct": 23.411,
+          "gpu_hours_delta": -0.05,
+          "queue_p99_delta": 366.265,
+          "scale_events_delta": 0,
+          "timeout_delta": 1.2132
+        },
+        "50.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        }
+      },
+      "ca_outlen": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "10.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "150.0": {
+          "cost_delta": -0.102,
+          "goodput_per_dollar_delta_pct": 23.411,
+          "gpu_hours_delta": -0.05,
+          "queue_p99_delta": 366.265,
+          "scale_events_delta": 0,
+          "timeout_delta": 1.2132
+        },
+        "50.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        }
+      },
+      "ca_outlen_p90": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "10.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "150.0": {
+          "cost_delta": 0.238,
+          "goodput_per_dollar_delta_pct": -31.302,
+          "gpu_hours_delta": 0.1167,
+          "queue_p99_delta": -146.779,
+          "scale_events_delta": 5,
+          "timeout_delta": -0.7203
+        },
+        "50.0": {
+          "cost_delta": 0.034,
+          "goodput_per_dollar_delta_pct": -2.975,
+          "gpu_hours_delta": 0.0167,
+          "queue_p99_delta": -14.455,
+          "scale_events_delta": 2,
+          "timeout_delta": -0.0538
+        }
+      }
+    },
+    "burstgpt": {
+      "ca_admission": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "100.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "300.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "600.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        }
+      },
+      "ca_all": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "100.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "300.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "600.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        }
+      },
+      "ca_outlen": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "100.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "300.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "600.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        }
+      },
+      "ca_outlen_p90": {
+        "1.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "100.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "300.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        },
+        "600.0": {
+          "cost_delta": 0.0,
+          "goodput_per_dollar_delta_pct": 0.0,
+          "gpu_hours_delta": 0.0,
+          "queue_p99_delta": 0.0,
+          "scale_events_delta": 0,
+          "timeout_delta": 0.0
+        }
+      }
+    }
+  },
+  "notes": {
+    "admission_kv_proxy": "realized serving rho (no measured KV fill in public traces)",
+    "best_effort_share": "BurstGPT 'API log' fraction; Azure documented code/batch fraction",
+    "decision_surface": "Azure/BurstGPT use an aggregate per-tick autoscaling replay; the modules act on the provisioning/admission decision. GPU placement has no per-region GPU-type labels in the public LLM traces, so it is evaluated on the synthetic-job/real-price routing backtest only.",
+    "no_future_leakage": "outlen forecaster fit on warmup prefix; admission uses past ticks only"
+  },
+  "scales": {
+    "azure_llm_2024": [
+      1.0,
+      10.0,
+      50.0,
+      150.0
+    ],
+    "burstgpt": [
+      1.0,
+      100.0,
+      300.0,
+      600.0
+    ]
+  }
+}
