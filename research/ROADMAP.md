@@ -626,6 +626,48 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 7. Experiment History
 
+### Run 2026-06-22-w — PER-CLASS CONFORMAL CALIBRATION (RESEARCH DISCOVERY — WITHIN-CLASS CEILING)
+
+**Goal:** Break the 70% BurstGPT oracle retention ceiling by maintaining per-model_id
+ConformalAlphaCalibrators so that accurate-prediction classes (GPT-4) converge to α≈0
+independently of noisy classes (ChatGPT).
+
+**Bottleneck addressed:** Runs -t/-u/-v confirmed conformal calibrator p90-relative-error
+formula is the binding constraint (not prediction accuracy). Per-class calibration was #1
+ranked opportunity (GAP_ANALYSIS.md). Hypothesis: GPT-4 per-class calibrator gets accurate
+ML-HGB predictions → per-class α → 0 independently of ChatGPT's high-variance errors.
+
+**Implementation:**
+- Added `model_id: str = ""` to `_Request` dataclass (backward-compatible)
+- Added `PerClassConformalCalibrator` class (per-class sliding windows, global fallback)
+- Added `_simulate_decoupled_hybrid_per_class_conformal()` simulator
+- Added `PerClassConformalReport` and `run_burstgpt_per_class_conformal_backtest()`
+- 26 new tests in `tests/test_per_class_conformal_backtest.py` (all pass, 0 regressions)
+- Research basis: RC3P (arXiv:2406.06818), Group-conditional conformal (Melki et al.),
+  TIE scheduling (arXiv:2604.00499), arXiv:2503.07545
+
+**Benchmark (BurstGPT HF, 5,880 requests, ρ=0.85, 4 servers, SLA=30s):**
+
+| Discipline | Goodput/$ | vs FIFO | Oracle retention |
+|---|---:|---:|---:|
+| FIFO | 6,528.76 | baseline | — |
+| Oracle conformal | 48,598.82 | +644.38% | 100% |
+| Global conformal (ML-HGB) | 34,003.60 | +420.83% | 65.31% |
+| **Per-class conformal (ML-HGB)** | **34,100.59** | **+422.31%** | **65.54%** |
+
+Per-class vs global: **+0.29%** — real but marginal. Both classes hit α cap (0.002).
+
+**Critical finding — WITHIN-CLASS VARIANCE CEILING:**
+GPT-4 intra-class token variance (CV ~40-60%) keeps per-class p90 rel_err ≥ 0.40 even
+with accurate ML-HGB predictions. The running-statistics ceiling extends to per-class
+statistics — between-class mixing was NOT the root cause.
+
+**Decision:** Merge as Research Infrastructure. 26 tests. +0.29% sub-frontier.
+**Run category:** RESEARCH DISCOVERY — Negative with Structural Diagnosis.
+Results: `research/results/per_class_conformal_burstgpt_backtest_2026-06-22.md`.
+
+---
+
 ### Run 2026-06-22-u — STRATIFIED FEATURE-AWARE CAUSAL PRIOR (RESEARCH DISCOVERY — NEGATIVE)
 
 **Goal:** Test whether per-(model_id, input_bin) stratified running-median prior improves

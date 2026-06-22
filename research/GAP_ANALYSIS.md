@@ -8,6 +8,139 @@
 
 ---
 
+## Run 2026-06-22-w — Per-Class Conformal Calibration (Within-Class Variance Ceiling)
+
+### Q1. What currently limits Aurelius most?
+
+**The within-class token variance is now the confirmed binding constraint — not between-class
+mixing.** Run -w tests per-class conformal calibration (separate ConformalAlphaCalibrator per
+model_id) with ML-HGB predictions on BurstGPT HF. Results:
+- FIFO: 6,528.76 goodput/$
+- Oracle: 48,598.82 (+644.38%)
+- Global conformal (ML-HGB): 34,003.60 (+420.83%, 65.31% retention)
+- Per-class conformal (ML-HGB): 34,100.59 (+422.31%, 65.54% retention)
+- **Per-class vs global: +0.29%** — real but marginal
+- GPT-4 per-class mean_α = 0.002 (exactly capped, same as global)
+- ChatGPT per-class mean_α = 0.001994 (≈capped)
+
+Root cause: GPT-4 within-class token variance is large (CV ~40-60%). ML-HGB predicts GPT-4
+p50 ≈ 235 tokens, but individual requests span 50-800 tokens. Short GPT-4 (100 tok):
+rel_err=1.35; long GPT-4 (500 tok): rel_err=0.53. Per-class GPT-4 p90 rel_err ≥ 0.40
+→ per-class α remains at cap.
+
+**The running-statistics ceiling extends to per-class statistics.** The conformal calibrator
+p90 relative error formula is binding WITHIN EACH CLASS, not just globally.
+
+### Q2. What theoretically offers the largest gain?
+
+**Changing the calibrator metric to absolute error (not relative error).** Key insight:
+- Relative error penalizes over-predictions of short requests disproportionately
+- GPT-4 absolute error (e.g., p90_abs ≈ 117 tokens for CV=50%) is more stable
+- With absolute error formula: α = alpha_max × min(2.0, p90_abs_err / target_abs_tokens)
+  - target_abs_tokens = 50 (calibrated for typical uncertainty)
+  - GPT-4 p90_abs ≈ 50 tokens → ratio = 1.0 → α = alpha_max (no improvement)
+  - But with good ML-HGB: GPT-4 p90_abs ≈ 10 tokens → ratio = 0.2 → α ≈ 0.0002 (improvement!)
+- Absolute error formula separates scale from calibration sensitivity
+
+### Q3. Which forecasts are weakest?
+
+1. **Conformal calibrator formula** — binding constraint. Both relative-error (current) and
+   any prior (running median, stratified, ML-HGB, per-class) cap at α≈0.002 for BurstGPT.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Calibrator uses p90 relative error** — sensitive to over-predictions of any request.
+   GPT-4's within-class variance alone keeps the per-class p90 rel_err above target.
+2. **Serving queue not wired into runtime** — all gates closed, integration pending.
+
+### Q5. Which workloads benefit least?
+
+**Any trace with high within-class token variance.** Both ChatGPT (bimodal) and GPT-4
+(broad unimodal) have sufficient within-class variance to saturate the conformal calibrator.
+
+### Q6. Which research direction appears strongest?
+
+**Absolute-error conformal calibration.** The per-class experiment definitively closes the
+"calibrator architecture" branch as a solution to the relative-error formula problem. The
+remaining path is changing the formula itself. Absolute error is:
+1. Scale-invariant in the right direction (50-token error is 50-token error for all classes)
+2. More predictable with ML-HGB (absolute error variance ∝ output length, not %)
+3. Less dominated by short-request over-prediction tail
+
+### Q7. What is the shortest path to another +10% gain?
+
+Implement absolute-error conformal calibration formula:
+- Replace `p90_err = p90(|predicted - actual| / actual)` with `p90_err = p90(|predicted - actual|)`
+- Replace `target_p90_error = 0.40` with `target_p90_abs_tokens = 50` (calibrated for
+  ML-HGB GPT-4 absolute error distribution)
+- Test on BurstGPT HF: GPT-4 absolute error with ML-HGB likely p90 ≈ 10-50 tokens
+  → α drops from 0.002 to 0.0004-0.002 → dispatch becomes more SRPT-like for GPT-4
+
+### Q8. What is the shortest path to another +50% gain?
+
+Absolute-error conformal + end-to-end compound backtest (economic × queue scheduling).
+The compound estimate is +876% vs FIFO (independence assumption) but unverified end-to-end.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Same as prior runs. Live prior gives +420.83% vs FIFO on BurstGPT already (+191pp over
++210% SLA-aware baseline). Key remaining gap: oracle (+644%) vs live prior (+421%) = 223pp.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Per-class α convergence only requires per-class errors to drop below target.**
+   This assumes target_p90_error=0.40 is appropriate for both classes. If GPT-4 within-class
+   variance fundamentally cannot produce p90_rel_err < 0.40, the formula needs changing.
+2. **Absolute error formula would help.** GPT-4 absolute error might still be too high.
+   Need to measure: what is GPT-4 p90 absolute error with ML-HGB predictions?
+3. **Phase 1 contamination was a factor.** With larger warmup_n (e.g., 500), Phase 1 GPT-4
+   errors would pollute the per-class window less. Not tested.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Four calibrator variants now exhausted (global median, stratified, ML-HGB, per-class):**
+   All hit the same 65-70% retention ceiling with p90 relative error formula.
+2. **Azure trace lacks model_id.** Cannot test per-class on Azure.
+3. **Compound gain independence assumption.** End-to-end backtest still pending.
+
+### Q12. Which public datasets should be added?
+
+ShareGPT, CARA telemetry. These would provide model_id + session features for absolute-error
+calibration experiments.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Absolute-error conformal calibration formula — directly targets the confirmed binding
+   constraint (relative error formula). Change formula, re-test on BurstGPT HF.
+2. End-to-end compound backtest (economic × queue scheduling).
+
+**Short-term (2–3 runs):**
+3. Wire conformal discipline into serving runtime (all gates closed).
+4. ShareGPT ingestion as third public LLM trace.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -w
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Absolute-error conformal calibration (change formula from relative to absolute) | Very High | High | Root cause confirmed [run -w]: p90 relative error is wrong metric for heavy-tailed outputs |
+| 2 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO; end-to-end unverified |
+| 3 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 4 | Wire conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+| 5 | Admission gate → cluster simulator | Medium | Medium | Implemented (unconnected) |
+
+**Closed/characterized opportunities:**
+- Per-class conformal calibration: **NEGATIVE [run -w]** — +0.29% vs global; within-class variance ceiling
+- ML-HGB prior (HGB quantile p50): **NEGATIVE [run -v]** — −0.12% vs global prior
+- Stratified causal prior: **NEGATIVE [run -u]** — −0.12% goodput/$
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 70.0% BurstGPT
+
+---
+
 ## Run 2026-06-22-v — ML-HGB Prior (Validated Null Result)
 
 ### Q1. What currently limits Aurelius most?
