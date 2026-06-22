@@ -1,13 +1,37 @@
 # Aurelius Optimizer Unification Plan
 
-> **Status:** PLAN ONLY — NOT APPROVED, NOT STARTED, NOTHING MERGED. This is the
-> phased, reversible migration path implied by `CANONICAL_AURELIUS_OPTIMIZER.md`.
-> Each phase is independently shippable behind a flag, is benchmark-gated, and
-> has an explicit rollback. **Hard constraints for every phase:** do not change
-> benchmark definitions, do not change public replay logic, do not change
-> evaluation infrastructure, do not modify the pinned energy core without an
-> explicit justified phase, and do not claim any improvement without the
-> required benchmark evidence below.
+> **Status:** PLAN (mostly). One bootstrap step has been executed — see
+> **Execution Status** below. This is the phased, reversible migration path
+> implied by `CANONICAL_AURELIUS_OPTIMIZER.md`. Each phase is independently
+> shippable behind a flag, is benchmark-gated, and has an explicit rollback.
+> **Hard constraints for every phase:** do not change benchmark definitions, do
+> not change public replay logic, do not change evaluation infrastructure, do
+> not modify the pinned energy core without an explicit justified phase, and do
+> not claim any improvement without the required benchmark evidence below.
+
+---
+
+## Execution Status
+
+| Step | Status | Evidence |
+|---|---|---|
+| **Phase 1a — Canonical interface bootstrap** (stand up `AureliusOptimizer` + decision-layer policy seam; energy policy = thin delegate to `JobScheduler`) | **DONE — behavior-preserving, 0% KPI drift** | `aurelius/optimizer/`, `tests/test_canonical_optimizer_parity.py` (21 pass), `research/results/canonical_optimizer_phase1_parity_2026-06-22.md` |
+| Phase 1b — Unify the 4 replay loops into one engine | Not started | — |
+| Phase 2 — Extract + wire the serving (SRPT+conformal) discipline (shadow) | Not started | — |
+| Phase 3 — Promote frontier BASE/DYNAMIC → constraint; dedup calibrators | Not started | — |
+| Phase 4 — Deprecate dead/duplicate code | Not started | — |
+
+**Phase 1a notes.** The very first safe step is *not* a behavior change — it is
+the permanent top-level seam (`AureliusOptimizer`) through which all future
+gains must flow. It wraps the existing productized energy `JobScheduler` with a
+verbatim delegate (`EnergySchedulingPolicy`) and declares the other decision
+policies (`ServingQueuePolicy`, `ReplicaScalingPolicy`, `PlacementPolicy`,
+`AdmissionPolicy`) as importable stubs that raise `NotImplementedError`. No
+optimizer rewritten, no serving/SRTF touched, no benchmark definition changed,
+no duplicate deleted. Parity vs. the pinned energy core and 0% canonical-benchmark
+KPI drift are proven in the parity report. The replay-engine unification
+(originally labelled "Phase 1" below) is re-tagged **Phase 1b** and remains the
+next, separately-gated step.
 
 ---
 

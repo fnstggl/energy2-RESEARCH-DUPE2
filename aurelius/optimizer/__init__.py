@@ -1,0 +1,34 @@
+"""Canonical Aurelius optimizer package (Phase 1).
+
+Top-level seam for the long-term unified optimizer
+(``research/CANONICAL_AURELIUS_OPTIMIZER.md``). Phase 1 ships only a thin,
+behavior-preserving delegate to the existing energy ``JobScheduler``; see
+``research/OPTIMIZER_UNIFICATION_PLAN.md``.
+
+Note: distinct from ``aurelius.optimization`` (the existing energy solver
+package, unchanged). This package wraps it; it does not replace it.
+"""
+
+from .aurelius_optimizer import AureliusOptimizer
+from .policies import (
+    IMPLEMENTED_POLICIES,
+    POLICY_REGISTRY,
+    AdmissionPolicy,
+    EnergySchedulingPolicy,
+    OptimizationPolicy,
+    PlacementPolicy,
+    ReplicaScalingPolicy,
+    ServingQueuePolicy,
+)
+
+__all__ = [
+    "AureliusOptimizer",
+    "OptimizationPolicy",
+    "EnergySchedulingPolicy",
+    "ServingQueuePolicy",
+    "ReplicaScalingPolicy",
+    "PlacementPolicy",
+    "AdmissionPolicy",
+    "POLICY_REGISTRY",
+    "IMPLEMENTED_POLICIES",
+]
