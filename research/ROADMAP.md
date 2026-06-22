@@ -40,6 +40,19 @@ constraint for BurstGPT — not prediction accuracy. Breaking the 70% retention 
 either per-class calibration or a different error metric (e.g., absolute error, not relative).
 Infrastructure merged. Results: `research/results/ml_hgb_prior_burstgpt_backtest_2026-06-22.md`.**
 
+**Per-Class Conformal Calibration [run 2026-06-22-w]:** NULL RESULT. Split `ConformalAlphaCalibrator`
+per model_id (ChatGPT/GPT-4) on BurstGPT HF (5,880 requests, ρ=0.85, SLA=30s). ChatGPT
+mean_α=0.001994, GPT-4 mean_α=0.001999 — **BOTH classes capped at α≈0.002**. Per-class
+goodput/$=34,100.59 (+422.31% vs FIFO), global=34,003.60 (+420.83%).
+**per_class_vs_global_improvement_pct = +0.29%** (within noise — NOT a frontier improvement).
+Root cause: the global sliding-window prior has high p90 prediction error for BOTH classes.
+GPT-4 median output ≈235 tokens; global prior (dominated by ChatGPT) predicts ~7-18 tokens →
+huge relative error on every GPT-4 request → GPT-4 conformal p90_err ≥ 0.80 → α also capped.
+Per-class CALIBRATION cannot fix poor per-class PREDICTION accuracy. Per-class vs oracle
+retention: 70.17% (global: 69.97%) — essentially unchanged. **Key structural finding: to break
+the 70% retention ceiling, the prediction PRIOR itself must be per-class** (separate sliding-window
+median or ML predictor trained per model_id). 36 new tests all pass. Infrastructure merged.
+
 **Stratified Causal Prior [run 2026-06-22-u]:** RESEARCH DISCOVERY — Negative result with
 informative diagnostics. Per-(model_id, input_bin) stratified running-median prior tested on
 BurstGPT HF (5,880 requests). MAE improvement: −5.7% (166.9→157.3 tokens). Goodput/$:
@@ -597,25 +610,28 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 6. Highest Expected Value Opportunities (Ranked)
 
-> Updated after run 2026-06-22-u. Stratified prior experiment confirmed: running-statistics priors
-> have a structural ceiling at ~70-82% retention on both public LLM traces. Conformal calibrator
-> absorbs any MAE improvement. Trained ML predictor (CARA HGB) is the confirmed required path.
+> Updated after run 2026-06-22-w. Per-class conformal calibration null result confirmed:
+> per-class calibration of a global prior cannot improve over global calibration. The binding
+> constraint is the PRIOR QUALITY per class, not the calibrator. Next: per-class prediction prior
+> (wire stratified predictor from run -u into per-class conformal simulator from run -w).
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | **Wire conformal+decoupled into serving runtime with trained ML prior** | **Very High** (+322% oracle, +244% live-prior on Azure) | **Medium** | **Ceiling confirmed [run -u]**: running-statistics priors top out at 70-82%. CARA HGB required | Integrate `HGBOutputLengthForecaster.p50` as prior in `_run_live_prior_on_trace` |
-| 2 | Compound economic + queue scheduling in canonical backtest | Very High (estimated +876% vs FIFO compound) | High | **Compound table measured [run -t]** — independence-assumption estimate | Wire conformal discipline into trace replay; measure true vs estimated compound |
-| 3 | Prompt-type classifier for BurstGPT surprise-long detection | High (bimodal ChatGPT structure) | Medium | **Gap quantified [run -u]**: ~10% ChatGPT requests are disguised-long | Build binary classifier on input_tokens + arrival context |
-| 4 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
-| 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 8 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 9 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 1 | **Per-class prediction prior + per-class conformal calibration** | **High** (GPT-4 α→0 for 15.8% of requests if per-class prior; est. +5-15%) | **Low-Medium** | **Architecture confirmed [run -w]**: tooling exists; need to wire stratified predictor into per-class conformal simulator | Wire `make_stratified_prior_predictions` as prior in `_simulate_decoupled_hybrid_per_class_conformal` |
+| 2 | **Wire conformal+decoupled into serving runtime with trained ML prior** | **Very High** (+322% oracle, +244% live-prior on Azure) | **Medium** | **Ceiling confirmed [run -u]**: running-statistics priors top out at 70-82%. CARA HGB required | Integrate `HGBOutputLengthForecaster.p50` as prior in `_run_live_prior_on_trace` |
+| 3 | Compound economic + queue scheduling in canonical backtest | Very High (estimated +876% vs FIFO compound) | High | **Compound table measured [run -t]** — independence-assumption estimate | Wire conformal discipline into trace replay; measure true vs estimated compound |
+| 4 | Prompt-type classifier for BurstGPT surprise-long detection | High (bimodal ChatGPT structure) | Medium | **Gap quantified [run -u]**: ~10% ChatGPT requests are disguised-long | Build binary classifier on input_tokens + arrival context |
+| 5 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
+| 6 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 7 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 8 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 9 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
 | 10 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
 **Removed from table (now closed / characterized):**
+- Per-class conformal calibration (global prior) — **NULL [run -w]**: +0.29% vs global; both classes α capped
 - Stratified causal prior — **NEGATIVE [run -u]**: −0.12% goodput/$; structural ceiling confirmed
+- ML-HGB prior — **NULL [run -v]**: −0.12% vs global; conformal calibrator is binding constraint
 - Preemption overhead on BurstGPT — **CLOSED** [run -s]: 95.25% retention at 0.30s
 - BurstGPT noisy prior robustness — **CLOSED** [run -r]: 100.0% retention
 - BurstGPT SLA-aware baseline — **CLOSED** [run -r]: +210.6% vs FIFO
@@ -625,6 +641,99 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-22-w — PER-CLASS CONFORMAL CALIBRATION (NULL RESULT — RESEARCH INFRASTRUCTURE)
+
+**Goal:** Break the 70% oracle retention ceiling on BurstGPT HF by splitting the monolithic
+`ConformalAlphaCalibrator` into per-class calibrators (one per model_id). Hypothesis: GPT-4
+requests have lower residual prediction error than ChatGPT, so per-class calibration should
+yield α→0 for GPT-4 (15.8% of traffic), improving dispatch priority for well-predicted requests
+and boosting goodput/$ by an estimated 5-15%.
+
+**Bottleneck addressed:** Runs -t, -u, -v all confirmed the monolithic calibrator is capped at
+mean_α=0.002 because ChatGPT "surprise-long" requests (~8.4% of ChatGPT traffic, ~7% overall)
+drive the mixed p90 relative error ≥ 0.80. The formula `α = alpha_max × min(2.0, p90_err /
+target_p90_error) = 0.001 × min(2.0, 0.80/0.40) = 0.002` locks α at the max regardless of
+overall predictor quality. Stratified prediction (-u) and ML-HGB prediction (-v) did not escape
+this cap. Per-class calibration was the last remaining "same-predictor, different calibration"
+approach.
+
+**Implementation:**
+- Added `PER_CLASS_CALIB_MIN_SAMPLES = 50` constant.
+- Added `PerClassConformalAlphaCalibrator` class — maintains one `ConformalAlphaCalibrator` per
+  model_id plus a global fallback; uses per-class α only after `min_samples_for_class` completions.
+- Added `_simulate_decoupled_hybrid_per_class_conformal()` — new simulator function that passes
+  per-class α at each dispatch decision (via `model_class_map: dict[int, str]`).
+- Added `PerClassConformalReport` dataclass with full 4-way comparison and per-class α diagnostics.
+- Added `_run_per_class_conformal_on_trace_with_features()` and
+  `run_burstgpt_hf_per_class_conformal_backtest()` public API.
+- Created `tests/test_per_class_conformal_backtest.py` — 36 tests across 7 classes (all passing).
+
+**Benchmark results (public trace: BurstGPT HF, 5,880 requests, ρ=0.85, SLA=30s):**
+
+| Discipline | SLA-safe goodput/$ | vs FIFO | Oracle retention |
+|---|---:|---:|---:|
+| FIFO | 6,528.76 | (baseline) | — |
+| Conformal oracle (upper bound) | 48,598.82 | +644.38% | 100% |
+| **Conformal global prior [run -t]** | **34,003.60** | **+420.83%** | **69.97%** |
+| **Conformal per-class [run -w]** | **34,100.59** | **+422.31%** | **70.17%** |
+
+**Per-class α diagnostics:**
+
+| Class | Mean α | N completions | p90 err profile |
+|---|---:|---:|---|
+| ChatGPT | 0.001994 | 4,137 | ≥0.80 — capped |
+| GPT-4 | 0.001999 | 1,743 | ≥0.80 — capped |
+| Global | 0.001971 | 5,880 | ≥0.80 — capped |
+
+**Key research findings:**
+
+1. **Both classes capped at α≈0.002.** The hypothesis that GPT-4 would have lower per-class
+   prediction error was INCORRECT given the existing global sliding-window prior. The global
+   prior predicts ~7-18 tokens for every request (biased toward ChatGPT majority). For GPT-4
+   requests (true output ≈235 tokens), every prediction is wrong by 10-30× → per-class
+   conformal measures THIS error → p90_err ≥ 0.80 → α capped identically.
+
+2. **+0.29% per_class_vs_global is within simulation noise.** The minimal improvement comes
+   from slight per-class warmup phase differences, not from systematic α reduction for either
+   class. Not a frontier improvement.
+
+3. **The constraint is the prior, not the calibration.** Per-class calibration of a global
+   predictor cannot improve over global calibration of a global predictor because the error
+   signal is the same. The calibrator can only adapt to the prediction quality it sees.
+
+4. **Confirmed path forward:** Use a PER-CLASS PRIOR (separate sliding-window median or ML model
+   per model_id). Then calibrate each class's error separately. Expected: GPT-4-specific
+   median (≈235 tokens) would have much lower relative error for GPT-4 requests → α→0 for
+   GPT-4. ChatGPT would remain capped. This requires integration of `make_stratified_prior_predictions`
+   (built in run -u) into the conformal calibration loop.
+
+**Research papers reviewed:**
+1. Mondrian Conformal Prediction (Venn Predictors, Vovk 2003) — formal foundation for per-group
+   conditional coverage; per-class conformal is a special case of Mondrian taxonomy.
+2. Online Conformal Prediction (Gibbs & Candès, ICML 2021) — adaptive conformal intervals are
+   valid marginally but NOT conditionally; per-class calibration improves conditional validity.
+3. Group-conditional Conformal Prediction (Romano et al., NeurIPS 2019) — CQR with per-group
+   calibration; applies directly to per-model_id α selection.
+
+**Decision:** Do not merge as frontier improvement (+0.29%). Merge as Research Infrastructure:
+provides `PerClassConformalAlphaCalibrator`, `_simulate_decoupled_hybrid_per_class_conformal`,
+`PerClassConformalReport` infrastructure for the correct next step (per-class prior + per-class
+calibration). 36 new tests passing; 0 regressions.
+
+**Run category:** NULL RESULT — Research Infrastructure (per-class conformal tooling).
+
+**Next recommended direction:**
+1. **Per-class prediction prior (Rank 1):** Wire `make_stratified_prior_predictions` (run -u) as
+   the prior inside `_simulate_decoupled_hybrid_per_class_conformal`. Measure GPT-4 class-specific
+   p90 error when predictions use the GPT-4-specific running median (≈235 tokens) instead of global.
+   Hypothesis: GPT-4 per-class prior → p90_err ≈ 0.20 → α≈0 for 15.8% of requests → +5-15%.
+2. **Calibrator metric change:** Try absolute-error conformal instead of relative-error.
+   `abs_err / median_output` would be less sensitive to bimodal tails.
+3. **Compound backtest:** Wire conformal+decoupled+per-class-prior into economic backtest for true
+   compound gain measurement.
+
+---
 
 ### Run 2026-06-22-u — STRATIFIED FEATURE-AWARE CAUSAL PRIOR (RESEARCH DISCOVERY — NEGATIVE)
 
