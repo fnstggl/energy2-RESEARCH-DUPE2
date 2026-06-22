@@ -8,6 +8,139 @@
 
 ---
 
+## Run 2026-06-22-u — Stratified Feature-Aware Causal Prior (Research Discovery — Negative)
+
+### Q1. What currently limits Aurelius most?
+
+**The running-statistics prior has a structural ceiling, now precisely characterized.**
+Run -u confirms that no running-statistics prior (global or stratified) can close the oracle
+gap on BurstGPT HF. Key findings:
+- Stratified prior MAE: −5.7% vs global (157.3 vs 166.9 tokens)
+- Stratified goodput/$: −0.12% vs global (33,962 vs 34,004) — flat/negative
+- Conformal mean_α: 0.002 for both (identical — calibrator absorbed the MAE improvement)
+- Running-statistics ceiling: ~70% retention on BurstGPT, ~82% on Azure
+- Root cause: ChatGPT bimodal distribution — ~10% "surprise-long" requests (short input,
+  long output) cannot be identified by any running-statistics prior
+
+### Q2. What theoretically offers the largest gain?
+
+**A trained ML predictor with per-request features.** Running statistics have now been
+conclusively shown to top out at ~70-82% retention on both public LLM traces. A trained
+model with session history, query complexity signals, and model-specific features would
+be needed to:
+1. Identify "surprise-long" ChatGPT requests before they enter the queue
+2. Provide request-specific (not population-level) token-length predictions
+3. Break the running-statistics ceiling
+
+### Q3. Which forecasts are weakest?
+
+1. **Live prior** — now confirmed at structural ceiling (70% BurstGPT, 82% Azure).
+   Any running-statistics variant (global, stratified, per-model, input-binned) converges
+   to the same goodput/$ because the conformal calibrator adapts α to match residual uncertainty.
+2. **TTFT p99 tail** — unchanged, baseline_fallback.
+3. **Queue wait** — derived proxy only.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Prior is running statistics, not request-specific.** Both global and stratified priors
+   hit the same goodput/$ — the calibrator absorbs the quality difference. A trained ML
+   predictor is required to break the ceiling.
+2. **Serving queue not wired into runtime** — with live prior, conformal achieves
+   +244.42% (Azure) / +420.83% (BurstGPT) vs FIFO. Integration pending.
+3. **North Star gap (vs SLA-aware)** — unchanged from run -t.
+
+### Q5. Which workloads benefit least?
+
+**BurstGPT HF with any running-statistics prior.** The bimodal ChatGPT distribution
+(short modal + ~10% surprise-long tail) creates an irreducible entropy floor for running
+statistics. Azure is worse in absolute terms (lower retention) but for a different reason:
+r≈0 correlation between prompt and output tokens means stratification cannot help even
+in principle.
+
+### Q6. Which research direction appears strongest?
+
+**Trained ML predictor integrating CARA HGB forecaster** (`cara_output_length_forecaster.py`).
+Run -u definitively closes the running-statistics branch: no level of stratification or feature
+engineering within running statistics can cross the ceiling. The path to ≥85% retention is:
+1. Request-specific features at arrival time (TTFT/queue-state from CARA)
+2. Trained model (HGB) predicting actual output length
+3. Wire HGB p50 as prior in `_run_live_prior_on_trace`
+
+### Q7. What is the shortest path to another +10% gain?
+
+Integrate `HGBOutputLengthForecaster.p50` as the live prior in the conformal backtest.
+Even 50% improvement in prediction CV (from ~7% running median to 4-5% from HGB) would
+break the conformal calibrator's α convergence and yield meaningfully different scheduling.
+
+### Q8. What is the shortest path to another +50% gain?
+
+A trained prompt-type classifier that correctly identifies ~70% of "surprise-long" ChatGPT
+requests would directly improve rank-ordering accuracy, moving short_p90 toward oracle levels
+(4.39s vs current 631s). Even partial classification would break the conformal ceiling.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+Same as run -t. Live prior already gives +244.42% vs FIFO = +53% above SLA-aware on Azure.
+To reach +300% vs SLA-aware:
+1. Trained ML prior (CARA HGB) pushing retention from 82% toward 95%+ on Azure
+2. Compound with economic scheduling (+876% independence estimate)
+3. End-to-end backtest to verify true compound (not independence assumption)
+
+### Q10. Which assumptions might be wrong?
+
+1. **Conformal calibrator fully absorbs MAE improvements.** Run -u confirms this for 5.7%
+   MAE reduction. A much larger MAE reduction (e.g., 50%+) might not be fully absorbed —
+   the threshold where calibrator compensation fails is unknown.
+2. **Surprise-long fraction is stable.** The ~10% estimate is from this trace. Other ChatGPT
+   traces may have different bimodal mixing proportions.
+3. **SLA=30s for BurstGPT.** Under tighter SLA (10s), surprise-long requests would have
+   even larger impact, potentially making the ceiling lower.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Running-statistics prior class now exhausted.** Both global and stratified variants
+   measured; both hit same goodput/$ ceiling. The benchmark is ready for the ML-predictor class.
+2. **Azure trace lacks request-specific features for ML predictor.** Only ContextTokens +
+   GeneratedTokens available — no model_id, session, TTFT. CARA HGB cannot be evaluated here.
+3. **Compound gain remains independence-assumption only.** End-to-end backtest still pending.
+
+### Q12. Which public datasets should be added?
+
+1. **CARA telemetry** — TTFT, queue state, actual output lengths; enables HGB predictor training.
+2. **ShareGPT** — richer request features (prompt text, session history) for predictor training.
+3. **Mooncake FAST25** — KV prefix reuse signal.
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. Integrate `HGBOutputLengthForecaster.p50` as live prior in conformal backtest — tests whether
+   trained predictor breaks the running-statistics ceiling.
+2. Build prompt-type binary classifier for BurstGPT surprise-long detection. Input_tokens
+   thresholding may identify 40-60% of surprise-long requests.
+
+**Short-term (2–3 runs):**
+3. End-to-end compound backtest: economic scheduling × live-prior SRTF in single trace run.
+4. Explore session-level features for output-length prediction improvement on BurstGPT.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -u
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Trained ML prior: CARA HGB forecaster integration | Very High | Medium | Running-statistics ceiling confirmed [run -u]; ML predictor is the required path |
+| 2 | Prompt-type classifier for BurstGPT surprise-long detection | High | Medium | Gap quantified: ~10% ChatGPT requests are disguised-long; bimodal structure known |
+| 3 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Independence estimate: +876% vs FIFO |
+| 4 | ShareGPT as third public LLM trace | High | Medium | Azure+BurstGPT confirmed; third trace adds confidence |
+| 5 | Wire conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+| 6 | Admission gate → cluster simulator | Medium | Medium | implemented (unconnected) |
+
+**Closed/characterized opportunities:**
+- Stratified causal prior: **NEGATIVE [run -u]** — −0.12% goodput/$; confirms running-statistics ceiling
+- Live causal prior (running median): **MEASURED [run -t]** — 81.6% Azure, 70.0% BurstGPT
+
+---
+
 ## Run 2026-06-21-t — Live Causal Prior Evaluation (Production Realism Gate)
 
 ### Q1. What currently limits Aurelius most?

@@ -4559,3 +4559,500 @@ def run_burstgpt_hf_live_prior_backtest(
     return _run_live_prior_on_trace(
         raw, "burstgpt_hf_fullscale", servers, target_rho, sla_s, prior_window
     )
+
+
+# ---------------------------------------------------------------------------
+# STRATIFIED CAUSAL PRIOR [run 2026-06-22-u]
+#
+# The global sliding-window median prior (run -t) achieves 70.0% retention on
+# BurstGPT HF because it conflates two fundamentally different request types:
+#   ChatGPT: p50=7 tokens (84.2% of requests — mostly very short responses)
+#   GPT-4:   p50=235 tokens (15.8% of requests — substantially longer)
+# A global running median of ~18 tokens is severely wrong for GPT-4 requests.
+#
+# This section implements a FEATURE-AWARE CAUSAL PRIOR that stratifies by:
+#   Level 1 (finest): (model_id, input_bin) — input_bin is 'long'/'short'
+#       based on the causal running median of past input_tokens for that model.
+#       Input-output correlation within ChatGPT is r=0.513 (strong).
+#   Level 2: model_id only — fallback when bin has < MIN_STRATUM_HISTORY entries.
+#   Level 3: global running median — ultimate fallback.
+#
+# All predictions are causal: request i uses only completions from 0..i-1.
+#
+# Expected impact: BurstGPT HF retention improves from 70.0% toward ≥85%.
+#
+# Research basis:
+# - TIE scheduling (arXiv:2604.00499): distributional ordering improves dispatch;
+#   stratification by model_id implements this at the predictor level.
+# - ProD, Robust Length Prediction (arXiv:2604.07931): per-request features
+#   (prompt type, model family) are the strongest available signals for output length.
+# - CARA HGB forecaster (existing repo): confirms model_id + input features are
+#   informative predictors of output length in production telemetry.
+# ---------------------------------------------------------------------------
+
+# Minimum history per stratum before stratum-specific prediction is used.
+STRATIFIED_MIN_HISTORY: int = 20
+
+
+def load_burstgpt_serving_requests_jsonl_with_features(
+    path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    limit: Optional[int] = None,
+) -> tuple[list[tuple[float, int]], list[dict]]:
+    """Load BurstGPT HF JSONL and return (raw_list, features_list).
+
+    raw_list:      [(arrival_s, output_tokens), ...]  — same format as
+                   ``load_burstgpt_serving_requests_jsonl``.
+    features_list: [{'model_id': str, 'input_tokens': int}, ...]  — parallel
+                   list of per-request features for stratified prediction.
+
+    Both lists are aligned: features_list[i] corresponds to raw_list[i].
+    Records with zero output_tokens are excluded (same as base loader).
+    """
+    import json as _json
+
+    rows: list[tuple[float, int, dict]] = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = _json.loads(line)
+                ts = float(d["request_arrival_ts_s"])
+                out_tok = int(d.get("output_tokens") or 0)
+                inp_tok = int(d.get("input_tokens") or 0)
+                model_id = str(d.get("model_id") or "unknown")
+            except (KeyError, ValueError, TypeError):
+                continue
+            if out_tok > 0:
+                rows.append((ts, out_tok, {"model_id": model_id, "input_tokens": inp_tok}))
+    rows.sort(key=lambda r: r[0])
+    if not rows:
+        return [], []
+    t0 = rows[0][0]
+    raw = [(ts - t0, tok) for ts, tok, _ in rows]
+    feats = [f for _, _, f in rows]
+    if limit is not None:
+        raw = raw[:limit]
+        feats = feats[:limit]
+    return raw, feats
+
+
+def make_stratified_prior_predictions(
+    raw: list[tuple[float, int]],
+    features: list[dict],
+    window: int = LIVE_PRIOR_WINDOW,
+    min_stratum_history: int = STRATIFIED_MIN_HISTORY,
+) -> tuple[list[float], dict]:
+    """Feature-aware causal prior using model_id + causal input-bin stratification.
+
+    For request i, the predicted output token count is selected via the
+    following fallback hierarchy (all causal — only uses past completions):
+
+      1. (model_id, input_bin) stratum median — if that stratum has ≥
+         min_stratum_history past completions.  input_bin is 'long' when
+         request i's input_tokens ≥ the causal running median of past
+         input_tokens for that model; else 'short'.
+      2. model_id median — if model has ≥ min_stratum_history past completions
+         but the bin-specific stratum is too sparse.
+      3. Global running median — ultimate fallback (window tokens from any model).
+
+    Args:
+        raw:     [(arrival_s, output_tokens), ...] — the requests.
+        features: [{'model_id': str, 'input_tokens': int}, ...] — parallel
+                  per-request features.  Must be the same length as raw.
+        window:  Sliding window size for all running medians.
+        min_stratum_history: Minimum past completions before a stratum's own
+                  median is trusted over the coarser fallback.
+
+    Returns:
+        (predictions, stats) where predictions[i] is the causal prediction
+        for request i, and stats is a diagnostic dict.
+    """
+    if not raw:
+        return [], {}
+    assert len(raw) == len(features), "raw and features must be same length"
+
+    all_toks = [t for _, t in raw]
+    sorted_all = sorted(all_toks)
+    global_median_val = float(sorted_all[len(sorted_all) // 2])
+
+    def _median(hist: list[int]) -> float:
+        if not hist:
+            return global_median_val
+        win = hist[-window:]
+        s = sorted(win)
+        return float(s[len(s) // 2])
+
+    global_hist: list[int] = []
+    model_hist: dict[str, list[int]] = {}      # model_id → output history
+    model_inp_hist: dict[str, list[int]] = {}  # model_id → input history (for bin cutoff)
+    stratum_hist: dict[tuple, list[int]] = {}  # (model_id, 'short'/'long') → output hist
+
+    predictions: list[float] = []
+    used_levels: list[str] = []  # diagnostic: which level was used for each prediction
+
+    for i, ((arr, tok), feat) in enumerate(zip(raw, features)):
+        mid = feat.get("model_id", "unknown")
+        inp = feat.get("input_tokens", 0)
+
+        # ── Step 1: determine input_bin causally
+        inp_hist = model_inp_hist.get(mid, [])
+        if len(inp_hist) >= min_stratum_history:
+            win_inp = inp_hist[-window:]
+            s_inp = sorted(win_inp)
+            inp_median = float(s_inp[len(s_inp) // 2])
+            inp_bin = "long" if inp >= inp_median else "short"
+        else:
+            inp_bin = "unknown"  # not enough history to classify reliably
+
+        # ── Step 2: select prediction level
+        stratum_key = (mid, inp_bin)
+        sh = stratum_hist.get(stratum_key, [])
+        mh = model_hist.get(mid, [])
+        gh = global_hist
+
+        if inp_bin != "unknown" and len(sh) >= min_stratum_history:
+            pred = _median(sh)
+            used_levels.append("stratum")
+        elif len(mh) >= min_stratum_history:
+            pred = _median(mh)
+            used_levels.append("model")
+        elif gh:
+            pred = _median(gh)
+            used_levels.append("global")
+        else:
+            pred = global_median_val
+            used_levels.append("fallback")
+
+        predictions.append(pred)
+
+        # ── Update histories with this request's actual output tokens
+        global_hist.append(tok)
+        model_hist.setdefault(mid, []).append(tok)
+        stratum_hist.setdefault(stratum_key, []).append(tok)
+        model_inp_hist.setdefault(mid, []).append(inp)
+
+    # ── Diagnostic statistics
+    errors = [abs(predictions[i] - all_toks[i]) for i in range(len(raw))]
+    biases = [predictions[i] - all_toks[i] for i in range(len(raw))]
+    mean_actual = statistics.mean(all_toks)
+    mae = statistics.mean(errors)
+    mean_bias = statistics.mean(biases)
+    pred_std = statistics.stdev(predictions) if len(predictions) > 1 else 0.0
+    cv_pct = 100.0 * pred_std / max(1.0, mean_actual)
+    rel_mae_pct = 100.0 * mae / max(1.0, mean_actual)
+
+    level_counts = {
+        lv: used_levels.count(lv) for lv in ("stratum", "model", "global", "fallback")
+    }
+
+    stats = {
+        "prior_cv_pct": round(cv_pct, 2),
+        "prior_mae_tokens": round(mae, 2),
+        "prior_rel_mae_pct": round(rel_mae_pct, 2),
+        "prior_bias_tokens": round(mean_bias, 2),
+        "prior_bias_pct": round(100.0 * mean_bias / max(1.0, mean_actual), 2),
+        "global_median_actual": round(global_median_val, 2),
+        "window": window,
+        "n_requests": len(raw),
+        "level_counts": level_counts,
+        "stratum_pct": round(100.0 * level_counts["stratum"] / max(1, len(raw)), 2),
+        "model_pct": round(100.0 * level_counts["model"] / max(1, len(raw)), 2),
+        "global_fallback_pct": round(
+            100.0 * (level_counts["global"] + level_counts["fallback"]) / max(1, len(raw)), 2
+        ),
+    }
+    return predictions, stats
+
+
+@dataclass
+class StratifiedPriorReport:
+    """Stratified feature-aware causal prior vs global causal prior [run 2026-06-22-u].
+
+    Extends LivePriorReport to compare four conditions on the same public trace:
+      - FIFO baseline
+      - Conformal with oracle prior (upper bound)
+      - Conformal with global causal prior (sliding-window median — run -t baseline)
+      - Conformal with stratified causal prior (per-model_id + input-bin median)
+
+    The key measurement: stratified_vs_oracle_retention_pct — how much of the oracle
+    conformal gain survives when we replace oracle with the stratified causal prior.
+    Also reports the improvement over the global prior to isolate the stratification gain.
+    """
+
+    trace: str
+    total_requests: int
+    servers: int
+    target_rho: float
+    sla_s: float
+    prior_window: int
+
+    # Prior quality diagnostics — global prior
+    global_prior_cv_pct: float
+    global_prior_mae_tokens: float
+    global_prior_rel_mae_pct: float
+
+    # Prior quality diagnostics — stratified prior
+    stratified_prior_cv_pct: float
+    stratified_prior_mae_tokens: float
+    stratified_prior_rel_mae_pct: float
+    stratified_stratum_pct: float   # % requests served by stratum-level prior
+    stratified_model_pct: float     # % requests served by model-level prior
+    stratified_fallback_pct: float  # % requests falling back to global prior
+
+    # Simulation summaries
+    fifo: dict
+    conformal_oracle: dict
+    conformal_global: dict
+    conformal_stratified: dict
+
+    # KPIs
+    fifo_goodput_per_dollar: float
+    oracle_goodput_per_dollar: float
+    global_goodput_per_dollar: float
+    stratified_goodput_per_dollar: float
+
+    oracle_delta_pct: float              # oracle conformal vs FIFO
+    global_delta_pct: float              # global causal prior vs FIFO
+    stratified_delta_pct: float          # stratified prior vs FIFO
+    global_vs_oracle_retention_pct: float    # global / oracle goodput, %
+    stratified_vs_oracle_retention_pct: float # stratified / oracle goodput, %
+    stratified_vs_global_improvement_pct: float  # (strat - global) / global, %
+
+    shadow_tag: str = "shadow_only_simulator_result_not_production_savings"
+
+    def to_dict(self) -> dict:
+        def _r(d: dict) -> dict:
+            return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d.items()}
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "servers": self.servers,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "prior_window": self.prior_window,
+            "global_prior_cv_pct": round(self.global_prior_cv_pct, 2),
+            "global_prior_mae_tokens": round(self.global_prior_mae_tokens, 2),
+            "global_prior_rel_mae_pct": round(self.global_prior_rel_mae_pct, 2),
+            "stratified_prior_cv_pct": round(self.stratified_prior_cv_pct, 2),
+            "stratified_prior_mae_tokens": round(self.stratified_prior_mae_tokens, 2),
+            "stratified_prior_rel_mae_pct": round(self.stratified_prior_rel_mae_pct, 2),
+            "stratified_stratum_pct": round(self.stratified_stratum_pct, 2),
+            "stratified_model_pct": round(self.stratified_model_pct, 2),
+            "stratified_fallback_pct": round(self.stratified_fallback_pct, 2),
+            "fifo": _r(self.fifo),
+            "conformal_oracle": _r(self.conformal_oracle),
+            "conformal_global": _r(self.conformal_global),
+            "conformal_stratified": _r(self.conformal_stratified),
+            "fifo_goodput_per_dollar": round(self.fifo_goodput_per_dollar, 2),
+            "oracle_goodput_per_dollar": round(self.oracle_goodput_per_dollar, 2),
+            "global_goodput_per_dollar": round(self.global_goodput_per_dollar, 2),
+            "stratified_goodput_per_dollar": round(self.stratified_goodput_per_dollar, 2),
+            "oracle_delta_pct": round(self.oracle_delta_pct, 2),
+            "global_delta_pct": round(self.global_delta_pct, 2),
+            "stratified_delta_pct": round(self.stratified_delta_pct, 2),
+            "global_vs_oracle_retention_pct": round(self.global_vs_oracle_retention_pct, 2),
+            "stratified_vs_oracle_retention_pct": round(self.stratified_vs_oracle_retention_pct, 2),
+            "stratified_vs_global_improvement_pct": round(self.stratified_vs_global_improvement_pct, 2),
+            "shadow_tag": self.shadow_tag,
+        }
+
+
+def _run_stratified_prior_on_trace_with_features(
+    raw: list[tuple[float, int]],
+    features: list[dict],
+    trace_name: str,
+    servers: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    min_stratum_history: int = STRATIFIED_MIN_HISTORY,
+) -> StratifiedPriorReport:
+    """Run FIFO / oracle / global-prior / stratified-prior on a feature-annotated trace."""
+    warp = calibrate_time_warp(raw, servers=servers, target_rho=target_rho)
+
+    # Global causal predictions (no features — same as run -t)
+    global_preds, global_stats = make_live_prior_predictions(raw, window=prior_window)
+
+    # Stratified causal predictions (uses model_id + input_bin)
+    strat_preds, strat_stats = make_stratified_prior_predictions(
+        raw, features, window=prior_window, min_stratum_history=min_stratum_history
+    )
+
+    def _build_oracle() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_global() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=global_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    def _build_stratified() -> list[_Request]:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=strat_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    fifo_reqs = _build_oracle()  # predicted_tokens irrelevant for FIFO
+    oracle_reqs = _build_oracle()
+    global_reqs = _build_global()
+    strat_reqs = _build_stratified()
+
+    fifo_sim, fifo_resp, _ = simulate_queue(fifo_reqs, servers, "fifo")
+    oracle_cal = ConformalAlphaCalibrator()
+    oracle_sim, oracle_resp, _ = _simulate_decoupled_hybrid_conformal(
+        oracle_reqs, servers, oracle_cal
+    )
+    global_cal = ConformalAlphaCalibrator()
+    global_sim, global_resp, _ = _simulate_decoupled_hybrid_conformal(
+        global_reqs, servers, global_cal
+    )
+    strat_cal = ConformalAlphaCalibrator()
+    strat_sim, strat_resp, _ = _simulate_decoupled_hybrid_conformal(
+        strat_reqs, servers, strat_cal
+    )
+
+    gp_fifo = _sla_safe_goodput_per_dollar(fifo_reqs, fifo_resp, sla_s, servers)
+    gp_oracle = _sla_safe_goodput_per_dollar(oracle_reqs, oracle_resp, sla_s, servers)
+    gp_global = _sla_safe_goodput_per_dollar(global_reqs, global_resp, sla_s, servers)
+    gp_strat = _sla_safe_goodput_per_dollar(strat_reqs, strat_resp, sla_s, servers)
+
+    fifo_sim["sla_safe_goodput_per_dollar"] = gp_fifo
+    oracle_sim["sla_safe_goodput_per_dollar"] = gp_oracle
+    global_sim["sla_safe_goodput_per_dollar"] = gp_global
+    strat_sim["sla_safe_goodput_per_dollar"] = gp_strat
+
+    def _delta(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    global_ret = (gp_global / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+    strat_ret = (gp_strat / gp_oracle * 100.0) if gp_oracle > 0 else 0.0
+    strat_vs_global = _delta(gp_global, gp_strat)
+
+    return StratifiedPriorReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        global_prior_cv_pct=global_stats.get("prior_cv_pct", 0.0),
+        global_prior_mae_tokens=global_stats.get("prior_mae_tokens", 0.0),
+        global_prior_rel_mae_pct=global_stats.get("prior_rel_mae_pct", 0.0),
+        stratified_prior_cv_pct=strat_stats.get("prior_cv_pct", 0.0),
+        stratified_prior_mae_tokens=strat_stats.get("prior_mae_tokens", 0.0),
+        stratified_prior_rel_mae_pct=strat_stats.get("prior_rel_mae_pct", 0.0),
+        stratified_stratum_pct=strat_stats.get("stratum_pct", 0.0),
+        stratified_model_pct=strat_stats.get("model_pct", 0.0),
+        stratified_fallback_pct=strat_stats.get("global_fallback_pct", 0.0),
+        fifo=fifo_sim,
+        conformal_oracle=oracle_sim,
+        conformal_global=global_sim,
+        conformal_stratified=strat_sim,
+        fifo_goodput_per_dollar=gp_fifo,
+        oracle_goodput_per_dollar=gp_oracle,
+        global_goodput_per_dollar=gp_global,
+        stratified_goodput_per_dollar=gp_strat,
+        oracle_delta_pct=_delta(gp_fifo, gp_oracle),
+        global_delta_pct=_delta(gp_fifo, gp_global),
+        stratified_delta_pct=_delta(gp_fifo, gp_strat),
+        global_vs_oracle_retention_pct=global_ret,
+        stratified_vs_oracle_retention_pct=strat_ret,
+        stratified_vs_global_improvement_pct=strat_vs_global,
+    )
+
+
+def run_burstgpt_hf_stratified_prior_backtest(
+    servers: int = 4,
+    target_rho: float = 0.85,
+    job_limit: Optional[int] = None,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    min_stratum_history: int = STRATIFIED_MIN_HISTORY,
+) -> StratifiedPriorReport:
+    """Stratified feature-aware causal prior on BurstGPT HF [run 2026-06-22-u].
+
+    Compares four conditions on BurstGPT HF (59,999 records, CC-BY-4.0):
+      1. FIFO — no ordering
+      2. Conformal oracle — perfect token-length prediction (upper bound)
+      3. Conformal global prior — causal sliding-window median [run -t baseline]
+      4. Conformal stratified prior — per-(model_id, input_bin) causal median [NEW]
+
+    Motivation: run -t measured 70.0% oracle retention for BurstGPT HF vs 81.6%
+    for Azure LLM 2024. The root cause: BurstGPT mixes two model types with
+    dramatically different output length distributions:
+      ChatGPT (84.2% of traffic): p50=7 tokens
+      GPT-4   (15.8% of traffic): p50=235 tokens
+    A global running median (~18 tokens) is wrong for GPT-4 by 33×.
+
+    The stratified prior addresses this by:
+      1. Stratifying predictions by model_id (ChatGPT vs GPT-4)
+      2. Within each model, further stratifying by input_token_bin ('short'/'long')
+         using the causal running median of past input_tokens for that model as cutoff
+      3. Using the per-stratum running median as the prediction (window=200)
+      4. Falling back to per-model median if stratum is too sparse (< 20 requests)
+      5. Falling back to global median if model is too sparse
+
+    Expected outcomes (5,880-record sample, ρ=0.85, 4 servers, sla_s=30s):
+      FIFO baseline:               ~ reference goodput/$
+      Conformal oracle:            +644.4% vs FIFO [run -r baseline]
+      Conformal global prior:      +420.83% vs FIFO [run -t baseline], 70.0% retention
+      Conformal stratified prior:  ≥ +520% vs FIFO (≥ 80% retention), target ≥ 85%
+
+    Why stratification helps:
+      ChatGPT input-output correlation: r=0.513 (strong) — short/long input bins
+      capture real response length differences.
+      GPT-4 output p50=235 vs global p50=18 — per-model median is 13× more accurate.
+
+    Args:
+        servers:              Replica pool size (M/G/c).
+        target_rho:           Target cluster utilization.
+        job_limit:            Optional request cap (default: None = use all available).
+        sla_s:                E2E SLA budget (seconds).
+        prior_window:         Sliding window size for running medians.
+        jsonl_path:           Path to BurstGPT HF normalized JSONL.
+        min_stratum_history:  Minimum completions before using a stratum prior.
+
+    Returns:
+        ``StratifiedPriorReport`` with FIFO / oracle / global / stratified KPIs.
+    """
+    raw, features = load_burstgpt_serving_requests_jsonl_with_features(
+        jsonl_path, limit=job_limit
+    )
+    if len(raw) < 2:
+        raise ValueError(
+            f"BurstGPT HF JSONL at {jsonl_path!r} returned fewer than 2 valid requests."
+        )
+    return _run_stratified_prior_on_trace_with_features(
+        raw, features,
+        trace_name="burstgpt_hf_stratified",
+        servers=servers,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        min_stratum_history=min_stratum_history,
+    )

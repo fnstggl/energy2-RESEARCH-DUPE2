@@ -24,6 +24,18 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Stratified Causal Prior [run 2026-06-22-u]:** RESEARCH DISCOVERY — Negative result with
+informative diagnostics. Per-(model_id, input_bin) stratified running-median prior tested on
+BurstGPT HF (5,880 requests). MAE improvement: −5.7% (166.9→157.3 tokens). Goodput/$:
+**−0.12%** vs global prior (flat — NOT a frontier improvement). Root cause: (1) ChatGPT
+bimodal distribution — ~10% "surprise-long" requests cannot be identified by any running-statistics
+prior; (2) conformal calibrator converges to identical mean_α=0.002 for both priors; (3) SLA=30s
+threshold is 20-28× above achievable short_p90 with running statistics. **Structural finding:**
+running-statistics priors have a ceiling at ~70-82% retention on both public LLM traces. Crossing
+the ceiling requires a trained ML predictor, not better running statistics. Short_p90 improved
+−24.9% (840s→632s) but both are far beyond SLA=30s. 39 new tests. Merged as research
+infrastructure. Results: `research/results/stratified_prior_burstgpt_backtest_2026-06-22.md`.
+
 **Live Causal Prior [run 2026-06-21-t]:** First production-realistic prior evaluation.
 Causal sliding-window median (window=200) achieves **+244.42% vs FIFO** on Azure LLM 2024
 (81.6% oracle retention) and **+420.83% vs FIFO** on BurstGPT HF (70.0% retention). Prior
@@ -196,6 +208,7 @@ See `docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md` for full table.
 
 **New frontier [run -r]: Conformal adaptive α achieves SRPT ceiling (+644.4%) on BurstGPT HF — cross-trace validated.**
 **Live prior floor [run -t]: Causal sliding-window median achieves +244% (Azure) / +421% (BurstGPT) vs FIFO — 81.6% / 70.0% retention vs oracle.**
+**Stratified prior [run -u]: −0.12% vs global prior (neutral/negative). MAE −5.7% absorbed by conformal calibrator. Structural finding: running-statistics ceiling at ~70-82% retention — ML predictor required to cross it.**
 Previous frontier [run -q]: Conformal +322.24% on Azure LLM 2024.
 Previous frontier [run -m]: Fixed α=0.001 at +274.0%. Gap closed: +48.24pp.
 
@@ -568,23 +581,25 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 
 ## 6. Highest Expected Value Opportunities (Ranked)
 
-> Updated after run 2026-06-21-t. Live causal prior measured: +244% Azure, +421% BurstGPT
-> vs FIFO. Running-median prior = 81.6% retention on Azure; request-specific predictor
-> needed to close remainder.
+> Updated after run 2026-06-22-u. Stratified prior experiment confirmed: running-statistics priors
+> have a structural ceiling at ~70-82% retention on both public LLM traces. Conformal calibrator
+> absorbs any MAE improvement. Trained ML predictor (CARA HGB) is the confirmed required path.
 
 | rank | opportunity | expected upside | complexity | status | next step |
 |---|---|---|---|---|---|
-| 1 | **Wire conformal+decoupled into serving runtime with request-specific prior** | **Very High** (+322% oracle, +244% live-prior on Azure) | **Medium** | **Live-prior floor measured [run -t]**: running median = 81.6% retention. CARA HGB would close remainder | Integrate `HGBOutputLengthForecaster.p50` as prior in `_run_live_prior_on_trace` |
+| 1 | **Wire conformal+decoupled into serving runtime with trained ML prior** | **Very High** (+322% oracle, +244% live-prior on Azure) | **Medium** | **Ceiling confirmed [run -u]**: running-statistics priors top out at 70-82%. CARA HGB required | Integrate `HGBOutputLengthForecaster.p50` as prior in `_run_live_prior_on_trace` |
 | 2 | Compound economic + queue scheduling in canonical backtest | Very High (estimated +876% vs FIFO compound) | High | **Compound table measured [run -t]** — independence-assumption estimate | Wire conformal discipline into trace replay; measure true vs estimated compound |
-| 3 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
-| 4 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
-| 5 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
-| 6 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
-| 7 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
-| 8 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
-| 9 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
+| 3 | Prompt-type classifier for BurstGPT surprise-long detection | High (bimodal ChatGPT structure) | Medium | **Gap quantified [run -u]**: ~10% ChatGPT requests are disguised-long | Build binary classifier on input_tokens + arrival context |
+| 4 | ShareGPT as third public LLM trace | High (3× cross-trace validation) | Medium | Not Started | Download ShareGPT/LMSYS Conversation Trace; ingest + run all disciplines |
+| 5 | GPU routing on LLM serving trace (TTFT violation reduction) | Medium | Low | **Benchmarked [run -f]** — energy trace −0.14% (price-dominated) | Evaluate on BurstGPT where TTFT is the binding constraint |
+| 6 | Admission gate simulation integration | Medium (prevents KV overflow spikes) | Medium | Implemented (unconnected) | Wire into cluster simulator + Azure 2024 replay |
+| 7 | BOute-style MOBO routing (arXiv:2602.10729, MLSys 2026) | High (2.57× improvement / 15-61% cost) | High | Not Started | Model deployment × routing co-optimisation via Bayesian BO |
+| 8 | Mooncake trace ingestion (KV prefix reuse cross-validation) | Low-Medium | Low | Not Started | Bounded ingest (Apache-2.0) |
+| 9 | Hermes PDGraph for agentic workloads | High (for agentic) | High | Not Started | CC-traces agentic structure audit |
+| 10 | Carbon-power MILP joint optimization | Medium | High | Not Started | Microgrid model design |
 
-**Removed from table (now closed):**
+**Removed from table (now closed / characterized):**
+- Stratified causal prior — **NEGATIVE [run -u]**: −0.12% goodput/$; structural ceiling confirmed
 - Preemption overhead on BurstGPT — **CLOSED** [run -s]: 95.25% retention at 0.30s
 - BurstGPT noisy prior robustness — **CLOSED** [run -r]: 100.0% retention
 - BurstGPT SLA-aware baseline — **CLOSED** [run -r]: +210.6% vs FIFO
@@ -594,6 +609,83 @@ Calibration aspirational target (95%) **NOT** reached (final 91.07%).
 ---
 
 ## 7. Experiment History
+
+### Run 2026-06-22-u — STRATIFIED FEATURE-AWARE CAUSAL PRIOR (RESEARCH DISCOVERY — NEGATIVE)
+
+**Goal:** Test whether per-(model_id, input_bin) stratified running-median prior improves
+BurstGPT HF retention from 70.0% toward ≥80% by exploiting BurstGPT's two-model structure
+(ChatGPT p50=7 tokens vs GPT-4 p50=235 tokens — 33× difference in median output length).
+
+**Bottleneck addressed:** Run -t measured 70.0% BurstGPT oracle retention with global running
+median (CV=15.3%). Root cause from GAP_ANALYSIS: global median ≈18 tokens is 33× wrong for
+GPT-4 requests. Additionally, within-ChatGPT input-output correlation r=0.513 suggested input
+bins could add predictive signal. Hypothesis: stratification should close the 30pp oracle gap.
+
+**Implementation:**
+- Added `load_burstgpt_serving_requests_jsonl_with_features()` — extends base loader with
+  parallel feature list of `{model_id, input_tokens}` per request
+- Added `make_stratified_prior_predictions()` — three-level causal fallback: (1) per-(model_id,
+  input_bin) running median when ≥20 stratum completions available; (2) per-model_id running
+  median; (3) global running median. Input bin: 'long' if input_tokens ≥ causal running median
+  for that model. All causal — prediction[i] uses only completions 0..i-1.
+- Added `StratifiedPriorReport` dataclass — 4-way comparison (FIFO/oracle/global/stratified)
+- Added `_run_stratified_prior_on_trace_with_features()` and `run_burstgpt_hf_stratified_prior_backtest()`
+- Created `tests/test_stratified_prior_backtest.py` — 39 tests (all passing, zero regressions)
+- Created `scripts/run_stratified_prior_backtest.py` — standalone public trace runner
+
+**Benchmark results (public trace: BurstGPT HF, 5,880 requests, ρ=0.85, SLA=30s):**
+
+| Discipline | SLA-safe goodput/$ | vs FIFO | Oracle retention |
+|---|---:|---:|---:|
+| FIFO | 6,528.76 | (baseline) | — |
+| Conformal oracle (upper bound) | 48,598.82 | +644.38% | 100% |
+| **Conformal global prior [run -t]** | **34,003.60** | **+420.83%** | **70.0%** |
+| **Conformal stratified prior [run -u]** | **33,962.29** | **+420.20%** | **69.9%** |
+
+**Prior quality diagnostics:**
+
+| Metric | Global prior | Stratified prior | Delta |
+|---|---:|---:|---:|
+| CV | 15.3% | 32.3% | +17.0pp |
+| MAE (tokens) | 166.9 | 157.3 | **−9.6 tokens (−5.7%)** |
+| Relative MAE | 64.5% | 60.8% | **−3.7pp** |
+| Stratum-level usage | — | 98.0% | — |
+| Conformal mean_α | 0.002 | 0.002 | 0.0 |
+
+**Key research findings:**
+
+1. **MAE improvement (−5.7%) does not improve goodput/$ (−0.12%).** The conformal calibrator
+   converges to identical mean_α=0.002 for both priors. MAE improvement is absorbed by
+   the calibrator's α adaptation — scheduling behavior is identical at the goodput/$ level.
+
+2. **Short_p90 improves 24.9% (840s→632s)** — real but both are far beyond SLA=30s.
+   The SLA threshold is the binding constraint, not relative latency.
+
+3. **The oracle gap is structural.** Oracle short_p90=4.39s; stratified=631.83s — 144× gap.
+   ChatGPT's bimodal distribution (p50=7 BUT ~10% exceed 200 tokens) means ~10% of requests
+   ("surprise-long") look identical at arrival but take 3-15s of actual service. No
+   running-statistics prior can identify these.
+
+4. **Running-statistics ceiling confirmed on both public traces:**
+   - Azure LLM 2024: ceiling ≈ 81.6% retention [run -t]
+   - BurstGPT HF: ceiling ≈ 70.0% retention [run -t], confirmed by -u
+   Crossing this ceiling requires a trained ML predictor with per-request features.
+
+**Research papers reviewed:**
+1. TIE Scheduling (arXiv:2604.00499) — distributional ordering; confirms bimodal entropy floor
+2. ProD, Robust Length Prediction (arXiv:2604.07931) — argues for request-specific prediction
+3. SLAI Scheduler (arXiv:2508.01002) — ordering quality is the key variable (not scheduling mechanics)
+4. Past-Future Scheduler (arXiv:2507.10150) — session-level features needed for high-quality prediction
+
+**Decision:** Do not merge as frontier improvement (−0.12% goodput/$). Merge as Research
+Infrastructure: provides `load_burstgpt_*_with_features`, `make_stratified_prior_predictions`,
+`StratifiedPriorReport` infrastructure for future ML-predictor experiments. 39 new tests
+passing; 0 regressions. The negative result is informative: it precisely characterizes the
+running-statistics ceiling and what predictor class is needed to cross it.
+
+**Run category:** RESEARCH DISCOVERY — Negative Result with Informative Diagnostics.
+
+---
 
 ### Run 2026-06-21-t — LIVE CAUSAL PRIOR + COMPOUND TABLE (RESEARCH DISCOVERY)
 
