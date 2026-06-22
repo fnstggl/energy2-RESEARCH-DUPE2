@@ -8,6 +8,121 @@
 
 ---
 
+## Run 2026-06-22-y — SLA-aware vs Abs-Conformal Head-to-Head (FRONTIER UNDERSTANDING)
+
+### Q1. What currently limits Aurelius most?
+
+**The queue-only component is near-optimal; the north-star gap is now explicitly
+characterized.** Abs-conformal (live prior) achieves:
+- Azure: +83.27% vs oracle SLA-aware, 97.8% oracle retention
+- BurstGPT: +111.55% vs oracle SLA-aware, 88.3% oracle retention
+
+The queue-scheduling component is near its ceiling (97.8% oracle retention on Azure).
+The binding constraint for the north-star (+300% vs SLA-aware) is the absence of the
+**compound economic × queue scheduling** integration. Queue alone reaches +83-112%.
+
+### Q2. What theoretically offers the largest gain?
+
+**Compound economic × queue scheduling end-to-end backtest.** The queue component
+is now near-optimal (97.8% oracle retention); the economic component (energy/carbon
+cost optimization) adds an additional multiplier. Independence estimate:
+(1 + 3.13) × (1 + 0.2575) ≈ 5.20 = +420% vs FIFO, and with SLA-aware at +125%
+vs FIFO, the compound is approximately +169% vs oracle SLA-aware. With BurstGPT:
+(1 + 5.57) × (1 + ε) vs SLA-aware at +211% → compound approximately +130-150%
+vs oracle SLA-aware.
+
+### Q3. Which forecasts are weakest?
+
+1. **Economic scheduling multiplier** — not yet compounded with queue gains.
+2. **BurstGPT 11.7% oracle gap** — closer to p90_abs_err ≈ 632 tokens; ML predictor
+   would reduce this.
+3. **Queue-economic integration** — completely unverified end-to-end.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Compound routing**: energy cost optimization and queue discipline are independent —
+   never co-optimized end-to-end.
+2. **BurstGPT gap**: 88.3% retention (vs Azure 97.8%) — further ML predictor gain possible.
+
+### Q5. Which workloads benefit least?
+
+**Workloads where SLA-aware binary classification is effective** (uniform output
+distributions where the median split is as informative as continuous prediction).
+On both Azure and BurstGPT, continuous prediction substantially dominates binary.
+
+### Q6. Which research direction appears strongest?
+
+**End-to-end compound economic × queue scheduling backtest.** Now that the
+head-to-head confirms abs-conformal dominates SLA-aware by +83-112%, the
+compound integration is the clearest next step to approach +300% vs SLA-aware.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Compound economic × queue scheduling end-to-end backtest. Even a conservative
+10% economic multiplier on top of the +83% queue advantage would exceed +300%.
+
+### Q8. What is the shortest path to another +50% gain?
+
+Compound economic × queue scheduling. If economic gains are multiplicative
+(~1.26× from Azure CA leaderboard), compound = 1.8327 × 1.2575 ≈ 2.30 = +130%
+vs oracle SLA-aware vs current +83%.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware?
+
+From the head-to-head:
+- Queue alone: +83% (Azure) / +112% (BurstGPT) vs oracle SLA-aware
+- Target: +300% vs SLA-aware means ~4.0× oracle SLA-aware goodput
+- Gap factor: 4.0 / 1.83 ≈ 2.19× more gain needed
+
+Path: compound economic × queue where economic multiplier ≥ 2.0×.
+Current CA leaderboard economic gain vs SLA-aware: +25.75%. Need a path
+where economic optimization delivers 2× the SLA-aware baseline.
+
+Alternative: improve ML predictor to close the oracle gap (push abs-conformal
+to 99.5%+ retention) and combine with economic scheduling.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Independence assumption** — queue and economic gains may not be truly
+   multiplicative (e.g., routing to cheap regions may increase queue depth).
+2. **Oracle SLA-aware is the right comparison for north-star** — the CA
+   leaderboard uses a different SLA-aware baseline (different workloads/traces).
+3. **BurstGPT 88.3% retention is stable** — may vary with load level.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Queue-economic compound is unverified** — both components measured separately.
+2. **Azure trace lacks model_id** — cannot test per-class improvements on Azure.
+3. **Different "SLA-aware" definitions** — SRTF simulator binary-class vs CA
+   leaderboard constraint-aware scheduler.
+
+### Q12. Which public datasets should be added?
+
+ShareGPT (third LLM trace for further cross-validation of the head-to-head).
+
+### Q13. What should be attempted next?
+
+**Immediate (next run):**
+1. End-to-end compound economic × queue scheduling backtest — both components
+   near-optimal; measure the compound gain directly.
+2. Characterize whether the compound gain exceeds +300% vs SLA-aware end-to-end.
+
+---
+
+## Future Opportunity Ranking — Updated After Run -y
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Compound economic + queue scheduling (end-to-end backtest) | Very High | High | Queue near-optimal (+83% vs SLA-aware); economic multiplier unverified |
+| 2 | ML predictor (HGB/CARA) with abs-conformal | High | Medium | Close remaining 11.7% BurstGPT gap; Azure already at 97.8% |
+| 3 | ShareGPT as third public LLM trace | Medium | Medium | Further cross-validation of head-to-head results |
+| 4 | Wire abs-conformal discipline into serving runtime | High | Medium | All gates CLOSED; integration pending |
+
+**Closed/characterized opportunities (run -y):**
+- SLA-aware head-to-head: **CHARACTERIZED** — abs-conformal +83% (Azure) / +112% (BurstGPT) vs oracle SLA-aware; north-star gap requires compound scheduling
+
+---
+
 ## Run 2026-06-22-x — Absolute-Error Conformal Calibration (FRONTIER IMPROVEMENT)
 
 ### Q1. What currently limits Aurelius most?

@@ -24,6 +24,22 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**SLA-aware vs Abs-Conformal Head-to-Head [run 2026-06-22-y] — FRONTIER UNDERSTANDING:**
+Six-discipline comparison directly answers the north-star question. Results on both public
+traces: Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s): FIFO=13,336, SLA-aware
+(oracle)=30,063 (+125.42%), SLA-aware (live)=19,793 (+48.41%), Rel-conformal=45,933
+(+244.42%), **Abs-conformal=55,097 (+313.14%, +83.27% vs oracle SLA-aware, +178.37% vs live
+SLA-aware, 97.8% retention)**. BurstGPT HF (5,880 req, ρ=0.85, SLA=30s): FIFO=6,529,
+SLA-aware (oracle)=20,280 (+210.63%), SLA-aware (live)=17,556 (+168.90%), Rel-conformal=34,004
+(+420.83%), **Abs-conformal=42,902 (+557.12%, +111.55% vs oracle SLA-aware, +144.37% vs live
+SLA-aware, 88.3% retention)**. Key findings: (1) Abs-conformal live-prior beats ORACLE
+SLA-aware by +83-112% — continuous prediction + conformal calibration dominates binary
+classification even with perfect oracle token knowledge. (2) North-star gap: abs-conformal is
++83%/+112% vs oracle SLA-aware; achieving +300% requires compound economic × queue compound
+scheduling. (3) Live SLA-aware (live prior) = +48%/+169% vs FIFO — binary classification
+with running-median prior is weak because global median has poor discriminative power.
+31 new tests passing. Results: `research/results/sla_aware_abs_conformal_backtest_2026-06-22.md`.
+
 **Abs-Conformal Calibration [run 2026-06-22-x] — FRONTIER IMPROVEMENT:** Absolute-error
 conformal calibrator breaks the running-statistics retention ceiling that blocked 5 consecutive
 runs (-s through -w). Results on both public traces: Azure LLM 2024: FIFO=13,336, Oracle=56,311
@@ -236,6 +252,7 @@ See `docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md` for full table.
 | BurstGPT HF (5,880 sample) [run -p / -r / -t] | 5,880 | **+420.83%** [run -t] | **+492.7%** | **+644.4%** | +644.4% | 30s |
 | BurstGPT HF (full 58,042) [run -p] | 58,042 | — | **+231.4%** | — | +316.1% | 30s |
 
+**Head-to-head [run -y]: Abs-conformal beats oracle SLA-aware by +83% (Azure) / +112% (BurstGPT). North-star gap: need compound economic × queue for +300% vs SLA-aware.**
 **New frontier [run -r]: Conformal adaptive α achieves SRPT ceiling (+644.4%) on BurstGPT HF — cross-trace validated.**
 **Live prior floor [run -t]: Causal sliding-window median achieves +244% (Azure) / +421% (BurstGPT) vs FIFO — 81.6% / 70.0% retention vs oracle.**
 **Stratified prior [run -u]: −0.12% vs global prior (neutral/negative). MAE −5.7% absorbed by conformal calibrator. Structural finding: running-statistics ceiling at ~70-82% retention — ML predictor required to cross it.**
