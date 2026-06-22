@@ -24,6 +24,20 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Abs-Conformal Calibration [run 2026-06-22-x] — FRONTIER IMPROVEMENT:** Absolute-error
+conformal calibrator breaks the running-statistics retention ceiling that blocked 5 consecutive
+runs (-s through -w). Results on both public traces: Azure LLM 2024: FIFO=13,336, Oracle=56,311
+(+322.24%), Rel-conformal=45,933 (+244.42%, α=0.00200 CAPPED, 81.6% retention), **Abs-conformal=
+55,097 (+313.14%, α=0.000222, 97.8% retention — +19.95% vs rel-conformal)**. BurstGPT HF:
+FIFO=6,529, Oracle=48,599 (+644.38%), Rel-conformal=34,004 (+420.83%, α=0.00199 CAPPED, 70.0%
+retention), **Abs-conformal=42,902 (+557.12%, α=0.000562, 88.3% retention — +26.17% vs
+rel-conformal)**. Root cause: rel-error formula penalizes short-request over-predictions
+(actual=7, pred=18, rel_err=1.57) which are scheduling-irrelevant (11-token misprediction ≈ 1s)
+but dominate the p90 tail. Fix: p90 abs_err driven by genuinely uncertain long requests
+(~509-632 tokens with running-median prior). α drops from 0.002 (capped) to 0.000222/0.000562
+(11× and 3.5× lower). 28 new tests all passing. Results:
+`research/results/abs_conformal_backtest_2026-06-22.md`.
+
 **ML-HGB Prior [run 2026-06-22-v]:** VALIDATED NULL RESULT. HistGradientBoostingRegressor
 (quantile p50, causal two-phase: warmup_n=1000 running-median → Phase 2 HGB) tested on
 BurstGPT HF (5,880 requests). FIFO=6,529 goodput/$, Oracle=48,599 (+644%), Global prior=34,004
