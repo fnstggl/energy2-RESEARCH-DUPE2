@@ -24,6 +24,22 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**ML-HGB Prior [run 2026-06-22-v]:** VALIDATED NULL RESULT. HistGradientBoostingRegressor
+(quantile p50, causal two-phase: warmup_n=1000 running-median → Phase 2 HGB) tested on
+BurstGPT HF (5,880 requests). FIFO=6,529 goodput/$, Oracle=48,599 (+644%), Global prior=34,004
+(+420.83%, 70.0% retention), ML-HGB prior=33,962 (+420.2%, 69.88% retention).
+**ml_vs_global_improvement_pct = −0.12%** (within noise — NOT a frontier improvement).
+ML prior DOES improve prediction accuracy: CV 15.34%→43.03%, MAE 166.93→162.82 tokens
+(−2.5%). But conformal calibrator remains capped at mean_α=0.002 for BOTH methods because
+p90 relative prediction error ≥ 0.80 in both cases. Root cause: ChatGPT intra-class variance
+is so large (p5=1 tok, p95=800+ tok) that no causal predictor reduces the p90 tail error below
+the 0.80 cap threshold, even with correct model_id signal. Adaptive min_samples_leaf=max(5,
+warmup_n//20) prevents over-regularization on small training sets. 24 new tests all pass.
+**Key structural finding: the conformal calibrator p90-relative-error formula is the binding
+constraint for BurstGPT — not prediction accuracy. Breaking the 70% retention ceiling requires
+either per-class calibration or a different error metric (e.g., absolute error, not relative).
+Infrastructure merged. Results: `research/results/ml_hgb_prior_burstgpt_backtest_2026-06-22.md`.**
+
 **Stratified Causal Prior [run 2026-06-22-u]:** RESEARCH DISCOVERY — Negative result with
 informative diagnostics. Per-(model_id, input_bin) stratified running-median prior tested on
 BurstGPT HF (5,880 requests). MAE improvement: −5.7% (166.9→157.3 tokens). Goodput/$:
