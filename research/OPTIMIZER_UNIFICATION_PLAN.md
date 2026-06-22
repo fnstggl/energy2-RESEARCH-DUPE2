@@ -16,10 +16,22 @@
 | Step | Status | Evidence |
 |---|---|---|
 | **Phase 1a — Canonical interface bootstrap** (stand up `AureliusOptimizer` + decision-layer policy seam; energy policy = thin delegate to `JobScheduler`) | **DONE — behavior-preserving, 0% KPI drift** | `aurelius/optimizer/`, `tests/test_canonical_optimizer_parity.py` (21 pass), `research/results/canonical_optimizer_phase1_parity_2026-06-22.md` |
+| **Phase 2 — Extract the serving (abs-conformal SRPT) discipline behind the policy interface** | **DONE — parity extraction, 0% serving + energy KPI drift** | `aurelius/optimizer/policies/serving_queue.py`, `tests/test_canonical_serving_policy_phase2.py` (9 pass) + `test_abs_conformal_backtest.py` (17 re-export), `research/results/canonical_optimizer_phase2_serving_policy_parity_2026-06-22.md` |
 | Phase 1b — Unify the 4 replay loops into one engine | Not started | — |
-| Phase 2 — Extract + wire the serving (SRPT+conformal) discipline (shadow) | Not started | — |
 | Phase 3 — Promote frontier BASE/DYNAMIC → constraint; dedup calibrators | Not started | — |
 | Phase 4 — Deprecate dead/duplicate code | Not started | — |
+
+**Phase 2 notes.** The strongest validated serving discipline (Decoupled Hybrid
+SRPT + absolute-error conformal α, run -x) was moved **verbatim** from the 7.6k-LOC
+benchmark monolith into `aurelius/optimizer/policies/serving_queue.py` and wrapped
+as `ServingQueuePolicy` (reachable via `AureliusOptimizer(policy="serving_queue")`).
+The benchmark imports the discipline + calibrator back and keeps a thin shim that
+injects its own `_summarize` (evaluation stays in the benchmark; one-way
+dependency, no circular import). Parity is exact: the serving and energy
+benchmarks are byte-identical before/after, and the existing 17 abs-conformal
+tests pass against the re-exported objects. No new optimizer, no new priors, no
+benchmark-assumption change, no FIFO-only claim, no actual-token decision-time
+leakage (all guarded by tests).
 
 **Phase 1a notes.** The very first safe step is *not* a behavior change — it is
 the permanent top-level seam (`AureliusOptimizer`) through which all future
