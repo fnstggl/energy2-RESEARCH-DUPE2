@@ -24,16 +24,19 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
-**Joint Economic × Queue TRUE Compound [run 2026-06-23] — NORTH STAR ACHIEVED:**
+**Joint Economic × Queue TRUE Compound [run 2026-06-23] — NORTH STAR NOT ACHIEVED:**
 First TRUE compound measurement — MCS per-tick variable-c provisioning + abs-conformal SRTF in
-a single discrete-event simulation (2×2 factorial). Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s):
-FIFO+fixed=11,183 (baseline), abs-conformal+fixed=46,199 (**+313%**), FIFO+MCS=59,694 (**+434%**),
-**abs-conformal+MCS (TRUE compound)=58,323 (+422% vs FIFO+fixed)** → **north-star +300% ACHIEVED**.
-Structural finding: MCS scaling (+434%) dominates queue discipline (+313%) on diurnal traces; abs-
-conformal slightly HURTS in MCS context (−2.3% vs FIFO+MCS) because SRPT preemption overhead
-dominates when queue is short. TRUE compound +42% above independence estimate (58,323 vs 41,066)
-— validates joint simulation necessity. MCS c_schedule_mean=4.5 > fixed_c=4 (MCS costs +12.5%
-more on diurnal trace by scaling up to c=8 at peak; goodput gain far outweighs cost increase).
+a single discrete-event simulation (2×2 factorial). All conditions on provisioned-hours cost.
+Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s): FIFO+fixed=11,183, SLA-aware oracle=25,208,
+abs-conformal+fixed=46,199 (**+83% vs SLA-oracle**), FIFO+MCS=59,694 (**+137% vs SLA-oracle**),
+**abs-conformal+MCS (TRUE compound)=58,323 (+131% vs SLA-oracle)** — north-star NOT achieved
+(target: +300% vs SLA-oracle = 100,832; gap: 1.73× economic factor still needed).
+Key findings: (1) MCS uses +12.5% MORE GPU-hours (c_mean=4.5, peaks to c=8) — savings claim
+wrong on diurnal traces; (2) FIFO+MCS (+137%) beats abs-conformal+MCS (+131%) — queue discipline
+adds nothing when MCS already controls depth; (3) TRUE compound +42% above independence estimate
+(58,323 vs 41,066) — validates joint simulation necessity; (4) the "+422% vs FIFO+fixed" framing
+in earlier summary was against the weakest baseline (FIFO+fixed p99=732s). Path to north-star:
+−42% GPU-hours via spot/preemptible on top of current MCS fleet schedule.
 15 new tests passing. Results: `research/results/joint_mcs_abs_conformal_2026-06-23.md`.
 
 **Compound Economic × Queue Scheduling [run 2026-06-22-z] — FRONTIER UNDERSTANDING (superseded by 2026-06-23 TRUE compound):**

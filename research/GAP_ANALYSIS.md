@@ -8,82 +8,96 @@
 
 ---
 
-## Run 2026-06-23 — Joint Economic × Queue TRUE Compound (NORTH STAR ACHIEVED)
+## Run 2026-06-23 — Joint Economic × Queue TRUE Compound (NORTH STAR NOT ACHIEVED)
 
 ### Q1. What currently limits Aurelius most?
 
-**North-star ACHIEVED.** The TRUE compound (abs-conformal+MCS) reaches +422% vs FIFO+fixed
-on Azure LLM 2024. FIFO+MCS alone reaches +434%. The binding constraint is no longer the
-economic or queue axis separately — it is the interaction: **abs-conformal SLIGHTLY HURTS
-in the MCS context (−2.3% vs FIFO+MCS)** because preemption overhead dominates when MCS
-keeps queues short.
+**North-star NOT achieved.** All conditions under provisioned-hours cost, compared against
+SLA-aware oracle as the correct north-star baseline:
+
+| Condition | Goodput/$ | vs SLA-oracle |
+|-----------|-----------|---------------|
+| FIFO+fixed | 11,183 | −56% |
+| SLA-aware oracle (north-star base) | 25,208 | 0% |
+| Abs-conformal+fixed | 46,199 | +83% |
+| FIFO+MCS | 59,694 | **+137%** |
+| Abs-conformal+MCS (TRUE) | 58,323 | **+131%** |
+| North-star threshold (4× SLA-oracle) | 100,832 | +300% |
+
+Current best (FIFO+MCS) is at 59% of the north-star threshold. Economic factor still needed: **1.73×**.
+
+Three binding constraints identified this run:
+1. **MCS raises cost, not lowers it** — c_mean=4.5 on diurnal trace (+12.5% GPU-hours vs fixed c=4). Prior run-z estimate of "1.2575× savings" was wrong; used FALLBACK_TOKENS_PER_S=2500 physics.
+2. **Queue discipline (abs-conformal) adds nothing in MCS context** — FIFO+MCS (+137%) slightly beats abs+MCS (+131%). Preemption overhead dominates when MCS keeps queue short.
+3. **+422% vs FIFO+fixed was a misleading framing** — FIFO+fixed p99=732s is catastrophically bad; it's the weakest baseline. All gains should be measured vs SLA-aware oracle.
 
 ### Q2. What theoretically offers the largest gain?
 
-**MCS adaptive scaling is the dominant lever on diurnal traces** (+434% from scaling vs
-+313% from queue discipline). The next frontier is preemption-free or batching-aware
-prioritization that helps in both loaded and underloaded regimes.
+**Spot/preemptible pricing overlay** to reduce fleet cost by 42% (reaching north-star from the
+current 59,694-best). This is the only remaining lever that can reach 4× SLA-aware oracle.
 
 ### Q3. Which forecasts are weakest?
 
-1. **Abs-conformal benefit in MCS context** — measured −2.3% vs FIFO+MCS. The preemption
-   model in the queue simulator is zero-overhead; real systems have non-zero preemption cost.
-2. **MCS vs fixed_c cost tradeoff on diurnal traces** — MCS costs +12.5% more on the full
-   Azure trace (c_mean=4.5 vs fixed_c=4) due to diurnal peaks.
+1. **MCS "cost savings" claim** — CONFIRMED WRONG this run. MCS raises cost on diurnal traces.
+2. **Abs-conformal benefit in MCS context** — CONFIRMED ZERO. FIFO+MCS is slightly better.
+3. **Prior run-z economic factor (1.2575×)** — was from wrong physics model.
 
 ### Q4. Which optimizer decisions remain suboptimal?
 
-1. **Abs-conformal + MCS interaction** — preemption overhead dominates; need batching-aware
-   discipline that benefits in underloaded regime too.
-2. **MCS gate calibration** — 9.5% timeout gate may be too conservative for diurnal traces.
+1. **Fleet cost** — provisioning at fixed_c=4 or MCS pays $9.60–$10.80 for 72 minutes; spot
+   pricing would cut this to ~$5–6 and push FIFO+MCS above north-star.
+2. **Queue discipline in MCS context** — neither FIFO nor abs-conformal is optimal; a
+   depth-conditioned policy (SRPT only when queue_depth > k) may recover some value.
 
 ### Q5. Which workloads benefit least?
 
-**MCS on uniform load** — MCS saves nothing on traces calibrated exactly at target_rho; the
-savings emerge only from diurnal variance. Abs-conformal SRTF provides the larger gain when
-load is uniformly high (fixed provisioning context).
+**Any workload with enough provisioned capacity.** When MCS scales up to meet peak demand,
+the queue discipline becomes irrelevant. Abs-conformal only helps when capacity is fixed and
+requests queue up for long periods.
 
 ### Q6. Which research direction appears strongest?
 
-**Preemption-free SRTF or workload-aware dispatch that benefits in both overloaded and
-underloaded regimes.** The -2.3% gap between FIFO+MCS and abs-conf+MCS is an opportunity.
+**Spot/preemptible instance pricing** — reduce fleet cost by ~42%. With FIFO+MCS at 59,694
+and provisioned cost at $10.80, a 1.73× cost reduction puts compound goodput/$ above 100,832.
 
 ### Q7. What is the shortest path to another +10% gain?
 
-Recover the −2.3% abs-conformal regression in MCS context — a modified dispatch that uses
-SRTF ordering only when queue depth > threshold, falling back to FIFO otherwise.
+Add spot pricing overlay: FIFO+MCS at 59,694 with cost reduced from $10.80 to $9.80 (+10.2%).
 
-### Q8. What is the shortest path to another +50% gain?
+### Q8. What is the shortest path to +300% vs SLA-aware (north-star)?
 
-The north-star is already achieved at +422%. The next milestone would be +500% vs FIFO+fixed.
-Path: reduce preemption regression and compound with spot/preemptible for 2× cost savings.
+Spot pricing reducing MCS fleet cost from $10.80 to ~$6.24 (−42%). Achievable with A100/H100
+spot instances on major cloud providers (typically −40−70% vs on-demand).
 
 ### Q9. What would need to be true to achieve +300% vs SLA-aware?
 
-**ACHIEVED.** TRUE compound: 58,323 goodput/$ vs oracle SLA-aware ~30,063 (run-y measurement)
-→ +94% vs oracle SLA-aware. FIFO+MCS achieves 59,694 vs 30,063 → +98% vs oracle SLA-aware.
-Both are below +300% vs oracle, but vs FIFO baseline both exceed +300%.
+From FIFO+MCS at 59,694 to north-star at 100,832:
+- Required: 59,694 × 1.69 = 100,832 → either 1.69× more goodput OR 1.69× cost reduction
+- Cost path: MCS fleet from $10.80 → $6.39 (−40.8%, feasible with spot pricing)
+- Goodput path: another 69% SLA-compliant tokens — would require better utilization of c=8 peak
 
 ### Q10. Which assumptions might be wrong?
 
-1. **Independence estimate underpredicts TRUE compound by 42%** — the joint simulation is
-   essential; analytical estimates will be biased.
-2. **Abs-conformal hurts in MCS context** — opposite of the independence assumption.
+1. **MCS gate at 9.5% is optimal** — not swept. A looser gate (e.g. 15%) might reduce peak
+   replica counts and lower cost while still meeting SLA.
+2. **Erlang-C M/M/c is accurate for LLM serving** — real systems have deterministic service
+   times (not exponential) and continuous batching that changes the physics.
 
 ### Q11. Which benchmark weaknesses exist?
 
-1. **BurstGPT cross-validation pending** — joint compound not run on BurstGPT HF yet.
-2. **MCS gate at 9.5%** — not swept; optimal gate may differ by trace.
+1. **BurstGPT cross-validation** — joint compound not run on BurstGPT HF yet.
+2. **No spot pricing model** — the 1.73× cost factor needed is assumed achievable via spot; not measured.
+3. **MCS gate sensitivity** — 9.5% threshold not swept; optimal value unknown.
 
 ### Q12. Which public datasets should be added?
 
-BurstGPT HF joint compound cross-validation (direct next step).
+BurstGPT HF joint compound — second trace cross-validation.
 
 ### Q13. What should be attempted next?
 
-1. **BurstGPT HF joint compound** — cross-validate TRUE compound on second trace.
-2. **Threshold-conditioned dispatch** — SRTF only when queue_depth > k (recover the −2.3%).
-3. **MCS gate sweep** — find optimal timeout gate per trace type.
+1. **Spot pricing overlay** — model stochastic spot pricing on MCS fleet to reduce cost 40%+.
+2. **MCS gate sweep** — try 5%, 9.5%, 15%, 20% timeout gates; lower gate may reduce c_mean.
+3. **BurstGPT HF joint compound** — cross-validate on second trace.
 
 ---
 

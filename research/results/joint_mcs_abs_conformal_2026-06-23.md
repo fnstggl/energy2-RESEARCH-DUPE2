@@ -4,129 +4,97 @@
 
 **Date:** 2026-06-23  
 **Branch:** `claude/practical-cori-690mw0`  
-**Trace:** Azure LLM 2024 (public)  
-**Fixture:** `tests/fixtures/azure_llm_2024_sample.csv`  
-**Method:** TRUE compound measurement — MCS per-tick variable-c provisioning + abs-conformal SRTF queue discipline in a single discrete-event simulation (NOT independence estimate)
+**Trace:** Azure LLM 2024 (5,880 requests, ρ=0.85, SLA=10s, fixed_c=4)  
+**Method:** TRUE compound — MCS per-tick variable-c provisioning + abs-conformal SRTF in a single discrete-event 2×2 factorial simulation (replaces run-z independence estimate)
 
-This run replaces the independence-based compound estimate from run-z (`abs_conformal_gp/$ × 1.2575`) with a TRUE joint 2×2 factorial simulation:
+---
 
-| Queue Discipline | Provisioning | Goodput/$ | vs FIFO+fixed |
-|-----------------|-------------|-----------|---------------|
-| FIFO            | Fixed c=4   | 11,182.6  | baseline      |
-| FIFO            | MCS variable | 59,694.1 | **+434%**     |
-| Abs-conformal   | Fixed c=4   | 46,199.3  | **+313%**     |
-| Abs-conformal   | MCS variable | 58,323.0 | **+422%**     |
+## Full Comparison Table (all conditions, provisioned-hours cost)
 
-**North-star target: +300% vs SLA-aware scheduler → ACHIEVED (+422% vs FIFO+fixed-c)**
+**Cost model:** provisioned GPU-hours × $2.00/hr — what the fleet actually costs, not just compute consumed.
 
-## Key Findings
+| Condition | Goodput/$ | vs FIFO+fixed | vs SLA-aware oracle |
+|-----------|-----------|---------------|---------------------|
+| FIFO + fixed c=4 | 11,183 | +0% (baseline) | −56% |
+| SLA-aware live + fixed | 16,596 | +48% | −34% |
+| **SLA-aware oracle + fixed** | **25,208** | **+125%** | **0% (north-star base)** |
+| Rel-conformal + fixed | 38,515 | +244% | +53% |
+| Abs-conformal + fixed | 46,199 | +313% | +83% |
+| Oracle conformal + fixed (ceil) | 47,218 | +322% | +87% |
+| FIFO + MCS | 59,694 | +434% | **+137%** |
+| **Abs-conformal + MCS (TRUE compound)** | **58,323** | **+422%** | **+131%** |
 
-### 1. MCS scaling dominates on diurnal traces
+**North-star threshold: +300% vs SLA-aware oracle = 4× SLA-oracle = 100,832 goodput/$**  
+**Status: NOT ACHIEVED. Abs+MCS at 58,323 is 57.8% of threshold. Economic factor still needed: 1.73×.**
 
-FIFO+MCS (+434%) outperforms abs-conformal+fixed (+313%). The full Azure LLM 2024 trace has extreme diurnal variation: during peak hours, fixed_c=4 is massively insufficient (FIFO+fixed p99=732s). MCS scales up to c=8 at peak, reducing queue buildup and enabling far more SLA-compliant completions.
+---
 
-### 2. TRUE compound exceeds north-star (+422% vs FIFO+fixed)
+## GPU-Hours and Capacity Impact
 
-The TRUE compound (abs-conformal+MCS) achieves +422% vs baseline, exceeding the north-star target of +300%. However, FIFO+MCS alone achieves +434%, slightly higher.
+| Fleet | GPU-hours | Cost | vs fixed-c |
+|-------|-----------|------|------------|
+| Fixed c=4 (always) | 4.80 hr | $9.60 | baseline |
+| **MCS variable** | **5.40 hr** | **$10.80** | **+12.5% MORE** |
+| Service time consumed (compute only) | 4.02 hr | $8.05 | −16% |
 
-### 3. Abs-conformal slightly hurts in MCS context (-2.3% vs FIFO+MCS)
+**MCS uses MORE capacity, not less.** On this diurnal trace, MCS scales up to c=8 at peak to maintain SLA — the savings at off-peak (c=1) are outweighed by the peak scaling. Mean replicas = 4.5 vs fixed 4.0. The goodput gain from MCS comes entirely from serving more SLA-compliant requests, not from cost reduction.
 
-When the queue is short (MCS keeps utilization controlled), SRPT preemption overhead dominates and prioritization provides no benefit. The structural insight: **abs-conformal SRTF is most valuable when the system is overloaded (fixed provisioning)**; when provisioning adapts dynamically (MCS), the scheduler choice matters less.
+---
 
-### 4. TRUE compound +42% above independence estimate
+## Key Structural Findings
 
-Independence estimate: `gp_abs_fixed × provisioning_cost_factor = 46,199 × 0.8889 = 41,066`  
-TRUE compound: 58,323  
-Gap: +42% — the interaction between scaling and queue discipline creates positive synergy in the goodput numerator that the multiplicative model cannot capture.
+### 1. North-star NOT achieved
+Abs-conformal+MCS reaches +131% vs SLA-aware oracle. The target is +300%. Factor still needed: 1.73×.
 
-### 5. MCS costs MORE than fixed_c on this full trace (+12.5%)
+### 2. MCS raises capacity and cost (+12.5%)
+The claim that MCS saves money is wrong for this diurnal trace. Fixed c=4 is calibrated for average load (ρ=0.85), but MCS must scale above 4 at peak to maintain the SLA gate — net result is higher provisioned hours. The goodput gain (+131% vs SLA-oracle) is real but comes from better SLA compliance under higher capacity, not from cost savings.
 
-`c_schedule_mean = 4.5 > fixed_c = 4`  
-`provisioning_cost_factor = 0.8889 < 1.0` (MCS costs $10.8 vs fixed $9.6)  
-MCS scales up during peaks (c up to 8), increasing total provisioned GPU hours. The gain comes entirely from dramatically higher SLA-compliant goodput, not from cost savings.
+### 3. FIFO+MCS slightly beats Abs+MCS (+137% vs +131%)
+When MCS controls queue depth by scaling capacity, the queue is short enough that SRPT ordering provides no benefit. Abs-conformal preemption overhead dominates, making it marginally worse than FIFO in the MCS context. The queue discipline axis only pays off in the fixed-capacity overloaded regime.
+
+### 4. TRUE compound vs independence estimate
+- Independence estimate: `gp_abs_fixed × (cost_fixed/cost_mcs)` = 46,199 × 0.889 = 41,066
+- TRUE compound: 58,323 (+42% above independence estimate)
+- The independence estimate is biased low because it ignores the large goodput numerator increase from MCS scaling
+
+### 5. +422% vs FIFO+fixed is a misleading baseline
+The correct comparison is vs SLA-aware oracle (+131%), not vs FIFO+fixed c=4 (+422%). FIFO+fixed c=4 with SLA=10s on a diurnal trace is catastrophically overloaded (p99=732s) — it is the weakest possible baseline.
+
+---
+
+## What the run-z independence estimate got wrong
+
+Run-z applied `economic_cost_factor = 1.2575` (from the weekly provisioning benchmark) to the abs-conformal result. This factor came from the provisioning model using `FALLBACK_TOKENS_PER_S=2500 tok/s` (continuous batching), which predicted c=1 for all ticks in the queue simulation. The corrected physics (Erlang-C with μ = 1/service_time_s) shows MCS requires c=4.5 mean, increasing cost rather than decreasing it.
+
+---
+
+## What needs to happen for north-star
+
+From abs-conformal+MCS at 58,323 to threshold at 100,832:
+- Factor needed: 1.73×
+- This requires 42% GPU-hour cost reduction (spot/preemptible pricing) on top of the current MCS schedule
+- OR 42% improvement in SLA-compliant goodput (e.g., smarter queue discipline that also works in underloaded regime)
+
+---
 
 ## Simulation Configuration
 
 ```
-trace             : azure_llm_2024_joint_mcs_abs_conformal
-total_requests    : 5,880
-fixed_c           : 4
-target_rho        : 0.85
-sla_s             : 10.0 s
-tick_seconds      : 60.0 s
-mcs_gate          : 9.5% timeout rate
-n_ticks           : 72
-c_schedule_min    : 1
-c_schedule_max    : 8
-c_schedule_mean   : 4.5
-cost_fixed_c      : $9.6
-cost_mcs_c        : $10.8
+trace           : azure_llm_2024 (5,880 requests)
+fixed_c         : 4 replicas
+target_rho      : 0.85
+sla_s           : 10.0 s
+tick_seconds    : 60.0 s
+mcs_gate        : 9.5% Erlang-C timeout rate
+n_ticks         : 72
+c_schedule      : mean=4.5, min=1, max=8
+cost_fixed_c    : $9.60 (4.80 GPU-hr)
+cost_mcs_c      : $10.80 (5.40 GPU-hr) — MCS costs MORE
 ```
 
-## 2×2 Factorial Results (full 5880-request trace)
-
-| Condition        | Goodput/$ | Completion | p99 (s) | Preemptions |
-|-----------------|-----------|------------|---------|-------------|
-| FIFO + fixed    | 11,182.6  | 100%       | 732.7   | 0           |
-| FIFO + MCS      | 59,694.1  | 100%       | 9.95    | 0           |
-| Abs + fixed     | 46,199.3  | 100%       | 1,973.2 | 3,042       |
-| Abs + MCS       | 58,323.0  | 100%       | 11.81   | 1,228       |
-
-## Compound Estimates
-
-| Estimate                   | Value     | vs baseline |
-|---------------------------|-----------|-------------|
-| Independence estimate      | 41,066    | +267%       |
-| TRUE compound (measured)   | 58,323    | +422%       |
-| Gap (true vs independence) | +42%      |             |
-
-The independence estimate UNDER-predicts the true compound by 42% — validates the necessity of joint simulation.
-
-## MCS c_schedule (per-tick, Azure LLM 2024, 72 ticks)
-
-- Mean: 4.5 replicas/tick
-- Min: 1 replica (low-traffic off-peak periods)
-- Max: 8 replicas (peak load periods)
-- MCS correctly identifies that fixed_c=4 is insufficient at peak → scales up
-
-## Physics Consistency
-
-All four simulation conditions use consistent service physics:
-- `service_s = TTFT_BASE_S + TPOT_S × output_tokens = 0.150 + 0.020 × tokens`
-- MCS c_schedule uses Erlang-C M/M/c with `μ = 1/service_s`, NOT the provisioning model's `FALLBACK_TOKENS_PER_S=2500 tok/s/replica`
-- `sla_wait = max(0.0, sla_s - mean_service_s)` for queuing-only SLA budget
+---
 
 ## Test Suite
 
-15 unit tests in `tests/test_joint_mcs_abs_conformal.py`, all passing:
-1. c_schedule non-empty with positive ints
-2. All c values >= 1
-3. Variable-c FIFO completes all requests
-4. Variable-c abs-conformal completes all requests
-5. Variable-c FIFO response times non-negative
-6. Variable-c abs-conformal response times non-negative
-7. `run_joint_mcs_abs_conformal_azure_backtest` returns `JointMCSAbsConformalReport`
-8. `abs_mcs_goodput_per_dollar > 0`
-9. `abs_fixed_goodput_per_dollar >= fifo_fixed × 0.90` (small-sample tolerance)
-10. `provisioning_cost_factor >= 1.0` (on 200-req fixture where costs balance)
-11. `abs_mcs_goodput_per_dollar >= fifo_fixed × 0.90`
-12. Completion rates > 0.9 for all conditions
-13. `c_schedule_mean <= fixed_c` (on uniform 200-req fixture)
-14. `to_dict()` contains all expected keys
-15. `abs_fixed_preemptions >= 0` and `abs_mcs_preemptions >= 0`
-
-## Implications for Research Roadmap
-
-1. **Prioritize MCS adaptive scaling** — on real diurnal traces, scaling provides 4× the gain of queue discipline improvement (+434% vs +313%)
-2. **Abs-conformal SRTF primary value is overload protection** — best when fixed-c is insufficient; minimal value when provisioning is adaptive
-3. **Independence estimate is biased low by -42%** — future compound estimates must use TRUE joint simulation
-4. **North-star +300% achieved** — both TRUE compound and FIFO+MCS alone exceed the target
-5. **Next frontier**: can abs-conformal+MCS be tuned to recover the -2.3% regression vs FIFO+MCS? Potential: preemption-free SRTF, or batching-aware prioritization that doesn't hurt in underloaded regime
-
-## Comparison to Previous Run-z Results
-
-Run-z used independence estimate:
-- Azure LLM 2024: `compound = gp_abs_fixed × 1.2575 = 46,199 × 1.2575 ≈ 58,104` goodput/$
-  → Matches TRUE compound of 58,323 within 0.4%! (Near-coincidence: factor=1.2575 ≠ actual MCS factor 0.8889, but the goodput numerator uplift compensates)
-
-The run-z independence estimate was closer to the true value than expected, but for the wrong reason: the cost factor of 1.2575 was based on a different provisioning model, while the actual full-trace MCS costs MORE (factor=0.8889). The independence formula underestimates goodput numerator gains.
+15 unit tests in `tests/test_joint_mcs_abs_conformal.py`, all passing on the 200-request fixture.  
+Small-sample tolerance (±10%) applied to tests 9 and 11 to account for 200-req calibration artifacts.
