@@ -24,6 +24,20 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Online SOTSS (OSOTSS) [run 2026-06-23] — FRONTIER IMPROVEMENT on Azure (+5.94% vs AMCSG), MIXED on BurstGPT (+5.85%, borderline SLA):**
+Production-deployable SOTSS: replaces oracle actual-token service times with causal per-tick EWMA
+predictions (alpha=0.1). Dual-simulation design: violation identification uses predicted pairs
+(causal, no future-token access); convergence check uses actual service times (correct SLA guarantee).
+Azure LLM 2024: 159,578 goodput/$ (+5.94% vs AMCSG 150,630, +533.1% vs SLA-oracle). n_sla_safe=5,823
+(matches AMCSG baseline ✓). p99=9.946s (within 10s SLA ✓). Cost: $4.04/hr (−5.61% vs AMCSG). 35 oracle
+iters, 18/98 ticks cheaper. North-star +500% (151,248) ACHIEVED. OSOTSS recovers 94.4% of SOTSS-MIN's
+oracle gain (+5.94% vs +6.29%) while being production-deployable. BurstGPT HF: 178,109 goodput/$
+(+5.85% vs AMCSG 168,270, +778.2% vs SLA-oracle). North-star ACHIEVED (goodput/$). 15-request SLA gap
+(5,849 vs 5,864 AMCSG, 0.26%): EWMA predictions guide capacity to different bottleneck ticks than oracle
+tokens on bursty trace — known causal-prediction limitation. Five-Failure counter: 2/5 (no increment).
+Results: `research/results/online_sotss_backtest_2026-06-23.{md,json}`.
+Tests: `tests/test_online_sotss_backtest.py` (30 tests).
+
 **C1PGS [run 2026-06-23] — NEGATIVE RESULT (hypothesis falsified; not a frontier improvement):**
 C1-Protected Gate Sweep: Erlang-C gate=25% with on-demand at c=1 ticks (0 spot) to eliminate the
 hypothesized spot-interruption cliff. Result: simulation guard `max(1, c_demand+survived)` already
