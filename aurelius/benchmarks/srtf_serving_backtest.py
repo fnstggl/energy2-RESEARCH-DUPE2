@@ -7548,6 +7548,96 @@ def _joint_mcs_c_schedule(
     return c_sched
 
 
+def _simulate_sla_aware_variable_c(
+    requests: list,
+    c_schedule: list,
+    tick_seconds: float = 60.0,
+) -> tuple:
+    """Non-preemptive binary SLA-class priority with per-tick variable c.
+
+    Mirrors ``simulate_queue(..., "sla_aware")`` (requests with
+    predicted_tokens ≤ global median → class 0 latency-critical, served before
+    class 1; FIFO within class) but with the per-tick variable server count
+    drain semantics of ``_simulate_fifo_variable_c``.
+
+    This is the strong SLA-aware-with-capacity-scaling baseline for the fair MCS
+    comparison [run 2026-06-23]: it receives the *same* MCS c_schedule as the
+    abs-conformal condition so the only variable is queue ordering, holding
+    GPU-hours, cost, and arrival process constant.
+
+    Returns ``(summary, response_map, wait_map)`` matching the benchmark contract.
+    """
+    n = len(requests)
+    max_c = max(c_schedule) if c_schedule else 1
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+
+    _pred_sorted = sorted(r.predicted_tokens for r in requests)
+    _median_pred = _pred_sorted[len(_pred_sorted) // 2] if _pred_sorted else 0.0
+
+    s_req: list = [None] * max_c
+    s_ver: list = [0] * max_c
+    events: list = []
+    _eseq = [n + 1]
+    _seq = [0]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _c_now(t: float) -> int:
+        idx = min(int(t / tick_seconds), len(c_schedule) - 1)
+        return max(1, c_schedule[idx])
+
+    def _start(sid: int, req, t: float) -> None:
+        s_req[sid] = req
+        s_ver[sid] += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + req.service_s, 1, _en(), sid, v, req))
+
+    response: dict = {}
+    wait_map: dict = {}
+    waiting: list = []  # priority heap: (sla_class, seq, arrived_t, req)
+
+    while events:
+        ev = heapq.heappop(events)
+        t, ety = ev[0], ev[1]
+        c = _c_now(t)
+
+        if ety == 0:  # ARRIVAL
+            req = ev[5]
+            free = next((s for s in range(c) if s_req[s] is None), None)
+            if free is not None:
+                wait_map[req.idx] = 0.0
+                _start(free, req, t)
+            else:
+                sla_class = 0 if req.predicted_tokens <= _median_pred else 1
+                heapq.heappush(waiting, (sla_class, _seq[0], t, req))
+                _seq[0] += 1
+
+        else:  # COMPLETION
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue
+            response[req.idx] = t - req.arrival_s
+            s_req[sid] = None
+            s_ver[sid] += 1
+
+            if sid < c and waiting:
+                _, _, arrived_t, nxt = heapq.heappop(waiting)
+                wait_map[nxt.idx] = t - arrived_t
+                _start(sid, nxt, t)
+
+    resp = [response[r.idx] for r in requests if r.idx in response]
+    waits_list = [wait_map.get(r.idx, 0.0) for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits_list, max_c)
+    summary["preemption_count"] = 0
+    summary["variable_c"] = True
+    return summary, response, wait_map
+
+
 def _simulate_fifo_variable_c(
     requests: list,
     c_schedule: list,

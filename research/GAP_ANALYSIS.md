@@ -8,6 +8,98 @@
 
 ---
 
+## Run 2026-06-23 (fair-MCS) — Does Aurelius Beat SLA-aware + MCS? (DECISIVE NO)
+
+### Q1. What currently limits Aurelius most?
+
+**The headline queue-ordering gain does not survive capacity scaling.** Controlled experiment
+(same MCS c_schedule across all disciplines; capacity, cost, GPU-hours, SLA, physics, arrivals
+all held constant) on Azure LLM 2024:
+
+| Policy | gp/$ | SLA-tok | GPU-hr | qP99 | viol |
+|--------|------|---------|--------|------|------|
+| FIFO + fixed c=4 | 11,183 | 16% | 4.80 | 730s | 4,917 |
+| SLA-aware + fixed c=4 | 16,596 | 23% | 4.80 | 1,684s | 4,413 |
+| SLA-aware + MCS | 59,676 | 95% | 5.40 | 2.5s | 58 |
+| FIFO + MCS (= constraint-aware + MCS) | 59,694 | 95% | 5.40 | 2.3s | 57 |
+| **Abs-conformal + MCS (Aurelius)** | **58,323** | **93%** | **5.40** | **3.2s** | **96** |
+
+**Aurelius is −2.27% BELOW the SLA-aware+MCS baseline** at identical capacity/cost. The binding
+constraint is that queue ordering and capacity scaling target the *same* bottleneck
+(SLA-compliant goodput under load); once MCS drains the queue (median wait 0.00s), ordering is a
+no-op and preemptive SRPT is a slight net negative (1,228 preemptions, +38 SLA misses).
+
+### Q2. What theoretically offers the largest gain?
+
+**Cost reduction (spot/preemptible), the one axis MCS does not touch.** MCS currently costs +12.5%
+MORE GPU-hours than fixed c=4. A 40%+ fleet-cost reduction is the only remaining lever that
+compounds with MCS capacity; more queue ordering does not.
+
+### Q3. Which forecasts are weakest?
+
+1. **"Abs-conformal compounds with MCS"** — CONFIRMED FALSE. −2.27% at equal capacity.
+2. **"Better predictions help at MCS capacity"** — FALSE. live=oracle=58,323 exactly; the loss is
+   structural preemption overhead, not prediction error.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Running preemptive SRPT when the queue is shallow** — pure overhead. A deployable optimizer
+   must gate the discipline on queue depth: abs-conformal only when capacity-constrained.
+2. **Treating queue and capacity as independent levers** — they are substitutes, not complements,
+   for this objective.
+
+### Q5. Which workloads benefit least?
+
+**Elastic-capacity workloads.** Where capacity can scale (MCS), Aurelius queue intelligence adds
+nothing. It only helps under hard capacity caps with deep queues.
+
+### Q6. Which research direction appears strongest?
+
+**Spot/preemptible cost modeling.** Reduce the $10.80 MCS fleet cost by 40%+. This is orthogonal
+to capacity and is the only path that beats SLA-aware+MCS.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Spot pricing: SLA-aware+MCS at 59,676 with cost cut from $10.80 to ~$9.80 → +10.2%. Ordering
+changes cannot deliver this — they are flat-to-negative at MCS capacity.
+
+### Q8. What is the shortest path to +300% vs SLA-aware+MCS (north-star)?
+
+No queue-side path exists. Requires ~4× cost reduction OR a fundamentally different objective
+(e.g. multi-tenant capacity pooling) — not achievable by reordering a drained queue.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware+MCS?
+
+Aurelius would need to deliver 4× the SLA-safe goodput/$ of SLA-aware+MCS at equal capacity.
+Since both already serve ~95% of tokens within SLA, the numerator is near-saturated; the only
+headroom is the denominator (cost). North-star via ordering is structurally impossible here.
+
+### Q10. Which assumptions might be wrong?
+
+1. **The "compound" framing of runs t/z** — assumed queue × capacity multiply. They do not; they
+   substitute. This run corrects that.
+2. **Zero-overhead preemption** — the simulator charges no preemption cost yet Aurelius still
+   loses; with realistic overhead the gap widens.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **BurstGPT fair-MCS cross-validation pending** — only Azure measured.
+2. **MCS gate (9.5%) not swept** — a looser gate would shrink capacity and may reopen a queue-
+   ordering regime; untested.
+
+### Q12. Which public datasets should be added?
+
+BurstGPT HF fair-MCS replication; spot-pricing trace for the cost lever.
+
+### Q13. What should be attempted next?
+
+1. **Spot/preemptible pricing overlay** on the MCS fleet — the only lever left.
+2. **Depth-gated discipline** — abs-conformal only when queue_depth > k; confirm it recovers to
+   parity (not better) with SLA-aware+MCS.
+3. **MCS gate sweep** — find whether any capacity level reopens a queue-ordering advantage.
+
+---
+
 ## Run 2026-06-23 — Joint Economic × Queue TRUE Compound (NORTH STAR NOT ACHIEVED)
 
 ### Q1. What currently limits Aurelius most?

@@ -24,6 +24,24 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Fair MCS Comparison [run 2026-06-23] — AURELIUS DOES NOT BEAT SLA-AWARE+MCS (decisive negative):**
+Controlled experiment holding capacity constant: all conditions receive the *same* MCS per-tick
+c_schedule (mean=4.5, [1,8]), same trace, SLA, physics, arrival process, and provisioned-hours
+cost — so only queue ordering varies. Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s, all at 5.40
+GPU-hr / $10.80): SLA-aware+MCS=**59,676 gp/$** (644,499 SLA-tok, qP99=2.5s, 58 viol) vs
+abs-conformal+MCS (Aurelius)=**58,323 gp/$** (629,888 SLA-tok, qP99=3.2s, 96 viol, 1,228 preempt)
+→ **Aurelius = −2.27%** (−2.24% vs oracle SLA-aware+MCS). FIFO+MCS=59,694 ties SLA-aware+MCS:
+once MCS drains the queue (median wait=0.00s) ordering is a no-op. Decomposition of the FIFO+fixed
+→ abs+MCS path: queue ordering at fixed cap **+48.4%**, MCS capacity **+259.6%**, Aurelius ordering
+on top of MCS **−2.27%**, cost reduction **0% (MCS costs +12.5% MORE)**. Conclusion: the headline
+abs-conformal gain is real ONLY at fixed constrained capacity; it is NOT additive with capacity
+scaling (same bottleneck, capacity dominates), and the preemptive variant is a net negative when
+the queue is shallow. Prediction quality irrelevant (live=oracle=58,323). To beat SLA-aware+MCS,
+Aurelius needs a COST lever (spot/preemptible), not more ordering. North-star (+300% vs
+SLA-aware+MCS) NOT achieved — Aurelius is below the baseline. New simulator
+`_simulate_sla_aware_variable_c` + 2 tests (17 total passing). Results:
+`research/results/fair_mcs_comparison_2026-06-23.md`. **Do not merge pending review.**
+
 **Joint Economic × Queue TRUE Compound [run 2026-06-23] — NORTH STAR NOT ACHIEVED:**
 First TRUE compound measurement — MCS per-tick variable-c provisioning + abs-conformal SRTF in
 a single discrete-event simulation (2×2 factorial). All conditions on provisioned-hours cost.

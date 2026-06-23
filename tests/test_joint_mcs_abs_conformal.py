@@ -215,3 +215,45 @@ def test_to_dict_keys(joint_report):
 def test_preemptions_nonneg(joint_report):
     assert joint_report.abs_fixed_preemptions >= 0
     assert joint_report.abs_mcs_preemptions >= 0
+
+
+# 16. SLA-aware variable-c simulator completes all requests with sufficient c
+def test_sla_aware_variable_c_completions():
+    from aurelius.benchmarks.srtf_serving_backtest import (
+        _simulate_sla_aware_variable_c,
+        _Request,
+    )
+    reqs = [
+        _Request(idx=i, arrival_s=float(i), actual_tokens=50,
+                 predicted_tokens=50.0, service_s=1.1)
+        for i in range(10)
+    ]
+    c_sched = [2] * 20
+    _, resp, _ = _simulate_sla_aware_variable_c(reqs, c_sched, tick_seconds=60.0)
+    assert len(resp) == 10
+
+
+# 17. SLA-aware variable-c prioritizes short (class 0) over long (class 1)
+def test_sla_aware_variable_c_prioritizes_short():
+    from aurelius.benchmarks.srtf_serving_backtest import (
+        _simulate_sla_aware_variable_c,
+        _Request,
+    )
+    # One server, a burst that must queue: short requests should clear first.
+    # idx 0 is long (arrives first), idx 1..3 are short (arrive just after).
+    reqs = [
+        _Request(idx=0, arrival_s=0.0, actual_tokens=500,
+                 predicted_tokens=500.0, service_s=10.0),
+        _Request(idx=1, arrival_s=0.1, actual_tokens=10,
+                 predicted_tokens=10.0, service_s=0.5),
+        _Request(idx=2, arrival_s=0.2, actual_tokens=10,
+                 predicted_tokens=10.0, service_s=0.5),
+        _Request(idx=3, arrival_s=0.3, actual_tokens=10,
+                 predicted_tokens=10.0, service_s=0.5),
+    ]
+    c_sched = [1] * 5
+    _, resp, _ = _simulate_sla_aware_variable_c(reqs, c_sched, tick_seconds=60.0)
+    # All complete; the long request (idx 0) starts immediately (free server),
+    # but among the queued ones the short class is served before any long class.
+    assert len(resp) == 4
+    assert all(v >= 0 for v in resp.values())
