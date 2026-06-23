@@ -24,6 +24,18 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**AFMS Policy [run 2026-06-24] — FRONTIER IMPROVEMENT (+10.1%/+13.1% vs static 70%):**
+Absolute-Floor Max-Spot eliminates rounding artifact at c=6,7,8 in static 70% spot formula.
+Formula: `c_spot = max(round(0.70*c), c-1)`. For c≤5: identical to static. For c≥6: 1 on-demand
+absolute floor, 1 more spot → lower cost → higher goodput/$. Azure LLM 2024 (5,880 req, ρ=0.85,
+SLA=10s): static=102,009 (+304.7% vs SLA-oracle), **AFMS=112,316 (+345.6%) — +10.1% improvement**.
+BurstGPT HF (5,880 req, ρ=0.85, SLA=30s): static=118,580 (+484.7%), **AFMS=134,093 (+561.2%) —
++13.1% improvement**. Both traces: completion rate=1.0000, zero SLA violations, north-star (>300%)
+maintained. n_ticks_c≥6: 29/72 Azure, 56/154 BurstGPT. Cost reduction: −9.2% Azure, −11.6%
+BurstGPT. Research basis: GFS (arXiv:2509.11134, ASPLOS '26) Dynamic Spot Quota Allocation;
+SkyServe/SpotHedge (arXiv:2411.01438) absolute on-demand floor. 20 tests passing.
+Results: `research/results/abs_floor_spot_fleet_backtest_2026-06-24.md`.
+
 **Spot Fleet MCS [run 2026-06-23B] — NORTH STAR ACHIEVED on BOTH TRACES:**
 Spot/preemptible pricing overlay on FIFO+MCS fleet. Primary operating point: 70% spot at $0.80/hr
 (60% discount, realistic AWS/GCP/Azure GPU spot), 10%/hr interruption rate, stochastic Binomial
@@ -2211,3 +2223,49 @@ complementary, see the cross-reference at the end.)
   3. Investigate adaptive gate (per-tick gate as function of load level) for further safe
      utilization margin at varying load.
   4. Update BENCHMARK_REGISTRY to use `min_cost_safe` as canonical headline economic policy.
+
+
+### Run 2026-06-24 — AFMS POLICY (ABSOLUTE-FLOOR MAX-SPOT)
+
+- **Phase 0 (PR hygiene):** No open PRs. All prior work already merged. Clean start.
+- **Phase 1 (audit):** Previous run-2026-06-23B achieved north-star via static 70% spot fleet
+  (102,009 Azure, 97,595 BurstGPT, +304.7%/+381.2% vs SLA-oracle). Identified rounding artifact
+  in static formula: at c=6,7,8, `round(0.70*c)` keeps 2 on-demand when 1 would suffice.
+- **Phase 2 (research):** 3 new papers reviewed:
+  1. GFS (arXiv:2509.11134, ASPLOS '26) — Dynamic Spot Quota Allocation: adjusts spot fraction
+     per demand level. Core insight: higher capacity = more redundancy = safe to increase spot.
+  2. SkyServe/SpotHedge (arXiv:2411.01438) — Absolute on-demand floor (not percentage) for
+     safety. "Falls back to on-demand when spot unavailable." 43% cost reduction achieved.
+  3. AI-Driven Multi-Region Provisioning (arXiv:2605.22778) — Cost-aware spot fleet allocation
+     across regions; fleet configuration estimation before deployment.
+- **Phase 3 (bottleneck):** Static `round(0.70*c)` rounding waste: at c=6: keeps 2 on-demand
+  (effective f_spot=0.667, not 0.70); at c=7: 2 on-demand (f_spot=0.714); at c=8: 2 on-demand
+  (f_spot=0.750). Each tick with c≥6 wastes $1.20/hr vs 1 on-demand absolute floor.
+- **Phase 4 (implementation):** AFMS formula: `c_spot = max(round(0.70*c), c-1)`
+  - `aurelius/benchmarks/srtf_serving_backtest.py`: Added `_abs_floor_spot_replicas`,
+    `_abs_floor_spot_fleet_cost`, `_abs_floor_expected_interruptions`,
+    `_simulate_fifo_abs_floor_spot_fleet`, `AbsFloorSpotFleetReport`,
+    `_run_abs_floor_spot_fleet_backtest`, `run_abs_floor_spot_fleet_mcs_azure_backtest`,
+    `run_abs_floor_spot_fleet_mcs_burstgpt_backtest`, `run_spot_fleet_mcs_burstgpt_backtest`.
+  - `tests/test_abs_floor_spot_fleet.py` — 20 new tests (all passing).
+  - `scripts/run_abs_floor_spot_fleet_backtest.py` — Public backtest script.
+- **Phase 5 (benchmarks — PUBLIC TRACE REPLAY):**
+  - Dataset: Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s, c_schedule: mean=4.5 max=8 n=72)
+  - Dataset: BurstGPT HF (5,880 req, ρ=0.85, SLA=30s, c_schedule: mean=4.3 max=14 n=154)
+
+  | Trace | Static 70% | AFMS | Improvement | vs SLA-oracle |
+  |-------|-----------|------|-------------|---------------|
+  | Azure LLM 2024 | 102,009 | **112,316** | **+10.1%** | +345.6% |
+  | BurstGPT HF | 118,580 | **134,093** | **+13.1%** | +561.2% |
+
+  n_ticks_c≥6: 29/72 (Azure), 56/154 (BurstGPT). Both: completion rate=1.0000, SLA violations=0.
+- **Decision:** **FRONTIER IMPROVEMENT — Merge.**
+  AFMS strictly beats static 70% on both traces with zero SLA regressions. Mechanism is
+  principled (absolute floor from GFS + SkyServe). No new calculated priors vs baseline.
+- **Run category:** Frontier Improvement (spot fleet leaderboard)
+- **Calculated priors:** Same as static baseline (spot_price=$0.80/hr, p_int=0.10/hr assumed).
+- **Next recommended direction:**
+  1. Dynamic spot price model — vary spot_price per tick based on historical spot price signals.
+  2. Multi-floor variant — min_ondemand=2 for extra safety at high-c ticks.
+  3. Integration into AureliusOptimizer as ReplicaScalingPolicy decision.
+  4. Cross-region spot arbitrage (SkyPilot-style) — route to cheapest spot region.
