@@ -265,6 +265,64 @@ def _oracle_fifo_response_times(
     return response
 
 
+def _oracle_stochastic_response_times(
+    pairs: list[tuple[float, float]],
+    c_schedule: list[int],
+    spot_fraction: float = 0.95,
+    zfhc_threshold: int = 8,
+    p_interrupt_hourly: float = 0.10,
+    tick_seconds: float = 60.0,
+    seed: int = 42,
+) -> dict[int, float]:
+    """Stochastic oracle simulation with GSF spot interruptions.
+
+    Applies a Binomial spot-interruption model to ``c_schedule``, producing
+    ``c_effective`` per tick, then runs the deterministic FIFO oracle on the
+    reduced schedule.  Provides the oracle loop in
+    ``compute_sotss_gsf_schedule`` with a stochastic view of capacity so it
+    detects ticks that are vulnerable to spot interruptions — not just
+    M/G/c queue violations.
+
+    The interruption draw is reproduced identically every call with the same
+    ``seed``, so the oracle converges deterministically (fixed-scenario SAA).
+
+    Args:
+        pairs:              ``(arrival_s_warped, service_s)`` per request.
+        c_schedule:         Per-tick total server count.
+        spot_fraction:      GSF spot fraction (≤1.0). Matches the evaluation.
+        zfhc_threshold:     All-spot threshold for large fleets (≥ this → all spot).
+        p_interrupt_hourly: Per-spot-instance hourly interruption probability.
+        tick_seconds:       Tick duration in seconds.
+        seed:               RNG seed — must match the evaluation seed for a
+                            fair same-conditions comparison.
+
+    Returns:
+        ``{orig_idx: response_time_s}`` from deterministic FIFO on c_effective.
+    """
+    try:
+        import numpy as _np
+    except ImportError:
+        raise ImportError(
+            "numpy is required for _oracle_stochastic_response_times / "
+            "compute_sotss_gsf_schedule"
+        )
+
+    rng = _np.random.default_rng(seed)
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+
+    c_effective: list[int] = []
+    for c in c_schedule:
+        if c >= zfhc_threshold:
+            c_spot = c  # all-spot above ZFHC threshold (identical to backtest)
+        else:
+            c_spot = min(c, max(round(spot_fraction * c), c - 1))  # GSF formula
+        c_demand = c - c_spot
+        survived = int(rng.binomial(c_spot, p_survive)) if c_spot > 0 else 0
+        c_effective.append(max(1, c_demand + survived))
+
+    return _oracle_fifo_response_times(pairs, c_effective, tick_seconds)
+
+
 def compute_sotss_min_schedule(
     raw: list[tuple[float, int]],
     tick_seconds: float,
@@ -339,6 +397,143 @@ def compute_sotss_min_schedule(
             tick_counts[t_idx] = tick_counts.get(t_idx, 0) + 1
 
         sorted_ticks = sorted(tick_counts, key=lambda k: tick_counts[k], reverse=True)
+        incremented = False
+        for tk in sorted_ticks:
+            if c_sched[tk] < c_ceil[tk]:
+                c_sched[tk] += 1
+                incremented = True
+                break
+
+        if not incremented:
+            break
+
+    n_ticks_cheaper = sum(1 for i in range(n_ticks) if c_sched[i] < c_ceil[i])
+    return c_sched, n_iters, initial_violations or 0, n_ticks_cheaper, baseline_n_sla_safe
+
+
+def compute_sotss_gsf_schedule(
+    raw: list[tuple[float, int]],
+    tick_seconds: float,
+    warp: float,
+    sla_s: float,
+    safe_gate: float = REPLICA_SAFE_GATE,
+    aggressive_gate: float = REPLICA_AGGRESSIVE_GATE,
+    spot_fraction: float = 0.95,
+    zfhc_threshold: int = 8,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    max_iters: int = REPLICA_MAX_ORACLE_ITERS,
+    baseline_n_sla_safe: Optional[int] = None,
+) -> tuple[list[int], int, int, int, int]:
+    """SOTSS-GSF: stochastic oracle for spot-interruption-aware capacity planning.
+
+    Extends ``compute_sotss_min_schedule`` by replacing the deterministic FIFO
+    simulation in the oracle loop with a stochastic GSF simulation that includes
+    spot interruptions.  This allows the oracle to detect and fix ticks that are
+    vulnerable to spot interruptions — specifically those where reduced
+    ``c_effective`` (after a Binomial interruption draw) causes M/G/c queue
+    violations that the purely deterministic oracle misses.
+
+    Algorithm
+    ---------
+    1. Ceiling schedule: ``gate=safe_gate`` Erlang-C (AMCSG best-safe).
+    2. Starting schedule: ``gate=aggressive_gate`` Erlang-C (default 100% = c=1).
+    3. **Stochastic oracle loop** (replaces deterministic FIFO in SOTSS-MIN):
+       a. Draw per-tick ``c_effective`` via Binomial(c_spot, p_survive) with ``seed``.
+       b. Run deterministic FIFO on ``c_effective``.
+       c. Count SLA-safe requests.
+       d. Increment c on the most-violated tick (bounded by ceiling) if
+          ``n_sla_safe < baseline_n_sla_safe``.
+       e. Repeat until safe or iteration cap reached.
+
+    The ``baseline_n_sla_safe`` defaults to the AMCSG (safe_gate%) **stochastic**
+    n_sla_safe with the same ``seed``.  This ensures SOTSS-GSF meets the same
+    stochastic safety floor as AMCSG — the apples-to-apples safety comparison.
+
+    Oracle class note
+    -----------------
+    Like SOTSS-MIN, this is an **oracle-class** algorithm: it uses actual output
+    tokens from the trace AND the fixed spot-interruption realisation (``seed``).
+    It should be compared against AMCSG (also oracle-class on actual tokens).
+    Results should be labelled: "ORACLE — not directly deployable without a
+    live token forecast and historical interruption model."
+
+    Args:
+        raw:                 ``(arrival_s_unwarped, output_tokens)`` tuples.
+        tick_seconds:        Tick duration in warped seconds.
+        warp:                Time-warp scalar.
+        sla_s:               E2E SLA budget in seconds.
+        safe_gate:           Ceiling gate (%) — AMCSG best-safe schedule.
+        aggressive_gate:     Starting gate (%) — 100.0 for minimum stable c.
+        spot_fraction:       GSF spot fraction (must match the evaluation).
+        zfhc_threshold:      All-spot threshold for large fleets.
+        p_interrupt_hourly:  Per-spot-instance hourly interruption probability.
+        seed:                RNG seed (must match evaluation seed for a fair
+                             same-conditions comparison).
+        max_iters:           Hard iteration cap.
+        baseline_n_sla_safe: Safety floor; if ``None``, computed from AMCSG
+                             stochastic evaluation with the same ``seed``.
+
+    Returns:
+        ``(c_schedule, n_iters, initial_violations, n_ticks_cheaper,
+         baseline_n_sla_safe_used)``
+    """
+    c_ceil = list(
+        compute_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=safe_gate, sla_s=sla_s)
+    )
+    c_sched = list(
+        compute_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=aggressive_gate, sla_s=sla_s)
+    )
+    n_ticks = len(c_sched)
+
+    pairs = [(arr / warp, _replica_service_time_s(tok)) for arr, tok in raw]
+
+    if baseline_n_sla_safe is None:
+        # Safety floor = AMCSG stochastic n_sla_safe (same seed, same physics)
+        resp_base = _oracle_stochastic_response_times(
+            pairs, c_ceil, spot_fraction, zfhc_threshold, p_interrupt_hourly,
+            tick_seconds, seed,
+        )
+        baseline_n_sla_safe = sum(
+            1 for i in range(len(pairs)) if i in resp_base and resp_base[i] <= sla_s
+        )
+
+    initial_violations: Optional[int] = None
+    n_iters = 0
+
+    for iteration in range(max_iters):
+        resp = _oracle_stochastic_response_times(
+            pairs, c_sched, spot_fraction, zfhc_threshold, p_interrupt_hourly,
+            tick_seconds, seed,
+        )
+
+        n_sla_safe = sum(
+            1 for i in range(len(pairs)) if i in resp and resp[i] <= sla_s
+        )
+
+        if initial_violations is None:
+            initial_violations = len(pairs) - n_sla_safe
+
+        n_iters = iteration + 1
+
+        if n_sla_safe >= baseline_n_sla_safe:
+            break
+
+        violators = [
+            i for i in range(len(pairs))
+            if i not in resp or resp[i] > sla_s
+        ]
+        if not violators:
+            break
+
+        tick_counts: dict[int, int] = {}
+        for i in violators:
+            t_idx = min(int(pairs[i][0] / tick_seconds), n_ticks - 1)
+            tick_counts[t_idx] = tick_counts.get(t_idx, 0) + 1
+
+        sorted_ticks = sorted(
+            tick_counts, key=lambda k: tick_counts[k], reverse=True
+        )
         incremented = False
         for tk in sorted_ticks:
             if c_sched[tk] < c_ceil[tk]:
@@ -573,6 +768,18 @@ class ReplicaScalingConfig:
     max_oracle_iters: int = REPLICA_MAX_ORACLE_ITERS
     """Hard iteration cap for the SOTSS oracle loop."""
 
+    spot_fraction: float = 0.95
+    """GSF spot fraction for sotss_gsf mode."""
+
+    zfhc_threshold: int = 8
+    """All-spot threshold for sotss_gsf mode."""
+
+    p_interrupt_hourly: float = 0.10
+    """Per-spot-instance hourly interruption probability for sotss_gsf mode."""
+
+    seed: int = 42
+    """RNG seed for sotss_gsf stochastic oracle (must match evaluation seed)."""
+
     ewma_alpha: float = REPLICA_OSOTSS_EWMA_ALPHA
     """EWMA decay for Online SOTSS causal service-time prediction (default 0.1)."""
 
@@ -582,7 +789,7 @@ class ReplicaScalingResult:
     """Result returned by :class:`ReplicaScalingPolicy`."""
 
     mode: str
-    """Algorithm used: ``"amcsg"``, ``"sotss_min"``, or ``"online_sotss"``."""
+    """Algorithm used: ``"amcsg"``, ``"sotss_min"``, ``"sotss_gsf"``, or ``"online_sotss"``."""
 
     c_schedule: list
     """Per-tick replica count ``list[int]``."""
@@ -622,6 +829,8 @@ class ReplicaScalingPolicy(OptimizationPolicy):
         ``"sotss_min"``    — SOTSS oracle loop starting from minimum stable c
                              (``aggressive_gate_pct=100.0``), the frontier algorithm
                              that achieves +6.29% goodput/$ vs AMCSG on Azure.
+        ``"sotss_gsf"``    — SOTSS-GSF stochastic oracle; uses spot interruptions
+                             in the oracle loop (oracle-class, not production-safe).
         ``"online_sotss"`` — Production-deployable SOTSS: causal EWMA service-time
                              predictions replace oracle actual token counts.
 
@@ -701,6 +910,32 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                 baseline_n_sla_safe=baseline_n_sla_safe,
             )
 
+        if cfg.mode == "sotss_gsf":
+            c_sched, n_iters, _, n_ticks_cheaper, baseline_n_sla_safe = (
+                compute_sotss_gsf_schedule(
+                    raw, cfg.tick_seconds, w,
+                    sla_s=cfg.sla_s,
+                    safe_gate=cfg.safe_gate_pct,
+                    aggressive_gate=cfg.aggressive_gate_pct,
+                    spot_fraction=cfg.spot_fraction,
+                    zfhc_threshold=cfg.zfhc_threshold,
+                    p_interrupt_hourly=cfg.p_interrupt_hourly,
+                    seed=cfg.seed,
+                    max_iters=cfg.max_oracle_iters,
+                )
+            )
+            c_mean = statistics.mean(c_sched) if c_sched else 0.0
+            return ReplicaScalingResult(
+                mode="sotss_gsf",
+                c_schedule=c_sched,
+                c_mean=c_mean,
+                n_ticks=len(c_sched),
+                warp=w,
+                oracle_iters=n_iters,
+                n_ticks_cheaper=n_ticks_cheaper,
+                baseline_n_sla_safe=baseline_n_sla_safe,
+            )
+
         if cfg.mode == "online_sotss":
             c_sched, n_iters, _, n_ticks_cheaper, baseline_n_sla_safe = (
                 compute_online_sotss_schedule(
@@ -726,7 +961,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
 
         raise ValueError(
             f"ReplicaScalingPolicy: unknown mode {cfg.mode!r}. "
-            "Valid modes: 'amcsg', 'sotss_min', 'online_sotss'."
+            "Valid modes: 'amcsg', 'sotss_min', 'sotss_gsf', 'online_sotss'."
         )
 
 
@@ -742,7 +977,9 @@ __all__ = [
     "_replica_erlang_c_sla_timeout_pct",
     "compute_mcs_c_schedule",
     "_oracle_fifo_response_times",
+    "_oracle_stochastic_response_times",
     "compute_sotss_min_schedule",
+    "compute_sotss_gsf_schedule",
     "compute_online_sotss_schedule",
     "compute_c1pgs_spot_replicas",
     "ReplicaScalingConfig",
