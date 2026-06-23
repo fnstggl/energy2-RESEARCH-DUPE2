@@ -8,6 +8,29 @@
 
 ---
 
+## Canonical Optimizer Phases 1–3 — Unification Routing (STRUCTURAL — NO BEHAVIOR CHANGE)
+
+> Architecture-unification parity steps, not optimization runs. See
+> `research/OPTIMIZER_UNIFICATION_PLAN.md` and the Phase 1/2/3 parity reports.
+
+- **Phase 1**: `AureliusOptimizer(policy="energy")` wraps `JobScheduler` (verbatim delegate).
+- **Phase 2**: `AureliusOptimizer(policy="serving_queue")` exposes the extracted
+  abs-conformal SRPT discipline (moved out of the benchmark monolith).
+- **Phase 3**: 5 public benchmark entry points now route through `AureliusOptimizer`
+  (4 energy benchmarks + the serving shim). **0% energy + serving KPI drift**
+  (canonical golden snapshot reproduced; abs-conformal JSON byte-identical).
+- Azure/BurstGPT trace replays are **not** routed yet — they are a per-tick
+  replica-provisioning autoscaler (a `ReplicaScalingPolicy`, future phase), not the
+  energy/serving policies.
+
+**Governance recorded (binding for future optimization claims):** (1) report
+Current-Main vs Best-Aurelius vs Candidate — never FIFO-only; a candidate is a
+frontier improvement only if it beats the best validated AureliusOptimizer config;
+(2) optimizer-first — every optimization must map to a real production decision
+(decision-time info only, no actual-token leakage); (3) policy-combination search
+with interaction effects once policies share a workload (feasible after Phase 1b
+unified replay; `energy` and `serving_queue` are disjoint workload classes today).
+
 ## Run 2026-06-23B — Spot Fleet MCS (NORTH STAR ACHIEVED — FRONTIER IMPROVEMENT)
 
 ### Q1. What currently limits Aurelius most?

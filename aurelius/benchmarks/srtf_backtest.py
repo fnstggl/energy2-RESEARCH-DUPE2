@@ -36,8 +36,7 @@ Design rules
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from ..models import Job, OptimizationConfig
 from .canonical_backtests import build_canonical_jobs, load_canonical_price_data
@@ -172,7 +171,6 @@ def _compute_schedule_metrics(
     migration_network_usd: float = 0.5,
 ) -> tuple[float, float, int]:
     """Return (sla_safe_goodput_per_dollar, realized_cost, deadline_misses)."""
-    from datetime import timedelta
 
     from ..backtesting.evaluator import evaluate_schedule
 
@@ -274,7 +272,8 @@ def run_srtf_backtest(
     Raises:
         FileNotFoundError: If canonical price CSV files are absent.
     """
-    from ..optimization.scheduler import JobScheduler
+    # Phase 3: route through the canonical AureliusOptimizer (energy policy).
+    from ..optimizer import AureliusOptimizer
 
     # 1. Build canonical jobs.
     raw_jobs = build_canonical_jobs(seed=seed, count=job_count)
@@ -294,13 +293,13 @@ def run_srtf_backtest(
     cfg = OptimizationConfig(default_region="us-east", min_power_fraction=1.0)
 
     # 4. Baseline schedule (no SRTF priors).
-    baseline_scheduler = JobScheduler(cfg)
-    baseline_result = baseline_scheduler.solve(baseline_jobs, da, carbon, method=method)
+    baseline_optimizer = AureliusOptimizer(config=cfg)
+    baseline_result = baseline_optimizer.optimize(baseline_jobs, da, carbon, method=method)
     baseline_schedule = baseline_result.schedule
 
     # 5. SRTF schedule (with predicted_output_tokens set for eligible jobs).
-    srtf_scheduler = JobScheduler(cfg)
-    srtf_result = srtf_scheduler.solve(srtf_jobs, da, carbon, method=method)
+    srtf_optimizer = AureliusOptimizer(config=cfg)
+    srtf_result = srtf_optimizer.optimize(srtf_jobs, da, carbon, method=method)
     srtf_schedule = srtf_result.schedule
 
     # 6. Compute KPIs.

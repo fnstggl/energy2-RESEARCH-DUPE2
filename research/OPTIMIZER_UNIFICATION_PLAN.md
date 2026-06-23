@@ -17,9 +17,24 @@
 |---|---|---|
 | **Phase 1a — Canonical interface bootstrap** (stand up `AureliusOptimizer` + decision-layer policy seam; energy policy = thin delegate to `JobScheduler`) | **DONE — behavior-preserving, 0% KPI drift** | `aurelius/optimizer/`, `tests/test_canonical_optimizer_parity.py` (21 pass), `research/results/canonical_optimizer_phase1_parity_2026-06-22.md` |
 | **Phase 2 — Extract the serving (abs-conformal SRPT) discipline behind the policy interface** | **DONE — parity extraction, 0% serving + energy KPI drift** | `aurelius/optimizer/policies/serving_queue.py`, `tests/test_canonical_serving_policy_phase2.py` (9 pass) + `test_abs_conformal_backtest.py` (17 re-export), `research/results/canonical_optimizer_phase2_serving_policy_parity_2026-06-22.md` |
+| **Phase 3 — Route public benchmark entry points through AureliusOptimizer** | **DONE — 5 entry points routed, 0% energy + serving KPI drift** | `canonical_backtests` / `gpu_routing_backtest` / `srtf_backtest` / `srtf_contention_backtest` + serving shim; `tests/test_canonical_optimizer_phase3_routing.py` (11) + `test_canonical_energy_backtest.py` (17 golden); `research/results/canonical_optimizer_phase3_benchmark_routing_parity_2026-06-22.md` |
 | Phase 1b — Unify the 4 replay loops into one engine | Not started | — |
-| Phase 3 — Promote frontier BASE/DYNAMIC → constraint; dedup calibrators | Not started | — |
-| Phase 4 — Deprecate dead/duplicate code | Not started | — |
+| Phase 4 — Promote frontier BASE/DYNAMIC → constraint; dedup calibrators | Not started | — |
+| Phase 5 — Deprecate dead/duplicate code | Not started | — |
+
+**Phase 3 notes.** Five public benchmark entry points now construct the canonical
+`AureliusOptimizer` instead of the underlying engines: the four energy benchmarks
+(`canonical_backtests`, `gpu_routing_backtest`, `srtf_backtest`,
+`srtf_contention_backtest`) route through `AureliusOptimizer(policy="energy")`
+(GPU placement passed through as a scheduler kwarg), and the serving benchmark's
+abs-conformal shim routes through `AureliusOptimizer(policy="serving_queue")`.
+Routing is construction-only: energy `routed == direct JobScheduler`, serving
+`shim == extracted impl` → 0% KPI drift (energy golden snapshot reproduced;
+serving JSON byte-identical). The Azure/BurstGPT trace replays are **not** routed
+— they are a per-tick replica-provisioning autoscaler (Erlang-C), a different
+decision type that maps to a future `ReplicaScalingPolicy`, not the energy/serving
+policies; routing them now would be a behavior change, not a parity refactor.
+`BacktestEngine` (a shared core engine) is left for a separate step.
 
 **Phase 2 notes.** The strongest validated serving discipline (Decoupled Hybrid
 SRPT + absolute-error conformal α, run -x) was moved **verbatim** from the 7.6k-LOC
@@ -44,6 +59,43 @@ no duplicate deleted. Parity vs. the pinned energy core and 0% canonical-benchma
 KPI drift are proven in the parity report. The replay-engine unification
 (originally labelled "Phase 1" below) is re-tagged **Phase 1b** and remains the
 next, separately-gated step.
+
+---
+
+## Optimization Governance (binding for all future optimization phases)
+
+These rules govern any phase that makes an **optimization claim** (Phases 1b–5
+that change behavior, and any new policy). They do **not** apply to parity
+refactors (Phases 1a/2/3), which by definition change no behavior.
+
+1. **Baseline governance.** Every optimization claim must report a three-way
+   comparison — **Current Main** vs **Best validated Aurelius** vs **Candidate** —
+   plus a relevant industry-standard baseline. Never compare exclusively against
+   FIFO, random, greedy, or other trivial baselines. A candidate is a *frontier
+   improvement* only if it beats the best validated `AureliusOptimizer`
+   configuration, not merely FIFO.
+
+2. **Optimizer-first rule.** Do not build an optimization whose only purpose is a
+   benchmark number. Before implementing any optimization, document: (a) the
+   production decision that changes, (b) the information available at decision
+   time, (c) why it should improve SLA-safe goodput/$, (d) how it operates on real
+   infrastructure. If no realistic production decision exists, do not implement it.
+   (Decision-time information only — no actual-output-token leakage, enforced by
+   tests.)
+
+3. **Policy combination search.** When ≥2 validated policies exist, evaluate
+   combinations (A, B, …, A+B, A+C, B+C, A+B+C, …) when computationally feasible,
+   and measure interaction effects — do not assume individually-beneficial
+   policies compose positively. The benchmark frontier is the best-performing
+   validated *combination* inside `AureliusOptimizer`.
+   - **Feasibility note (today):** the two validated policies — `energy`
+     (batch-job cost on price traces) and `serving_queue` (request-queue goodput/$
+     on LLM traces) — operate on **disjoint workload classes**, so no shared
+     benchmark defines `energy + serving_queue` yet. A meaningful combination
+     search becomes feasible after **Phase 1b** (unified replay) and the
+     `ReplicaScalingPolicy`/`PlacementPolicy`/`AdmissionPolicy` exist on a common
+     workload. Until then there is no honest combination to measure, and none is
+     fabricated.
 
 ---
 

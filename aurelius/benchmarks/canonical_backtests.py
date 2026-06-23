@@ -473,16 +473,18 @@ def run_canonical_backtest(
         gpu_hour_usd=CANONICAL_GPU_HOUR_USD,
         migration_network_usd=CANONICAL_MIGRATION_NETWORK_USD,
     )
-    from ..optimization.scheduler import JobScheduler
-    scheduler = JobScheduler(cfg)
-    standalone_result = scheduler.solve(jobs, da, carbon, method=method)
+    # Phase 3: route the canonical energy benchmark through the canonical
+    # AureliusOptimizer (energy policy delegates verbatim to JobScheduler).
+    from ..optimizer import AureliusOptimizer
+    optimizer = AureliusOptimizer(config=cfg)
+    standalone_result = optimizer.optimize(jobs, da, carbon, method=method)
     standalone_schedule = standalone_result.schedule
     # ASAP home placement = "no optimization" sanity baseline (FIFO) + the safe
     # no-move fallback for rejected candidates. Each job runs at its own
     # earliest_start in the default region; no cross-job queueing artifact (the
     # energy evaluator scores each job's window independently), so it has zero
     # deadline misses and is the honest "did we make things worse?" reference.
-    asap_baseline = scheduler.create_baseline_schedule(jobs)
+    asap_baseline = optimizer.create_baseline_schedule(jobs)
     fifo_schedule = asap_baseline
     baseline_regions = {d.job_id: d.region for d in asap_baseline}
 

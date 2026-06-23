@@ -134,12 +134,18 @@ from typing import Optional
 # serving discipline (Decoupled Hybrid SRPT + absolute-error conformal alpha) and
 # its calibrator now live in the optimizer package. The benchmark imports them
 # back so it no longer owns the optimizer logic (parity-preserving extraction).
+from aurelius.optimizer import AureliusOptimizer
 from aurelius.optimizer.policies.serving_queue import (
     AbsoluteErrorConformalCalibrator,
+    simulate_decoupled_hybrid_abs_conformal,
 )
-from aurelius.optimizer.policies.serving_queue import (
-    simulate_decoupled_hybrid_abs_conformal as _abs_conformal_impl,
-)
+
+# Phase 3: the benchmark routes the abs-conformal serving discipline through the
+# canonical AureliusOptimizer facade (policy="serving_queue") instead of calling
+# the extracted function directly — same logic, same _summarize, 0% KPI drift.
+_SERVING_QUEUE_OPTIMIZER = AureliusOptimizer(policy="serving_queue")
+# Back-compat alias (identical object the serving_queue policy dispatches to).
+_abs_conformal_impl = simulate_decoupled_hybrid_abs_conformal
 
 # ---------------------------------------------------------------------------
 # Documented service-physics constants (identical across all disciplines).
@@ -5745,14 +5751,19 @@ def _simulate_decoupled_hybrid_abs_conformal(
 ) -> tuple[dict, dict, dict]:
     """Decoupled Hybrid SRPT + absolute-error conformal alpha [run 2026-06-22-x].
 
-    Phase 2 unification: the discipline now lives in
-    ``aurelius.optimizer.policies.serving_queue.simulate_decoupled_hybrid_abs_conformal``.
-    This thin shim injects the benchmark's ``_summarize`` (evaluation layer) and
-    preserves the exact signature, return contract, and behavior. See
-    research/results/canonical_optimizer_phase2_serving_policy_parity_2026-06-22.md.
+    Phase 2 extracted the discipline to
+    ``aurelius.optimizer.policies.serving_queue``; Phase 3 routes this shim
+    through the canonical ``AureliusOptimizer(policy="serving_queue")`` facade,
+    injecting the benchmark's ``_summarize`` (evaluation layer) and preserving
+    the exact signature, return contract, and behavior. See
+    research/results/canonical_optimizer_phase3_benchmark_routing_parity_2026-06-22.md.
     """
-    return _abs_conformal_impl(
-        requests, servers, calibrator, preemption_overhead_s, summarize=_summarize
+    return _SERVING_QUEUE_OPTIMIZER.optimize(
+        requests,
+        servers,
+        summarize=_summarize,
+        calibrator=calibrator,
+        preemption_overhead_s=preemption_overhead_s,
     )
 
 

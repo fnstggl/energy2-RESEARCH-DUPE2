@@ -56,12 +56,12 @@ import dataclasses
 import math
 import os
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from ..models import Job, OptimizationConfig, ScheduleDecision
-from .canonical_backtests import REGION_CAISO, _load_price_csv, CANONICAL_DA_FILES
+from .canonical_backtests import CANONICAL_DA_FILES, REGION_CAISO, _load_price_csv
 
 # ---------------------------------------------------------------------------
 # Proxy constants (documented; identical across every variant)
@@ -349,7 +349,8 @@ def run_srtf_contention_backtest(
     Raises:
         FileNotFoundError: If the canonical CAISO price CSV is absent.
     """
-    from ..optimization.scheduler import JobScheduler
+    # Phase 3: route through the canonical AureliusOptimizer (energy policy).
+    from ..optimizer import AureliusOptimizer
 
     # 1. Real Azure LLM 2024 output tokens → contended jobs (FIFO/no prior).
     tokens = load_azure_output_tokens(azure_fixture, limit=job_limit)
@@ -372,8 +373,8 @@ def run_srtf_contention_backtest(
     )
 
     def _run(js_jobs: list[Job]) -> list[ScheduleDecision]:
-        scheduler = JobScheduler(cfg)
-        return scheduler.solve(js_jobs, price_map, carbon, method="greedy").schedule
+        optimizer = AureliusOptimizer(config=cfg)
+        return optimizer.optimize(js_jobs, price_map, carbon, method="greedy").schedule
 
     fifo_sched = _run(base_jobs)
     perfect_sched = _run(srtf_perfect_jobs)
