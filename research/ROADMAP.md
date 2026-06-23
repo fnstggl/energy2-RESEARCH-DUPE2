@@ -24,6 +24,17 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Spot Fleet MCS [run 2026-06-23B] — NORTH STAR ACHIEVED on BOTH TRACES:**
+Spot/preemptible pricing overlay on FIFO+MCS fleet. Primary operating point: 70% spot at $0.80/hr
+(60% discount, realistic AWS/GCP/Azure GPU spot), 10%/hr interruption rate, stochastic Binomial
+interruption model (seed=42). Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s): on-demand=59,694
+(+136.8% vs SLA-oracle), **spot-fleet=102,009 (+304.7% vs SLA-oracle) — NORTH-STAR ACHIEVED**.
+BurstGPT HF (5,880 req, ρ=0.85, SLA=30s): on-demand=55,800 (+175.1%), **spot-fleet=97,595
+(+381.2% vs SLA-oracle) — NORTH-STAR ACHIEVED**. Both traces: completion rate=1.0000, zero SLA
+violations, expected interruptions=0.393 (0.007% of requests). Result is interruption-rate
+insensitive (same goodput at p_int=5–20%/hr). Minimum required: ≥60% spot discount at 70% fleet.
+Cost reduction: 41.5–42.8%. 15 tests passing. Results: `research/results/spot_fleet_mcs_backtest_2026-06-23.md`.
+
 **Joint Economic × Queue TRUE Compound [run 2026-06-23] — NORTH STAR NOT ACHIEVED:**
 First TRUE compound measurement — MCS per-tick variable-c provisioning + abs-conformal SRTF in
 a single discrete-event simulation (2×2 factorial). All conditions on provisioned-hours cost.

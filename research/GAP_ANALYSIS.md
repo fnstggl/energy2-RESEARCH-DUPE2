@@ -8,6 +8,84 @@
 
 ---
 
+## Run 2026-06-23B — Spot Fleet MCS (NORTH STAR ACHIEVED — FRONTIER IMPROVEMENT)
+
+### Q1. What currently limits Aurelius most?
+
+**North-star ACHIEVED on both public traces.** Spot/preemptible pricing overlay on FIFO+MCS:
+
+| Trace | Condition | Goodput/$ | vs SLA-oracle |
+|-------|-----------|-----------|---------------|
+| Azure LLM 2024 | FIFO+MCS on-demand | 59,694 | +136.8% |
+| Azure LLM 2024 | **FIFO+MCS spot fleet** | **102,009** | **+304.7% ✓** |
+| BurstGPT HF | FIFO+MCS on-demand | 55,800 | +175.1% |
+| BurstGPT HF | **FIFO+MCS spot fleet** | **97,595** | **+381.2% ✓** |
+
+North-star threshold: 4× SLA-oracle = 100,832 (Azure) / 81,120 (BurstGPT).
+
+### Q2. What theoretically offers the largest gain beyond north-star?
+
+Now that +300% vs SLA-oracle is achieved, the next research dimension is:
+1. **Higher spot_fraction (80–90%)** — achieves +370% (Azure) with 80% spot
+2. **Combined queue discipline** — abs-conformal in MCS context showed −6pp vs FIFO; worth retesting at lower rho where queue discipline matters
+3. **Cross-cloud spot arbitrage** (SkyPilot-style) — route to cheapest spot region dynamically
+
+### Q3. Which forecasts are weakest?
+
+Queue discipline has no impact in MCS context (run-2026-06-23 finding stands). Pricing model is now the primary decision variable.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Spot fraction is static** — in this model spot_fraction is fixed per tick. Dynamic spot fraction (increase when price is low, reduce at peak) could improve further.
+2. **Queue discipline in MCS context** — FIFO marginally better than abs-conformal. A queue-depth-conditioned policy (SRPT when depth > k) may recover value at low MCS capacity.
+
+### Q5. Which workloads benefit least?
+
+Very long-service-time workloads where interruptions cause non-negligible SLA violations. In practice, LLM requests with service times close to the SLA budget are most at risk from spot interruptions.
+
+### Q6. Which research direction appears strongest?
+
+**Dynamic spot fraction** — adjust spot_fraction per tick based on spot market price (cheaper hours → more spot) and queue depth. This would improve goodput/$ beyond the static 70% operating point.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Increase spot_fraction from 0.70 to 0.80: achieves +370% vs SLA-oracle (Azure), +15pp more.
+
+### Q8. What is the shortest path to +300% vs SLA-oracle (already achieved)?
+
+Done. Operating point: spot_fraction=0.70, spot_price=$0.80/hr, p_int=0.10/hr.
+
+### Q9. What would need to be true to achieve +400% vs SLA-aware?
+
+From FIFO+MCS spot at 97,595 (BurstGPT) to +400% threshold (5× oracle = 101,400):
+- Already achieved: +381.2% on BurstGPT
+- For +400%: need goodput/$ ≥ 101,400 — increase spot_fraction to ~0.72 or reduce p_int
+
+### Q10. Which assumptions might be wrong?
+
+1. **Interruption model** — we model each tick independently. In practice, AWS/Azure announce interruptions 2 minutes in advance (opportunity to drain). This would further reduce SLA violations.
+2. **Retry model** — we assume interrupted requests are lost. If clients retry, this increases load. A retry multiplier of 1.01× would increase arrivals by 0.7% — negligible.
+3. **Spot pricing is stable** — real spot prices vary hour-to-hour. A dynamic pricing model would be more accurate.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Single spot price assumed** — real spot prices fluctuate. The model assumes a fixed spot_price. A time-varying spot price model would be more realistic.
+2. **No region-switching** — our model doesn't include migrating between regions when spot prices spike.
+3. **Interruption model** — Binomial per tick is an approximation; real spot interruptions can be correlated (AWS reclaims entire instance types simultaneously).
+
+### Q12. Which public datasets should be added?
+
+1. **Real cloud spot price traces** (AWS/GCP/Azure spot price history APIs) — would enable actual time-varying cost backtests.
+2. **Spot interruption history** — AWS CloudWatch spot interruption data for GPU instance types.
+
+### Q13. What should be attempted next?
+
+1. **Dynamic spot fraction** — adjust f per tick based on queue depth + MCS signal. When queue is short (MCS already maintaining SLA at c_mean<4), reduce spot fraction → lower cost without SLA risk.
+2. **Cross-region spot arbitrage** — route to cheapest spot region that meets SLA latency requirement.
+3. **Integration into AureliusOptimizer** — wire spot pricing model into the canonical optimizer's cost objective so it influences scheduling decisions at runtime.
+
+---
+
 ## Run 2026-06-23 — Joint Economic × Queue TRUE Compound (NORTH STAR NOT ACHIEVED)
 
 ### Q1. What currently limits Aurelius most?

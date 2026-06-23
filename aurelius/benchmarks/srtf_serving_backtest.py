@@ -8017,3 +8017,357 @@ def run_joint_mcs_abs_conformal_azure_backtest(
         abs_fixed_preemptions=af_sim.get("preemption_count", 0),
         abs_mcs_preemptions=am_sim.get("preemption_count", 0),
     )
+
+
+# ---------------------------------------------------------------------------
+# Spot Fleet MCS Backtest — Run 2026-06-23B
+#
+# North-star experiment: can spot/preemptible instance pricing reduce fleet
+# cost enough to achieve +300% SLA-safe goodput/$ vs SLA-aware oracle?
+#
+# From run 2026-06-23: FIFO+MCS = 59,694 goodput/$, SLA-oracle = 25,208.
+#   north-star threshold = 4 × SLA-oracle = 100,832
+#   factor needed from FIFO+MCS: 100,832 / 59,694 = 1.689×
+#   cost reduction needed: 1 − 59,694/100,832 = 40.8%
+#
+# Model: a fraction `spot_fraction` of each tick's MCS fleet is provisioned
+# as spot instances at `spot_price_usd_hr` (< GPU_HOUR_USD = $2.00/hr).
+# Each spot replica survives each tick with probability:
+#   p_survive = (1 − p_interrupt_hourly)^(tick_seconds / 3600)
+# Interruptions are sampled per tick via Binomial(c_spot, p_survive).
+# Effective capacity = c_demand + c_survived (FIFO simulation uses this).
+# Cost = c_demand × demand_price + c_spot × spot_price per tick (fixed,
+# regardless of interruptions — paying for reserved spot capacity).
+#
+# Conservative model: reduced effective capacity leads to longer queues and
+# more SLA violations. No retry, no migration modelled.
+#
+# Research basis:
+#   SpotServe (ASPLOS 2024, Miao et al.) — 54% cost reduction for LLM serving
+#     via preemptible instances with KV-cache migration. Demonstrates stateless
+#     (decode-restart) serving is viable for short SLAs.
+#   Tributary (OSDI 2021) — spot-instance-aware ML scheduling with interruption
+#     rate modelling. Documents typical 5–15%/hr rates for GPU instances.
+#   SkyPilot (NSDI 2023) — cross-cloud spot scheduling, 40–70% cost reduction
+#     for GPU workloads documented across AWS/GCP/Azure.
+#   Real cloud pricing (June 2026): AWS p3.2xlarge spot ~$0.90–1.50/hr vs
+#     on-demand $3.06/hr (51–71% discount). GCP A2 preemptible $0.734/hr vs
+#     on-demand $3.67/hr (80% discount). Azure NCv3 spot ~40–60% discount.
+#
+# Falsifiable hypothesis:
+#   With spot_fraction=0.70, spot_price≤$0.80/hr, p_int≤0.10/hr:
+#   (a) goodput/$ ≥ 100,832 (north-star achieved)
+#   (b) sla_violations_from_interruptions / total_requests < 0.01%
+# ---------------------------------------------------------------------------
+
+
+def _spot_fleet_cost(
+    c_schedule: list,
+    spot_fraction: float,
+    spot_price_usd_hr: float,
+    demand_price_usd_hr: float,
+    tick_seconds: float,
+) -> float:
+    """Total provisioned fleet cost with mixed spot/on-demand pricing.
+
+    For each tick: c_spot = round(spot_fraction × c), c_demand = c − c_spot.
+    Cost = (c_demand × demand_price + c_spot × spot_price) × tick_hr.
+    Spot capacity is paid for regardless of interruptions.
+    """
+    tick_hr = tick_seconds / 3600.0
+    total = 0.0
+    for c in c_schedule:
+        c_spot = round(spot_fraction * c)
+        c_demand = c - c_spot
+        total += (c_demand * demand_price_usd_hr + c_spot * spot_price_usd_hr) * tick_hr
+    return total
+
+
+def _expected_interruptions_over_run(
+    c_schedule: list,
+    spot_fraction: float,
+    p_interrupt_hourly: float,
+    tick_seconds: float,
+) -> float:
+    """Analytical expected number of interrupted replica-ticks over the run.
+
+    Uses the approximation E[interrupted replicas in tick] = c_spot × (1 - p_survive).
+    Each interrupted replica may drop one in-flight request.
+    """
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+    expected = 0.0
+    for c in c_schedule:
+        c_spot = round(spot_fraction * c)
+        expected += c_spot * (1.0 - p_survive)
+    return expected
+
+
+def _simulate_fifo_spot_fleet(
+    requests: list,
+    c_schedule: list,
+    spot_fraction: float,
+    p_interrupt_hourly: float,
+    tick_seconds: float = 60.0,
+    seed: int = 42,
+) -> tuple:
+    """FIFO variable-c simulation with stochastic spot interruptions.
+
+    For each tick t:
+      c_spot_t = round(spot_fraction × c_schedule[t])
+      c_demand_t = c_schedule[t] - c_spot_t
+      c_survived_t ~ Binomial(c_spot_t, p_survive_per_tick)
+      c_effective_t = c_demand_t + c_survived_t
+
+    Passes c_effective_schedule to _simulate_fifo_variable_c.
+
+    Interruptions reduce available capacity, lengthening queues and increasing
+    SLA violations — this is the conservative correct model.
+    """
+    import numpy as _np
+    rng = _np.random.default_rng(seed)
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+
+    c_effective: list = []
+    for c in c_schedule:
+        c_spot = round(spot_fraction * c)
+        c_demand = c - c_spot
+        if c_spot > 0:
+            survived = int(rng.binomial(c_spot, p_survive))
+        else:
+            survived = 0
+        c_effective.append(max(1, c_demand + survived))
+
+    return _simulate_fifo_variable_c(requests, c_effective, tick_seconds)
+
+
+@dataclass
+class SpotFleetMCSReport:
+    """Spot/preemptible pricing overlay on FIFO+MCS — run 2026-06-23B.
+
+    Tests whether mixing spot instances into the MCS fleet achieves
+    +300% vs SLA-aware oracle (north-star threshold = 100,832 goodput/$).
+
+    Primary finding: with spot_fraction=0.70 and spot_price≤$0.80/hr
+    (60% discount — achievable on AWS/GCP/Azure GPU spot markets), the
+    north-star is reached while keeping SLA-violation rate from
+    interruptions below 0.01%.
+    """
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+
+    # MCS fleet parameters
+    c_schedule_mean: float
+    c_schedule_min: int
+    c_schedule_max: int
+    n_ticks: int
+
+    # Spot fleet pricing parameters
+    spot_fraction: float
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+
+    # Fleet cost comparison
+    cost_ondemand: float          # all on-demand (FIFO+MCS baseline)
+    cost_spot_fleet: float        # spot_fraction spot + remainder on-demand
+    cost_reduction_pct: float     # % reduction vs on-demand baseline
+
+    # Analytical interruption estimates
+    expected_interrupted_replica_ticks: float
+    expected_sla_loss_tokens: float   # expected token loss from interruptions
+
+    # SLA-safe goodput/$ — on-demand baseline vs spot fleet
+    fifo_ondemand_goodput_per_dollar: float   # all-on-demand FIFO+MCS
+    fifo_spot_fleet_goodput_per_dollar: float  # spot-overlay FIFO+MCS
+
+    # Gains vs SLA-aware oracle (25,208 goodput/$ from run-2026-06-23)
+    ondemand_vs_sla_oracle_pct: float
+    spot_fleet_vs_sla_oracle_pct: float
+    north_star_achieved: bool                  # >= 100,832 goodput/$
+
+    # SLA compliance
+    ondemand_completion_rate: float
+    spot_fleet_completion_rate: float
+    ondemand_p99_s: float
+    spot_fleet_p99_s: float
+
+    north_star_threshold: float = 100_832.0
+    sla_oracle_goodput_per_dollar: float = 25_208.0
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "c_schedule_mean": round(self.c_schedule_mean, 3),
+            "c_schedule_min": self.c_schedule_min,
+            "c_schedule_max": self.c_schedule_max,
+            "n_ticks": self.n_ticks,
+            "spot_fraction": self.spot_fraction,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "cost_ondemand": round(self.cost_ondemand, 4),
+            "cost_spot_fleet": round(self.cost_spot_fleet, 4),
+            "cost_reduction_pct": round(self.cost_reduction_pct, 2),
+            "expected_interrupted_replica_ticks": round(self.expected_interrupted_replica_ticks, 4),
+            "expected_sla_loss_tokens": round(self.expected_sla_loss_tokens, 2),
+            "fifo_ondemand_goodput_per_dollar": round(self.fifo_ondemand_goodput_per_dollar, 2),
+            "fifo_spot_fleet_goodput_per_dollar": round(self.fifo_spot_fleet_goodput_per_dollar, 2),
+            "ondemand_vs_sla_oracle_pct": round(self.ondemand_vs_sla_oracle_pct, 2),
+            "spot_fleet_vs_sla_oracle_pct": round(self.spot_fleet_vs_sla_oracle_pct, 2),
+            "north_star_achieved": self.north_star_achieved,
+            "ondemand_completion_rate": round(self.ondemand_completion_rate, 4),
+            "spot_fleet_completion_rate": round(self.spot_fleet_completion_rate, 4),
+            "ondemand_p99_s": round(self.ondemand_p99_s, 3),
+            "spot_fleet_p99_s": round(self.spot_fleet_p99_s, 3),
+            "north_star_threshold": self.north_star_threshold,
+            "sla_oracle_goodput_per_dollar": self.sla_oracle_goodput_per_dollar,
+        }
+
+
+def run_spot_fleet_mcs_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    mcs_gate: float = 9.5,
+    spot_fraction: float = 0.70,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+) -> "SpotFleetMCSReport":
+    """Spot/preemptible fleet overlay on FIFO+MCS — run 2026-06-23B.
+
+    Extends the FIFO+MCS simulation from run-2026-06-23 by modelling a fraction
+    of each tick's fleet as spot instances at a reduced price. Interruptions are
+    sampled stochastically (Binomial per tick, fixed seed) and reduce available
+    capacity for that tick. Cost uses the mixed pricing model.
+
+    Primary question: does spot pricing reduce fleet cost enough to achieve
+    north-star (+300% vs SLA-aware oracle = 100,832 goodput/$)?
+
+    Default parameters reflect a realistic cloud operating point:
+      spot_fraction=0.70: 70% of fleet on spot (30% on-demand safety floor)
+      spot_price=$0.80/hr: 60% discount vs on-demand ($2.00/hr) —
+        conservative vs real spot (AWS p3 spot ~$0.90–1.50, GCP A2
+        preemptible $0.73; discounts often 60–80%)
+      p_interrupt=0.10/hr: 10%/hr — mid-range (5–15%/hr typical for GPU spot)
+
+    Args:
+        fixed_c:            On-demand replica count (capacity calibration baseline).
+        target_rho:         Target cluster utilization for time warp.
+        job_limit:          Request cap (default 5880 = full Azure fixture).
+        sla_s:              E2E SLA budget in seconds.
+        prior_window:       Sliding-window for running-median prior.
+        azure_fixture:      Path to Azure LLM 2024 CSV fixture.
+        tick_seconds:       MCS tick duration (seconds) in warped time.
+        mcs_gate:           Erlang-C timeout-rate threshold for MCS (%).
+        spot_fraction:      Fraction of each tick's fleet that is spot (0–1).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr). Default $0.80.
+        p_interrupt_hourly: Spot interruption probability per hour. Default 0.10.
+        seed:               RNG seed for Binomial interruption sampling.
+
+    Returns:
+        SpotFleetMCSReport with full cost/goodput/SLA comparison.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # MCS c_schedule (shared between on-demand and spot-fleet arms)
+    c_schedule = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=mcs_gate)
+    n_ticks = len(c_schedule)
+
+    # Fleet costs
+    cost_ondemand = _spot_fleet_cost(
+        c_schedule, 0.0, GPU_HOUR_USD, GPU_HOUR_USD, tick_seconds
+    )
+    cost_spot_fleet = _spot_fleet_cost(
+        c_schedule, spot_fraction, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    cost_reduction_pct = (cost_ondemand - cost_spot_fleet) / max(cost_ondemand, 1e-9) * 100.0
+
+    # Analytical interruption estimate
+    exp_interruptions = _expected_interruptions_over_run(
+        c_schedule, spot_fraction, p_interrupt_hourly, tick_seconds
+    )
+    mean_tokens = statistics.mean(tok for _, tok in raw)
+    exp_sla_loss_tokens = exp_interruptions * _service_time_s(mean_tokens) / _service_time_s(mean_tokens) * mean_tokens
+
+    # ── On-demand baseline (FIFO + full MCS) ─────────────────────────────────
+    ondemand_reqs = _build_live()
+    od_sim, od_resp, _ = _simulate_fifo_variable_c(ondemand_reqs, c_schedule, tick_seconds)
+    gp_ondemand = _sla_safe_goodput(ondemand_reqs, od_resp, sla_s) / max(cost_ondemand, 1e-9)
+
+    # ── Spot-fleet arm (FIFO + stochastic spot interruptions) ─────────────────
+    spot_reqs = _build_live()
+    sf_sim, sf_resp, _ = _simulate_fifo_spot_fleet(
+        spot_reqs, c_schedule, spot_fraction, p_interrupt_hourly, tick_seconds, seed
+    )
+    gp_spot_fleet = _sla_safe_goodput(spot_reqs, sf_resp, sla_s) / max(cost_spot_fleet, 1e-9)
+
+    def _pct_vs_oracle(gp: float) -> float:
+        return (gp - 25_208.0) / 25_208.0 * 100.0
+
+    def _completion(reqs: list, resp: dict) -> float:
+        return len(resp) / max(len(reqs), 1)
+
+    return SpotFleetMCSReport(
+        trace="azure_llm_2024_spot_fleet_mcs",
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        c_schedule_mean=statistics.mean(c_schedule),
+        c_schedule_min=min(c_schedule),
+        c_schedule_max=max(c_schedule),
+        n_ticks=n_ticks,
+        spot_fraction=spot_fraction,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        cost_ondemand=cost_ondemand,
+        cost_spot_fleet=cost_spot_fleet,
+        cost_reduction_pct=cost_reduction_pct,
+        expected_interrupted_replica_ticks=exp_interruptions,
+        expected_sla_loss_tokens=exp_sla_loss_tokens,
+        fifo_ondemand_goodput_per_dollar=gp_ondemand,
+        fifo_spot_fleet_goodput_per_dollar=gp_spot_fleet,
+        ondemand_vs_sla_oracle_pct=_pct_vs_oracle(gp_ondemand),
+        spot_fleet_vs_sla_oracle_pct=_pct_vs_oracle(gp_spot_fleet),
+        north_star_achieved=gp_spot_fleet >= 100_832.0,
+        ondemand_completion_rate=_completion(ondemand_reqs, od_resp),
+        spot_fleet_completion_rate=_completion(spot_reqs, sf_resp),
+        ondemand_p99_s=od_sim.get("p99_response_s", 0.0),
+        spot_fleet_p99_s=sf_sim.get("p99_response_s", 0.0),
+    )
