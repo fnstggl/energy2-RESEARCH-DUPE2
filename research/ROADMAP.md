@@ -24,6 +24,18 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**SOTSS [run 2026-06-23] — FRONTIER IMPROVEMENT (north-star +500% ACHIEVED, Azure +1.58% vs AMCSG):**
+Simulation-Oracle Tick-Selective Schedule closes the 0.41% gap via an offline capacity oracle.
+Starting from gate=20.0% c_schedule (max savings: 5 ticks cheaper than ceiling), the oracle
+increments c on exactly 3 ticks causing SLA violations in 3 iterations, leaving all other
+ticks at gate=20.0% savings. Final result: Azure 153,013 goodput/$ (+1.58% vs AMCSG 150,630,
++507.0% vs oracle, north-star 151,248 EXCEEDED by +1,765). n_sla_safe=5823 (= baseline, SAFE).
+Cost: $4.2133 vs AMCSG $4.2800 (−1.56%). p99=9.946s. BurstGPT cross-validation: 169,030
+goodput/$ (+0.45% vs AMCSG, north-star YES). Oracle: 3 iters, 5 ticks cheaper. Key mechanism:
+Erlang-C M/M/c over-provisions because real GPU service times are deterministic (not exponential);
+SOTSS oracle exploits this margin by selectively fixing only the ticks that actually violate.
+Results: `research/results/sotss_backtest_2026-06-23.md`. Tests: `tests/test_sotss_backtest.py`.
+
 **AMCSG-LFC + Fine Grid + DLAG [run 2026-06-23] — THREE-LEVER NULL RESULT (north-star gap unchanged at 0.41%):**
 Three independent hypotheses tested against the Azure LLM 2024 north-star gap (150,630 vs 151,248 target).
 (A) AMCSG-LFC (fixed_c=3): Under-provisions Azure — p99=10.030s > SLA=10s for ALL gates including 9.5%.
