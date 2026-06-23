@@ -24,7 +24,19 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
-**Compound Economic × Queue Scheduling [run 2026-06-22-z] — FRONTIER UNDERSTANDING:**
+**Joint Economic × Queue TRUE Compound [run 2026-06-23] — NORTH STAR ACHIEVED:**
+First TRUE compound measurement — MCS per-tick variable-c provisioning + abs-conformal SRTF in
+a single discrete-event simulation (2×2 factorial). Azure LLM 2024 (5,880 req, ρ=0.85, SLA=10s):
+FIFO+fixed=11,183 (baseline), abs-conformal+fixed=46,199 (**+313%**), FIFO+MCS=59,694 (**+434%**),
+**abs-conformal+MCS (TRUE compound)=58,323 (+422% vs FIFO+fixed)** → **north-star +300% ACHIEVED**.
+Structural finding: MCS scaling (+434%) dominates queue discipline (+313%) on diurnal traces; abs-
+conformal slightly HURTS in MCS context (−2.3% vs FIFO+MCS) because SRPT preemption overhead
+dominates when queue is short. TRUE compound +42% above independence estimate (58,323 vs 41,066)
+— validates joint simulation necessity. MCS c_schedule_mean=4.5 > fixed_c=4 (MCS costs +12.5%
+more on diurnal trace by scaling up to c=8 at peak; goodput gain far outweighs cost increase).
+15 new tests passing. Results: `research/results/joint_mcs_abs_conformal_2026-06-23.md`.
+
+**Compound Economic × Queue Scheduling [run 2026-06-22-z] — FRONTIER UNDERSTANDING (superseded by 2026-06-23 TRUE compound):**
 Measures the compound system (abs-conformal queue + economic provisioning) and corrects the
 run-t over-estimate. Economic cost factor 1.2575× (−21.2% GPU-hours, BENCHMARK_REGISTRY §1.1)
 applied multiplicatively to abs-conformal result. Azure LLM 2024: **compound=69,285 goodput/$
