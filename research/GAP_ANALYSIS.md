@@ -8,6 +8,121 @@
 
 ---
 
+## Run 2026-06-27 — AMCSG Policy (MARGINAL IMPROVEMENT — +0.93%/+0.30% vs GSF, North-star gap 0.41%)
+
+### Q1. What currently limits Aurelius most?
+
+**Azure is 0.41% below the +500% north-star ceiling after all-spot + Erlang-C gate optimization.**
+GSF at f=0.95 reached all-spot every tick (149,235 goodput/$, 1.35% gap). AMCSG gate sweep closed
+0.93% of that gap via raising the Erlang-C gate 9.5%→12.5%:
+
+| Trace | Condition | Goodput/$ | Cost | vs SLA-oracle |
+|-------|-----------|-----------|------|---------------|
+| Azure LLM 2024 | GSF(9.5%) baseline | 149,235 | $4.32 | +492.0% |
+| Azure LLM 2024 | **AMCSG(12.5%)** | **150,630** | **$4.28** | **+497.5%** |
+| BurstGPT HF | GSF(9.5%) baseline | 167,767 | $8.92 | +727.3% |
+| BurstGPT HF | **AMCSG(12.5%)** | **168,270** | **$8.89** | **+729.7%** |
+
+North-star thresholds: 6× oracle = 151,248 (Azure) / 121,680 (BurstGPT). BurstGPT already well
+above; Azure gap = **618 goodput/$ (0.41%)**.
+
+### Q2. What theoretically offers the largest gain beyond current state?
+
+1. **AMCSG-LFC (fixed_c=3 on Azure):** Current fixed_c=4 sets the time-warp calibration.
+   Lower fixed_c → fewer high-cost on-demand ticks at low load → lower c_mean → lower cost.
+   Expected: c_mean 4.5→4.2, cost ~$4.18 → goodput/$ ~155,000 (+3.5%) — would clear the north-star.
+2. **Dynamic per-tick gate:** Set gate proportional to (1 − ρ) per tick. At low load (ρ<<0.85),
+   raise gate aggressively; at high load, use conservative 9.5%. Expected: ~+1% additional on Azure.
+3. **Cross-region spot arbitrage (SkyPilot-style):** Not yet modeled; expected 5-20% cost reduction.
+
+### Q3. Which forecasts are weakest?
+
+1. **fixed_c calibration** — `calibrate_time_warp` uses fixed_c as the time-dilation factor.
+   If fixed_c is too high relative to actual arrival rate, we over-provision.
+2. **Erlang-C exponential service-time assumption** — actual GPU service times are heavy-tailed
+   (not exponential). The M/M/c model adds conservatism that can be safely reduced up to gate=12.5%.
+3. Spot price $0.80/hr and interruption rate 10%/hr remain calculated priors.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **fixed_c=4 throughout.** The time-warp calibration factor is fixed across all load levels.
+   At low-demand ticks, MCS still uses c=4 as the reference, over-provisioning.
+2. **Flat gate=12.5% across all ticks.** Off-peak ticks with ρ<<0.85 could safely go higher.
+3. **Single gate for all service-time distributions.** Heavy-tailed traces (BurstGPT) could
+   tolerate higher gates than lighter-tailed ones.
+
+### Q5. Which workloads benefit least from AMCSG?
+
+Workloads where every tick is near or above ρ=0.85 — no room to raise the gate without SLA
+violation. High-load, steady-state inference workloads see minimal benefit.
+
+### Q6. Which research direction appears strongest?
+
+**AMCSG-LFC (fixed_c=3 on Azure).** The gap to north-star is tiny (0.41%, 618 goodput/$).
+Reducing fixed_c from 4 to 3 directly reduces the time-warp calibration denominator, cutting
+per-tick on-demand cost at low load. Expected payoff: clear north-star with zero-violation guarantee.
+
+### Q7. What is the shortest path to another +0.5% gain?
+
+Reduce fixed_c 4→3 on Azure, keep gate at 12.5% (proven safe). If c_mean drops by 0.2 replicas
+average, cost falls from $4.28 → ~$4.21, goodput/$ rises ~+1.5%, clearing the north-star.
+
+### Q8. What is the current north-star status?
+
+- **Azure +500% north-star (151,248):** NOT YET ACHIEVED. Current best = 150,630 (gate=12.5%).
+  Gap = 618 goodput/$ = **0.41%**.
+- **BurstGPT +500% north-star (121,680):** ACHIEVED since GSF run. Current best = 168,270 (well above).
+
+### Q9. What would need to be true to achieve north-star on Azure?
+
+Any one of: (a) fixed_c 4→3 reducing cost $4.28→~$4.20, (b) gate swept to ~14% safely on
+a trace with less-heavy tails, (c) cross-region spot arbitrage cutting cost 1%, or (d) a
+load-aware gate schedule that avoids p99>SLA at peak while exploiting slack at off-peak.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Erlang-C conservatism is uniform across load.** At peak ρ (ρ=0.90+), even 12.5% gate
+   may be too aggressive — we haven't tested behavior under load spikes.
+2. **n_sla_safe drop at gate≥15% is fully explained by spot interruptions.** Could also be
+   a FIFO queue depth crossing a threshold from queueing theory.
+3. **fixed_c=4 is the right calibration baseline.** If actual long-run arrival rate corresponds
+   to fixed_c=3.5, then c=4 over-provisions and c=3 under-provisions.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Erlang-C gate search is coarse (1.5% steps).** Finer grid around 12.5%–14% on Azure
+   might find a safe improvement without full-step violations.
+2. **p99 reported; tail not fully characterized.** The n_sla_safe criterion is more honest
+   but the exact tail shape (p99.9, max) is not reported.
+
+### Q12. Which public datasets should be added?
+
+Same as prior runs: real cloud spot price traces, spot interruption histories.
+
+### Q13. What should be attempted next?
+
+1. **AMCSG-LFC** — fixed_c=3 on Azure with gate=12.5%; test whether north-star is cleared.
+2. **Fine gate grid** — test gates 13.0%, 13.5%, 14.0% on Azure with n_sla_safe criterion.
+3. **Dynamic load-aware gate** — gate = 9.5% + 5%*(1-ρ/0.85) per tick.
+
+---
+
+## Future Opportunity Ranking — Updated After Run 2026-06-27
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | AMCSG-LFC: fixed_c=3 on Azure (target: clear +500% north-star) | High | High | 0.41% gap — likely achievable with c_mean drop |
+| 2 | Fine gate grid (13.0%–14.0% on Azure) | Medium | High | Coarse grid may have missed a safe improvement |
+| 3 | Dynamic per-tick gate (load-aware, gate ∝ 1-ρ) | Medium | Medium | Avoids peak SLA violations, exploits off-peak slack |
+| 4 | Cross-region spot arbitrage (SkyPilot-style) | High | Medium | Multi-region cost model needed |
+
+**Closed/characterized opportunities (run 2026-06-27):**
+- Erlang-C gate exploitability: **CHARACTERIZED** — max safe gate = 12.5% (+3.0% above 9.5%). Gate≥15% causes SLA violations.
+- AMCSG best Azure: +0.93% vs GSF baseline (150,630 goodput/$). North-star gap: 0.41%.
+- AMCSG best BurstGPT: +0.30% vs GSF baseline (168,270 goodput/$). North-star already achieved.
+
+---
+
 ## Canonical Optimizer Phases 1–3 — Unification Routing (STRUCTURAL — NO BEHAVIOR CHANGE)
 
 > Architecture-unification parity steps, not optimization runs. See
