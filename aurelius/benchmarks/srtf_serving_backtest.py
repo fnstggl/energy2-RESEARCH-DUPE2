@@ -7403,3 +7403,617 @@ def run_burstgpt_hf_ml_abs_conformal_backtest(
         servers, target_rho, sla_s, warmup_n,
         target_p90_abs_tokens=target_p90_abs_tokens,
     )
+
+
+# ---------------------------------------------------------------------------
+# Joint Economic × Queue Compound Backtest — Run 2026-06-23
+#
+# First TRUE compound measurement: provisioning (MCS per-tick variable-c
+# replica schedule) and queue ordering (abs-conformal SRTF) composed in a
+# SINGLE discrete-event simulation on the Azure LLM 2024 public trace.
+#
+# Previous compound (run-z) applied the economic cost factor as a post-hoc
+# independence multiplier:
+#   compound_gp/$ = abs_conformal_gp/$ × ECONOMIC_COST_FACTOR_BENCHMARK_REGISTRY
+# This run removes that assumption by driving the serving simulation with the
+# actual MCS c_schedule so both effects are measured end-to-end.
+#
+# 2×2 factorial design:
+#   queue discipline: {FIFO, abs-conformal SRTF}
+#   provisioning:     {fixed-c=4, MCS variable-c}
+# Cost denominator: provisioned GPU hours × GPU_HOUR_USD (changes between
+# fixed-c and MCS-c; NOT the service-time cost shared across queue disciplines).
+#
+# Expected results (vs run-z independence estimates):
+#   abs-conformal+fixed-c:  +313% vs FIFO+fixed-c  [reference for run-y]
+#   abs-conformal+MCS-c:    > abs-conformal+fixed-c × provisioning_cost_factor
+#   independence vs truth:  close if queue+econ interactions are small
+#
+# Falsifiable hypothesis:
+#   TRUE compound ≥ 0.90 × independence estimate
+#   (≥10% tolerance for SLA degradation under variable-c transitions)
+# ---------------------------------------------------------------------------
+
+
+def _erlang_c_sla_timeout_pct(
+    lam: float,
+    mean_service_s: float,
+    c: int,
+    sla_wait_threshold_s: float,
+) -> float:
+    """Fraction of M/M/c arrivals waiting longer than sla_wait_threshold_s (%).
+
+    Uses the standard Erlang-C formula with service rate μ = 1/mean_service_s.
+    M/M/c is a conservative approximation for M/D/c (deterministic service times
+    used by the queue simulation). Returns 100.0 when system is overloaded (ρ≥1).
+
+    This provides queue-simulation-consistent physics for the MCS c_schedule:
+    service time = TTFT_BASE_S + output_tokens × TPOT_S (same as _service_time_s).
+    """
+    mu = 1.0 / max(mean_service_s, 1e-12)
+    a = lam / mu          # total traffic intensity (Erlangs)
+    rho = a / max(c, 1)   # per-server utilization
+
+    if rho >= 1.0:
+        return 100.0
+
+    # Erlang-C: P(new arrival must wait) via log-domain summation for stability.
+    log_a = math.log(a) if a > 1e-12 else -1e9
+    # Compute a^c / c! in log space
+    log_ac_over_cfact = c * log_a - sum(math.log(k) for k in range(1, c + 1))
+    # Compute sum_{k=0}^{c-1} a^k / k!
+    log_sum_terms: list = []
+    log_fact_k = 0.0
+    for k in range(c):
+        if k > 0:
+            log_fact_k += math.log(k)
+        log_sum_terms.append(k * log_a - log_fact_k)
+
+    log_last = log_ac_over_cfact + math.log(c / max(c - a, 1e-9))
+    all_logs = log_sum_terms + [log_last]
+    max_log = max(all_logs)
+    denom = sum(math.exp(x - max_log) for x in all_logs)
+    erlang_c_prob = math.exp(log_last - max_log) / denom
+
+    # P(wait > t) = C(c,a) * exp(-(c*μ - λ) * t)
+    excess_rate = c * mu - lam
+    prob_exceed = erlang_c_prob * math.exp(-excess_rate * sla_wait_threshold_s)
+    return min(100.0, max(0.0, prob_exceed * 100.0))
+
+
+def _joint_mcs_c_schedule(
+    raw: list,
+    tick_seconds: float,
+    warp: float,
+    mcs_gate: float = 9.5,
+    sla_s: float = DEFAULT_SLA_S,
+) -> list:
+    """Per-tick MCS replica counts using queue-simulation-consistent physics.
+
+    Uses Erlang-C M/M/c with μ = 1/_service_time_s(mean_output_tokens) per
+    server — the same service model as the discrete-event queue simulation.
+    This avoids the throughput-model mismatch between the provisioning backtest
+    (FALLBACK_TOKENS_PER_S=2500 tok/s via continuous batching) and the queue
+    simulation (TPOT_S=0.020 s/tok via sequential decoding).
+
+    Finds min c per tick where P(queue_wait > sla_s − service_s) < mcs_gate%.
+    Empty ticks (no arrivals) return 1 replica.
+
+    Args:
+        raw:          Raw ``(arrival_s, output_tokens)`` tuples (unwarped).
+        tick_seconds: Tick duration in warped seconds.
+        warp:         Time-warp factor (arrival_warped = arrival_raw / warp).
+        mcs_gate:     Timeout-rate threshold (%). Default 9.5 < 10% SLA target.
+        sla_s:        E2E SLA budget (seconds). SLA wait threshold = sla_s - mean_svc.
+
+    Returns:
+        List of ints; index k = replica count for tick [k*tick_s, (k+1)*tick_s).
+    """
+    if not raw:
+        return []
+
+    warped = [(t / warp, tok) for t, tok in raw]
+    t_max = warped[-1][0]
+    n_ticks = max(1, int(t_max / tick_seconds) + 1)
+
+    buckets: list = [[] for _ in range(n_ticks)]
+    for t, tok in warped:
+        idx = min(n_ticks - 1, int(t / tick_seconds))
+        buckets[idx].append(tok)
+
+    c_sched: list = []
+
+    for bucket in buckets:
+        if not bucket:
+            c_sched.append(1)
+            continue
+
+        n_req = len(bucket)
+        lam = n_req / tick_seconds          # arrival rate in warped seconds
+        mean_service = statistics.mean(      # service time per queue simulation
+            _service_time_s(tok) for tok in bucket
+        )
+        # SLA wait budget: remaining after service (negative → svc itself violates SLA)
+        sla_wait = max(0.0, sla_s - mean_service)
+
+        chosen = 1
+        for c in range(1, 1024):
+            timeout_pct = _erlang_c_sla_timeout_pct(lam, mean_service, c, sla_wait)
+            if timeout_pct < mcs_gate:
+                chosen = c
+                break
+
+        c_sched.append(chosen)
+
+    return c_sched
+
+
+def _simulate_fifo_variable_c(
+    requests: list,
+    c_schedule: list,
+    tick_seconds: float = 60.0,
+) -> tuple:
+    """Non-preemptive FIFO M/G/c with per-tick variable server count.
+
+    Per-server state (s_req, s_ver arrays pre-sized to max(c_schedule)).
+    Servers ≥ c(t) at event time t drain (complete current request) but do
+    not accept new arrivals. Servers < c(t) accept new work when freed.
+
+    Returns ``(summary, response_map, wait_map)`` matching simulate_queue's
+    contract. Requests not dispatched before all events drain are absent from
+    response_map (counted as SLA violations).
+    """
+    n = len(requests)
+    max_c = max(c_schedule) if c_schedule else 1
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+
+    s_req: list = [None] * max_c
+    s_ver: list = [0] * max_c
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _c_now(t: float) -> int:
+        idx = min(int(t / tick_seconds), len(c_schedule) - 1)
+        return max(1, c_schedule[idx])
+
+    def _start(sid: int, req, t: float) -> None:
+        s_req[sid] = req
+        s_ver[sid] += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + req.service_s, 1, _en(), sid, v, req))
+
+    response: dict = {}
+    wait_map: dict = {}
+    waiting: list = []  # FIFO queue: (arrived_t, req)
+
+    while events:
+        ev = heapq.heappop(events)
+        t, ety = ev[0], ev[1]
+        c = _c_now(t)
+
+        if ety == 0:  # ARRIVAL
+            req = ev[5]
+            free = next((s for s in range(c) if s_req[s] is None), None)
+            if free is not None:
+                wait_map[req.idx] = 0.0
+                _start(free, req, t)
+            else:
+                waiting.append((t, req))
+
+        else:  # COMPLETION
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue
+            response[req.idx] = t - req.arrival_s
+            s_req[sid] = None
+            s_ver[sid] += 1
+
+            if sid < c and waiting:
+                arrived_t, nxt = waiting.pop(0)
+                wait_map[nxt.idx] = t - arrived_t
+                _start(sid, nxt, t)
+
+    resp = [response[r.idx] for r in requests if r.idx in response]
+    waits_list = [wait_map.get(r.idx, 0.0) for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits_list, max_c)
+    summary["preemption_count"] = 0
+    summary["variable_c"] = True
+    return summary, response, wait_map
+
+
+def _simulate_abs_conformal_variable_c(
+    requests: list,
+    c_schedule: list,
+    calibrator,
+    tick_seconds: float = 60.0,
+    preemption_overhead_s: float = 0.0,
+) -> tuple:
+    """Decoupled Hybrid SRPT + abs-conformal α with per-tick variable c.
+
+    Identical to simulate_decoupled_hybrid_abs_conformal (serving_queue.py)
+    except the active server count c(t) follows c_schedule rather than being
+    fixed. Arrays are pre-sized to max(c_schedule).
+
+    Drain semantics: servers ≥ c(t) at event time t complete running requests
+    but do not accept new arrivals (no dispatch on completion for those servers).
+    They resume accepting work if c(t) increases at a later tick.
+
+    Returns ``(summary, response_map, wait_map)`` matching the benchmark contract.
+    """
+    n = len(requests)
+    max_c = max(c_schedule) if c_schedule else 1
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+    _npreempt = [0]
+
+    s_req:          list = [None] * max_c
+    s_start:        list = [0.0] * max_c
+    s_rem0:         list = [0.0] * max_c
+    s_ver:          list = [0] * max_c
+    s_frozen_wait:  list = [0.0] * max_c
+
+    waiting: list = []
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _remaining(sid: int, t: float) -> float:
+        return max(0.0, s_rem0[sid] - (t - s_start[sid]))
+
+    def _abs_dispatch_key(entry: tuple, t: float, alpha: float) -> tuple:
+        rem_s, frozen_wait_s, wait_entered_s, req = entry
+        total_wait = frozen_wait_s + (t - wait_entered_s)
+        ek = rem_s / max(1e-9, 1.0 + alpha * total_wait)
+        return (ek, req.idx)
+
+    def _c_now(t: float) -> int:
+        idx = min(int(t / tick_seconds), len(c_schedule) - 1)
+        return max(1, c_schedule[idx])
+
+    def _start(sid: int, req, rem: float, frozen_wait: float, t: float) -> None:
+        s_req[sid] = req
+        s_start[sid] = t
+        s_rem0[sid] = rem
+        s_ver[sid] += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + rem, 1, _en(), sid, v, req))
+
+    response: dict = {}
+
+    while events:
+        ev = heapq.heappop(events)
+        t, ety = ev[0], ev[1]
+        c = _c_now(t)
+
+        if ety == 0:  # ARRIVAL
+            req = ev[5]
+            free = next((s for s in range(c) if s_req[s] is None), None)
+            if free is not None:
+                s_frozen_wait[free] = 0.0
+                _start(free, req, req.service_s, 0.0, t)
+            else:
+                worst_sid, worst_rem = 0, -1.0
+                for s in range(c):
+                    r = _remaining(s, t)
+                    if r > worst_rem:
+                        worst_rem, worst_sid = r, s
+
+                if req.service_s < worst_rem:
+                    preempted = s_req[worst_sid]
+                    prem = _remaining(worst_sid, t)
+                    pfrozen = s_frozen_wait[worst_sid]
+                    s_req[worst_sid] = None
+                    s_ver[worst_sid] += 1
+                    s_frozen_wait[worst_sid] = 0.0
+                    _start(worst_sid, req, req.service_s, 0.0, t)
+                    _npreempt[0] += 1
+                    waiting.append((prem + preemption_overhead_s, pfrozen, t, preempted))
+                else:
+                    waiting.append((req.service_s, 0.0, t, req))
+
+        else:  # COMPLETION
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue
+            response[req.idx] = t - req.arrival_s
+            calibrator.update(req.predicted_tokens, req.actual_tokens)
+            s_req[sid] = None
+            s_ver[sid] += 1
+
+            if sid < c and waiting:
+                alpha = calibrator.current_alpha()
+                best_i = min(
+                    range(len(waiting)),
+                    key=lambda i: _abs_dispatch_key(waiting[i], t, alpha),
+                )
+                rem_s, frozen_wait_s, wait_entered_s, nxt = waiting.pop(best_i)
+                new_frozen = frozen_wait_s + (t - wait_entered_s)
+                s_frozen_wait[sid] = new_frozen
+                _start(sid, nxt, rem_s, new_frozen, t)
+
+    wait_map = {
+        r.idx: max(0.0, response[r.idx] - r.service_s)
+        for r in requests if r.idx in response
+    }
+    resp = [response[r.idx] for r in requests if r.idx in response]
+    waits = [wait_map[r.idx] for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits, max_c)
+    summary["preemption_count"] = _npreempt[0]
+    summary["variable_c"] = True
+    return summary, response, wait_map
+
+
+@dataclass
+class JointMCSAbsConformalReport:
+    """TRUE end-to-end compound economic × queue result — run 2026-06-23.
+
+    2×2 factorial: {FIFO, abs-conformal} × {fixed-c, MCS variable-c}.
+
+    Cost denominator: provisioned GPU hours × GPU_HOUR_USD. This differs from
+    the service-time cost in ``_sla_safe_goodput_per_dollar`` (which is
+    constant across queue disciplines). Here the denominator varies with the
+    provisioning decision: MCS uses fewer GPU hours than fixed-c.
+
+    Primary KPI: ``abs_mcs_goodput_per_dollar`` — the first TRUE compound
+    measurement. All other cells provide isolation:
+      ``abs_fixed_goodput_per_dollar``   — queue gain only (vs fifo_fixed)
+      ``fifo_mcs_goodput_per_dollar``    — economic gain only (vs fifo_fixed)
+      ``fifo_fixed_goodput_per_dollar``  — do-nothing baseline
+    """
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+
+    # MCS c_schedule statistics (in warped-time domain)
+    c_schedule_mean: float
+    c_schedule_min: int
+    c_schedule_max: int
+    n_ticks: int
+
+    # Provisioned GPU-hour costs
+    cost_fixed_c: float
+    cost_mcs_c: float
+    provisioning_cost_factor: float   # cost_fixed_c / cost_mcs_c
+
+    # SLA-compliant goodput / provisioned infra dollar — 4 conditions
+    fifo_fixed_goodput_per_dollar: float
+    fifo_mcs_goodput_per_dollar: float
+    abs_fixed_goodput_per_dollar: float
+    abs_mcs_goodput_per_dollar: float  # TRUE COMPOUND KPI
+
+    # Goodput gains vs FIFO+fixed-c baseline
+    abs_fixed_vs_fifo_fixed_pct: float       # queue-only gain
+    fifo_mcs_vs_fifo_fixed_pct: float        # economic-only gain for FIFO
+    abs_mcs_vs_fifo_fixed_pct: float         # TRUE compound gain
+
+    # Independence estimate (run-z approach applied to this trace)
+    independence_estimate_gp_per_dollar: float  # abs_fixed × provisioning_cost_factor
+    true_vs_independence_gap_pct: float          # >0 = true beats estimate
+
+    # Completions (requests in response_map / total)
+    fifo_fixed_completion_rate: float
+    fifo_mcs_completion_rate: float
+    abs_fixed_completion_rate: float
+    abs_mcs_completion_rate: float
+
+    # p99 response times (SLA safety check)
+    fifo_fixed_p99_s: float
+    fifo_mcs_p99_s: float
+    abs_fixed_p99_s: float
+    abs_mcs_p99_s: float
+
+    # Preemption counts (abs-conformal disciplines only)
+    abs_fixed_preemptions: int
+    abs_mcs_preemptions: int
+
+    north_star_target_pct: float = 300.0
+
+    def to_dict(self) -> dict:
+        def _pct_or_none(v):
+            return None if v is None else round(v, 2)
+
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "c_schedule_mean": round(self.c_schedule_mean, 3),
+            "c_schedule_min": self.c_schedule_min,
+            "c_schedule_max": self.c_schedule_max,
+            "n_ticks": self.n_ticks,
+            "cost_fixed_c": round(self.cost_fixed_c, 6),
+            "cost_mcs_c": round(self.cost_mcs_c, 6),
+            "provisioning_cost_factor": round(self.provisioning_cost_factor, 4),
+            "fifo_fixed_goodput_per_dollar": round(self.fifo_fixed_goodput_per_dollar, 2),
+            "fifo_mcs_goodput_per_dollar": round(self.fifo_mcs_goodput_per_dollar, 2),
+            "abs_fixed_goodput_per_dollar": round(self.abs_fixed_goodput_per_dollar, 2),
+            "abs_mcs_goodput_per_dollar": round(self.abs_mcs_goodput_per_dollar, 2),
+            "abs_fixed_vs_fifo_fixed_pct": _pct_or_none(self.abs_fixed_vs_fifo_fixed_pct),
+            "fifo_mcs_vs_fifo_fixed_pct": _pct_or_none(self.fifo_mcs_vs_fifo_fixed_pct),
+            "abs_mcs_vs_fifo_fixed_pct": _pct_or_none(self.abs_mcs_vs_fifo_fixed_pct),
+            "independence_estimate_gp_per_dollar": round(self.independence_estimate_gp_per_dollar, 2),
+            "true_vs_independence_gap_pct": _pct_or_none(self.true_vs_independence_gap_pct),
+            "fifo_fixed_completion_rate": round(self.fifo_fixed_completion_rate, 4),
+            "fifo_mcs_completion_rate": round(self.fifo_mcs_completion_rate, 4),
+            "abs_fixed_completion_rate": round(self.abs_fixed_completion_rate, 4),
+            "abs_mcs_completion_rate": round(self.abs_mcs_completion_rate, 4),
+            "fifo_fixed_p99_s": round(self.fifo_fixed_p99_s, 3),
+            "fifo_mcs_p99_s": round(self.fifo_mcs_p99_s, 3),
+            "abs_fixed_p99_s": round(self.abs_fixed_p99_s, 3),
+            "abs_mcs_p99_s": round(self.abs_mcs_p99_s, 3),
+            "abs_fixed_preemptions": self.abs_fixed_preemptions,
+            "abs_mcs_preemptions": self.abs_mcs_preemptions,
+            "north_star_target_pct": self.north_star_target_pct,
+        }
+
+
+def run_joint_mcs_abs_conformal_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    mcs_gate: float = 9.5,
+) -> "JointMCSAbsConformalReport":
+    """TRUE compound economic × queue backtest on Azure LLM 2024 [run 2026-06-23].
+
+    First end-to-end compound measurement: MCS provisioning (per-tick variable-c
+    replica schedule) + abs-conformal SRTF (queue ordering) in a single
+    discrete-event simulation. Removes the independence assumption used by
+    run-z (``_compute_compound_economic_queue``).
+
+    2×2 factorial — all conditions on the same warped Azure LLM 2024 trace:
+      FIFO + fixed-c:             do-nothing baseline
+      FIFO + MCS variable-c:     economic-only gain (cost↓, goodput~same)
+      abs-conformal + fixed-c:   queue-only gain (goodput↑, cost same)
+      abs-conformal + MCS-c:     TRUE compound (goodput↑, cost↓)
+
+    Cost denominator: provisioned GPU hours × GPU_HOUR_USD. Unlike the
+    existing ``_sla_safe_goodput_per_dollar`` (which uses total service time
+    as the cost proxy — identical across queue disciplines), this function
+    uses the wall-clock provisioned fleet cost so that MCS's cost reduction
+    is captured in the denominator.
+
+    Args:
+        fixed_c:               Baseline replica count for the fixed-c arm.
+        target_rho:            Target cluster utilization (for time warp).
+        job_limit:             Request cap (default 5880 = full Azure fixture).
+        sla_s:                 E2E SLA budget in seconds.
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Abs-error calibration target.
+        azure_fixture:         Path to Azure LLM 2024 CSV fixture.
+        tick_seconds:          MCS tick duration (seconds) in warped time.
+        mcs_gate:              Timeout-rate threshold for MCS (9.5% < 10% target).
+
+    Returns:
+        ``JointMCSAbsConformalReport`` with the 4-cell 2×2 KPIs.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 requests")
+
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # Compute MCS c schedule in warped-time domain
+    c_schedule = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=mcs_gate)
+    n_ticks = len(c_schedule)
+
+    # Provisioned GPU-hour costs (different between fixed-c and MCS-c)
+    cost_fixed_c = fixed_c * n_ticks * tick_seconds / 3600.0 * GPU_HOUR_USD
+    cost_mcs_c = sum(c_schedule) * tick_seconds / 3600.0 * GPU_HOUR_USD
+    provisioning_cost_factor = cost_fixed_c / max(cost_mcs_c, 1e-9)
+
+    # ── CELL 1: FIFO + fixed-c ────────────────────────────────────────────────
+    fifo_fixed_reqs = _build_live()
+    ff_sim, ff_resp, _ = simulate_queue(fifo_fixed_reqs, fixed_c, "fifo")
+    gp_fifo_fixed = (
+        _sla_safe_goodput(fifo_fixed_reqs, ff_resp, sla_s) / max(cost_fixed_c, 1e-9)
+    )
+
+    # ── CELL 2: FIFO + MCS variable-c ────────────────────────────────────────
+    fifo_mcs_reqs = _build_live()
+    fm_sim, fm_resp, _ = _simulate_fifo_variable_c(fifo_mcs_reqs, c_schedule, tick_seconds)
+    gp_fifo_mcs = (
+        _sla_safe_goodput(fifo_mcs_reqs, fm_resp, sla_s) / max(cost_mcs_c, 1e-9)
+    )
+
+    # ── CELL 3: abs-conformal + fixed-c ──────────────────────────────────────
+    abs_fixed_reqs = _build_live()
+    abs_fixed_cal = AbsoluteErrorConformalCalibrator(
+        target_p90_abs_tokens=target_p90_abs_tokens
+    )
+    af_sim, af_resp, _ = _simulate_decoupled_hybrid_abs_conformal(
+        abs_fixed_reqs, fixed_c, abs_fixed_cal
+    )
+    gp_abs_fixed = (
+        _sla_safe_goodput(abs_fixed_reqs, af_resp, sla_s) / max(cost_fixed_c, 1e-9)
+    )
+
+    # ── CELL 4: abs-conformal + MCS variable-c (TRUE COMPOUND) ───────────────
+    abs_mcs_reqs = _build_live()
+    abs_mcs_cal = AbsoluteErrorConformalCalibrator(
+        target_p90_abs_tokens=target_p90_abs_tokens
+    )
+    am_sim, am_resp, _ = _simulate_abs_conformal_variable_c(
+        abs_mcs_reqs, c_schedule, abs_mcs_cal, tick_seconds
+    )
+    gp_abs_mcs = (
+        _sla_safe_goodput(abs_mcs_reqs, am_resp, sla_s) / max(cost_mcs_c, 1e-9)
+    )
+
+    def _pct(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    def _completion_rate(reqs: list, resp: dict) -> float:
+        return len(resp) / max(len(reqs), 1)
+
+    # Independence estimate: abs_fixed × provisioning_cost_factor
+    gp_independence = gp_abs_fixed * provisioning_cost_factor
+
+    return JointMCSAbsConformalReport(
+        trace="azure_llm_2024_joint_mcs_abs_conformal",
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        c_schedule_mean=statistics.mean(c_schedule),
+        c_schedule_min=min(c_schedule),
+        c_schedule_max=max(c_schedule),
+        n_ticks=n_ticks,
+        cost_fixed_c=cost_fixed_c,
+        cost_mcs_c=cost_mcs_c,
+        provisioning_cost_factor=provisioning_cost_factor,
+        fifo_fixed_goodput_per_dollar=gp_fifo_fixed,
+        fifo_mcs_goodput_per_dollar=gp_fifo_mcs,
+        abs_fixed_goodput_per_dollar=gp_abs_fixed,
+        abs_mcs_goodput_per_dollar=gp_abs_mcs,
+        abs_fixed_vs_fifo_fixed_pct=_pct(gp_fifo_fixed, gp_abs_fixed),
+        fifo_mcs_vs_fifo_fixed_pct=_pct(gp_fifo_fixed, gp_fifo_mcs),
+        abs_mcs_vs_fifo_fixed_pct=_pct(gp_fifo_fixed, gp_abs_mcs),
+        independence_estimate_gp_per_dollar=gp_independence,
+        true_vs_independence_gap_pct=_pct(gp_independence, gp_abs_mcs),
+        fifo_fixed_completion_rate=_completion_rate(fifo_fixed_reqs, ff_resp),
+        fifo_mcs_completion_rate=_completion_rate(fifo_mcs_reqs, fm_resp),
+        abs_fixed_completion_rate=_completion_rate(abs_fixed_reqs, af_resp),
+        abs_mcs_completion_rate=_completion_rate(abs_mcs_reqs, am_resp),
+        fifo_fixed_p99_s=ff_sim.get("p99_response_s", 0.0),
+        fifo_mcs_p99_s=fm_sim.get("p99_response_s", 0.0),
+        abs_fixed_p99_s=af_sim.get("p99_response_s", 0.0),
+        abs_mcs_p99_s=am_sim.get("p99_response_s", 0.0),
+        abs_fixed_preemptions=af_sim.get("preemption_count", 0),
+        abs_mcs_preemptions=am_sim.get("preemption_count", 0),
+    )
