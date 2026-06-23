@@ -2269,3 +2269,48 @@ complementary, see the cross-reference at the end.)
   2. Multi-floor variant — min_ondemand=2 for extra safety at high-c ticks.
   3. Integration into AureliusOptimizer as ReplicaScalingPolicy decision.
   4. Cross-region spot arbitrage (SkyPilot-style) — route to cheapest spot region.
+
+---
+
+### Run 2026-06-25 — ZFHC (Zero-Floor High-Capacity) Spot Policy
+
+**KPI:** SLA-safe goodput/$ (public traces, static seed=42)  
+**Primary result:**
+
+| Trace | AFMS (baseline) | ZFHC thr=8 | vs AFMS | vs SLA-oracle |
+|-------|----------------|------------|---------|---------------|
+| Azure LLM 2024 | 112,316 ($5.74) | **113,904** ($5.66) | **+1.4%** | **+351.9%** |
+| BurstGPT HF | 134,093 ($11.16) | **140,647** ($10.64) | **+4.9%** | **+593.5%** |
+
+**Decision: FRONTIER IMPROVEMENT — Merge.**
+
+- **Phase 0 (PR hygiene):** Working branch `claude/happy-pascal-pvp0fd` is current; AFMS already merged.
+- **Phase 1 (bottleneck):** After AFMS, the only remaining on-demand cost is the $0.020/tick floor
+  at high-c ticks. ZFHC removes this by going all-spot at c≥threshold. P(any interruption at c=8)
+  ≈ 1.3% per tick; with seed=42 zero actual interruptions occurred at these ticks.
+- **Phase 2 (research):** 3 new papers reviewed:
+  1. GFS (arXiv:2509.11134, ASPLOS '26) — Capacity-conditioned spot quota: higher capacity
+     = more redundancy = safe to increase spot fraction (motivated ZFHC threshold).
+  2. SpotServe (arXiv:2311.15566, ASPLOS 2024) — Full spot fleet for LLM inference: 54% cost
+     reduction while maintaining SLA. Validated 0 on-demand floor at sufficient scale.
+  3. SageServe (arXiv:2502.14617) — Forecast-aware autoscaling: 25% GPU-hour savings through
+     capacity-conditioned scaling decisions.
+- **Phase 3 (implementation):**
+  - `aurelius/benchmarks/srtf_serving_backtest.py`: Added `_ZFHC_THRESHOLDS`, `_zfhc_spot_replicas`,
+    `_zfhc_spot_fleet_cost`, `_zfhc_expected_interruptions`, `_simulate_fifo_zfhc_spot_fleet`,
+    `ZFHCThresholdEntry`, `ZFHCReport`, `_run_zfhc_backtest`, `run_zfhc_azure_backtest`,
+    `run_zfhc_burstgpt_backtest`.
+  - `tests/test_zfhc_spot_fleet.py` — 20 new tests (all passing).
+- **Phase 4 (benchmarks):**
+  - Threshold sweep: {8, 10, 12}. Azure c_max=8 so thr=10,12 produce no change.
+  - BurstGPT c_max=14: thr=8 affects 26/154 ticks, thr=10 affects 6, thr=12 affects 2.
+  - Best: threshold=8 on both traces. Zero SLA violations all thresholds all traces.
+- **BurstGPT new record:** +593.5% vs SLA-oracle (previous record: +561.2% with AFMS).
+- **Calculated priors:** Same as AFMS baseline (spot=$0.80/hr, p_int=0.10/hr).
+- **Run category:** Frontier Improvement (spot fleet leaderboard)
+- **Next recommended direction:**
+  1. Adaptive threshold — set threshold dynamically using preemption risk model per tick.
+  2. Cross-region spot arbitrage (SkyPilot-style) — route to cheapest region per tick.
+  3. Integration into AureliusOptimizer as ReplicaScalingPolicy decision.
+  4. Extended threshold sweep down to c≥6 on BurstGPT (risk: c=6 has higher interruption rate).
+  5. Real-time interruption probability — replace static 10%/hr with cloud signal.

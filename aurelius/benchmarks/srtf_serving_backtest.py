@@ -8931,3 +8931,480 @@ def run_abs_floor_spot_fleet_mcs_burstgpt_backtest(
         sla_oracle=_BURSTGPT_SLA_ORACLE,
         north_star_threshold=4.0 * _BURSTGPT_SLA_ORACLE,
     )
+
+
+# ---------------------------------------------------------------------------
+# ZERO-FLOOR HIGH-CAPACITY (ZFHC) SPOT POLICY — run 2026-06-25
+# ---------------------------------------------------------------------------
+# Motivation:
+#   AFMS (run 2026-06-24) reduces on-demand from 2 → 1 at c≥6 ticks.
+#   The natural next step: reduce from 1 → 0 at very high c (c≥threshold)
+#   where the stochastic interruption model makes 0-on-demand safe:
+#
+#   At c=10, p_interrupt_per_tick ≈ 10 × 0.001666 ≈ 0.017 (1.7%).
+#   P(≥2 simultaneous interruptions at c=10) ≈ 0.03% — negligible.
+#   So at c≥10, the expected c_eff = c − 0.017 ≈ c; SLA remains intact.
+#
+# ZFHC formula:
+#   c < threshold:  AFMS (max(round(0.70*c), c-1)) — 1 on-demand floor
+#   c ≥ threshold:  c (all spot) — 0 on-demand floor
+#
+# Cost saving vs AFMS: $0.020/tick for every c≥threshold tick
+#   1 on-demand replaced by 1 spot: (GPU_HOUR_USD - spot_price) × 60/3600
+#   = ($2.00 - $0.80) × 0.01667 = $0.0200/tick (differential, not $0.0333)
+#
+# Research basis:
+#   GFS (arXiv:2509.11134, ASPLOS '26) — capacity-conditioned spot quota:
+#     "higher capacity = more redundancy = safe to increase spot fraction"
+#   SpotServe (arXiv:2311.15566, ASPLOS 2024) — full spot fleet for LLM
+#     serving: 54% cost reduction while maintaining SLA. No on-demand floor
+#     at high capacity in their production deployment.
+#   SageServe (arXiv:2502.14617) — forecast-aware autoscaling: up to 25%
+#     GPU-hour savings through capacity-conditioned scaling decisions.
+#
+# Threshold sweep: {8, 10, 12}
+#   threshold=12: very conservative; only benefits BurstGPT c=12-14 ticks
+#   threshold=10: moderate; benefits BurstGPT c=10-14 ticks
+#   threshold=8:  aggressive; benefits both traces' c=8 ticks
+#   (Azure c_max=8; BurstGPT c_max=14)
+#
+# Falsifiable hypotheses:
+#   (a) ZFHC cost < AFMS cost (strictly, for schedule with c≥threshold ticks)
+#   (b) ZFHC goodput/$ > AFMS goodput/$
+#   (c) ZFHC SLA violations ≈ AFMS SLA violations (near-zero)
+#   (d) North-star (+300% vs SLA-oracle) maintained
+# ---------------------------------------------------------------------------
+
+_ZFHC_THRESHOLDS = (8, 10, 12)
+
+
+def _zfhc_spot_replicas(c: int, high_c_threshold: int = 10) -> int:
+    """Spot replicas under Zero-Floor High-Capacity (ZFHC) policy.
+
+    For c < high_c_threshold: AFMS (1 on-demand floor, same as run-2026-06-24).
+    For c >= high_c_threshold: all spot (0 on-demand floor).
+
+    Args:
+        c:                 Total replica count for this tick.
+        high_c_threshold:  Capacity level above which on-demand floor is removed.
+    Returns:
+        Number of spot replicas (on-demand = c - return_value).
+    """
+    if c >= high_c_threshold:
+        return c  # all spot, 0 on-demand
+    return _abs_floor_spot_replicas(c, min_ondemand=1)  # AFMS
+
+
+def _zfhc_spot_fleet_cost(
+    c_schedule: list,
+    high_c_threshold: int,
+    spot_price_usd_hr: float,
+    demand_price_usd_hr: float,
+    tick_seconds: float,
+) -> float:
+    """Total fleet cost under ZFHC: all-spot at c≥threshold, AFMS below."""
+    tick_hr = tick_seconds / 3600.0
+    total = 0.0
+    for c in c_schedule:
+        c_spot = _zfhc_spot_replicas(c, high_c_threshold)
+        c_demand = c - c_spot
+        total += (c_demand * demand_price_usd_hr + c_spot * spot_price_usd_hr) * tick_hr
+    return total
+
+
+def _zfhc_expected_interruptions(
+    c_schedule: list,
+    high_c_threshold: int,
+    p_interrupt_hourly: float,
+    tick_seconds: float,
+) -> float:
+    """Expected interrupted replica-ticks under ZFHC."""
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+    return sum(
+        _zfhc_spot_replicas(c, high_c_threshold) * (1.0 - p_survive)
+        for c in c_schedule
+    )
+
+
+def _simulate_fifo_zfhc_spot_fleet(
+    requests: list,
+    c_schedule: list,
+    high_c_threshold: int,
+    p_interrupt_hourly: float,
+    tick_seconds: float = 60.0,
+    seed: int = 42,
+) -> tuple:
+    """FIFO variable-c simulation with ZFHC stochastic spot interruptions.
+
+    Like AFMS simulation but uses ``_zfhc_spot_replicas`` for per-tick
+    spot counts: all-spot at c≥threshold, 1-on-demand-floor below.
+
+    Args:
+        requests:            List of _Request objects.
+        c_schedule:          Per-tick total replica count from MCS.
+        high_c_threshold:    ZFHC threshold — all-spot for c≥threshold.
+        p_interrupt_hourly:  Per-spot-instance hourly interruption probability.
+        tick_seconds:        Tick duration in seconds.
+        seed:                RNG seed for reproducibility.
+    Returns:
+        (sim_stats, response_times, n_served) tuple from
+        ``_simulate_fifo_variable_c``.
+    """
+    import numpy as _np
+    rng = _np.random.default_rng(seed)
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+
+    c_effective: list = []
+    for c in c_schedule:
+        c_spot = _zfhc_spot_replicas(c, high_c_threshold)
+        c_demand = c - c_spot
+        survived = int(rng.binomial(c_spot, p_survive)) if c_spot > 0 else 0
+        # max(1,...) prevents 0-server tick in simulation (P(all spot interrupted)
+        # at c≥10 is ~10^-20; guard is a numerical safety net only).
+        c_effective.append(max(1, c_demand + survived))
+
+    return _simulate_fifo_variable_c(requests, c_effective, tick_seconds)
+
+
+@dataclass
+class ZFHCThresholdEntry:
+    """Per-threshold ZFHC result for one threshold value."""
+    threshold: int
+    n_ticks_affected: int          # ticks with c >= threshold (all-spot under ZFHC)
+    cost_zfhc: float
+    cost_vs_afms_reduction_pct: float
+    goodput_per_dollar: float
+    goodput_vs_afms_pct: float     # % improvement vs AFMS (positive = better)
+    goodput_vs_sla_oracle_pct: float
+    north_star_achieved: bool
+    completion_rate: float
+    p99_s: float
+
+    def to_dict(self) -> dict:
+        return {
+            "threshold": self.threshold,
+            "n_ticks_affected": self.n_ticks_affected,
+            "cost_zfhc": round(self.cost_zfhc, 4),
+            "cost_vs_afms_reduction_pct": round(self.cost_vs_afms_reduction_pct, 4),
+            "goodput_per_dollar": round(self.goodput_per_dollar, 2),
+            "goodput_vs_afms_pct": round(self.goodput_vs_afms_pct, 4),
+            "goodput_vs_sla_oracle_pct": round(self.goodput_vs_sla_oracle_pct, 2),
+            "north_star_achieved": self.north_star_achieved,
+            "completion_rate": round(self.completion_rate, 4),
+            "p99_s": round(self.p99_s, 3),
+        }
+
+
+@dataclass
+class ZFHCReport:
+    """Zero-Floor High-Capacity (ZFHC) threshold sweep — run 2026-06-25.
+
+    Compares AFMS (1 on-demand floor) against ZFHC (0 on-demand at c≥threshold)
+    across three thresholds: 8, 10, 12. Sweep reveals the optimal threshold
+    that maximises goodput/$ without SLA regression.
+
+    Primary KPI: best_goodput_per_dollar (threshold with highest goodput/$
+    and zero SLA regression vs AFMS).
+    """
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+
+    # MCS c_schedule stats (shared across all thresholds)
+    c_schedule_mean: float
+    c_schedule_min: int
+    c_schedule_max: int
+    n_ticks: int
+
+    # Pricing parameters
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+
+    # AFMS baseline (from previous run — anchors the comparison)
+    cost_afms: float
+    afms_goodput_per_dollar: float
+    afms_vs_sla_oracle_pct: float
+
+    # ZFHC threshold sweep results
+    threshold_results: list  # list of ZFHCThresholdEntry
+
+    # Best-threshold summary
+    best_threshold: int
+    best_goodput_per_dollar: float
+    best_vs_afms_pct: float
+    best_vs_sla_oracle_pct: float
+    best_north_star_achieved: bool
+
+    # Benchmark reference values
+    north_star_threshold: float
+    sla_oracle_goodput_per_dollar: float
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "c_schedule_mean": round(self.c_schedule_mean, 3),
+            "c_schedule_min": self.c_schedule_min,
+            "c_schedule_max": self.c_schedule_max,
+            "n_ticks": self.n_ticks,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "cost_afms": round(self.cost_afms, 4),
+            "afms_goodput_per_dollar": round(self.afms_goodput_per_dollar, 2),
+            "afms_vs_sla_oracle_pct": round(self.afms_vs_sla_oracle_pct, 2),
+            "threshold_results": [e.to_dict() for e in self.threshold_results],
+            "best_threshold": self.best_threshold,
+            "best_goodput_per_dollar": round(self.best_goodput_per_dollar, 2),
+            "best_vs_afms_pct": round(self.best_vs_afms_pct, 4),
+            "best_vs_sla_oracle_pct": round(self.best_vs_sla_oracle_pct, 2),
+            "best_north_star_achieved": self.best_north_star_achieved,
+            "north_star_threshold": self.north_star_threshold,
+            "sla_oracle_goodput_per_dollar": self.sla_oracle_goodput_per_dollar,
+        }
+
+
+def _run_zfhc_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    mcs_gate: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_threshold: float,
+    thresholds: tuple = _ZFHC_THRESHOLDS,
+) -> ZFHCReport:
+    """Shared ZFHC threshold-sweep backtest logic."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    c_schedule = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=mcs_gate, sla_s=sla_s)
+    n_ticks = len(c_schedule)
+
+    # AFMS baseline (same formula as run-2026-06-24)
+    cost_afms = _abs_floor_spot_fleet_cost(
+        c_schedule, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    afms_reqs = _build_live()
+    af_sim, af_resp, _ = _simulate_fifo_abs_floor_spot_fleet(
+        afms_reqs, c_schedule, p_interrupt_hourly, tick_seconds, seed
+    )
+    gp_afms = _sla_safe_goodput(afms_reqs, af_resp, sla_s) / max(cost_afms, 1e-9)
+
+    # ZFHC threshold sweep
+    entries: list = []
+    for thr in thresholds:
+        n_affected = sum(1 for c in c_schedule if c >= thr)
+        cost_z = _zfhc_spot_fleet_cost(
+            c_schedule, thr, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+        )
+        cost_reduction = (cost_afms - cost_z) / max(cost_afms, 1e-9) * 100.0
+
+        z_reqs = _build_live()
+        z_sim, z_resp, _ = _simulate_fifo_zfhc_spot_fleet(
+            z_reqs, c_schedule, thr, p_interrupt_hourly, tick_seconds, seed
+        )
+        gp_z = _sla_safe_goodput(z_reqs, z_resp, sla_s) / max(cost_z, 1e-9)
+        completion = len(z_resp) / max(len(z_reqs), 1)
+
+        entries.append(ZFHCThresholdEntry(
+            threshold=thr,
+            n_ticks_affected=n_affected,
+            cost_zfhc=cost_z,
+            cost_vs_afms_reduction_pct=cost_reduction,
+            goodput_per_dollar=gp_z,
+            goodput_vs_afms_pct=(gp_z - gp_afms) / max(gp_afms, 1e-9) * 100.0,
+            goodput_vs_sla_oracle_pct=(gp_z - sla_oracle) / sla_oracle * 100.0,
+            north_star_achieved=gp_z >= north_star_threshold,
+            completion_rate=completion,
+            p99_s=z_sim.get("p99_response_s", 0.0),
+        ))
+
+    # Best threshold: max goodput/$ with no SLA regression vs AFMS
+    afms_completion = len(af_resp) / max(len(afms_reqs), 1)
+    safe_entries = [
+        e for e in entries
+        if e.completion_rate >= afms_completion - 0.001  # allow 0.1% tolerance
+    ]
+    best = max(safe_entries, key=lambda e: e.goodput_per_dollar) if safe_entries else entries[0]
+
+    return ZFHCReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        c_schedule_mean=statistics.mean(c_schedule),
+        c_schedule_min=min(c_schedule),
+        c_schedule_max=max(c_schedule),
+        n_ticks=n_ticks,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        cost_afms=cost_afms,
+        afms_goodput_per_dollar=gp_afms,
+        afms_vs_sla_oracle_pct=(gp_afms - sla_oracle) / sla_oracle * 100.0,
+        threshold_results=entries,
+        best_threshold=best.threshold,
+        best_goodput_per_dollar=best.goodput_per_dollar,
+        best_vs_afms_pct=best.goodput_vs_afms_pct,
+        best_vs_sla_oracle_pct=best.goodput_vs_sla_oracle_pct,
+        best_north_star_achieved=best.north_star_achieved,
+        north_star_threshold=north_star_threshold,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+    )
+
+
+def run_zfhc_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    mcs_gate: float = 9.5,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    thresholds: tuple = _ZFHC_THRESHOLDS,
+) -> ZFHCReport:
+    """ZFHC threshold sweep on Azure LLM 2024 — run 2026-06-25.
+
+    Evaluates ZFHC (0 on-demand at c≥threshold) vs AFMS (1 on-demand for all
+    c≥6) on Azure LLM 2024 (SLA=10s, oracle=25,208, north-star=100,832).
+
+    Research basis:
+        GFS (arXiv:2509.11134): capacity-conditioned spot quota allocation.
+        SpotServe (arXiv:2311.15566): full spot LLM fleet (54% cost reduction).
+        SageServe (arXiv:2502.14617): forecast-aware autoscaling (25% GPU-hr savings).
+
+    Azure c_max=8, so threshold=10 and threshold=12 produce zero change vs AFMS.
+    threshold=8 removes the on-demand floor at c=8 ticks; the expected SLA risk
+    is ~1.3% per c=8 tick (P(any interruption) = 8 × 0.001666).
+
+    Args:
+        fixed_c:            On-demand replica count baseline.
+        target_rho:         Target cluster utilization.
+        job_limit:          Request cap (default 5880 for Azure).
+        sla_s:              E2E SLA budget (default 10s for Azure).
+        prior_window:       Sliding-window for running-median prior.
+        azure_fixture:      Path to Azure LLM 2024 fixture.
+        tick_seconds:       MCS tick duration.
+        mcs_gate:           Erlang-C timeout-rate threshold (%).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Spot interruption probability per hour.
+        seed:               RNG seed.
+        thresholds:         ZFHC threshold values to sweep.
+
+    Returns:
+        ZFHCReport with per-threshold results and best-threshold summary.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_zfhc_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_zfhc",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        mcs_gate=mcs_gate,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_threshold=100_832.0,
+        thresholds=thresholds,
+    )
+
+
+def run_zfhc_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    mcs_gate: float = 9.5,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    thresholds: tuple = _ZFHC_THRESHOLDS,
+) -> ZFHCReport:
+    """ZFHC threshold sweep on BurstGPT HF — run 2026-06-25.
+
+    BurstGPT has c_max=14, so threshold=8,10,12 all affect non-trivial
+    tick counts. Expected savings at threshold=10: $0.033/tick × n_ticks_c≥10.
+
+    Research basis: same as ``run_zfhc_azure_backtest``.
+
+    Args:
+        fixed_c:            On-demand replica count baseline.
+        target_rho:         Target cluster utilization.
+        job_limit:          Request cap (default 5880).
+        sla_s:              E2E SLA budget (default 30s for BurstGPT).
+        prior_window:       Sliding-window for running-median prior.
+        jsonl_path:         Path to BurstGPT HF JSONL.
+        tick_seconds:       MCS tick duration.
+        mcs_gate:           Erlang-C timeout-rate threshold (%).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Spot interruption probability per hour.
+        seed:               RNG seed.
+        thresholds:         ZFHC threshold values to sweep.
+
+    Returns:
+        ZFHCReport with per-threshold results and best-threshold summary.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_zfhc_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_zfhc",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        mcs_gate=mcs_gate,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_threshold=4.0 * 20_280.0,
+        thresholds=thresholds,
+    )

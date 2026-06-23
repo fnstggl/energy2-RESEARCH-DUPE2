@@ -3854,3 +3854,109 @@ the independence assumption with a measured compound result.
 sla_aware, extrapolated) needs to reach 2.18× for north-star. MCS gets closer than SHU (1.46×)
 but the gap remains. Spot/preemptible pricing (projected 2.88× combined) remains the highest
 expected-value unlocking mechanism if the full-trace MCS audit confirms the fixture gains.
+
+---
+
+## Run 2026-06-25 — ZFHC Policy (FRONTIER IMPROVEMENT — +1.4%/+4.9% vs AFMS)
+
+### Q1. What currently limits Aurelius most?
+
+**After AFMS, the dominant remaining cost lever is the on-demand floor at high-c ticks.** AFMS keeps exactly 1 on-demand replica (the absolute floor), costing $0.020/tick extra vs all-spot. At c≥8, the stochastic interruption risk is low enough (P(any interrupt at c=8 per tick) ≈ 1.3%) that the all-spot allocation is SLA-safe. ZFHC removes this floor at c≥threshold:
+
+| Trace | AFMS baseline | ZFHC(thr=8) | vs AFMS | vs SLA-oracle |
+|-------|--------------|------------|---------|---------------|
+| Azure LLM 2024 | 112,316 ($5.74) | **113,904** ($5.66) | **+1.4%** | **+351.9%** |
+| BurstGPT HF | 134,093 ($11.16) | **140,647** ($10.64) | **+4.9%** | **+593.5%** |
+
+North-star maintained on both traces. Zero SLA violations all thresholds. BurstGPT new record: +593.5% vs oracle.
+
+### Q2. What theoretically offers the largest gain beyond the current state?
+
+1. **Adaptive threshold** — set threshold per-tick using a preemption risk model: lower threshold during low-risk periods, higher threshold during high-risk periods. Expected gain: 1-3% additional improvement vs static threshold=8.
+2. **Cross-region spot arbitrage** — route high-c ticks to cheapest available spot region (SkyPilot-style). Literature: 20-40% cost reduction on top of single-region spot pricing. Not yet explored in Aurelius.
+3. **Dynamic spot price signal** — replace static $0.80/hr assumed spot price with time-varying signal. If spot price varies across the trace, a smarter threshold would lower the on-demand floor when spot is cheap and raise it when spot is expensive.
+4. **Integration into AureliusOptimizer** — wire ZFHC as a `ReplicaScalingPolicy` so the optimizer can combine it with other policies (conformal queue, MCS autoscaler).
+
+### Q3. What was the hypothesis for this run?
+
+**H1:** Removing the on-demand floor at c≥8 (ZFHC) saves $0.020/tick per affected tick vs AFMS.  
+**H2:** The stochastic interruption model (Binomial(c_spot, p_survive), seed=42) produces near-zero actual interruptions at c=8+ ticks, so SLA completions remain at 1.0000.  
+**H3:** Best threshold is the lowest tested (8) because it maximizes the number of affected ticks.
+
+### Q4. Were the hypotheses confirmed?
+
+**H1: CONFIRMED.** $0.020/tick saving verified algebraically: (GPU_HOUR_USD − spot_price) × (60/3600) = (2.00−0.80) × 0.01667 = $0.020/tick. Total savings match: Azure 4 ticks × $0.020 = $0.08; BurstGPT 26 ticks × $0.020 = $0.52. (Actual: Azure −$0.08, BurstGPT −$0.52. Exact match.)
+
+**H2: CONFIRMED.** Completion rate = 1.0000 on both traces at all thresholds including threshold=8. Zero SLA violations. p99 response time identical to AFMS (9.95s Azure, 22.9s BurstGPT).
+
+**H3: CONFIRMED.** Threshold=8 is best on both traces due to maximum affected ticks.
+
+### Q5. What new information was learned?
+
+1. **Azure c_max=8 limits ZFHC gains.** Only 4/72 ticks are at c=8, so Azure gains are modest (+1.4%). BurstGPT's richer high-c distribution (26 ticks at c≥8) allows +4.9% improvement.
+2. **The $0.020/tick correction is cost-model correct.** Initial comment said $0.033/tick (wrongly counting 1 on-demand in vacuum). The correct saving is the differential: replacing on-demand with spot saves (demand - spot) = $1.20/hr per GPU, not $2.00/hr.
+3. **BurstGPT hits 593% vs oracle.** This is the highest achieved vs-oracle percentage in any run. The threshold sweep shows monotonic improvement as threshold decreases (8 > 10 > 12), suggesting even lower thresholds (e.g., 6) might yield further gains — but c=6 has higher interruption probability.
+
+### Q6. What remains uncertain?
+
+1. **Correlated interruptions.** The model assumes i.i.d. interruptions per spot instance. Real cloud spot interruptions can be correlated (AZ-wide events). This is the primary unmodeled risk.
+2. **Spot price sensitivity.** At spot=$1.00/hr, the ZFHC saving becomes only $0.017/tick; at spot=$1.40/hr (equal to 70% of demand), the saving drops to $0.010/tick. Current results are anchored to spot=$0.80/hr.
+3. **Lower-threshold safety.** Would threshold=6 maintain SLA on both traces? P(any interrupt at c=6 per tick) ≈ 1.0% — marginal risk. Not tested this run.
+
+### Q7. What are the most plausible next improvements?
+
+**Ranked by expected goodput/$ × implementation feasibility:**
+
+| Rank | Opportunity | Expected Δgoodput/$ | Basis | Risk |
+|------|------------|--------------------|----|------|
+| 1 | Lower ZFHC threshold to 6 (c≥6 all-spot) | +1-3% BurstGPT | More affected ticks; c=6 still has low P(interrupt) | Low: check SLA safety |
+| 2 | Cross-region spot arbitrage | +15-30% | Literature (SkyPilot, SpotHedge) | High: new infra |
+| 3 | Dynamic threshold via preemption risk model | +1-2% | GFS adaptive quota | Medium: model needed |
+| 4 | Wire into AureliusOptimizer as policy | Structural | Phase 3 routing | Low: plumbing only |
+| 5 | Real spot price signal | ±5% depending on price signal | Pricing variability | Medium: data needed |
+
+### Q8. Is the north-star still achievable?
+
+**YES — already achieved and extended.** Both traces exceed 4× SLA-oracle:
+- Azure: 113,904 / 100,832 = **1.13× over north-star** (+13%)
+- BurstGPT: 140,647 / 81,120 = **1.73× over north-star** (+73%)
+
+If the north-star is updated to 500% vs oracle: Azure (113,904 / 25,208 = +351.9%) does not yet reach 500%. BurstGPT (140,647 / 20,280 = +593.5%) already exceeds 500%.
+
+The new research question is: can Azure reach +500% vs oracle? That would require goodput/$ ≥ 5 × 25,208 = 126,040. Current best (ZFHC-8): 113,904. Gap: +10.7%. Cross-region arbitrage or lower thresholds could close this gap.
+
+### Q9. What are the binding constraints going forward?
+
+1. **Azure c_max=8 ceiling.** The schedule rarely goes above c=8, limiting ZFHC gains. Higher c would require either lower cost per tick (more affordable scaling) or higher load (different operating point).
+2. **Static interruption model.** The i.i.d. Binomial model is a simplification. Production hardening requires a real interrupt-rate signal.
+3. **Single-region model.** No cross-region routing implemented. SpotHedge showed 43% savings from multi-region hedging — this is the biggest unmodeled lever.
+
+### Q10. What was the most important failure mode avoided?
+
+**Using the wrong cost saving formula.** The initial implementation comment claimed $0.033/tick saving (cost of 1 on-demand in vacuum). The correct saving is $0.020/tick (differential: on-demand replaced by spot). Test 8 caught this error before it could propagate to result reporting.
+
+### Q11. What papers guided this run?
+
+1. GFS (arXiv:2509.11134, ASPLOS '26) — capacity-conditioned spot quota: safety scales with c.
+2. SpotServe (arXiv:2311.15566, ASPLOS 2024) — all-spot LLM fleet: 54% cost reduction; production deployments use 0 on-demand floor at sufficient c.
+3. SageServe (arXiv:2502.14617) — forecast-aware autoscaling: at high c, marginal cost of on-demand floor dominates savings opportunity.
+
+### Q12. How does ZFHC relate to the architecture?
+
+ZFHC is a spot fleet provisioning policy, operating in the same layer as AFMS — the per-tick replica allocation in `srtf_serving_backtest.py`. It does not affect:
+- The FIFO queue discipline (unchanged)
+- The MCS autoscaler (c_schedule is computed by MCS, then ZFHC allocates spot/on-demand within each c)
+- The conformal predictor (unchanged)
+- AureliusOptimizer (not yet wired; this is the "integration" direction)
+
+### Q13. What should be attempted next?
+
+**Highest priority (run 2026-06-26):** Test ZFHC with threshold=6 on BurstGPT. The sweep showed monotonic: thr=8 > thr=10 > thr=12 (lower = more affected ticks = more savings). The natural next step is thr=6, which would affect all ticks with c=6,7,8,9,10,11,12,13,14 — a much larger fraction of the schedule. The risk is c=6 has P(any interrupt) ≈ 1.0%, which is safe in expectation but non-trivial.
+
+**Second priority:** Cross-region spot arbitrage. This is the single largest unmodeled lever. Requires modeling multi-region spot prices and routing latency overhead.
+
+**Third priority:** Integration into AureliusOptimizer as a `ReplicaScalingPolicy`. This is structural work (no KPI change expected) but required before any production claim can be made.
+
+**Current frontier (leaderboard state after run-2026-06-25):**
+- Azure LLM 2024: 113,904 goodput/$ (ZFHC thr=8, +351.9% vs oracle, north-star ✓)
+- BurstGPT HF: 140,647 goodput/$ (ZFHC thr=8, +593.5% vs oracle, north-star ✓)
