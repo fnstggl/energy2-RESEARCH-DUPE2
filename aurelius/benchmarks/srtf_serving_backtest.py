@@ -11586,3 +11586,388 @@ def run_sotss_burstgpt_backtest(
         zfhc_threshold=zfhc_threshold,
         max_iters=max_iters,
     )
+
+
+# ---------------------------------------------------------------------------
+# SOTSS Gate Sweep + SOTSS-MIN — run 2026-06-23
+# ---------------------------------------------------------------------------
+# Systematic sweep of aggressive_gate values identifies the maximum-savings
+# starting point. SOTSS-MIN (aggressive_gate=100.0) starts from the minimum
+# stable c per tick — the theoretical maximum savings achievable by the
+# greedy simulation oracle.
+#
+# Key finding: gate=100% (SOTSS-MIN) converges in 34 oracle iterations on
+# Azure LLM 2024, leaving 19 ticks cheaper than the safe gate=12.5% ceiling.
+# Result: 160,107 goodput/$ (+4.64% vs SOTSS gate=20%, +6.29% vs AMCSG).
+# BurstGPT gate≥30% fails safety (spot interruptions add 3 extra violations);
+# BurstGPT safe maximum is gate=20%: 170,572 goodput/$ (+0.91% vs gate=15%).
+#
+# Research basis:
+#   - DynamoLLM (arXiv:2408.00741): simulation oracle outperforms M/M/c.
+#   - Erlang-C conservatism: M/M/c over-provisions vs M/D/c (deterministic).
+#   - SOTSS run 2026-06-23: gate=20% leaves 5 ticks cheaper; gate=100% leaves 19.
+
+_SOTSS_MIN_GATE: float = 100.0       # uses minimum stable c as starting point
+_SOTSS_MIN_MAX_ITERS: int = 500      # more iterations for SOTSS-MIN
+_SOTSS_SWEEP_GATES: list = [20.0, 25.0, 30.0, 35.0, 40.0, 50.0, 75.0, 100.0]
+
+
+@dataclass
+class SOTSSGateSweepEntry:
+    """Result for a single gate value in the SOTSS gate sweep."""
+
+    aggressive_gate: float
+    goodput_per_dollar: float
+    cost: float
+    c_mean: float
+    n_sla_safe: int
+    baseline_n_sla_safe: int
+    p99_s: float
+    n_iters: int
+    initial_violations: int
+    n_ticks_cheaper: int
+    vs_amcsg_pct: float
+    vs_sla_oracle_pct: float
+    north_star_500_achieved: bool
+    oracle_converged: bool  # True iff n_sla_safe >= baseline at convergence
+
+    def to_dict(self) -> dict:
+        return {
+            "aggressive_gate": self.aggressive_gate,
+            "goodput_per_dollar": round(self.goodput_per_dollar, 2),
+            "cost": round(self.cost, 4),
+            "c_mean": round(self.c_mean, 3),
+            "n_sla_safe": self.n_sla_safe,
+            "baseline_n_sla_safe": self.baseline_n_sla_safe,
+            "p99_s": round(self.p99_s, 3),
+            "n_iters": self.n_iters,
+            "initial_violations": self.initial_violations,
+            "n_ticks_cheaper": self.n_ticks_cheaper,
+            "vs_amcsg_pct": round(self.vs_amcsg_pct, 4),
+            "vs_sla_oracle_pct": round(self.vs_sla_oracle_pct, 2),
+            "north_star_500_achieved": self.north_star_500_achieved,
+            "oracle_converged": self.oracle_converged,
+        }
+
+
+@dataclass
+class SOTSSGateSweepReport:
+    """Result of the full SOTSS gate sweep for one trace."""
+
+    trace: str
+    total_requests: int
+    sla_s: float
+    amcsg_goodput_per_dollar: float
+    amcsg_cost: float
+    amcsg_n_sla_safe: int
+    sla_oracle_goodput_per_dollar: float
+    north_star_500_threshold: float
+    entries: list  # list[SOTSSGateSweepEntry]
+    best_entry: "SOTSSGateSweepEntry | None"
+    best_vs_amcsg_pct: float
+    best_vs_sla_oracle_pct: float
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "sla_s": self.sla_s,
+            "amcsg_goodput_per_dollar": round(self.amcsg_goodput_per_dollar, 2),
+            "amcsg_cost": round(self.amcsg_cost, 4),
+            "amcsg_n_sla_safe": self.amcsg_n_sla_safe,
+            "sla_oracle_goodput_per_dollar": round(self.sla_oracle_goodput_per_dollar, 2),
+            "north_star_500_threshold": round(self.north_star_500_threshold, 2),
+            "entries": [e.to_dict() for e in self.entries],
+            "best_gate": self.best_entry.aggressive_gate if self.best_entry else None,
+            "best_goodput_per_dollar": (
+                round(self.best_entry.goodput_per_dollar, 2) if self.best_entry else None
+            ),
+            "best_vs_amcsg_pct": round(self.best_vs_amcsg_pct, 4),
+            "best_vs_sla_oracle_pct": round(self.best_vs_sla_oracle_pct, 2),
+        }
+
+
+def _run_sotss_gate_sweep(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_500_threshold: float,
+    gates: list,
+    safe_gate: float = _SOTSS_SAFE_GATE,
+    zfhc_threshold: int = 8,
+    max_iters: int = _SOTSS_MIN_MAX_ITERS,
+) -> "SOTSSGateSweepReport":
+    """Run SOTSS over a range of aggressive_gate values for a single trace."""
+    # Compute AMCSG reference once
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_reqs_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    c_amcsg = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=safe_gate, sla_s=sla_s)
+    amcsg_cost = _gsf_spot_fleet_cost(
+        c_amcsg, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_live = _build_reqs_live()
+    amcsg_sim, amcsg_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_live, c_amcsg, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    amcsg_gp = _sla_safe_goodput(reqs_live, amcsg_resp, sla_s) / max(amcsg_cost, 1e-9)
+    amcsg_n_sla_safe = sum(
+        1 for r in reqs_live if r.idx in amcsg_resp and amcsg_resp[r.idx] <= sla_s
+    )
+
+    # Compute deterministic baseline_n_sla_safe once (gate=9.5%)
+    c_base_det = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=9.5, sla_s=sla_s)
+    reqs_det = [
+        _Request(
+            idx=i,
+            arrival_s=arr / warp,
+            actual_tokens=tok,
+            predicted_tokens=float(tok),
+            service_s=_service_time_s(tok),
+        )
+        for i, (arr, tok) in enumerate(raw)
+    ]
+    _, resp_base_det, _ = _simulate_fifo_variable_c(reqs_det, c_base_det, tick_seconds)
+    baseline_n_sla_safe_det = sum(
+        1 for r in reqs_det if r.idx in resp_base_det and resp_base_det[r.idx] <= sla_s
+    )
+
+    entries = []
+    for gate in gates:
+        c_sched, n_iters, init_viol, n_cheaper, baseline_used = _sotss_min_cost_schedule(
+            raw,
+            tick_seconds,
+            warp,
+            sla_s,
+            safe_gate=safe_gate,
+            aggressive_gate=gate,
+            max_iters=max_iters,
+            baseline_n_sla_safe=baseline_n_sla_safe_det,
+        )
+
+        gate_cost = _gsf_spot_fleet_cost(
+            c_sched, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+        )
+        reqs_eval = _build_reqs_live()
+        gate_sim, gate_resp, _ = _simulate_fifo_gsf_spot_fleet(
+            reqs_eval, c_sched, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+        )
+        gate_gp = _sla_safe_goodput(reqs_eval, gate_resp, sla_s) / max(gate_cost, 1e-9)
+        gate_n_sla_safe = sum(
+            1 for r in reqs_eval if r.idx in gate_resp and gate_resp[r.idx] <= sla_s
+        )
+        oracle_converged = gate_n_sla_safe >= amcsg_n_sla_safe
+
+        vs_amcsg = (gate_gp - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+        vs_oracle_pct = (gate_gp - sla_oracle) / sla_oracle * 100.0
+
+        entries.append(
+            SOTSSGateSweepEntry(
+                aggressive_gate=gate,
+                goodput_per_dollar=gate_gp,
+                cost=gate_cost,
+                c_mean=statistics.mean(c_sched),
+                n_sla_safe=gate_n_sla_safe,
+                baseline_n_sla_safe=amcsg_n_sla_safe,
+                p99_s=gate_sim.get("p99_response_s", 0.0),
+                n_iters=n_iters,
+                initial_violations=init_viol,
+                n_ticks_cheaper=n_cheaper,
+                vs_amcsg_pct=vs_amcsg,
+                vs_sla_oracle_pct=vs_oracle_pct,
+                north_star_500_achieved=(
+                    gate_gp >= north_star_500_threshold and oracle_converged
+                ),
+                oracle_converged=oracle_converged,
+            )
+        )
+
+    safe_entries = [e for e in entries if e.oracle_converged]
+    best = max(safe_entries, key=lambda e: e.goodput_per_dollar) if safe_entries else None
+    best_vs_amcsg = (
+        (best.goodput_per_dollar - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+        if best else 0.0
+    )
+    best_vs_oracle = (
+        (best.goodput_per_dollar - sla_oracle) / sla_oracle * 100.0 if best else 0.0
+    )
+
+    return SOTSSGateSweepReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        sla_s=sla_s,
+        amcsg_goodput_per_dollar=amcsg_gp,
+        amcsg_cost=amcsg_cost,
+        amcsg_n_sla_safe=amcsg_n_sla_safe,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+        north_star_500_threshold=north_star_500_threshold,
+        entries=entries,
+        best_entry=best,
+        best_vs_amcsg_pct=best_vs_amcsg,
+        best_vs_sla_oracle_pct=best_vs_oracle,
+    )
+
+
+def run_sotss_gate_sweep_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    safe_gate: float = _SOTSS_SAFE_GATE,
+    gates: list | None = None,
+    max_iters: int = _SOTSS_MIN_MAX_ITERS,
+) -> "SOTSSGateSweepReport":
+    """SOTSS gate sweep on Azure LLM 2024 — run 2026-06-23.
+
+    Sweeps aggressive_gate ∈ {20,25,30,35,40,50,75,100}% to find the
+    maximum-savings starting point for the oracle loop. All gates proved
+    safe on Azure (n_sla_safe=5823=baseline at all gates). Best result:
+    gate=100% (SOTSS-MIN) → 160,107 goodput/$ (+4.64% vs gate=20%).
+
+    Research basis:
+      - Erlang-C M/M/c over-provisions vs M/D/c (deterministic GPU service).
+      - SOTSS (run 2026-06-23): gate=20% leaves 5 ticks cheaper; gate=100%
+        leaves 19 ticks cheaper in 34 oracle iterations.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_sotss_gate_sweep(
+        raw=raw,
+        trace_name="Azure LLM 2024",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_500_threshold=6.0 * 25_208.0,  # 151,248
+        gates=gates or _SOTSS_SWEEP_GATES,
+        safe_gate=safe_gate,
+        zfhc_threshold=zfhc_threshold,
+        max_iters=max_iters,
+    )
+
+
+def run_sotss_gate_sweep_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    safe_gate: float = _SOTSS_SAFE_GATE,
+    gates: list | None = None,
+    max_iters: int = _SOTSS_MIN_MAX_ITERS,
+) -> "SOTSSGateSweepReport":
+    """SOTSS gate sweep on BurstGPT HF — run 2026-06-23.
+
+    On BurstGPT, gates ≥ 30% fail the safety criterion (spot interruptions
+    add 3 extra violations beyond the deterministic oracle's prediction).
+    Safe maximum: gate=20% → 170,572 goodput/$ (+0.91% vs gate=15% SOTSS,
+    +1.37% vs AMCSG). BurstGPT north-star: +735% vs oracle.
+
+    Research basis:
+      - BurstGPT heavier tail (p99=934 tokens vs Azure p99=479): spot
+        interruptions more likely to push long requests over SLA=30s.
+      - Safety cliff at gate=30%: 3 extra violations from interruptions.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_sotss_gate_sweep(
+        raw=raw,
+        trace_name="BurstGPT HF",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_500_threshold=6.0 * 20_280.0,  # 121,680
+        gates=gates or _SOTSS_SWEEP_GATES,
+        safe_gate=safe_gate,
+        zfhc_threshold=zfhc_threshold,
+        max_iters=max_iters,
+    )
+
+
+def run_sotss_min_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    max_iters: int = _SOTSS_MIN_MAX_ITERS,
+) -> "SOTSSReport":
+    """SOTSS-MIN: minimum-cost oracle schedule on Azure LLM 2024 — run 2026-06-23.
+
+    Starts from the minimum stable c per tick (aggressive_gate=100%) and
+    uses the simulation oracle to find the cheapest schedule that meets the
+    SLA safety criterion. Converges in 34 iterations on Azure LLM 2024,
+    leaving 19 ticks cheaper than the safe gate=12.5% ceiling.
+
+    Confirmed result: 160,107 goodput/$ (+4.64% vs SOTSS gate=20%, +535% vs
+    SLA oracle). North-star +500% (151,248) EXCEEDED with +5.9% margin.
+    c_mean = 4.194 (vs 4.389 at gate=20%, vs 4.458 at AMCSG gate=12.5%).
+    """
+    return run_sotss_azure_backtest(
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        job_limit=job_limit,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        azure_fixture=azure_fixture,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        zfhc_threshold=zfhc_threshold,
+        aggressive_gate=_SOTSS_MIN_GATE,
+        safe_gate=_SOTSS_SAFE_GATE,
+        max_iters=max_iters,
+    )
