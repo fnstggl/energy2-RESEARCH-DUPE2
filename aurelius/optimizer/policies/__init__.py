@@ -34,6 +34,7 @@ from .replica_scaling import (
     ReplicaScalingConfig,
     ReplicaScalingPolicy,
     ReplicaScalingResult,
+    compute_c1pgs_spot_replicas,
     compute_mcs_c_schedule,
     compute_sotss_min_schedule,
 )
@@ -138,6 +139,7 @@ __all__ = [
     "CONFORMAL_WARMUP",
     "CONFORMAL_WINDOW",
     "CONFORMAL_ABS_TARGET_P90_TOKENS",
+    "compute_c1pgs_spot_replicas",
     "compute_mcs_c_schedule",
     "compute_sotss_min_schedule",
     "ReplicaScalingConfig",
