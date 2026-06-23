@@ -138,6 +138,13 @@ BurstGPT frontier: SOTSS gate=20% 170,572 goodput/$ (+1.37% vs AMCSG); gate≥25
 Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 2/3].
 Results: `research/results/sotss_gate_sweep_2026-06-23.md`.
 
+**NULL RESULT — SOTSS-GSF (stochastic oracle, gate=100%) [run 2026-06-23]:**
+Identical to SOTSS-MIN on Azure (160,107 goodput/$); unsafe on BurstGPT at gate=100% (178,462,
+n_sla_safe=5860 < baseline=5864). Root cause: p_survive per 60s tick ≈ 99.82% at 10%/hr interruption
+rate — stochastic oracle degenerates to deterministic oracle. Five-Failure counter: 2/5.
+Results: `research/results/sotss_gsf_backtest_2026-06-23.{md,json}`.
+Tests: `tests/test_sotss_gsf.py` (49 tests, all passing).
+
 ---
 
 ## 3. Ingested HF Datasets (not in rollup — research/training use only)
