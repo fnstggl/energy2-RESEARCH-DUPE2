@@ -139,6 +139,14 @@ from aurelius.optimizer.policies.serving_queue import (
     AbsoluteErrorConformalCalibrator,
     simulate_decoupled_hybrid_abs_conformal,
 )
+# Canonical replica-scaling policy [Phase 2/3 unification]: per-tick replica
+# count decisions (AMCSG MCS gate sweep and SOTSS-MIN oracle loop) now live in
+# the optimizer package. _joint_mcs_c_schedule and _sotss_min_cost_schedule
+# become thin delegates — same algorithm, constants, and tie-breaks (0% KPI drift).
+from aurelius.optimizer.policies.replica_scaling import (
+    compute_mcs_c_schedule as _compute_mcs_c_schedule,
+    compute_sotss_min_schedule as _compute_sotss_min_schedule,
+)
 
 # Phase 3: the benchmark routes the abs-conformal serving discipline through the
 # canonical AureliusOptimizer facade (policy="serving_queue") instead of calling
@@ -146,6 +154,8 @@ from aurelius.optimizer.policies.serving_queue import (
 _SERVING_QUEUE_OPTIMIZER = AureliusOptimizer(policy="serving_queue")
 # Back-compat alias (identical object the serving_queue policy dispatches to).
 _abs_conformal_impl = simulate_decoupled_hybrid_abs_conformal
+# Phase 2/3: replica-scaling decisions routed through AureliusOptimizer facade.
+_REPLICA_SCALING_OPTIMIZER = AureliusOptimizer(policy="replica_scaling")
 
 # ---------------------------------------------------------------------------
 # Documented service-physics constants (identical across all disciplines).
@@ -7499,64 +7509,14 @@ def _joint_mcs_c_schedule(
     mcs_gate: float = 9.5,
     sla_s: float = DEFAULT_SLA_S,
 ) -> list:
-    """Per-tick MCS replica counts using queue-simulation-consistent physics.
+    """Per-tick MCS replica counts — delegates to canonical ReplicaScalingPolicy.
 
-    Uses Erlang-C M/M/c with μ = 1/_service_time_s(mean_output_tokens) per
-    server — the same service model as the discrete-event queue simulation.
-    This avoids the throughput-model mismatch between the provisioning backtest
-    (FALLBACK_TOKENS_PER_S=2500 tok/s via continuous batching) and the queue
-    simulation (TPOT_S=0.020 s/tok via sequential decoding).
-
-    Finds min c per tick where P(queue_wait > sla_s − service_s) < mcs_gate%.
-    Empty ticks (no arrivals) return 1 replica.
-
-    Args:
-        raw:          Raw ``(arrival_s, output_tokens)`` tuples (unwarped).
-        tick_seconds: Tick duration in warped seconds.
-        warp:         Time-warp factor (arrival_warped = arrival_raw / warp).
-        mcs_gate:     Timeout-rate threshold (%). Default 9.5 < 10% SLA target.
-        sla_s:        E2E SLA budget (seconds). SLA wait threshold = sla_s - mean_svc.
-
-    Returns:
-        List of ints; index k = replica count for tick [k*tick_s, (k+1)*tick_s).
+    [Phase 2/3 delegate] Algorithm and constants now live in
+    ``aurelius.optimizer.policies.replica_scaling.compute_mcs_c_schedule``.
+    This wrapper preserves the original signature and default ``mcs_gate=9.5``
+    so all existing callers continue to work without modification.
     """
-    if not raw:
-        return []
-
-    warped = [(t / warp, tok) for t, tok in raw]
-    t_max = warped[-1][0]
-    n_ticks = max(1, int(t_max / tick_seconds) + 1)
-
-    buckets: list = [[] for _ in range(n_ticks)]
-    for t, tok in warped:
-        idx = min(n_ticks - 1, int(t / tick_seconds))
-        buckets[idx].append(tok)
-
-    c_sched: list = []
-
-    for bucket in buckets:
-        if not bucket:
-            c_sched.append(1)
-            continue
-
-        n_req = len(bucket)
-        lam = n_req / tick_seconds          # arrival rate in warped seconds
-        mean_service = statistics.mean(      # service time per queue simulation
-            _service_time_s(tok) for tok in bucket
-        )
-        # SLA wait budget: remaining after service (negative → svc itself violates SLA)
-        sla_wait = max(0.0, sla_s - mean_service)
-
-        chosen = 1
-        for c in range(1, 1024):
-            timeout_pct = _erlang_c_sla_timeout_pct(lam, mean_service, c, sla_wait)
-            if timeout_pct < mcs_gate:
-                chosen = c
-                break
-
-        c_sched.append(chosen)
-
-    return c_sched
+    return _compute_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=mcs_gate, sla_s=sla_s)
 
 
 def _simulate_fifo_variable_c(
@@ -11144,104 +11104,20 @@ def _sotss_min_cost_schedule(
     max_iters: int = _SOTSS_MAX_ITERS,
     baseline_n_sla_safe: int | None = None,
 ) -> tuple:
-    """Oracle loop: start cheap, selectively increment c on violation ticks.
+    """SOTSS oracle loop — delegates to canonical ReplicaScalingPolicy.
 
-    Returns (c_schedule, n_iters, initial_violations, n_ticks_cheaper,
-             baseline_n_sla_safe_used).
-
-    Args:
-        raw:                  List of (arrival_s, output_tokens) from trace.
-        tick_seconds:         MCS tick duration (60s).
-        warp:                 Time-warp scalar from calibrate_time_warp.
-        sla_s:                E2E SLA budget in seconds.
-        safe_gate:            Ceiling gate (12.5%) — AMCSG best-safe schedule.
-        aggressive_gate:      Starting gate (15.0%) — cheapest near north-star.
-        max_iters:            Hard iteration cap (200).
-        baseline_n_sla_safe:  Override for the safety floor; if None, computed
-                              from gate=9.5% deterministic simulation.
-
-    Returns:
-        Tuple of:
-          c_schedule          (list[int]) SOTSS per-tick replica counts
-          n_iters             (int)  oracle iterations used
-          initial_violations  (int)  violations at gate=aggressive_gate start
-          n_ticks_cheaper     (int)  ticks where SOTSS < safe_gate schedule
-          baseline_used       (int)  baseline_n_sla_safe used as criterion
+    [Phase 2/3 delegate] Algorithm and constants now live in
+    ``aurelius.optimizer.policies.replica_scaling.compute_sotss_min_schedule``.
+    This wrapper preserves the original signature so all existing callers
+    continue to work without modification.
     """
-    # Ceiling and starting schedules
-    c_ceil = list(_joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=safe_gate, sla_s=sla_s))
-    c_sched = list(_joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=aggressive_gate, sla_s=sla_s))
-    n_ticks = len(c_sched)
-
-    # Build _Request objects; oracle uses actual token counts as service time
-    reqs = [
-        _Request(
-            idx=i,
-            arrival_s=arr / warp,
-            actual_tokens=tok,
-            predicted_tokens=float(tok),
-            service_s=_service_time_s(tok),
-        )
-        for i, (arr, tok) in enumerate(raw)
-    ]
-
-    # Establish baseline n_sla_safe via gate=9.5% deterministic simulation
-    if baseline_n_sla_safe is None:
-        c_base = list(_joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=9.5, sla_s=sla_s))
-        _, resp_base, _ = _simulate_fifo_variable_c(reqs, c_base, tick_seconds)
-        baseline_n_sla_safe = sum(
-            1 for r in reqs if r.idx in resp_base and resp_base[r.idx] <= sla_s
-        )
-
-    initial_violations: int | None = None
-    n_iters = 0
-
-    for iteration in range(max_iters):
-        _, resp, _ = _simulate_fifo_variable_c(reqs, c_sched, tick_seconds)
-
-        n_sla_safe = sum(
-            1 for r in reqs if r.idx in resp and resp[r.idx] <= sla_s
-        )
-
-        if initial_violations is None:
-            initial_violations = len(reqs) - n_sla_safe
-
-        n_iters = iteration + 1
-
-        if n_sla_safe >= baseline_n_sla_safe:
-            break
-
-        # Identify violating requests: missing from resp OR response > sla_s
-        violators = [
-            r for r in reqs
-            if r.idx not in resp or resp[r.idx] > sla_s
-        ]
-        if not violators:
-            break
-
-        # Count violations per arrival tick
-        tick_counts: dict[int, int] = {}
-        for r in violators:
-            t_idx = min(int(r.arrival_s / tick_seconds), n_ticks - 1)
-            tick_counts[t_idx] = tick_counts.get(t_idx, 0) + 1
-
-        # Try to increment c on the worst tick, falling back to next-worst if
-        # ceiling is already reached on the worst.
-        sorted_ticks = sorted(tick_counts, key=tick_counts.get, reverse=True)
-        incremented = False
-        for tk in sorted_ticks:
-            if c_sched[tk] < c_ceil[tk]:
-                c_sched[tk] += 1
-                incremented = True
-                break
-
-        if not incremented:
-            # All violation-tick c values already at ceiling — can't improve
-            # without exceeding the safe gate. Halt and report partial result.
-            break
-
-    n_ticks_cheaper = sum(1 for i in range(n_ticks) if c_sched[i] < c_ceil[i])
-    return c_sched, n_iters, initial_violations or 0, n_ticks_cheaper, baseline_n_sla_safe
+    return _compute_sotss_min_schedule(
+        raw, tick_seconds, warp, sla_s,
+        safe_gate=safe_gate,
+        aggressive_gate=aggressive_gate,
+        max_iters=max_iters,
+        baseline_n_sla_safe=baseline_n_sla_safe,
+    )
 
 
 @dataclass

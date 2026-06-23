@@ -117,10 +117,12 @@
 
 ### 2A. Spot Fleet Provisioning Leaderboard (FIFO+MCS base, spot/on-demand mix)
 
-Separate from rollup — uses FIFO+MCS provisioner (not AureliusOptimizer energy policies).
+Separate from rollup — decisions now governed by `AureliusOptimizer(policy="replica_scaling")`
+following Phase 2/3 architecture convergence [run 2026-06-23].
 Metric: SLA-safe goodput/$ = completed_requests / total_spot_fleet_cost_usd.
 SLA-oracle baselines: Azure=25,208, BurstGPT=20,280 goodput/$.
 North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
++500% north-star threshold: Azure=151,248, BurstGPT=121,680.
 
 | Policy | Azure goodput/$ | vs oracle | BurstGPT goodput/$ | vs oracle | Date |
 |--------|----------------|-----------|--------------------|-----------|------|
@@ -128,11 +130,13 @@ North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
 | AFMS (f=0.70, c-1 floor) | 112,316 | +345.6% | 134,093 | +561.2% | 2026-06-24 |
 | ZFHC(thr=8) | 113,904 | +351.9% | 140,647 | +593.5% | 2026-06-25 |
 | GSF(f=0.95) | 149,235 | +492.0% | 167,767 | +727.3% | 2026-06-26 |
-| **AMCSG(gate=12.5%)** | **150,630** | **+497.5%** | **168,270** | **+729.7%** | **2026-06-27** |
+| AMCSG(gate=12.5%) | 150,630 | +497.5% | 168,270 | +729.7% | 2026-06-27 |
+| SOTSS-MIN(gate=100%) | 160,107 | **+535.1%** | 170,572 | **+741.0%** | 2026-06-23 |
 
-North-star (4× oracle) achieved at all policies. +500% north-star: BurstGPT ✓ (since AFMS), Azure 99.6% (gap: 0.41%, 618 goodput/$).
-Erlang-C conservatism margin: max safe gate = 12.5% (+3.0% above baseline 9.5%) on both traces.
-Results: `research/results/amcsg_backtest_2026-06-27.md` / `research/results/gsf_spot_fleet_backtest_2026-06-26.md`.
+Current frontier: SOTSS-MIN 160,107 goodput/$ (Azure, +6.29% vs AMCSG, +8.86% vs +500% threshold).
+BurstGPT frontier: SOTSS gate=20% 170,572 goodput/$ (+1.37% vs AMCSG); gate≥25% unsafe.
+Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 2/3].
+Results: `research/results/sotss_gate_sweep_2026-06-23.md`.
 
 ---
 

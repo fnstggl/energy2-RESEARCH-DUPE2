@@ -8,6 +8,34 @@
 
 ---
 
+## Run 2026-06-23 — ReplicaScalingPolicy (ARCHITECTURE CONVERGENCE — Phase 2/3)
+
+### Q1. What currently limits Aurelius most?
+
+**Architecture gap.** SOTSS-MIN provisioning decisions lived in the benchmark monolith, not in
+`AureliusOptimizer`. This run closes that gap by implementing `ReplicaScalingPolicy` following the
+Phase 2 extraction pattern (`serving_queue.py`).
+
+| Policy | Status before | Status after |
+|--------|--------------|--------------|
+| energy | Implemented (Phase 1) | Implemented (Phase 1) |
+| serving_queue | Implemented (Phase 2) | Implemented (Phase 2) |
+| replica_scaling | Stub | **Implemented (Phase 2/3)** |
+| placement | Stub | Stub |
+| admission | Stub | Stub |
+
+### Q2–Q13. Gap summary for architecture run
+
+- **KPI impact**: 0% (parity-preserving extraction; 42 bit-identical parity tests)
+- **Architecture**: `IMPLEMENTED_POLICIES = {"energy", "serving_queue", "replica_scaling"}`
+- **Next research priority**: Dynamic spot fraction per tick (unchanged from SOTSS-MIN gap analysis)
+- **Highest-EV**: Dynamic spot fraction (addresses BurstGPT cliff, enables gate=25%)
+
+Results: `research/results/replica_scaling_policy_parity_2026-06-23.md`
+Tests: `tests/test_replica_scaling_policy_parity.py` (42 tests, 0.41s)
+
+---
+
 ## Run 2026-06-23 — SOTSS Gate Sweep / SOTSS-MIN (FRONTIER IMPROVEMENT — +6.29% vs AMCSG on Azure)
 
 ### Q1. What currently limits Aurelius most?
