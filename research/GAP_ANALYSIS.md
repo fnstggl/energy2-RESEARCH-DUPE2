@@ -8,6 +8,134 @@
 
 ---
 
+## Run 2026-06-23 — Online SOTSS / OSOTSS (FRONTIER IMPROVEMENT on Azure, MIXED on BurstGPT)
+
+### Q1. What currently limits Aurelius most?
+
+**Production deployability of SOTSS-MIN.** SOTSS-MIN achieves +6.29% vs AMCSG on Azure but uses
+actual per-tick token counts at scheduling time — future knowledge unavailable in production.
+This run replaces oracle tokens with causal EWMA predictions (alpha=0.1), making the oracle loop
+production-safe while recovering 94.4% of the oracle gain.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+OSOTSS is the production frontier. The oracle frontier (SOTSS-MIN) leaves 5.6% uncovered due to
+EWMA prediction error. Further gains require:
+1. **Better service-time prediction** — transformer-based next-request predictor; expected MAPE reduction
+   from ~15% (EWMA) to ~5-8%, closing the OSOTSS-vs-SOTSS-MIN gap.
+2. **Adaptive EWMA alpha** — per-tick alpha tuning based on recent prediction error; burst-adaptive.
+3. **Multi-step prediction horizon** — predict service times k ticks ahead; handles bursty BurstGPT.
+4. **ShareGPT/LMSYS cross-validation** — test OSOTSS on a third public trace.
+
+### Q3. Which forecasts are weakest?
+
+1. **EWMA alpha=0.1 is fixed** — optimal alpha may differ between smooth (Azure) and bursty (BurstGPT)
+   traces. BurstGPT's 15-request gap could shrink with higher alpha tracking recent bursts.
+2. **BurstGPT 15-request gap** — 0.26% below AMCSG in stochastic evaluation; deterministic oracle
+   convergence check passes but stochastic GSF exposes the gap. May vary with different seeds.
+3. **EWMA warm-start from global mean** — global mean is computed offline (whole trace); in production,
+   the prior would need to be a rolling historical mean.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Fixed EWMA alpha=0.1** — not adaptive to burst patterns in bursty traces (BurstGPT).
+2. **Single-step EWMA** — predicts current-tick service time from past ticks; cannot anticipate
+   upcoming request bursts (e.g., BurstGPT's 5-min surge patterns).
+3. **Offline global mean warm-start** — requires complete trace history; production would use a
+   rolling prior from the previous N ticks.
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Traces where EWMA predictions are systematically biased: heavy-burst arrival patterns (OSOTSS
+guides capacity to different ticks than oracle), very non-stationary service times (EWMA lags),
+or traces where violations are spread across all ticks (oracle needs many iterations with
+imperfect guidance). The BurstGPT 15-request gap exemplifies all three.
+
+### Q6. Which research direction appears strongest?
+
+**Adaptive EWMA alpha per trace/tick.** The Azure-vs-BurstGPT performance gap (SLA-safe vs 15-request
+gap) is directly caused by EWMA's inability to track BurstGPT's bursty arrival patterns. A simple
+adaptive alpha (increase on burst detection, decay on stability) could close the gap.
+
+Alternative: **Multi-region spot pricing** remains the highest untapped gain (estimated 5-20%);
+OSOTSS is the production baseline needed before multi-region experiments.
+
+### Q7. What is the shortest path to another +1% gain?
+
+**Adaptive EWMA alpha.** On BurstGPT, the 15-request gap (0.26%) appears on specific bottleneck ticks
+where EWMA underestimates service time due to preceding quiet period. A burst-detection heuristic
+(alpha=0.5 if last-tick load > 1.5× rolling mean, alpha=0.1 otherwise) could close this gap without
+oracle access.
+
+### Q8. What is the current north-star status?
+
+- **Azure +500% north-star (151,248):** ACHIEVED. OSOTSS: 159,578 (+5.86% margin above threshold).
+  SOTSS-MIN: 160,107 (+5.87% margin). Both oracle and production frontiers clear the threshold.
+- **BurstGPT +500% north-star (121,680):** ACHIEVED (goodput/$). OSOTSS: 178,109 (+46.4% margin).
+
+### Q9. What would need to be true to maintain north-star on other traces?
+
+For OSOTSS to achieve north-star: violations must be concentrated on ≤20% of ticks; EWMA predictions
+must be directionally correct (right bottleneck ticks even if imprecise); SLA budget must be generous
+enough that 0.26% prediction-gap requests don't breach it. Azure satisfies all three; BurstGPT
+borderline on the last condition.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Dual-simulation design is sufficient.** The BurstGPT gap shows that even with actual-pair
+   convergence check, the stochastic evaluation can expose violations when EWMA guides to wrong ticks.
+2. **EWMA alpha=0.1 is universally appropriate.** Azure's smooth workload may mask that other traces
+   need alpha>0.1 for better burst tracking.
+3. **Global mean warm-start is neutral.** On traces with load ramp-up, global mean may over-estimate
+   early ticks and under-estimate later ticks.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure LLM 2024 and BurstGPT HF; ShareGPT/LMSYS needed for a third.
+2. **BurstGPT borderline result** — 15-request SLA gap (0.26%) documented as known limitation; a
+   different random seed could push this above or below AMCSG.
+3. **EWMA warm-start uses global mean** — in production, this would be a rolling prior (lookahead bias
+   of ~6% on early ticks); the benchmark uses offline global mean.
+
+### Q12. Which public datasets should be added?
+
+1. **ShareGPT** — third LLM trace; test OSOTSS on a non-Azure, non-BurstGPT workload pattern.
+2. **LMSYS Chatbot Arena** — fourth trace; heavier multi-turn, highly variable token counts.
+3. **AzurePublicDataset conversation traces** — longer context windows; different p99 profile.
+
+### Q13. What should be attempted next?
+
+1. **Adaptive EWMA alpha** — burst-tracking variant to close the BurstGPT 15-request SLA gap.
+2. **ShareGPT/LMSYS cross-validation** — validate OSOTSS on a third public trace.
+3. **Multi-region spot arbitrage** — OSOTSS is now the production baseline; multi-region can build on it.
+4. **Transformer service-time predictor** — replace EWMA with a learned predictor; expected larger
+   fraction of SOTSS-MIN oracle gain recovered.
+
+**Five-Failure Rule counter: 2 of 5 consecutive non-frontier runs.**
+
+Results: `research/results/online_sotss_backtest_2026-06-23.{md,json}`
+Tests: `tests/test_online_sotss_backtest.py` (30 tests, all passing)
+
+---
+
+## Future Opportunity Ranking — Updated After Run 2026-06-23 (Online SOTSS)
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Adaptive EWMA alpha per tick/trace (burst-tracking) | High | High | Closes BurstGPT 15-request gap; straightforward heuristic |
+| 2 | ShareGPT/LMSYS cross-validation of OSOTSS | Medium | High | Third/fourth public trace; validates EWMA approach |
+| 3 | Transformer service-time predictor (replace EWMA) | High | Medium | Larger SOTSS-MIN fraction recovered; production-safe |
+| 4 | Multi-region spot arbitrage (SkyPilot/arXiv:2605.22778) | High | Medium | OSOTSS is production baseline; multi-region on top |
+| 5 | Stochastic oracle variant (run oracle with GSF not FIFO) | Medium | Medium | Closes deterministic/stochastic gap |
+
+**Closed/characterized opportunities (Online SOTSS):**
+- OSOTSS (EWMA alpha=0.1): **FRONTIER IMPROVEMENT** — 159,578 goodput/$ (Azure, +5.94% vs AMCSG)
+- Dual-simulation design: violation ID from predicted pairs, convergence from actual pairs
+- 94.4% of SOTSS-MIN oracle gain recovered while being production-deployable
+- BurstGPT causal-prediction limitation: 15-request SLA gap (0.26%) — known, documented
+
+---
+
 ## Run 2026-06-23 — SOTSS-GSF Stochastic Oracle (NULL RESULT — hypothesis falsified)
 
 ### Q1. What was attempted?

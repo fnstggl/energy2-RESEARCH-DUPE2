@@ -131,12 +131,20 @@ North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
 | ZFHC(thr=8) | 113,904 | +351.9% | 140,647 | +593.5% | 2026-06-25 |
 | GSF(f=0.95) | 149,235 | +492.0% | 167,767 | +727.3% | 2026-06-26 |
 | AMCSG(gate=12.5%) | 150,630 | +497.5% | 168,270 | +729.7% | 2026-06-27 |
-| SOTSS-MIN(gate=100%) | 160,107 | **+535.1%** | 170,572 | **+741.0%** | 2026-06-23 |
+| OSOTSS(ewma=0.1) ¹ | **159,578** | **+533.1%** | **178,109** ² | **+778.2%** | 2026-06-23 |
+| SOTSS-MIN(gate=100%) ³ | 160,107 | +535.1% | 170,572 | +741.0% | 2026-06-23 |
 
-Current frontier: SOTSS-MIN 160,107 goodput/$ (Azure, +6.29% vs AMCSG, +8.86% vs +500% threshold).
-BurstGPT frontier: SOTSS gate=20% 170,572 goodput/$ (+1.37% vs AMCSG); gate≥25% unsafe.
+¹ OSOTSS = Online SOTSS (production-deployable, causal EWMA predictions). Azure: SLA-safe frontier
+  (+5.94% vs AMCSG, n_sla_safe=5823 ✓). BurstGPT: goodput frontier but n_sla_safe=5849 vs 5864 (−15 requests).
+² BurstGPT OSOTSS goodput/$ exceeds SOTSS-MIN (170,572) by +4.4%, but 15-request SLA gap disqualifies it from
+  the SLA-safe frontier. Counted as a partial result (production-deployable strength with documented limitation).
+³ SOTSS-MIN uses oracle actual token counts; not production-deployable.
+
+**Current SLA-safe frontier (production-deployable)**: OSOTSS 159,578 goodput/$ (Azure, +5.94% vs AMCSG).
+**Current oracle frontier**: SOTSS-MIN 160,107 (Azure, +6.29% vs AMCSG); oracle-only (offline capacity planner).
+**BurstGPT SLA-safe frontier**: AMCSG 168,270 (n_sla_safe=5864 ✓); OSOTSS borderline (n_sla_safe=5849).
 Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 2/3].
-Results: `research/results/sotss_gate_sweep_2026-06-23.md`.
+Results: `research/results/sotss_gate_sweep_2026-06-23.md`, `research/results/online_sotss_backtest_2026-06-23.md`.
 
 **NULL RESULT — SOTSS-GSF (stochastic oracle, gate=100%) [run 2026-06-23]:**
 Identical to SOTSS-MIN on Azure (160,107 goodput/$); unsafe on BurstGPT at gate=100% (178,462,

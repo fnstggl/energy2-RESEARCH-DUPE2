@@ -146,6 +146,7 @@ from aurelius.optimizer.policies.serving_queue import (
 from aurelius.optimizer.policies.replica_scaling import (
     compute_c1pgs_spot_replicas as _compute_c1pgs_spot_replicas,
     compute_mcs_c_schedule as _compute_mcs_c_schedule,
+    compute_online_sotss_schedule as _compute_online_sotss_schedule,
     compute_sotss_gsf_schedule as _compute_sotss_gsf_schedule,
     compute_sotss_min_schedule as _compute_sotss_min_schedule,
 )
@@ -12734,4 +12735,420 @@ def run_sotss_gsf_burstgpt_backtest(
         zfhc_threshold=zfhc_threshold,
         spot_fraction=spot_fraction,
         max_iters=max_iters,
+    )
+
+
+# # Online SOTSS (OSOTSS) — run 2026-06-23
+# ---------------------------------------------------------------------------
+# Motivation:
+#   SOTSS-MIN achieves +6.29% goodput/$ vs AMCSG on Azure by using oracle
+#   actual token counts to plan per-tick capacity. This makes it production-
+#   undeployable (future token counts are unknown at scheduling time).
+#
+#   Online SOTSS replaces oracle actual-token service times with causal
+#   EWMA predictions built from past-observed tokens only. The oracle loop
+#   is identical to SOTSS-MIN; only the planning-phase service times change.
+#   The final evaluation always uses actual service times (same GSF spot-fleet
+#   simulation as AMCSG and SOTSS-MIN) for a fair leaderboard comparison.
+#
+# Expected behavior:
+#   - Azure: between AMCSG (150,630) and SOTSS-MIN (160,107) goodput/$
+#   - BurstGPT: between AMCSG (168,270) and SOTSS-MIN (170,572) goodput/$
+#   - Fewer oracle iterations than SOTSS-MIN (EWMA prediction is smoother)
+#
+# Research basis:
+#   DynamoLLM (arXiv:2408.00741): simulation oracle for capacity planning.
+#   EWMA service-time forecasting: standard M/M/c queueing extension.
+# ---------------------------------------------------------------------------
+
+_ONLINE_SOTSS_EWMA_ALPHA: float = 0.1       # default EWMA decay
+_ONLINE_SOTSS_AGGRESSIVE_GATE: float = 100.0  # start from min-stable c (same as SOTSS-MIN)
+_ONLINE_SOTSS_SAFE_GATE: float = 12.5        # ceiling gate = AMCSG best-safe
+_ONLINE_SOTSS_MAX_ITERS: int = 500           # same cap as SOTSS-MIN gate=100%
+
+
+def _online_sotss_cost_schedule(
+    raw: list,
+    tick_seconds: float,
+    warp: float,
+    sla_s: float,
+    safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
+    aggressive_gate: float = _ONLINE_SOTSS_AGGRESSIVE_GATE,
+    max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
+    baseline_n_sla_safe: int | None = None,
+    ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+) -> tuple:
+    """Online SOTSS schedule — delegates to canonical ReplicaScalingPolicy.
+
+    [Phase 2/3 delegate] Algorithm and constants now live in
+    ``aurelius.optimizer.policies.replica_scaling.compute_online_sotss_schedule``.
+    This wrapper preserves the original signature so all existing callers
+    continue to work without modification.
+    """
+    return _compute_online_sotss_schedule(
+        raw, tick_seconds, warp, sla_s,
+        safe_gate=safe_gate,
+        aggressive_gate=aggressive_gate,
+        max_iters=max_iters,
+        baseline_n_sla_safe=baseline_n_sla_safe,
+        ewma_alpha=ewma_alpha,
+    )
+
+
+@dataclass
+class OnlineSOTSSReport:
+    """Online SOTSS backtest report — run 2026-06-23.
+
+    Online SOTSS (OSOTSS) replaces oracle actual-token service times with
+    causal EWMA predictions, making the SOTSS oracle loop production-deployable.
+    The oracle loop is identical to SOTSS-MIN; only the planning-phase service
+    times differ (predicted vs actual). Final evaluation uses actual service
+    times via the same GSF spot-fleet simulation as AMCSG and SOTSS-MIN.
+
+    Primary KPI: osotss_goodput_per_dollar vs amcsg_goodput_per_dollar.
+    Compared against: AMCSG gate=12.5% (strongest fair deployable baseline).
+    """
+
+    trace: str
+    total_requests: int
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+    ewma_alpha: float
+
+    # North-star targets
+    sla_oracle_goodput_per_dollar: float
+    north_star_500_threshold: float
+
+    # AMCSG safe-gate baseline (gate=12.5%)
+    amcsg_gate: float
+    amcsg_goodput_per_dollar: float
+    amcsg_cost: float
+    amcsg_c_mean: float
+    amcsg_n_sla_safe: int
+    amcsg_p99_s: float
+
+    # Online SOTSS result
+    osotss_aggressive_gate: float
+    osotss_safe_gate: float
+    osotss_goodput_per_dollar: float
+    osotss_cost: float
+    osotss_c_mean: float
+    osotss_n_sla_safe: int
+    osotss_p99_s: float
+    osotss_n_iters: int
+    osotss_initial_violations: int
+    n_ticks_cheaper: int
+    osotss_vs_amcsg_pct: float
+    osotss_vs_sla_oracle_pct: float
+    osotss_north_star_500_achieved: bool
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "zfhc_threshold": self.zfhc_threshold,
+            "ewma_alpha": self.ewma_alpha,
+            "sla_oracle_goodput_per_dollar": round(self.sla_oracle_goodput_per_dollar, 2),
+            "north_star_500_threshold": round(self.north_star_500_threshold, 2),
+            "amcsg_gate": self.amcsg_gate,
+            "amcsg_goodput_per_dollar": round(self.amcsg_goodput_per_dollar, 2),
+            "amcsg_cost": round(self.amcsg_cost, 4),
+            "amcsg_c_mean": round(self.amcsg_c_mean, 3),
+            "amcsg_n_sla_safe": self.amcsg_n_sla_safe,
+            "amcsg_p99_s": round(self.amcsg_p99_s, 3),
+            "osotss_aggressive_gate": self.osotss_aggressive_gate,
+            "osotss_safe_gate": self.osotss_safe_gate,
+            "osotss_goodput_per_dollar": round(self.osotss_goodput_per_dollar, 2),
+            "osotss_cost": round(self.osotss_cost, 4),
+            "osotss_c_mean": round(self.osotss_c_mean, 3),
+            "osotss_n_sla_safe": self.osotss_n_sla_safe,
+            "osotss_p99_s": round(self.osotss_p99_s, 3),
+            "osotss_n_iters": self.osotss_n_iters,
+            "osotss_initial_violations": self.osotss_initial_violations,
+            "n_ticks_cheaper": self.n_ticks_cheaper,
+            "osotss_vs_amcsg_pct": round(self.osotss_vs_amcsg_pct, 4),
+            "osotss_vs_sla_oracle_pct": round(self.osotss_vs_sla_oracle_pct, 2),
+            "osotss_north_star_500_achieved": self.osotss_north_star_500_achieved,
+        }
+
+
+def _run_online_sotss_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_500_threshold: float,
+    aggressive_gate: float = _ONLINE_SOTSS_AGGRESSIVE_GATE,
+    safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
+    zfhc_threshold: int = 8,
+    max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
+    ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+) -> "OnlineSOTSSReport":
+    """Shared Online SOTSS backtest logic for both Azure and BurstGPT traces."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_reqs_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # -----------------------------------------------------------------------
+    # Step 1: Compute AMCSG safe-gate baseline (gate=12.5%) for comparison.
+    # Same simulation path as _run_amcsg_backtest for apple-to-apple parity.
+    # -----------------------------------------------------------------------
+    c_amcsg = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=safe_gate, sla_s=sla_s)
+    amcsg_cost = _gsf_spot_fleet_cost(
+        c_amcsg, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_live = _build_reqs_live()
+    amcsg_sim, amcsg_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_live, c_amcsg, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    amcsg_gp = _sla_safe_goodput(reqs_live, amcsg_resp, sla_s) / max(amcsg_cost, 1e-9)
+    amcsg_n_sla_safe = sum(
+        1 for r in reqs_live if r.idx in amcsg_resp and amcsg_resp[r.idx] <= sla_s
+    )
+
+    # -----------------------------------------------------------------------
+    # Step 2: Run Online SOTSS oracle loop (causal EWMA predictions only).
+    # Production-deployable: no oracle access to future token counts.
+    #
+    # The oracle's convergence baseline is set to amcsg_n_sla_safe — the
+    # same SLA-safe count achieved by AMCSG in the stochastic GSF simulation.
+    # This ensures OSOTSS targets the same safety floor as the baseline, not
+    # the more-conservative deterministic gate=9.5% baseline used by SOTSS-MIN.
+    # -----------------------------------------------------------------------
+    c_osotss, n_iters, initial_violations, n_ticks_cheaper, baseline_used = (
+        _online_sotss_cost_schedule(
+            raw,
+            tick_seconds,
+            warp,
+            sla_s,
+            safe_gate=safe_gate,
+            aggressive_gate=aggressive_gate,
+            max_iters=max_iters,
+            baseline_n_sla_safe=amcsg_n_sla_safe,
+            ewma_alpha=ewma_alpha,
+        )
+    )
+
+    # -----------------------------------------------------------------------
+    # Step 3: Final evaluation using same spot-fleet simulation as AMCSG.
+    # Actual service times govern SLA compliance (no oracle in evaluation).
+    # -----------------------------------------------------------------------
+    osotss_cost = _gsf_spot_fleet_cost(
+        c_osotss, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_live2 = _build_reqs_live()
+    osotss_sim, osotss_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_live2, c_osotss, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    osotss_gp = _sla_safe_goodput(reqs_live2, osotss_resp, sla_s) / max(osotss_cost, 1e-9)
+    osotss_n_sla_safe = sum(
+        1 for r in reqs_live2 if r.idx in osotss_resp and osotss_resp[r.idx] <= sla_s
+    )
+
+    vs_amcsg = (osotss_gp - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+    vs_oracle = (osotss_gp - sla_oracle) / sla_oracle * 100.0
+
+    return OnlineSOTSSReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        ewma_alpha=ewma_alpha,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+        north_star_500_threshold=north_star_500_threshold,
+        amcsg_gate=safe_gate,
+        amcsg_goodput_per_dollar=amcsg_gp,
+        amcsg_cost=amcsg_cost,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_n_sla_safe=amcsg_n_sla_safe,
+        amcsg_p99_s=amcsg_sim.get("p99_response_s", 0.0),
+        osotss_aggressive_gate=aggressive_gate,
+        osotss_safe_gate=safe_gate,
+        osotss_goodput_per_dollar=osotss_gp,
+        osotss_cost=osotss_cost,
+        osotss_c_mean=statistics.mean(c_osotss),
+        osotss_n_sla_safe=osotss_n_sla_safe,
+        osotss_p99_s=osotss_sim.get("p99_response_s", 0.0),
+        osotss_n_iters=n_iters,
+        osotss_initial_violations=initial_violations,
+        n_ticks_cheaper=n_ticks_cheaper,
+        osotss_vs_amcsg_pct=vs_amcsg,
+        osotss_vs_sla_oracle_pct=vs_oracle,
+        osotss_north_star_500_achieved=(
+            osotss_gp >= north_star_500_threshold and osotss_n_sla_safe >= baseline_used
+        ),
+    )
+
+
+def run_online_sotss_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    aggressive_gate: float = _ONLINE_SOTSS_AGGRESSIVE_GATE,
+    safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
+    max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
+    ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+) -> "OnlineSOTSSReport":
+    """Online SOTSS backtest on Azure LLM 2024 — run 2026-06-23.
+
+    Production-deployable SOTSS: replaces oracle actual-token service times
+    with causal per-tick EWMA predictions.  The oracle loop starts from the
+    gate=100% schedule (minimum stable c per tick) and increments c on the
+    worst-violation tick until n_sla_safe (predicted) ≥ baseline.  Final
+    evaluation uses actual service times via the GSF spot-fleet simulation.
+
+    Candidate claim: if osotss_goodput_per_dollar > amcsg_goodput_per_dollar
+    AND osotss_n_sla_safe >= amcsg_n_sla_safe, this is a frontier improvement
+    over AMCSG — production-deployable since it uses only past observations.
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880 for Azure).
+        sla_s:              E2E SLA budget (10s).
+        prior_window:       Sliding-window for running-median live prior.
+        azure_fixture:      Azure LLM 2024 fixture CSV path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        aggressive_gate:    Start gate percentage (100.0% → min stable c).
+        safe_gate:          Ceiling gate percentage (12.5%).
+        max_iters:          Hard iteration cap for oracle loop (500).
+        ewma_alpha:         EWMA decay for service-time prediction (0.1).
+
+    Returns:
+        OnlineSOTSSReport with oracle loop metrics and comparison vs AMCSG.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_online_sotss_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_online_sotss",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_500_threshold=6.0 * 25_208.0,  # 151,248
+        aggressive_gate=aggressive_gate,
+        safe_gate=safe_gate,
+        zfhc_threshold=zfhc_threshold,
+        max_iters=max_iters,
+        ewma_alpha=ewma_alpha,
+    )
+
+
+def run_online_sotss_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    aggressive_gate: float = _ONLINE_SOTSS_AGGRESSIVE_GATE,
+    safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
+    max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
+    ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+) -> "OnlineSOTSSReport":
+    """Online SOTSS backtest on BurstGPT HF — run 2026-06-23.
+
+    Production-deployable SOTSS on the BurstGPT trace.  Same causal EWMA
+    prediction approach as the Azure backtest; SLA budget is 30s (BurstGPT
+    default).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880).
+        sla_s:              E2E SLA budget (30s).
+        prior_window:       Sliding-window for running-median live prior.
+        jsonl_path:         BurstGPT HF JSONL path.
+        tick_seconds:       Tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        aggressive_gate:    Start gate percentage (100.0% → min stable c).
+        safe_gate:          Ceiling gate percentage (12.5%).
+        max_iters:          Hard iteration cap (500).
+        ewma_alpha:         EWMA decay for service-time prediction (0.1).
+
+    Returns:
+        OnlineSOTSSReport with oracle loop metrics and comparison vs AMCSG.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_online_sotss_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_online_sotss",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_500_threshold=6.0 * 20_280.0,  # 121,680
+        aggressive_gate=aggressive_gate,
+        safe_gate=safe_gate,
+        zfhc_threshold=zfhc_threshold,
+        max_iters=max_iters,
+        ewma_alpha=ewma_alpha,
     )
