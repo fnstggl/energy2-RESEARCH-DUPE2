@@ -8,6 +8,56 @@
 
 ---
 
+## Run 2026-06-23 — C1-Protected Gate Sweep / C1PGS (NEGATIVE RESULT — hypothesis falsified)
+
+### Q1. What was attempted?
+
+**C1-Protected Gate Sweep (C1PGS):** Use Erlang-C gate=25% for per-tick c_schedule, but protect c=1
+ticks with on-demand instances (0 spot) to eliminate the hypothesized spot-interruption cliff.
+Hypothesis: c=1 OD at $2.00/hr < c=4 GSF spot at $3.20/hr on low-load ticks → lower cost and
+higher goodput/$ than AMCSG gate=12.5%.
+
+### Q2. Why it failed
+
+**Mechanism was wrong.** The simulation contains:
+```python
+c_effective.append(max(1, c_demand + survived))
+```
+This guard prevents `c_effective=0` at c=1 ticks regardless of spot allocation. C1PGS and GSF
+produce **identical effective capacity** at c=1. The SLA violations at gate=25% come from
+Erlang-C over-optimism (M/M/c too lenient at high load), not spot interruptions.
+
+**Cost error on BurstGPT.** With SLA=30s, AMCSG at gate=12.5% assigns c=2 (not c=4) on
+low-load ticks. c=2 all-spot = $1.60/hr < c=1 OD = $2.00/hr. C1PGS costs MORE, not less.
+
+### Q3–Q12. Summary
+
+| Metric | AMCSG gate=12.5% | C1PGS gate=25% Azure | C1PGS gate=25% BurstGPT |
+|--------|-----------------|---------------------|------------------------|
+| goodput/$ | 150,630 / 168,270 | 153,960 (+2.21%) | 155,786 (-7.42%) |
+| n_sla_safe | 5823 / 5864 | 5818 (-5) ✗ | 5859 (-5) ✗ |
+| cost | $4.28 / $8.89 | $4.17 (-2.49%) | $9.59 (+7.80%) |
+| SLA-safe? | baseline | **NO** | **NO** |
+| North-star? | YES | NO | NO |
+
+### Q13. What to attempt next?
+
+C1PGS is falsified. The underlying idea (dynamic spot fraction per tick to address BurstGPT
+cliff) is still valid conceptually, but the mechanism needs to be:
+
+1. **Gate=25% safety at Erlang-C level** — not a spot-allocation fix; need smarter capacity
+   planning (e.g., calibration correction for M/M/c → M/G/c, or trace-adaptive gate selection).
+2. **SOTSS-MIN integration** — SOTSS-MIN already handles Erlang-C over-optimism by using an
+   actual-token oracle. Focus on production-readying SOTSS-MIN rather than further gate exploration.
+3. **ShareGPT cross-validation** — Validate SOTSS-MIN on a third trace.
+
+**Five-Failure Rule counter: 1 of 5 consecutive non-frontier runs.**
+
+Results: `research/results/c1pgs_backtest_2026-06-23.{md,json}`
+Tests: `tests/test_c1pgs_policy.py` (39 tests, all passing)
+
+---
+
 ## Run 2026-06-23 — ReplicaScalingPolicy (ARCHITECTURE CONVERGENCE — Phase 2/3)
 
 ### Q1. What currently limits Aurelius most?

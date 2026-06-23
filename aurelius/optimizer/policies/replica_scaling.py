@@ -349,6 +349,57 @@ def compute_sotss_min_schedule(
 
 
 # ---------------------------------------------------------------------------
+# C1-Protected Gate Sweep (C1PGS) — run 2026-06-23
+# ---------------------------------------------------------------------------
+# Motivation:
+#   At gate=25% the Erlang-C schedule assigns c=1 on low-load ticks.  With the
+#   standard GSF formula, c=1 means 1 spot replica — one interruption drops
+#   c_effective to 0 and causes an SLA violation.  On BurstGPT the stochastic
+#   Binomial model shows 3-4 violations per run at gate=25%, making it unsafe.
+#
+#   C1PGS eliminates this risk: whenever c=1, use 0 spot + 1 on-demand.
+#   The on-demand replica cannot be interrupted.  For c>1 the standard GSF
+#   formula applies (higher c tolerates one interruption; c_effective≥c-1≥1).
+#
+# Cost comparison (f=0.95, spot=$0.80/hr, on-demand=$2.00/hr):
+#   gate=12.5%, c=4, GSF:   4×$0.80 = $3.20/hr
+#   gate=25%,  c=1, C1PGS:  1×$2.00 = $2.00/hr  → saves $1.20/hr per such tick
+#
+# Research basis:
+#   SpotServe (arXiv:2311.15566, ASPLOS 2024): minimum on-demand reserve at low
+#     capacity prevents SLA cliff from preemption.
+#   DynamoLLM (arXiv:2408.00741): guard empty-tick c_effective drop.
+# ---------------------------------------------------------------------------
+
+
+def compute_c1pgs_spot_replicas(
+    c: int,
+    spot_fraction: float = 0.95,
+    zfhc_threshold: int = 8,
+) -> int:
+    """C1-protected spot replicas: at c=1 use 0 spot (1 on-demand only).
+
+    Eliminates the BurstGPT safety cliff where a single spot interruption at a
+    minimum-capacity (c=1) tick reduces c_effective to 0 and causes an SLA
+    violation.  For c>1 the standard GSF formula is used — one interruption
+    leaves c_effective≥c-1≥1, which remains SLA-safe.
+
+    Args:
+        c:               Total replica count for this tick.
+        spot_fraction:   GSF spot fraction for c>1 (default 0.95).
+        zfhc_threshold:  All-spot threshold for large fleets (default 8).
+
+    Returns:
+        Number of spot replicas (on-demand = c − return_value).
+    """
+    if c == 1:
+        return 0  # on-demand only — no interruption risk at minimum capacity
+    if c >= zfhc_threshold:
+        return c  # all-spot for large fleets (ZFHC)
+    return min(c, max(round(spot_fraction * c), c - 1))  # standard GSF
+
+
+# ---------------------------------------------------------------------------
 # Policy dataclasses
 # ---------------------------------------------------------------------------
 
@@ -522,6 +573,7 @@ __all__ = [
     "compute_mcs_c_schedule",
     "_oracle_fifo_response_times",
     "compute_sotss_min_schedule",
+    "compute_c1pgs_spot_replicas",
     "ReplicaScalingConfig",
     "ReplicaScalingResult",
     "ReplicaScalingPolicy",

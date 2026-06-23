@@ -24,6 +24,16 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**C1PGS [run 2026-06-23] — NEGATIVE RESULT (hypothesis falsified; not a frontier improvement):**
+C1-Protected Gate Sweep: Erlang-C gate=25% with on-demand at c=1 ticks (0 spot) to eliminate the
+hypothesized spot-interruption cliff. Result: simulation guard `max(1, c_demand+survived)` already
+prevents c_effective=0 — C1PGS has identical effective capacity to GSF at c=1. Violations at gate=25%
+come from Erlang-C over-optimism (M/M/c too optimistic), not spot interruptions. Azure: goodput/$ up
++2.21% but n_sla_safe -5 (UNSAFE). BurstGPT: -7.42% worse AND +7.80% more expensive (c=1 OD $2.00/hr
+> c=2 all-spot $1.60/hr at gate=12.5%/SLA=30s). Not merged. Five-Failure counter: 1/5.
+Results: `research/results/c1pgs_backtest_2026-06-23.{md,json}`.
+Tests: `tests/test_c1pgs_policy.py` (39 tests).
+
 **ReplicaScalingPolicy [run 2026-06-23] — ARCHITECTURE CONVERGENCE (Phase 2/3):**
 Implements `ReplicaScalingPolicy` in `aurelius/optimizer/policies/replica_scaling.py`, following
 the Phase 2 extraction pattern (`serving_queue.py`). All per-tick provisioning decisions (AMCSG

@@ -144,6 +144,7 @@ from aurelius.optimizer.policies.serving_queue import (
 # the optimizer package. _joint_mcs_c_schedule and _sotss_min_cost_schedule
 # become thin delegates — same algorithm, constants, and tie-breaks (0% KPI drift).
 from aurelius.optimizer.policies.replica_scaling import (
+    compute_c1pgs_spot_replicas as _compute_c1pgs_spot_replicas,
     compute_mcs_c_schedule as _compute_mcs_c_schedule,
     compute_sotss_min_schedule as _compute_sotss_min_schedule,
 )
@@ -11846,4 +11847,440 @@ def run_sotss_min_azure_backtest(
         aggressive_gate=_SOTSS_MIN_GATE,
         safe_gate=_SOTSS_SAFE_GATE,
         max_iters=max_iters,
+    )
+
+
+# ===========================================================================
+# C1-PROTECTED GATE SWEEP (C1PGS) — run 2026-06-23
+# ===========================================================================
+# Motivation:
+#   At gate=25% Erlang-C assigns c=1 on low-load ticks.  GSF at f=0.95 makes
+#   that single replica spot: one interruption → c_effective=0 → SLA violation.
+#   BurstGPT has 3-4 such violations at gate=25% under GSF (making it UNSAFE).
+#
+#   C1PGS eliminates the cliff: at c=1 ticks use 0 spot + 1 on-demand.
+#   On-demand instances cannot be interrupted.  For c>1 the standard GSF formula
+#   applies (one interruption still leaves c_effective ≥ 1).
+#
+# Cost comparison vs AMCSG gate=12.5% (f=0.95, spot=$0.80/hr, OD=$2.00/hr):
+#   AMCSG gate=12.5%, c=4, GSF:    4×$0.80 = $3.20/hr per tick
+#   C1PGS  gate=25%,  c=1, C1PGS:  1×$2.00 = $2.00/hr per tick (−$1.20/hr)
+#   Net: every tick that moves c=4→c=1 saves $1.20/hr.
+#
+# Implementation:
+#   _c1pgs_spot_replicas   — thin delegate to canonical compute_c1pgs_spot_replicas
+#   _c1pgs_spot_fleet_cost — cost accounting with C1 protection
+#   _simulate_fifo_c1pgs_spot_fleet — stochastic Binomial simulation (same seed)
+#   _run_c1pgs_backtest    — shared backtest logic (AMCSG baseline + C1PGS candidate)
+#   run_c1pgs_azure_backtest / run_c1pgs_burstgpt_backtest — public entry points
+#
+# Same-conditions rule (identical to AMCSG and SOTSS comparisons):
+#   ✓ Same trace, SLA, cost denominator, GPU-hour accounting, physics model
+#   ✓ Same pricing model ($0.80 spot, $2.00 OD)
+#   ✓ Same arrival process (warped, same warp scalar)
+#   ✓ Same telemetry class (actual tick arrival counts, no future-arrival oracle)
+#   ✓ Same evaluation: stochastic Binomial GSF simulator, seed=42, p_int=0.10/hr
+#   ✓ C1PGS is a spot-allocation change inside AureliusOptimizer — NOT a pricing arbitrage
+# ===========================================================================
+
+_C1PGS_GATE: float = 25.0          # C1PGS uses gate=25% for the Erlang-C schedule
+_C1PGS_SAFE_GATE: float = 12.5     # baseline ceiling gate (AMCSG)
+_C1PGS_SPOT_FRACTION: float = 0.95  # same as AMCSG/SOTSS comparisons
+
+
+def _c1pgs_spot_replicas(c: int, spot_fraction: float = 0.95, zfhc_threshold: int = 8) -> int:
+    """Thin delegate to canonical compute_c1pgs_spot_replicas in replica_scaling."""
+    return _compute_c1pgs_spot_replicas(c, spot_fraction=spot_fraction, zfhc_threshold=zfhc_threshold)
+
+
+def _c1pgs_spot_fleet_cost(
+    c_schedule: list,
+    spot_fraction: float,
+    zfhc_threshold: int,
+    spot_price_usd_hr: float,
+    demand_price_usd_hr: float,
+    tick_seconds: float,
+) -> float:
+    """Total fleet cost under C1PGS spot allocation."""
+    tick_hr = tick_seconds / 3600.0
+    total = 0.0
+    for c in c_schedule:
+        c_spot = _c1pgs_spot_replicas(c, spot_fraction, zfhc_threshold)
+        c_demand = c - c_spot
+        total += (c_demand * demand_price_usd_hr + c_spot * spot_price_usd_hr) * tick_hr
+    return total
+
+
+def _simulate_fifo_c1pgs_spot_fleet(
+    requests: list,
+    c_schedule: list,
+    spot_fraction: float,
+    zfhc_threshold: int,
+    p_interrupt_hourly: float,
+    tick_seconds: float = 60.0,
+    seed: int = 42,
+) -> tuple:
+    """FIFO variable-c simulation with C1-protected stochastic spot interruptions.
+
+    Identical to ``_simulate_fifo_gsf_spot_fleet`` except spot replicas per tick
+    are determined by ``_c1pgs_spot_replicas`` (c=1 ticks → 0 spot, 1 on-demand).
+
+    Args:
+        requests:            List of _Request objects.
+        c_schedule:          Per-tick total replica count from MCS.
+        spot_fraction:       GSF spot fraction for c>1 ticks (0–1).
+        zfhc_threshold:      All-spot threshold for large fleets.
+        p_interrupt_hourly:  Per-spot-instance hourly interruption probability.
+        tick_seconds:        Tick duration in seconds.
+        seed:                RNG seed for reproducibility.
+
+    Returns:
+        (sim_stats, response_times, n_served) tuple from
+        ``_simulate_fifo_variable_c``.
+    """
+    import numpy as _np
+    rng = _np.random.default_rng(seed)
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+
+    c_effective: list = []
+    for c in c_schedule:
+        c_spot = _c1pgs_spot_replicas(c, spot_fraction, zfhc_threshold)
+        c_demand = c - c_spot
+        survived = int(rng.binomial(c_spot, p_survive)) if c_spot > 0 else 0
+        # c_demand (on-demand) never interrupted; spot replicas subject to Binomial.
+        # c=1 ticks: c_spot=0, c_demand=1 → c_effective=1 always (no cliff).
+        c_effective.append(max(1, c_demand + survived))
+
+    return _simulate_fifo_variable_c(requests, c_effective, tick_seconds)
+
+
+@dataclass
+class C1PGSReport:
+    """C1-Protected Gate Sweep (C1PGS) backtest report — run 2026-06-23.
+
+    C1PGS uses gate=25% Erlang-C schedule with on-demand-only at c=1 ticks,
+    eliminating the BurstGPT spot-interruption cliff that makes gate≥25% unsafe
+    under the standard GSF formula.
+
+    Primary KPI: c1pgs_goodput_per_dollar vs amcsg_goodput_per_dollar.
+    Compared against: AMCSG gate=12.5% (strongest fair deployable baseline).
+    """
+
+    trace: str
+    total_requests: int
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+
+    # North-star targets
+    sla_oracle_goodput_per_dollar: float
+    north_star_500_threshold: float
+
+    # AMCSG safe-gate baseline (gate=12.5%, GSF f=0.95)
+    amcsg_gate: float
+    amcsg_goodput_per_dollar: float
+    amcsg_cost: float
+    amcsg_c_mean: float
+    amcsg_n_sla_safe: int
+    amcsg_p99_s: float
+
+    # C1PGS candidate (gate=25%, C1-protected at c=1)
+    c1pgs_gate: float
+    c1pgs_spot_fraction: float
+    c1pgs_goodput_per_dollar: float
+    c1pgs_cost: float
+    c1pgs_c_mean: float
+    c1pgs_n_sla_safe: int
+    c1pgs_p99_s: float
+    c1pgs_n_ticks_c1: int           # ticks assigned c=1 (OD-only under C1PGS)
+    c1pgs_n_ticks_c1_gsf: int       # same ticks under GSF (c=1 all-spot → cliff)
+    c1pgs_vs_amcsg_pct: float       # % improvement in goodput/$ vs AMCSG
+    c1pgs_vs_sla_oracle_pct: float  # % above SLA oracle
+    c1pgs_north_star_500_achieved: bool
+    c1pgs_sla_safe: bool            # n_sla_safe >= amcsg_n_sla_safe
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "zfhc_threshold": self.zfhc_threshold,
+            "sla_oracle_goodput_per_dollar": round(self.sla_oracle_goodput_per_dollar, 2),
+            "north_star_500_threshold": round(self.north_star_500_threshold, 2),
+            "amcsg_gate": self.amcsg_gate,
+            "amcsg_goodput_per_dollar": round(self.amcsg_goodput_per_dollar, 2),
+            "amcsg_cost": round(self.amcsg_cost, 4),
+            "amcsg_c_mean": round(self.amcsg_c_mean, 3),
+            "amcsg_n_sla_safe": self.amcsg_n_sla_safe,
+            "amcsg_p99_s": round(self.amcsg_p99_s, 3),
+            "c1pgs_gate": self.c1pgs_gate,
+            "c1pgs_spot_fraction": self.c1pgs_spot_fraction,
+            "c1pgs_goodput_per_dollar": round(self.c1pgs_goodput_per_dollar, 2),
+            "c1pgs_cost": round(self.c1pgs_cost, 4),
+            "c1pgs_c_mean": round(self.c1pgs_c_mean, 3),
+            "c1pgs_n_sla_safe": self.c1pgs_n_sla_safe,
+            "c1pgs_p99_s": round(self.c1pgs_p99_s, 3),
+            "c1pgs_n_ticks_c1": self.c1pgs_n_ticks_c1,
+            "c1pgs_n_ticks_c1_gsf": self.c1pgs_n_ticks_c1_gsf,
+            "c1pgs_vs_amcsg_pct": round(self.c1pgs_vs_amcsg_pct, 4),
+            "c1pgs_vs_sla_oracle_pct": round(self.c1pgs_vs_sla_oracle_pct, 2),
+            "c1pgs_north_star_500_achieved": self.c1pgs_north_star_500_achieved,
+            "c1pgs_sla_safe": self.c1pgs_sla_safe,
+        }
+
+
+def _run_c1pgs_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_500_threshold: float,
+    c1pgs_gate: float = _C1PGS_GATE,
+    safe_gate: float = _C1PGS_SAFE_GATE,
+    spot_fraction: float = _C1PGS_SPOT_FRACTION,
+    zfhc_threshold: int = 8,
+) -> "C1PGSReport":
+    """Shared C1PGS backtest logic for Azure and BurstGPT traces."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_reqs_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # -----------------------------------------------------------------------
+    # Step 1: AMCSG baseline (gate=12.5%, GSF f=0.95) — same as SOTSS comparison.
+    # -----------------------------------------------------------------------
+    c_amcsg = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=safe_gate, sla_s=sla_s)
+    amcsg_cost = _gsf_spot_fleet_cost(
+        c_amcsg, spot_fraction, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_live = _build_reqs_live()
+    amcsg_sim, amcsg_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_live, c_amcsg, spot_fraction, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    amcsg_gp = _sla_safe_goodput(reqs_live, amcsg_resp, sla_s) / max(amcsg_cost, 1e-9)
+    amcsg_n_sla_safe = sum(
+        1 for r in reqs_live if r.idx in amcsg_resp and amcsg_resp[r.idx] <= sla_s
+    )
+
+    # -----------------------------------------------------------------------
+    # Step 2: C1PGS candidate (gate=25%, C1-protected spot allocation).
+    # Uses the same Erlang-C formula as AMCSG but at gate=25% → cheaper c_schedule.
+    # At c=1 ticks: 0 spot + 1 on-demand (interruption-safe).
+    # -----------------------------------------------------------------------
+    c_c1pgs = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=c1pgs_gate, sla_s=sla_s)
+    c1pgs_cost = _c1pgs_spot_fleet_cost(
+        c_c1pgs, spot_fraction, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    n_ticks_c1 = sum(1 for c in c_c1pgs if c == 1)
+    # GSF at c=1 would also put all replicas on spot (cliff risk):
+    n_ticks_c1_gsf = n_ticks_c1  # same c_schedule, different spot allocation
+
+    reqs_live2 = _build_reqs_live()
+    c1pgs_sim, c1pgs_resp, _ = _simulate_fifo_c1pgs_spot_fleet(
+        reqs_live2, c_c1pgs, spot_fraction, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    c1pgs_gp = _sla_safe_goodput(reqs_live2, c1pgs_resp, sla_s) / max(c1pgs_cost, 1e-9)
+    c1pgs_n_sla_safe = sum(
+        1 for r in reqs_live2 if r.idx in c1pgs_resp and c1pgs_resp[r.idx] <= sla_s
+    )
+
+    vs_amcsg = (c1pgs_gp - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+    vs_oracle = (c1pgs_gp - sla_oracle) / sla_oracle * 100.0
+
+    return C1PGSReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+        north_star_500_threshold=north_star_500_threshold,
+        amcsg_gate=safe_gate,
+        amcsg_goodput_per_dollar=amcsg_gp,
+        amcsg_cost=amcsg_cost,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_n_sla_safe=amcsg_n_sla_safe,
+        amcsg_p99_s=amcsg_sim.get("p99_response_s", 0.0),
+        c1pgs_gate=c1pgs_gate,
+        c1pgs_spot_fraction=spot_fraction,
+        c1pgs_goodput_per_dollar=c1pgs_gp,
+        c1pgs_cost=c1pgs_cost,
+        c1pgs_c_mean=statistics.mean(c_c1pgs),
+        c1pgs_n_sla_safe=c1pgs_n_sla_safe,
+        c1pgs_p99_s=c1pgs_sim.get("p99_response_s", 0.0),
+        c1pgs_n_ticks_c1=n_ticks_c1,
+        c1pgs_n_ticks_c1_gsf=n_ticks_c1_gsf,
+        c1pgs_vs_amcsg_pct=vs_amcsg,
+        c1pgs_vs_sla_oracle_pct=vs_oracle,
+        c1pgs_north_star_500_achieved=(
+            c1pgs_gp >= north_star_500_threshold and c1pgs_n_sla_safe >= amcsg_n_sla_safe
+        ),
+        c1pgs_sla_safe=(c1pgs_n_sla_safe >= amcsg_n_sla_safe),
+    )
+
+
+def run_c1pgs_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    c1pgs_gate: float = _C1PGS_GATE,
+    safe_gate: float = _C1PGS_SAFE_GATE,
+    spot_fraction: float = _C1PGS_SPOT_FRACTION,
+) -> "C1PGSReport":
+    """C1-Protected Gate Sweep backtest on Azure LLM 2024 — run 2026-06-23.
+
+    Tests whether C1PGS gate=25% with on-demand protection at c=1 ticks
+    outperforms AMCSG gate=12.5% on the Azure LLM 2024 trace.
+
+    Same-conditions: same trace (5880 req), same SLA (10s), same physics,
+    same pricing, same warp scalar, same stochastic simulator (seed=42).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880 for Azure).
+        sla_s:              E2E SLA budget (10s).
+        prior_window:       Sliding-window for live-prior predictions.
+        azure_fixture:      Azure LLM 2024 fixture CSV path.
+        tick_seconds:       Tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr) — 0.80.
+        p_interrupt_hourly: Hourly spot interruption probability — 0.10.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        c1pgs_gate:         Erlang-C gate for C1PGS schedule (25.0%).
+        safe_gate:          Baseline ceiling gate for AMCSG (12.5%).
+        spot_fraction:      GSF spot fraction for c>1 ticks (0.95).
+
+    Returns:
+        C1PGSReport with goodput/$ comparison vs AMCSG baseline.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_c1pgs_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_c1pgs",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_500_threshold=6.0 * 25_208.0,  # 151,248
+        c1pgs_gate=c1pgs_gate,
+        safe_gate=safe_gate,
+        spot_fraction=spot_fraction,
+        zfhc_threshold=zfhc_threshold,
+    )
+
+
+def run_c1pgs_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    c1pgs_gate: float = _C1PGS_GATE,
+    safe_gate: float = _C1PGS_SAFE_GATE,
+    spot_fraction: float = _C1PGS_SPOT_FRACTION,
+) -> "C1PGSReport":
+    """C1-Protected Gate Sweep backtest on BurstGPT HF — run 2026-06-23.
+
+    BurstGPT at gate=25% under standard GSF produces 3-4 SLA violations from
+    spot interruptions at c=1 ticks (the safety cliff identified in run 2026-06-22).
+    C1PGS protects c=1 ticks with on-demand — eliminating the cliff.
+
+    The hypothesis: gate=25% + C1PGS protection costs less than gate=12.5% + GSF
+    on low-load ticks (c=1 OD at $2.00/hr < c=4 GSF at $3.20/hr), producing
+    higher goodput/$ while remaining SLA-safe.
+
+    Same-conditions: same trace (5880 req), same SLA (30s), same physics,
+    same pricing, same warp scalar, same stochastic simulator (seed=42).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880).
+        sla_s:              E2E SLA budget (30s).
+        prior_window:       Sliding-window for live-prior predictions.
+        jsonl_path:         BurstGPT HF JSONL path.
+        tick_seconds:       Tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr) — 0.80.
+        p_interrupt_hourly: Hourly spot interruption probability — 0.10.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        c1pgs_gate:         Erlang-C gate for C1PGS schedule (25.0%).
+        safe_gate:          Baseline ceiling gate for AMCSG (12.5%).
+        spot_fraction:      GSF spot fraction for c>1 ticks (0.95).
+
+    Returns:
+        C1PGSReport with goodput/$ comparison vs AMCSG baseline.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_c1pgs_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_c1pgs",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_500_threshold=6.0 * 20_280.0,  # 121,680
+        c1pgs_gate=c1pgs_gate,
+        safe_gate=safe_gate,
+        spot_fraction=spot_fraction,
+        zfhc_threshold=zfhc_threshold,
     )
