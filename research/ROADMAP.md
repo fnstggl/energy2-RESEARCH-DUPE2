@@ -24,6 +24,16 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**ReplicaScalingPolicy [run 2026-06-23] — ARCHITECTURE CONVERGENCE (Phase 2/3):**
+Implements `ReplicaScalingPolicy` in `aurelius/optimizer/policies/replica_scaling.py`, following
+the Phase 2 extraction pattern (`serving_queue.py`). All per-tick provisioning decisions (AMCSG
+MCS gate sweep + SOTSS-MIN oracle loop) now flow through `AureliusOptimizer(policy="replica_scaling")`.
+`_joint_mcs_c_schedule` and `_sotss_min_cost_schedule` become thin delegates; canonical logic lives
+in the policy module. IMPLEMENTED_POLICIES = {"energy", "serving_queue", "replica_scaling"} (3 of 5).
+42 parity tests pass (0.41s), asserting bit-identical results. 0% KPI impact by design.
+Results: `research/results/replica_scaling_policy_parity_2026-06-23.md`.
+Tests: `tests/test_replica_scaling_policy_parity.py`.
+
 **SOTSS-MIN Gate Sweep [run 2026-06-23] — FRONTIER IMPROVEMENT (+6.29% vs AMCSG on Azure):**
 Systematic gate sweep {20,25,30,35,40,50,75,100}% finds gate=100% (SOTSS-MIN) as the maximum-savings
 starting point. All 8 gates safe on Azure (n_sla_safe=5823=baseline at every gate). SOTSS-MIN starts

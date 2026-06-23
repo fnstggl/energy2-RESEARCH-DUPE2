@@ -3,11 +3,14 @@
 Phase 1 stood up this seam with the energy policy as a thin delegate to
 ``JobScheduler``; Phase 2 implements ``ServingQueuePolicy`` by extracting the
 strongest validated serving-queue discipline out of the benchmark monolith into
-:mod:`aurelius.optimizer.policies.serving_queue`.
+:mod:`aurelius.optimizer.policies.serving_queue`; Phase 2/3 implements
+``ReplicaScalingPolicy`` by extracting the per-tick provisioning logic (AMCSG
+MCS gate sweep and SOTSS-MIN oracle loop) into
+:mod:`aurelius.optimizer.policies.replica_scaling`.
 
     EnergySchedulingPolicy   — implemented (Phase 1): thin delegate to JobScheduler
     ServingQueuePolicy       — implemented (Phase 2): extracted abs-conformal SRPT
-    ReplicaScalingPolicy     — NOT implemented (Phase 2/3)
+    ReplicaScalingPolicy     — implemented (Phase 2/3): extracted AMCSG/SOTSS-MIN
     PlacementPolicy          — NOT implemented (Phase 3)
     AdmissionPolicy          — NOT implemented (Phase 3)
 
@@ -22,6 +25,18 @@ from typing import Optional
 
 from ...optimization.scheduler import JobScheduler, SchedulerResult
 from .base import OptimizationPolicy
+from .replica_scaling import (
+    REPLICA_AGGRESSIVE_GATE,
+    REPLICA_MAX_ORACLE_ITERS,
+    REPLICA_SAFE_GATE,
+    REPLICA_TPOT_S,
+    REPLICA_TTFT_BASE_S,
+    ReplicaScalingConfig,
+    ReplicaScalingPolicy,
+    ReplicaScalingResult,
+    compute_mcs_c_schedule,
+    compute_sotss_min_schedule,
+)
 from .serving_queue import (
     CONFORMAL_ABS_TARGET_P90_TOKENS,
     CONFORMAL_ALPHA_MAX,
@@ -82,13 +97,6 @@ class _UnimplementedPolicy(OptimizationPolicy):
         )
 
 
-class ReplicaScalingPolicy(_UnimplementedPolicy):
-    """Replica/autoscaling provisioning policy (Phase 2/3)."""
-
-    name = "replica_scaling"
-    phase = "Phase 2/3 (replica scaling)"
-
-
 class PlacementPolicy(_UnimplementedPolicy):
     """GPU/region placement-and-routing policy (Phase 3)."""
 
@@ -114,7 +122,7 @@ POLICY_REGISTRY: dict[str, type[OptimizationPolicy]] = {
 
 #: Policies that are actually implemented in the current phase.
 IMPLEMENTED_POLICIES: frozenset[str] = frozenset(
-    {EnergySchedulingPolicy.name, ServingQueuePolicy.name}
+    {EnergySchedulingPolicy.name, ServingQueuePolicy.name, ReplicaScalingPolicy.name}
 )
 
 __all__ = [
@@ -130,6 +138,15 @@ __all__ = [
     "CONFORMAL_WARMUP",
     "CONFORMAL_WINDOW",
     "CONFORMAL_ABS_TARGET_P90_TOKENS",
+    "compute_mcs_c_schedule",
+    "compute_sotss_min_schedule",
+    "ReplicaScalingConfig",
+    "ReplicaScalingResult",
+    "REPLICA_TTFT_BASE_S",
+    "REPLICA_TPOT_S",
+    "REPLICA_SAFE_GATE",
+    "REPLICA_AGGRESSIVE_GATE",
+    "REPLICA_MAX_ORACLE_ITERS",
     "POLICY_REGISTRY",
     "IMPLEMENTED_POLICIES",
 ]
