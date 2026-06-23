@@ -24,6 +24,18 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**SOTSS-GSF [run 2026-06-23] — NULL RESULT (hypothesis falsified; stochastic oracle = deterministic oracle):**
+SOTSS-GSF replaces the deterministic FIFO oracle in SOTSS-MIN's fix-up loop with a stochastic Binomial
+oracle (seed=42, matching evaluation). Hypothesis: detect spot-interruption-vulnerable ticks missed by
+the deterministic oracle. Result: SOTSS-GSF produces identical c_schedules to SOTSS-MIN on both traces.
+Root cause: at p_interrupt=10%/hr with 60s ticks, p_survive per tick = (0.90)^(1/60) ≈ 0.9982 — each
+spot instance almost always survives each tick. Binomial(c_spot, 0.9982) ≈ c_spot → stochastic oracle
+degenerates to deterministic oracle. Azure: 160,107 goodput/$ (+0.00% vs SOTSS-MIN, SAFE). BurstGPT:
+178,462 goodput/$ (gate=100%, UNSAFE — 4 requests short of baseline; oracle-simulation gap in queue
+dynamics, not an interruption detection failure). Frontier unchanged. Five-Failure counter: 2/5.
+Results: `research/results/sotss_gsf_backtest_2026-06-23.{md,json}`.
+Tests: `tests/test_sotss_gsf.py` (49 tests, all passing).
+
 **C1PGS [run 2026-06-23] — NEGATIVE RESULT (hypothesis falsified; not a frontier improvement):**
 C1-Protected Gate Sweep: Erlang-C gate=25% with on-demand at c=1 ticks (0 spot) to eliminate the
 hypothesized spot-interruption cliff. Result: simulation guard `max(1, c_demand+survived)` already
