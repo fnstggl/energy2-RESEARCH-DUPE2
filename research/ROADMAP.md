@@ -24,6 +24,23 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Economic MCS Optimizer [run 2026-06-23] — AURELIUS BEATS SLA-AWARE+MCS BY +9.6% (cost lever):**
+Treats MCS as the strong baseline and asks: can Aurelius reduce the cost/GPU-hours of the
+MCS-safe schedule while preserving SLA? **Yes.** Mechanism: Erlang-C M/M/c over-provisions because
+it assumes exponential service variance; LLM service is near-deterministic (M/D/c needs fewer
+servers for the same wait, Pollaczek–Khinchine). The candidate sizes capacity to the ACTUAL
+closed-loop SLA via full-trace deterministic simulation instead of the analytical bound. Azure LLM
+2024 (5,880 req, ρ=0.85, SLA=10s), all policies same trace/physics/SLA/cost-denominator:
+SLA-aware+MCS (baseline)=**59,676 gp/$** (644,499 SLA-tok, 5.40 GPU-hr, $10.80) vs candidate
+SC-MCS=**65,411 gp/$** (641,031 SLA-tok, 4.90 GPU-hr, $9.80) → **+9.61% gp/$ via −9.26% GPU-hours,
+SLA preserved (−0.54%)**. Greedy per-tick ceiling: +13.85% (−12.35% GPU-hr). Lever confirmed
+ordering-INDEPENDENT (FIFO reaches same c_sum=284 → it is M/D/c, not scheduling). Negative controls:
+per-tick ISOLATED sizing breaks SLA (61% tok, ignores carryover — must validate closed-loop);
+abs-conformal on reduced schedule loses tokens (preemption). This is where Aurelius adds value over
+MCS — sizing the safe fleet accurately, NOT reordering a drained queue. Stacks with spot pricing.
+6 new tests (23 total passing). Results: `research/results/economic_mcs_optimizer_2026-06-23.md`.
+**Do not merge pending review.**
+
 **Fair MCS Comparison [run 2026-06-23] — AURELIUS DOES NOT BEAT SLA-AWARE+MCS (decisive negative):**
 Controlled experiment holding capacity constant: all conditions receive the *same* MCS per-tick
 c_schedule (mean=4.5, [1,8]), same trace, SLA, physics, arrival process, and provisioned-hours

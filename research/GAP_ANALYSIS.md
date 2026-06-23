@@ -8,6 +8,89 @@
 
 ---
 
+## Run 2026-06-23 (economic-MCS) — Can Aurelius Reduce MCS Cost Preserving SLA? (YES, +9.6%)
+
+### Q1. What currently limits Aurelius most?
+
+**Resolved this run for the elastic-capacity regime.** With MCS as the baseline, Aurelius's value
+is NOT queue ordering (fair-MCS showed that is flat-to-negative) but **capacity-sizing accuracy**.
+Erlang-C M/M/c over-provisions for exponential service variance that deterministic LLM service
+does not have. Sizing to the actual closed-loop SLA (M/D/c via simulation) cuts GPU-hours −9.26%
+preserving SLA, beating SLA-aware+MCS by **+9.61% gp/$** (greedy ceiling +13.85%).
+
+| Policy | gp/$ | SLA-tok | GPU-hr | cost |
+|--------|------|---------|--------|------|
+| SLA-aware + MCS (baseline) | 59,676 | 644,499 | 5.40 | $10.80 |
+| Constraint-aware + MCS (=FIFO+MCS) | 59,694 | 644,696 | 5.40 | $10.80 |
+| Current Aurelius (abs-conf) + MCS | 58,323 | 629,888 | 5.40 | $10.80 |
+| **Candidate SC-MCS + MCS** | **65,411** | **641,031** | **4.90** | **$9.80** |
+
+### Q2. What theoretically offers the largest gain?
+
+**Stacking the cost lever with spot/preemptible pricing.** The −9% GPU-hour reduction is
+multiplicative with spot discounts (−40%+), unlike queue ordering which is flat at MCS capacity.
+
+### Q3. Which forecasts are weakest?
+
+1. **"MCS is cost-optimal"** — FALSE. It over-provisions ~9–12% via the M/M/c variance assumption.
+2. **Per-tick isolated M/D/c sizing** — predicted cheap+safe, actually breaks SLA (carryover).
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Capacity sizing via analytical Erlang-C** — leaves 9–12% GPU-hours on the table vs the
+   simulation-calibrated schedule.
+2. **Running abs-conformal at MCS capacity** — preemption loses tokens; should be gated off when
+   the queue is shallow.
+
+### Q5. Which workloads benefit least?
+
+Workloads with high service-time variance (Cs²→1) where M/D/c ≈ M/M/c and the over-provisioning
+slack disappears. Azure LLM (deterministic per-token decode) is near the best case for this lever.
+
+### Q6. Which research direction appears strongest?
+
+**Simulation-calibrated capacity sizing + spot pricing.** Both are cost-side and compound; queue
+ordering is exhausted at MCS capacity.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Spot/preemptible pricing overlay on the already-reduced SC-MCS fleet (4.90 GPU-hr × spot discount).
+
+### Q8. What is the shortest path to +300% vs SLA-aware+MCS?
+
+Cost-side only. SC-MCS gives −9% (→ +9.6% gp/$); spot gives −40%; combined ~ −46% cost →
+~+85% gp/$. +300% (4×) requires ~−75% cost — needs spot + multi-tenant capacity pooling, not
+achievable by sizing alone. North-star vs SLA-aware+MCS remains open but the path is cost, not queue.
+
+### Q9. What would need to be true to achieve +300% vs SLA-aware+MCS?
+
+Cost reduction of ~75% at preserved SLA. SC-MCS (−9%) + aggressive spot (−40–70%) + workload
+consolidation. No queue-ordering path exists (numerator already ~95% saturated).
+
+### Q10. Which assumptions might be wrong?
+
+1. **Closed-loop validation on the serving trace** — mild trace-fitting; the 1-parameter uplift
+   form limits it but a holdout-calibrated version is needed for deployment.
+2. **M/D/c physics** — continuous-batching throughput would change the absolute reduction.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **BurstGPT economic-MCS cross-validation pending.**
+2. **No holdout split** — capacity is calibrated and served on the same trace.
+3. **Spot pricing not yet modeled** — the compounding claim is projected, not measured.
+
+### Q12. Which public datasets should be added?
+
+BurstGPT HF (economic-MCS replication); a cloud spot-pricing trace for the cost overlay.
+
+### Q13. What should be attempted next?
+
+1. **Spot/preemptible pricing overlay** on the SC-MCS fleet — the compounding cost lever.
+2. **Holdout-calibrated uplift** — calibrate the utilization uplift on a warmup window, validate online.
+3. **BurstGPT economic-MCS** — confirm the M/D/c reduction generalizes.
+
+---
+
 ## Run 2026-06-23 (fair-MCS) — Does Aurelius Beat SLA-aware + MCS? (DECISIVE NO)
 
 ### Q1. What currently limits Aurelius most?

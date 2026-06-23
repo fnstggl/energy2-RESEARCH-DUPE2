@@ -257,3 +257,79 @@ def test_sla_aware_variable_c_prioritizes_short():
     # but among the queued ones the short class is served before any long class.
     assert len(resp) == 4
     assert all(v >= 0 for v in resp.values())
+
+
+# ---------------------------------------------------------------------------
+# Economic MCS optimizer [run 2026-06-23]: reduce MCS cost preserving SLA.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def econ_report():
+    from aurelius.benchmarks.srtf_serving_backtest import (
+        run_economic_mcs_optimizer_azure_backtest,
+    )
+    return run_economic_mcs_optimizer_azure_backtest(
+        fixed_c=4, target_rho=0.85, job_limit=200, sla_s=10.0,
+        azure_fixture=FIXTURE, tick_seconds=60.0,
+    )
+
+
+# 18. report type + dict keys
+def test_econ_report_type(econ_report):
+    from aurelius.benchmarks.srtf_serving_backtest import EconomicMCSReport
+    assert isinstance(econ_report, EconomicMCSReport)
+    d = econ_report.to_dict()
+    for k in ("candidate_goodput_per_dollar", "sla_aware_mcs_goodput_per_dollar",
+              "candidate_gpu_hours", "mcs_gpu_hours", "candidate_sla_tokens_delta_pct",
+              "success"):
+        assert k in d
+
+
+# 19. candidate uses no MORE GPU-hours than the MCS Erlang-C schedule
+def test_econ_candidate_not_more_gpu_hours(econ_report):
+    assert econ_report.candidate_gpu_hours <= econ_report.mcs_gpu_hours + 1e-9
+
+
+# 20. candidate preserves SLA-safe goodput (>= 99% of baseline tokens)
+def test_econ_candidate_preserves_sla(econ_report):
+    assert econ_report.candidate_sla_tokens >= 0.99 * econ_report.sla_aware_mcs_sla_tokens
+
+
+# 21. candidate goodput/$ >= baseline (cost reduction is the lever; never worse)
+def test_econ_candidate_not_worse(econ_report):
+    assert (econ_report.candidate_goodput_per_dollar
+            >= econ_report.sla_aware_mcs_goodput_per_dollar - 1e-6)
+
+
+# 22. constraint-aware+MCS equals FIFO+MCS contract (provisioning, not ordering):
+#     both sit at the strong-baseline goodput band, far above current Aurelius is
+#     NOT asserted; we assert the documented relationship that ordering is a
+#     near-no-op at MCS capacity (all within a few % of each other).
+def test_econ_ordering_near_noop_at_mcs(econ_report):
+    gps = [
+        econ_report.sla_aware_mcs_goodput_per_dollar,
+        econ_report.constraint_aware_mcs_goodput_per_dollar,
+        econ_report.current_aurelius_mcs_goodput_per_dollar,
+    ]
+    # spread between best and worst ordering at fixed MCS capacity is small
+    assert (max(gps) - min(gps)) / max(gps) < 0.10
+
+
+# 23. schedule helper returns a schedule no more expensive than Erlang-C MCS
+def test_econ_calibrated_schedule_cheaper_or_equal():
+    from aurelius.benchmarks.srtf_serving_backtest import (
+        load_serving_requests, calibrate_time_warp, _joint_mcs_c_schedule,
+        _economic_mcs_calibrated_schedule, _simulate_sla_aware_variable_c,
+        _build_variable_c_requests, _sla_safe_goodput,
+    )
+    raw = load_serving_requests(FIXTURE, limit=200)
+    warp = calibrate_time_warp(raw, servers=4, target_rho=0.85)
+    c_mcs = _joint_mcs_c_schedule(raw, 60.0, warp, mcs_gate=9.5, sla_s=10.0)
+    r = _build_variable_c_requests(raw, warp)
+    _, resp, _ = _simulate_sla_aware_variable_c(r, c_mcs, 60.0)
+    base_tok = _sla_safe_goodput(r, resp, 10.0)
+    c_cand, gate, tok = _economic_mcs_calibrated_schedule(
+        raw, warp, 60.0, 10.0, baseline_tok=base_tok, preserve_frac=0.99,
+    )
+    assert sum(c_cand) <= sum(c_mcs)
+    assert tok >= 0.99 * base_tok
