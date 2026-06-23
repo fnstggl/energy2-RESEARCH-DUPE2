@@ -4184,3 +4184,96 @@ GSF generalizes AFMS (f=0.70 with c-1 floor) and ZFHC (all-spot at c≥8). At f=
 **Current frontier (leaderboard state after run-2026-06-26):**
 - Azure LLM 2024: **149,235** goodput/$ (GSF f=0.95, **+492.0%** vs oracle, north-star ✓, gap to +500%: 1.7%)
 - BurstGPT HF: **167,767** goodput/$ (GSF f=0.95, **+727.3%** vs oracle, north-star ✓)
+
+## Run 2026-06-23 — AMCSG-LFC + Fine Grid + DLAG (THREE-LEVER NULL RESULT)
+
+### Q1. What was the north-star gap entering this run?
+
+Azure: 150,630 goodput/$ (AMCSG gate=12.5%). Target: 151,248 (6× oracle). Gap: 618 goodput/$ (0.41%).
+BurstGPT: 168,270 goodput/$ (AMCSG gate=12.5%). Already above +500% north-star (121,680). Cross-validation only.
+
+### Q2. What hypotheses were tested?
+
+Three independent levers:
+- **(A) AMCSG-LFC (fixed_c=3):** Reduce time-warp calibration factor → lower c_mean → lower cost → higher goodput/$.
+- **(B) Fine gate grid (fixed_c=4):** Resolve the 12.5%→15.0% safety boundary at 0.5% resolution.
+- **(C) DLAG (Dynamic Load-Aware Gate):** Per-tick gate = base_gate at high load, max_gate at idle.
+
+### Q3. What did each hypothesis find?
+
+**(A) AMCSG-LFC — UNSAFE on Azure:**
+- Reducing fixed_c from 4→3 reduces the time-warp multiplier by 25%.
+- Azure p99 = 10.030s for ALL gates (even gate=9.5%) → SLA=10s violated.
+- Root cause: Azure's heavy-tailed GPU service times require fixed_c≥4 to keep Erlang-C conservative enough.
+- BurstGPT safe (SLA=30s has large headroom): LFC c_mean drops from 4.5 to ~3.7.
+- **Conclusion:** fixed_c is a hard constraint for Azure. Minimum safe fixed_c=4.
+
+**(B) Fine gate grid — NULL (boundary at 13.0%→13.5%, not 12.5%→15.0%):**
+- Gates 12.5% and 13.0% produce IDENTICAL c_schedule (c_mean=4.458). Same cost, same goodput/$.
+- Gate=13.5% pushes p99=10.030s > SLA=10s (unsafe).
+- The Erlang-C function is integer-valued; 12.5% and 13.0% round to same c per tick.
+- **Conclusion:** The safe frontier is 13.0% (not a new win — identical to 12.5%). No improvement possible via fine grid.
+
+**(C) DLAG — NULL (collapses to base_gate on uniform loads):**
+- Azure is calibrated to ρ=target_rho=0.85 throughout. Per-tick slack = max(0, 1−0.85/0.85) = 0 for every tick.
+- gate_k = base_gate = 9.5% for all ticks regardless of max_gate. All max_gate values (15–30%) produce identical results.
+- Azure DLAG: 149,235 goodput/$ (−0.93% vs AMCSG 150,630). n_sla_safe=5823 (57 violations at tick boundary).
+- BurstGPT DLAG: 168,018 at max_gate=25% (marginal, below AMCSG 168,270).
+- **Conclusion:** DLAG requires genuine load variance (bursty traces). Azure at ρ≈target_rho offers no idle slack.
+
+### Q4. What is the new structural understanding?
+
+The Azure +500% north-star gap has three confirmed closure mechanisms that DO NOT WORK:
+1. ~~Lower fixed_c~~ (unsafe: p99 > SLA at fixed_c=3)
+2. ~~Fine gate sweep~~ (identical c_schedule at 12.5% and 13.0%; boundary at 13.0→13.5% with no win)
+3. ~~Dynamic per-tick gate~~ (collapses to base_gate when ρ ≈ target_rho throughout)
+
+The gap (618 goodput/$, 0.41%) requires a fundamentally different lever. The Erlang-C gate family
+has been exhausted at fixed_c=4. The provisioning model ceiling has been hit.
+
+### Q5. What is the north-star gap after this run?
+
+**UNCHANGED: 0.41%** (618 goodput/$). Azure: 150,630 vs target 151,248.
+BurstGPT remains above north-star: 168,270 vs threshold 121,680.
+
+### Q6. What structural levers remain unexplored?
+
+**Highest priority:**
+1. **Tick granularity (tick_seconds=30s):** Shorter ticks reduce over-provisioning at burst transitions.
+   Azure's 60s ticks provision for the worst request in the tick; finer ticks adapt faster. Low risk.
+2. **Per-tick SLA_eff = 0.9 × SLA_s:** Provision against 9s instead of 10s. Creates 10% headroom buffer,
+   potentially allowing a safe gate between 13.0% and 13.5% without SLA breach. Pure re-parameterization.
+3. **Spot fraction above 95% (f=0.97–0.99):** ZFHC already allows all-spot at c≥8. Below that, increasing
+   spot fraction from 0.95 toward 1.0 reduces on-demand cost further. Interruption tail risk.
+4. **Cross-tick work stealing:** Servers completing tick k early start tick k+1 requests. Reduces effective
+   queue depth at burst entries, potentially reducing c_k for boundary ticks.
+5. **Abs-conformal SRTF calibration on Azure (oracle baseline):** Establishes how much scheduling alone
+   can contribute on top of the current provisioning floor.
+
+**Lower priority (requires new infrastructure):**
+- Cross-region spot arbitrage (SkyPilot regions)
+- Batch grouping by token length (reduce service-time variance)
+- Preemptive per-request timeout admission
+
+### Q7. What are the binding constraints?
+
+1. **fixed_c ≥ 4 for Azure:** Proven hard constraint. LFC is unsafe.
+2. **Gate ceiling at 13.0%:** The Erlang-C integer-c rounding makes 12.5% and 13.0% equivalent.
+   13.5% is unsafe. No gate above 13.0% is safe at fixed_c=4.
+3. **DLAG degeneracy:** Dynamic gating requires load variance. Azure at ρ=0.85=target_rho gives no slack.
+4. **DLAG safety:** Even base_gate=9.5% in DLAG has n_sla_safe=5823 (vs 5880 in AMCSG), meaning
+   the idle-tick under-provisioning causes 57 SLA violations. DLAG is NOT safety-equivalent to AMCSG at gate=9.5%.
+
+### Q8. What should be attempted next?
+
+**Priority 1 (run next):** `tick_seconds=30s` sweep on Azure. Implement `run_amcsg_azure_30s_backtest()`.
+Hypothesis: halving tick duration reduces stranded capacity at burst boundaries, lowering effective c_mean
+by 5–10%, closing the 0.41% gap.
+
+**Priority 2:** `_erlang_c_sla_timeout_pct(sla_s=9.0)` effective SLA tightening. Check if gate=13.5%
+becomes safe when the Erlang-C is calibrated against 9s instead of 10s, while the actual DES still uses 10s.
+This exploits the M/M/c conservatism without changing the external SLA contract.
+
+**Priority 3:** DLAG on a synthetically bursty Azure re-sample (interleave high-load and idle ticks).
+This isolates whether DLAG's mechanism is sound and just needs a bursty trace to prove it. Do NOT
+use this for north-star claims — it's a mechanistic validator only.
