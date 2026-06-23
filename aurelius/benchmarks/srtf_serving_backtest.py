@@ -9908,3 +9908,423 @@ def run_gsf_burstgpt_backtest(
         zfhc_threshold=zfhc_threshold,
         fractions=fractions,
     )
+
+
+# ---------------------------------------------------------------------------
+# AMCSG Policy — Adaptive MCS Gate Sweep — Run 2026-06-27
+# ---------------------------------------------------------------------------
+#
+# Bottleneck: Azure LLM 2024 goodput/$ = 149,235 (GSF f=0.95, run 2026-06-26),
+# 1.35% short of the +500% north-star (151,248 = 6× SLA-oracle of 25,208).
+# All-spot ceiling reached: fraction tuning exhausted. The remaining cost
+# lever is reducing c_mean in the MCS c_schedule.
+#
+# Mechanism: _erlang_c_sla_timeout_pct is documented as "conservative
+# approximation for M/D/c". Real service times are
+# TTFT_BASE_S + output_tokens × TPOT_S — not exponential. M/M/c
+# over-estimates queue wait times vs M/G/c when service-time variance is
+# sub-exponential. Raising the Erlang-C gate lets MCS provision fewer
+# servers per tick; the discrete-event simulation may still satisfy
+# p99 ≤ SLA because the Erlang-C bound is conservative.
+#
+# Research basis:
+#   DynamoLLM (arXiv:2408.00741, 2024): Adaptive LLM cluster reconfiguration
+#       under SLOs; uses empirical validation rather than pure M/M/c to
+#       achieve 61% cost reduction while meeting latency SLOs.
+#   TokenScale (arXiv:2512.03416, 2025): Per-interval capacity decisions for
+#       LLM autoscaling; shows conservative Erlang-C-based models waste
+#       GPU-hours at moderate load when service times are non-exponential.
+#   SageServe (arXiv:2502.14617, 2025): Forecast-aware autoscaling with
+#       calibrated per-interval thresholds reduces over-provisioning by 25%.
+#
+# Gate sweep: {9.5, 11.0, 12.5, 15.0, 17.5, 20.0}%.
+# Fixed: fixed_c=4, target_rho=0.85, spot_fraction=0.95 (all-spot every tick
+#        at these load levels per run 2026-06-26), zfhc_threshold=8, seed=42.
+# ---------------------------------------------------------------------------
+
+_AMCSG_GATES = (9.5, 11.0, 12.5, 15.0, 17.5, 20.0)
+
+
+@dataclass
+class AMCSGEntry:
+    """Single gate-value result in the AMCSG sweep."""
+
+    gate_pct: float
+    c_schedule_mean: float
+    c_schedule_min: int
+    c_schedule_max: int
+    n_ticks: int
+    cost: float
+    cost_vs_baseline_pct: float       # % change vs gate=9.5% (negative = cheaper)
+    goodput_per_dollar: float
+    goodput_vs_baseline_pct: float    # % change vs gate=9.5%
+    goodput_vs_sla_oracle_pct: float
+    north_star_300_achieved: bool     # ≥ 100,832 (+300% vs oracle)
+    north_star_500_achieved: bool     # ≥ 151,248 (+500% roadmap target)
+    completion_rate: float
+    p99_s: float
+    n_sla_safe: int                   # requests completing within SLA
+
+    def to_dict(self) -> dict:
+        return {
+            "gate_pct": self.gate_pct,
+            "c_schedule_mean": round(self.c_schedule_mean, 3),
+            "c_schedule_min": self.c_schedule_min,
+            "c_schedule_max": self.c_schedule_max,
+            "n_ticks": self.n_ticks,
+            "cost": round(self.cost, 4),
+            "cost_vs_baseline_pct": round(self.cost_vs_baseline_pct, 4),
+            "goodput_per_dollar": round(self.goodput_per_dollar, 2),
+            "goodput_vs_baseline_pct": round(self.goodput_vs_baseline_pct, 4),
+            "goodput_vs_sla_oracle_pct": round(self.goodput_vs_sla_oracle_pct, 2),
+            "north_star_300_achieved": self.north_star_300_achieved,
+            "north_star_500_achieved": self.north_star_500_achieved,
+            "completion_rate": round(self.completion_rate, 4),
+            "p99_s": round(self.p99_s, 3),
+            "n_sla_safe": self.n_sla_safe,
+        }
+
+
+@dataclass
+class AMCSGReport:
+    """AMCSG Gate Sweep full report — run 2026-06-27.
+
+    Sweeps mcs_gate ∈ {9.5, 11.0, 12.5, 15.0, 17.5, 20.0}% at fixed_c=4,
+    target_rho=0.85, spot_fraction=0.95 (all-spot every tick). Determines
+    whether raising the Erlang-C gate reduces c_mean, lowers cost, and
+    improves goodput/$ while maintaining completion_rate = baseline.
+
+    Primary KPI: best_goodput_per_dollar (highest goodput/$ with no SLA
+    regression vs gate=9.5% baseline).
+    """
+
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+    sla_oracle_goodput_per_dollar: float
+    north_star_300_threshold: float
+    north_star_500_threshold: float
+
+    # gate=9.5% anchor
+    baseline_gate: float
+    baseline_goodput_per_dollar: float
+    baseline_cost: float
+    baseline_c_schedule_mean: float
+
+    # Sweep results
+    gate_results: list  # list of AMCSGEntry
+
+    # Best safe gate
+    best_gate: float
+    best_goodput_per_dollar: float
+    best_vs_baseline_pct: float
+    best_vs_sla_oracle_pct: float
+    best_north_star_500_achieved: bool
+
+    # Erlang-C conservatism finding
+    max_safe_gate: float        # highest gate preserving completion_rate = baseline
+    erlang_c_margin_pct: float  # max_safe_gate − 9.5
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "zfhc_threshold": self.zfhc_threshold,
+            "sla_oracle_goodput_per_dollar": round(self.sla_oracle_goodput_per_dollar, 2),
+            "north_star_300_threshold": round(self.north_star_300_threshold, 2),
+            "north_star_500_threshold": round(self.north_star_500_threshold, 2),
+            "baseline_gate": self.baseline_gate,
+            "baseline_goodput_per_dollar": round(self.baseline_goodput_per_dollar, 2),
+            "baseline_cost": round(self.baseline_cost, 4),
+            "baseline_c_schedule_mean": round(self.baseline_c_schedule_mean, 3),
+            "gate_results": [e.to_dict() for e in self.gate_results],
+            "best_gate": self.best_gate,
+            "best_goodput_per_dollar": round(self.best_goodput_per_dollar, 2),
+            "best_vs_baseline_pct": round(self.best_vs_baseline_pct, 4),
+            "best_vs_sla_oracle_pct": round(self.best_vs_sla_oracle_pct, 2),
+            "best_north_star_500_achieved": self.best_north_star_500_achieved,
+            "max_safe_gate": self.max_safe_gate,
+            "erlang_c_margin_pct": round(self.erlang_c_margin_pct, 2),
+        }
+
+
+def _run_amcsg_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_300_threshold: float,
+    north_star_500_threshold: float,
+    zfhc_threshold: int = 8,
+    gates: tuple = _AMCSG_GATES,
+) -> "AMCSGReport":
+    """Shared AMCSG gate-sweep backtest logic."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    entries: list = []
+    baseline_entry = None
+
+    for gate in gates:
+        c_schedule = _joint_mcs_c_schedule(
+            raw, tick_seconds, warp, mcs_gate=gate, sla_s=sla_s
+        )
+        n_ticks = len(c_schedule)
+
+        # Cost at f=0.95: all ticks are all-spot at these load levels
+        # (verified in run 2026-06-26: n_ticks_c_all_spot=72/72 Azure,
+        # 154/154 BurstGPT). Use _gsf_spot_fleet_cost for consistency.
+        cost = _gsf_spot_fleet_cost(
+            c_schedule, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+        )
+
+        reqs = _build_live()
+        sim, resp, _ = _simulate_fifo_gsf_spot_fleet(
+            reqs, c_schedule, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+        )
+
+        gp = _sla_safe_goodput(reqs, resp, sla_s) / max(cost, 1e-9)
+        completion = len(resp) / max(len(reqs), 1)
+        n_sla_safe = sum(
+            1 for r in reqs
+            if r.idx in resp and resp[r.idx] <= sla_s
+        )
+
+        entry = AMCSGEntry(
+            gate_pct=gate,
+            c_schedule_mean=statistics.mean(c_schedule),
+            c_schedule_min=min(c_schedule),
+            c_schedule_max=max(c_schedule),
+            n_ticks=n_ticks,
+            cost=cost,
+            cost_vs_baseline_pct=0.0,  # filled after loop
+            goodput_per_dollar=gp,
+            goodput_vs_baseline_pct=0.0,  # filled after loop
+            goodput_vs_sla_oracle_pct=(gp - sla_oracle) / sla_oracle * 100.0,
+            north_star_300_achieved=gp >= north_star_300_threshold,
+            north_star_500_achieved=gp >= north_star_500_threshold,
+            completion_rate=completion,
+            p99_s=sim.get("p99_response_s", 0.0),
+            n_sla_safe=n_sla_safe,
+        )
+        entries.append(entry)
+
+        if baseline_entry is None:
+            baseline_entry = entry  # first gate is the baseline anchor
+
+    # Fill relative metrics vs gate=9.5% baseline
+    for e in entries:
+        e.cost_vs_baseline_pct = (
+            (e.cost - baseline_entry.cost) / max(baseline_entry.cost, 1e-9) * 100.0
+        )
+        e.goodput_vs_baseline_pct = (
+            (e.goodput_per_dollar - baseline_entry.goodput_per_dollar)
+            / max(baseline_entry.goodput_per_dollar, 1e-9) * 100.0
+        )
+
+    # Best safe gate: highest goodput/$ with ZERO SLA regressions.
+    # Use n_sla_safe ≥ baseline (strict zero-violation criterion) rather than
+    # completion_rate, because completion_rate tracks whether requests finish
+    # while n_sla_safe tracks whether they finish within the SLA budget.
+    baseline_n_sla_safe = baseline_entry.n_sla_safe
+    safe_entries = [e for e in entries if e.n_sla_safe >= baseline_n_sla_safe]
+    best = (
+        max(safe_entries, key=lambda e: e.goodput_per_dollar)
+        if safe_entries else entries[0]
+    )
+
+    # Erlang-C margin: highest gate with zero SLA violations
+    max_safe = max(
+        (e.gate_pct for e in entries if e.n_sla_safe >= baseline_n_sla_safe),
+        default=gates[0],
+    )
+
+    return AMCSGReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+        north_star_300_threshold=north_star_300_threshold,
+        north_star_500_threshold=north_star_500_threshold,
+        baseline_gate=gates[0],
+        baseline_goodput_per_dollar=baseline_entry.goodput_per_dollar,
+        baseline_cost=baseline_entry.cost,
+        baseline_c_schedule_mean=baseline_entry.c_schedule_mean,
+        gate_results=entries,
+        best_gate=best.gate_pct,
+        best_goodput_per_dollar=best.goodput_per_dollar,
+        best_vs_baseline_pct=best.goodput_vs_baseline_pct,
+        best_vs_sla_oracle_pct=best.goodput_vs_sla_oracle_pct,
+        best_north_star_500_achieved=best.north_star_500_achieved,
+        max_safe_gate=max_safe,
+        erlang_c_margin_pct=max_safe - 9.5,
+    )
+
+
+def run_amcsg_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    gates: tuple = _AMCSG_GATES,
+) -> "AMCSGReport":
+    """AMCSG gate sweep on Azure LLM 2024 — run 2026-06-27.
+
+    Sweeps mcs_gate ∈ {9.5..20.0}% at fixed_c=4, target_rho=0.85,
+    spot_fraction=0.95. The gate=9.5% entry anchors the comparison to the
+    GSF(0.95) baseline from run 2026-06-26 (149,235 goodput/$, $4.32).
+
+    North-star target: 151,248 goodput/$ (6× SLA-oracle, +500%).
+    Gap: 1.35% cost reduction from $4.32 to ≤$4.26.
+
+    Research basis:
+        DynamoLLM (arXiv:2408.00741): empirical SLO validation > pure M/M/c.
+        TokenScale (arXiv:2512.03416): per-interval capacity for LLM serving.
+        SageServe (arXiv:2502.14617): forecast-aware autoscaling calibration.
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target utilization (default 0.85).
+        job_limit:          Request cap (5880 for Azure).
+        sla_s:              E2E SLA budget (10s).
+        prior_window:       Sliding-window for running-median prior.
+        azure_fixture:      Azure LLM 2024 fixture path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        gates:              MCS gate values to sweep.
+
+    Returns:
+        AMCSGReport with gate sweep results and best-gate summary.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_amcsg_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_amcsg",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_300_threshold=100_832.0,
+        north_star_500_threshold=6.0 * 25_208.0,  # 151,248
+        zfhc_threshold=zfhc_threshold,
+        gates=gates,
+    )
+
+
+def run_amcsg_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    gates: tuple = _AMCSG_GATES,
+) -> "AMCSGReport":
+    """AMCSG gate sweep on BurstGPT HF — run 2026-06-27.
+
+    BurstGPT has SLA=30s and is at +727.3% vs oracle (167,767 goodput/$)
+    with c_mean=4.344, n_ticks=154. Gate relaxation may further reduce
+    c_mean on BurstGPT's diurnal low-load ticks.
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target utilization (default 0.85).
+        job_limit:          Request cap (5880).
+        sla_s:              E2E SLA budget (30s).
+        prior_window:       Sliding-window for running-median prior.
+        jsonl_path:         BurstGPT HF JSONL path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        gates:              MCS gate values to sweep.
+
+    Returns:
+        AMCSGReport with gate sweep results and best-gate summary.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_amcsg_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_amcsg",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_300_threshold=4.0 * 20_280.0,   # 81,120
+        north_star_500_threshold=6.0 * 20_280.0,   # 121,680
+        zfhc_threshold=zfhc_threshold,
+        gates=gates,
+    )

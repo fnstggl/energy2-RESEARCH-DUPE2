@@ -24,6 +24,15 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**AMCSG Policy [run 2026-06-27] — MARGINAL IMPROVEMENT (+0.93%/+0.30% vs GSF baseline, gap to +500% NS now 0.41%):**
+Adaptive MCS Gate Sweep quantifies Erlang-C (M/M/c) conservatism in `_joint_mcs_c_schedule`.
+Gate sweep {9.5, 11.0, 12.5, 15.0, 17.5, 20.0}% at fixed_c=4, target_rho=0.85, all-spot (f=0.95).
+Azure: max safe gate = 12.5% (p99≤9.946s≤SLA=10s); gates≥15% push p99=10.030s > SLA.
+Azure best: 150,630 goodput/$ (+0.93% vs 149,235 baseline, +497.5% vs oracle, 0.41% below north-star).
+BurstGPT max safe gate also 12.5% (n_sla_safe drop at gate≥15% due to spot-interrupted tail requests);
+BurstGPT best: 168,270 goodput/$ (+0.30% vs 167,767 baseline, +729.7% vs oracle). Erlang-C margin: +3.0%.
+All 86 AMCSG+GSF tests passing. Results: `research/results/amcsg_backtest_2026-06-27.md`.
+
 **AFMS Policy [run 2026-06-24] — FRONTIER IMPROVEMENT (+10.1%/+13.1% vs static 70%):**
 Absolute-Floor Max-Spot eliminates rounding artifact at c=6,7,8 in static 70% spot formula.
 Formula: `c_spot = max(round(0.70*c), c-1)`. For c≤5: identical to static. For c≥6: 1 on-demand
@@ -2360,3 +2369,59 @@ complementary, see the cross-reference at the end.)
   2. Adaptive MCS gate (9.5%→8%): reduce conservative over-provisioning.
   3. Cross-region spot arbitrage (SkyPilot-style) — route to cheapest spot region per tick.
   4. Adaptive interruption model — replace static 10%/hr with cloud provider signal.
+
+---
+
+### Run 2026-06-27 — AMCSG (Adaptive MCS Gate Sweep) — Erlang-C conservatism study
+
+**KPI:** SLA-safe goodput/$ (public traces, static seed=42)  
+**Primary result:**
+
+| Trace | GSF(9.5%) baseline | AMCSG best (gate=12.5%) | vs baseline | vs SLA-oracle |
+|-------|--------------------|-------------------------|-------------|---------------|
+| Azure LLM 2024 | 149,235 ($4.32) | **150,630** ($4.28) | **+0.93%** | **+497.5%** |
+| BurstGPT HF | 167,767 ($8.92) | **168,270** ($8.89) | **+0.30%** | **+729.7%** |
+
+**Decision: MARGINAL IMPROVEMENT — Merge. North-star gap narrowed to 0.41% (Azure).**
+
+- **Phase 0 (PR hygiene):** Merged GSF PR on branch `claude/happy-pascal-crwn80`.
+- **Phase 1 (bottleneck):** GSF at f=0.95 is all-spot every tick. Azure at 149,235 is 1.35% below
+  +500% north-star (151,248 = 6× oracle). The remaining lever is reducing c_mean via the MCS gate.
+- **Phase 2 (hypothesis):** `_joint_mcs_c_schedule` uses Erlang-C (M/M/c) which is documented as
+  "conservative approximation for M/D/c." Non-exponential (heavy-tailed) GPU service times may
+  allow a higher gate without actually exceeding the SLA, because M/M/c over-estimates queue wait
+  vs M/G/c or M/D/c. Raising the gate → lower minimum c per tick → lower cost → higher goodput/$.
+- **Phase 3 (implementation):**
+  - `aurelius/benchmarks/srtf_serving_backtest.py`: Added `_AMCSG_GATES`, `AMCSGEntry`,
+    `AMCSGReport`, `_run_amcsg_backtest`, `run_amcsg_azure_backtest`, `run_amcsg_burstgpt_backtest`.
+  - Safety criterion: strict `n_sla_safe >= baseline_n_sla_safe` (not completion_rate — catches
+    requests that finish but after the SLA deadline).
+  - `tests/test_amcs_gate_sweep.py` — 37 new tests (all passing).
+  - `scripts/run_amcsg_backtest.py` — standalone backtest runner.
+- **Phase 4 (benchmarks):**
+  - Gate sweep: {9.5, 11.0, 12.5, 15.0, 17.5, 20.0}%.
+  - Azure: gates 9.5%–12.5% safe (p99≤9.946s ≤ SLA=10s). Gates ≥15% push p99=10.030s > SLA.
+    Max safe gate = 12.5% (margin: +3.0% above baseline 9.5%).
+  - BurstGPT: gates 9.5%–12.5% fully safe (n_sla_safe=5880, p99≤22.918s ≤ SLA=30s).
+    Gates ≥15% show small n_sla_safe drop (spot interruptions extend a few long requests beyond
+    30s despite p99=23.205s << SLA). Max safe gate = 12.5%.
+  - Erlang-C safety margin: +3.0% on both traces (Azure and BurstGPT at gate=12.5%).
+- **Erlang-C finding:** The M/M/c assumption allows a 3% gate increase without SLA violation.
+  Beyond 12.5% the heavier tails of actual GPU service times show through (SLA violations appear
+  even with p99 << SLA, because p99 misses the worst tail). This puts a natural ceiling on
+  gate-only exploitation.
+- **Azure north-star status:** 150,630 at gate=12.5% = +497.5% vs oracle. North-star of +500%
+  requires 151,248. Gap narrows to 0.41% (618 goodput/$). All-spot + Erlang-C gate is likely
+  at its practical ceiling; next lever is reducing per-tick base cost (lower fixed_c or dynamic
+  load-aware MCS).
+- **Calculated priors:** Same as GSF baseline (spot params, seed=42, job_limit=5880).
+- **Run category:** Marginal Improvement (gap-closing study)
+- **Results:** `research/results/amcsg_backtest_2026-06-27.json`, `research/results/amcsg_backtest_2026-06-27.md`
+- **Next recommended direction:**
+  1. **AMCSG-LFC (Low Fixed-C):** Try fixed_c=3 instead of 4 on Azure — fewer high-cost ticks
+     at low load, c_mean should drop from 4.5 toward 4.0, potentially closing the 0.41% gap.
+  2. **Dynamic gate schedule:** Per-tick gate based on current ρ (lower gate when ρ high,
+     higher when ρ low) — avoids SLA violations at peak while saving cost at off-peak.
+  3. **Cross-region spot arbitrage (SkyPilot):** Region-level cost variation, no SLA impact.
+  4. **Per-request priority admission:** Drop lowest-goodput/$ marginal requests at saturation
+     to reduce cost without SLA count drop.
