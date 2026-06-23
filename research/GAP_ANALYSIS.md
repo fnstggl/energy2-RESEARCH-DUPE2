@@ -31,6 +31,98 @@ frontier improvement only if it beats the best validated AureliusOptimizer confi
 with interaction effects once policies share a workload (feasible after Phase 1b
 unified replay; `energy` and `serving_queue` are disjoint workload classes today).
 
+## Run 2026-06-24 — AFMS Policy (FRONTIER IMPROVEMENT — +10.1%/+13.1% vs Static 70%)
+
+### Q1. What currently limits Aurelius most?
+
+**The static spot-fraction formula has a rounding artifact.** `round(0.70*c)` keeps 2 on-demand replicas at c=6,7,8, wasting $0.020/tick vs the minimum safe floor. AFMS (`max(round(0.70*c), c-1)`) eliminates this with zero SLA regression:
+
+| Trace | Condition | Goodput/$ | Cost | vs SLA-oracle |
+|-------|-----------|-----------|------|---------------|
+| Azure LLM 2024 | FIFO+MCS static 70% | 102,009 | $6.32 | +304.7% |
+| Azure LLM 2024 | **FIFO+MCS AFMS** | **112,316** | **$5.74** | **+345.6%** |
+| BurstGPT HF | FIFO+MCS static 70% | 118,580 | $12.62 | +484.7% |
+| BurstGPT HF | **FIFO+MCS AFMS** | **134,093** | **$11.16** | **+561.2%** |
+
+North-star maintained on both traces (AFMS ≥ 100,832 Azure / 81,120 BurstGPT). Zero SLA violations.
+
+### Q2. What theoretically offers the largest gain beyond the current state?
+
+1. **Cross-region spot arbitrage** (SkyPilot-style) — route to cheapest spot region per tick; expected 5-20% additional cost reduction on top of AFMS.
+2. **Dynamic spot fraction** — adjust f per tick based on spot market price signal; AFMS fixes the on-demand floor at 1, but the fraction could be raised to 80-90% when spot is cheapest.
+3. **Multi-floor AFMS** — AFMS with min_ondemand=2 at c≥10 for extra safety in very large schedules.
+
+### Q3. Which forecasts are weakest?
+
+Spot price ($0.80/hr) and interruption rate (0.10/hr) remain calculated priors, not real-time data. Result is directionally correct but would need real spot price traces for production validation.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Spot fraction is fixed at 70%** — even with AFMS's absolute floor, the fraction is not dynamically adjusted to market conditions.
+2. **Single-region model** — no cross-region cost arbitrage.
+3. **Static interruption model** — i.i.d. per-tick interruptions; correlated spot reclamation events not modeled.
+
+### Q5. Which workloads benefit least?
+
+Schedules with c≤5 throughout (no c≥6 ticks) see zero AFMS benefit vs static 70% (cost is identical). Also, c=1 ticks are $0.020/tick more expensive under AFMS. Low-capacity, uniformly-small schedules do not benefit.
+
+### Q6. Which research direction appears strongest?
+
+**Cross-region spot arbitrage.** AFMS is a local formula fix (within-tick). The next multiplier comes from multi-region routing — choosing the cheapest spot market dynamically per tick. arXiv:2605.22778 documents the methodology directly.
+
+### Q7. What is the shortest path to another +10% gain?
+
+Raise spot_fraction from 0.70 to 0.80 at c≥6 while keeping the AFMS absolute floor at 1. Expected: additional ~5% cost reduction, compounding to ~+15% vs static 70%.
+
+### Q8. What is the shortest path to +500% vs SLA-oracle (new north-star candidate)?
+
+From Azure AFMS (+345.6% vs oracle) to +500% threshold (6× oracle = 151,248): requires dynamic spot fraction (80-90%) and cross-region arbitrage. BurstGPT already exceeds 6× oracle at 134,093 vs 6× threshold of 121,680.
+
+### Q9. What would need to be true to achieve further north-star improvement?
+
+- 5× oracle (Azure, 126,040): achievable by raising spot_fraction to ~0.78 with AFMS floor.
+- 6× oracle (Azure, 151,248): requires cross-region spot arbitrage AND higher spot_fraction.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Spot price $0.80/hr is stable.** Real spot prices fluctuate; during demand spikes GPU spot can exceed on-demand price briefly.
+2. **i.i.d. interruption model (10%/hr).** Real spot interruptions can be correlated across ticks.
+3. **c=1 ticks are rare.** If c=1 dominates the schedule, AFMS is net more expensive than static.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Calculated priors on spot price and interruption rate.** No real-time cloud pricing data used.
+2. **Single-region model.** No cross-region cost arbitrage modeled.
+3. **Static interruption model.** Correlated spot reclamation not captured.
+
+### Q12. Which public datasets should be added?
+
+1. **Real cloud spot price traces** (AWS/GCP/Azure pricing history APIs) — enable time-varying cost backtests.
+2. **Spot interruption history** (AWS CloudWatch GPU instance reclamation logs) — validate the 10%/hr prior.
+
+### Q13. What should be attempted next?
+
+1. **Dynamic spot fraction with AFMS floor** — adjust f from 0.70 to 0.80-0.90 per tick based on MCS signal.
+2. **Cross-region spot arbitrage** — multi-region cost model; select cheapest spot region per tick within latency budget.
+3. **Integration into AureliusOptimizer** — wire AFMS as a `ReplicaScalingPolicy` in the canonical optimizer.
+
+---
+
+## Future Opportunity Ranking — Updated After Run 2026-06-24
+
+| rank | opportunity | EV | feasibility | status |
+|---|---|---|---|---|
+| 1 | Dynamic spot fraction with AFMS floor (0.70→0.80-0.90) | High | High | AFMS floor established; fraction sweep is straightforward |
+| 2 | Cross-region spot arbitrage (SkyPilot/arXiv:2605.22778) | High | Medium | Multi-region cost model needed; methodology documented |
+| 3 | Wire AFMS as `ReplicaScalingPolicy` in AureliusOptimizer | Medium | Medium | Integration pending; AFMS validated |
+| 4 | Real spot price traces (time-varying cost model) | Medium | Medium | Would validate calculated prior; requires cloud API access |
+
+**Closed/characterized opportunities (run 2026-06-24):**
+- Static 70% rounding artifact at c=6,7,8: **FIXED by AFMS** — +10.1% (Azure), +13.1% (BurstGPT) vs static 70%
+- AFMS SLA safety: **CONFIRMED** — 0 SLA violations, completion_rate=1.0000 both traces, north-star maintained
+
+---
+
 ## Run 2026-06-23B — Spot Fleet MCS (NORTH STAR ACHIEVED — FRONTIER IMPROVEMENT)
 
 ### Q1. What currently limits Aurelius most?
