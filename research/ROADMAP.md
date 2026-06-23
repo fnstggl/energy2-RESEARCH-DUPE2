@@ -740,6 +740,23 @@ Proposed convergence and a phased, benchmark-gated migration are in
 
 ## 7. Experiment History
 
+### Canonical Optimizer Phases 1–3 — Unification Routing (STRUCTURAL — NO BEHAVIOR CHANGE)
+
+Architecture-unification parity steps (not optimization runs); see
+`research/OPTIMIZER_UNIFICATION_PLAN.md` and the Phase 1/2/3 parity reports.
+- **Phase 1**: `AureliusOptimizer(policy="energy")` wraps `JobScheduler` (verbatim).
+- **Phase 2**: `AureliusOptimizer(policy="serving_queue")` exposes the extracted
+  abs-conformal SRPT discipline.
+- **Phase 3**: 5 public benchmark entry points route through `AureliusOptimizer`
+  (4 energy benchmarks + serving shim); **0% energy + serving KPI drift** (canonical
+  golden reproduced; abs-conformal JSON byte-identical). Azure/BurstGPT replays
+  not routed yet (replica-provisioning autoscaler → future `ReplicaScalingPolicy`).
+
+**Governance recorded** (binding for future optimization claims): report
+Current-Main vs Best-Aurelius vs Candidate (never FIFO-only); optimizer-first
+(every optimization maps to a real production decision; no actual-token leakage);
+policy-combination search with interaction effects once policies share a workload.
+
 ### Audit 2026-06-22 — OPTIMIZER ARCHITECTURE AUDIT (NO CODE CHANGED)
 
 **Goal:** Determine whether Aurelius is a coherent optimization system or a set

@@ -384,7 +384,10 @@ def run_gpu_routing_backtest(
         FileNotFoundError: If the canonical price CSV files are absent.
     """
     from ..forecasting.gpu_placement_scorer import GpuPlacementConfig, GpuPlacementScorer
-    from ..optimization.scheduler import JobScheduler
+
+    # Phase 3: route through the canonical AureliusOptimizer (energy policy);
+    # GPU placement is passed through as a scheduler kwarg, behavior unchanged.
+    from ..optimizer import AureliusOptimizer
 
     rgt = region_gpu_types or CANONICAL_REGION_GPU_TYPES
 
@@ -412,21 +415,21 @@ def run_gpu_routing_backtest(
     cfg = OptimizationConfig(default_region="us-east", min_power_fraction=1.0)
 
     # 4. Baseline: no GPU routing.
-    baseline_scheduler = JobScheduler(cfg)
-    baseline_result = baseline_scheduler.solve(jobs, da, carbon, method=method)
+    baseline_optimizer = AureliusOptimizer(config=cfg)
+    baseline_result = baseline_optimizer.optimize(jobs, da, carbon, method=method)
     baseline_schedule = baseline_result.schedule
 
     # FIFO home placement for baseline region reference (no migration cost).
-    asap_baseline = baseline_scheduler.create_baseline_schedule(jobs)
+    asap_baseline = baseline_optimizer.create_baseline_schedule(jobs)
     baseline_regions = {d.job_id: d.region for d in asap_baseline}
 
     # 5. GPU routing: scorer enabled.
-    gpu_scheduler = JobScheduler(
-        cfg,
+    gpu_optimizer = AureliusOptimizer(
+        config=cfg,
         gpu_placement_scorer=scorer,
         region_gpu_types=rgt,
     )
-    gpu_result = gpu_scheduler.solve(jobs, da, carbon, method=method)
+    gpu_result = gpu_optimizer.optimize(jobs, da, carbon, method=method)
     gpu_schedule = gpu_result.schedule
 
     # 6. Compute routing quality metrics for latency_critical jobs.
