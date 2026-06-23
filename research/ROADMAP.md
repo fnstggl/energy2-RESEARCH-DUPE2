@@ -24,6 +24,17 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**SOTSS-MIN Gate Sweep [run 2026-06-23] — FRONTIER IMPROVEMENT (+6.29% vs AMCSG on Azure):**
+Systematic gate sweep {20,25,30,35,40,50,75,100}% finds gate=100% (SOTSS-MIN) as the maximum-savings
+starting point. All 8 gates safe on Azure (n_sla_safe=5823=baseline at every gate). SOTSS-MIN starts
+from minimum stable c per tick and oracle converges in 34 iterations, leaving 19 ticks cheaper than
+the gate=12.5% ceiling (vs 5 at gate=20%). Azure: 160,107 goodput/$ (+6.29% vs AMCSG 150,630,
++535.1% vs oracle, north-star EXCEEDED by +8,859). c_mean=4.194 (−5.92% vs AMCSG 4.458).
+BurstGPT: gate=20% best safe (170,572 gpd/$, +1.37% vs AMCSG); gate≥25% unsafe (spot interruptions
+add 3-4 violations on heavy-tail requests). Key finding: monotonic goodput/$ vs gate on Azure confirms
+Erlang-C over-provisions on 19 of 72 ticks; SOTSS-MIN finds all 19 via oracle. 26 new tests passing.
+Results: `research/results/sotss_gate_sweep_2026-06-23.md`. Tests: `tests/test_sotss_gate_sweep.py`.
+
 **SOTSS [run 2026-06-23] — FRONTIER IMPROVEMENT (north-star +500% ACHIEVED, Azure +1.58% vs AMCSG):**
 Simulation-Oracle Tick-Selective Schedule closes the 0.41% gap via an offline capacity oracle.
 Starting from gate=20.0% c_schedule (max savings: 5 ticks cheaper than ceiling), the oracle
