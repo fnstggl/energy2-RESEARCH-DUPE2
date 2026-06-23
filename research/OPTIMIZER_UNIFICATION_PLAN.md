@@ -18,9 +18,12 @@
 | **Phase 1a — Canonical interface bootstrap** (stand up `AureliusOptimizer` + decision-layer policy seam; energy policy = thin delegate to `JobScheduler`) | **DONE — behavior-preserving, 0% KPI drift** | `aurelius/optimizer/`, `tests/test_canonical_optimizer_parity.py` (21 pass), `research/results/canonical_optimizer_phase1_parity_2026-06-22.md` |
 | **Phase 2 — Extract the serving (abs-conformal SRPT) discipline behind the policy interface** | **DONE — parity extraction, 0% serving + energy KPI drift** | `aurelius/optimizer/policies/serving_queue.py`, `tests/test_canonical_serving_policy_phase2.py` (9 pass) + `test_abs_conformal_backtest.py` (17 re-export), `research/results/canonical_optimizer_phase2_serving_policy_parity_2026-06-22.md` |
 | **Phase 3 — Route public benchmark entry points through AureliusOptimizer** | **DONE — 5 entry points routed, 0% energy + serving KPI drift** | `canonical_backtests` / `gpu_routing_backtest` / `srtf_backtest` / `srtf_contention_backtest` + serving shim; `tests/test_canonical_optimizer_phase3_routing.py` (11) + `test_canonical_energy_backtest.py` (17 golden); `research/results/canonical_optimizer_phase3_benchmark_routing_parity_2026-06-22.md` |
-| Phase 1b — Unify the 4 replay loops into one engine | Not started | — |
-| Phase 4 — Promote frontier BASE/DYNAMIC → constraint; dedup calibrators | Not started | — |
-| Phase 5 — Deprecate dead/duplicate code | Not started | — |
+| **ReplicaScalingPolicy — extract per-tick provisioning (MCS/SOTSS-MIN + GSF/C1PGS spot schedules)** | **DONE — parity extraction, 0% drift** | `aurelius/optimizer/policies/replica_scaling.py`, `tests/test_replica_scaling_policy_parity.py` (42), `research/results/replica_scaling_policy_parity_2026-06-23.md` |
+| **Phases 5.1–5.8 — full canonical integration roadmap (Phase 5 master plan)** | **PLANNED — authoritative; supersedes the ad-hoc rows below** | `research/CANONICAL_INTEGRATION_MASTER_PLAN.md` + `NON_CANONICAL_SYSTEM_INVENTORY.md` + `OPTIMIZER_INTEGRATION_DEPENDENCY_GRAPH.md` + `NEXT_PHASE_IMPLEMENTATION_PROMPT.md` |
+| Phase 5.1 — ObjectiveLayer spot/preemptible cost interface (**NEXT**) | Not started | master plan |
+| Phase 5.6 — Unify replay loops (enabling) | Not started | master plan |
+| Phase 5.7 — Honest policy-combination search | Not started | master plan |
+| Phase 5.8 — ConstraintLayer (frontier safe-ρ + SLA gate) | Not started | master plan |
 
 **Phase 3 notes.** Five public benchmark entry points now construct the canonical
 `AureliusOptimizer` instead of the underlying engines: the four energy benchmarks

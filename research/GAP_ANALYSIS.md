@@ -8,6 +8,27 @@
 
 ---
 
+## Phase 5 — Canonical Integration Master Plan (PLANNING — NO CODE CHANGED)
+
+> Planning/architecture run. See `research/CANONICAL_INTEGRATION_MASTER_PLAN.md`
+> (+ inventory, dependency graph, next-phase prompt). No optimizer logic added.
+
+- **AO state:** `{energy, serving_queue, replica_scaling}` implemented;
+  `placement`/`admission` stubs.
+- **Largest remaining bottleneck (and next phase):** the **spot/preemptible cost
+  denominator** is the dominant measured lever (GSF: Azure +492% / BurstGPT +727%
+  vs SLA-oracle) but is **benchmark-local**, not a canonical objective. Phase 5.1
+  extracts it into a canonical **ObjectiveLayer cost interface** (parity, 0% drift).
+- **Dependency order:** ObjectiveLayer cost → GSF spot policy into ReplicaScaling
+  → consolidate duplicate trace-replay provisioning + route BacktestEngine →
+  **unified ReplayLayer** (hard prerequisite) → honest policy-combination search →
+  ConstraintLayer.
+- **Keep shadow:** GpuPlacementScorer (harmful −7.3% lc), admission gate (neutral),
+  CARA/output-length forecasters, residency, C1PGS/SOTSS-GSF (validated null/neg).
+- **Deprecate:** `frontier` EVAL_WORKLOAD + BATCH_INFERENCE (dead copy-paste).
+- **Composition is blocked** until the unified replay exists (Phase 4 showed
+  ordering × provisioning is negative/substitutive; energy × serving disjoint).
+
 ## Run 2026-06-23 — Online SOTSS / OSOTSS (FRONTIER IMPROVEMENT on Azure, MIXED on BurstGPT)
 
 ### Q1. What currently limits Aurelius most?

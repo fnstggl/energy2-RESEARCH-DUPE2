@@ -844,6 +844,25 @@ Proposed convergence and a phased, benchmark-gated migration are in
 
 ## 7. Experiment History
 
+### Phase 5 — Canonical Integration Master Plan (PLANNING — NO CODE CHANGED)
+
+Planning/architecture run. Produced the authoritative integration roadmap:
+`research/CANONICAL_INTEGRATION_MASTER_PLAN.md`,
+`NON_CANONICAL_SYSTEM_INVENTORY.md`,
+`OPTIMIZER_INTEGRATION_DEPENDENCY_GRAPH.md`,
+`NEXT_PHASE_IMPLEMENTATION_PROMPT.md`.
+- Current AO state: `{energy, serving_queue, replica_scaling}` implemented;
+  `placement`/`admission` stubs (shadow scorer harmful / gate neutral).
+- Dominant un-routed lever = **spot/preemptible cost denominator** (GSF records:
+  Azure +492% / BurstGPT +727% vs SLA-oracle), benchmark-local in
+  `srtf_serving_backtest.py`.
+- **Highest-value next phase = Phase 5.1**: extract the spot-fleet **cost model**
+  into a canonical ObjectiveLayer interface (parity extraction, 0% drift). Then
+  GSF spot policy → ReplicaScaling, BacktestEngine routing, consolidate duplicate
+  provisioning, **unified ReplayLayer** (enabling) → honest combination search →
+  ConstraintLayer. Placement/admission stay shadow; dead frontier families
+  deprecated. No optimization claim.
+
 ### Canonical Optimizer Phases 1–3 — Unification Routing (STRUCTURAL — NO BEHAVIOR CHANGE)
 
 Architecture-unification parity steps (not optimization runs); see
