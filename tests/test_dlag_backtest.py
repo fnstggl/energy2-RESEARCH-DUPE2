@@ -11,19 +11,18 @@ Core contracts:
   - best_goodput_per_dollar ≥ amcsg_goodput_per_dollar when safe.
 """
 import statistics
+
 import pytest
+
 from aurelius.benchmarks.srtf_serving_backtest import (
+    _DLAG_MAX_GATES,
     DLAGEntry,
     DLAGReport,
-    _DLAG_MAX_GATES,
     _joint_mcs_dlag_c_schedule,
+    calibrate_time_warp,
     run_dlag_azure_backtest,
     run_dlag_burstgpt_backtest,
-    calibrate_time_warp,
-    GPU_HOUR_USD,
-    DEFAULT_SLA_S,
 )
-
 
 # ---------------------------------------------------------------------------
 # Class 1: _joint_mcs_dlag_c_schedule — unit tests
