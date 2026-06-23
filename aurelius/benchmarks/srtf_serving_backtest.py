@@ -9408,3 +9408,503 @@ def run_zfhc_burstgpt_backtest(
         north_star_threshold=4.0 * 20_280.0,
         thresholds=thresholds,
     )
+
+
+# GRADUATED SPOT FLEET (GSF) POLICY — run 2026-06-26
+# ---------------------------------------------------------------------------
+# Motivation:
+#   ZFHC(8) removes the on-demand floor at c≥8 but keeps AFMS (1 on-demand)
+#   for c=2..7. However, the MCS safety gate ensures c is always conservatively
+#   sized: even at c_effective = c-1, the timeout rate stays well below 10%.
+#   Therefore, removing the 1 on-demand floor at c=2..7 (by raising spot_fraction
+#   above 0.70) should be safe and reduce cost further.
+#
+# GSF formula:
+#   c < zfhc_threshold: c_spot = max(round(f × c), c − 1)   [AFMS with fraction f]
+#   c ≥ zfhc_threshold: c_spot = c                            [ZFHC: all spot]
+#
+# When f=0.70: identical to current AFMS+ZFHC (baseline).
+# When f=0.90: all-spot at c=2,3,4 (removes 1 on-demand at those ticks).
+# When f=1.00: all-spot at all c (maximum fraction; ZFHC for c≥threshold, 100%
+#              spot fraction below threshold too).
+#
+# Cost saving vs ZFHC(8) baseline:
+#   At c=2 (f≥0.80): 2 spot (was AFMS: 1 spot + 1 demand) → saves $1.20/hr
+#   At c=3 (f≥0.90): 3 spot (was AFMS: 2 spot + 1 demand) → saves $1.20/hr
+#   At c=4 (f≥0.90): 4 spot (was AFMS: 3 spot + 1 demand) → saves $1.20/hr
+#
+# Research basis:
+#   SpotServe (arXiv:2311.15566, ASPLOS 2024) — "0 on-demand floor is safe when
+#     fleet is large and checkpoint/drain mechanisms are active." Validates all-spot
+#     at any c given sufficient redundancy and preemption handling.
+#   GFS (arXiv:2509.11134, ASPLOS '26) — capacity-conditioned spot quota:
+#     "increase fraction as c rises." GSF generalizes this to smooth graduation
+#     across ALL c values, not just high-c thresholds.
+#   SkyPilot (arXiv:2205.07147, NSDI 2023) — multi-cloud spot arbitrage:
+#     demonstrates 60%+ cost savings with spot-only fleets on real workloads.
+#
+# Falsifiable hypotheses:
+#   (a) GSF(f=0.90) cost < ZFHC(8) cost for schedules with c=2,3,4 ticks
+#   (b) GSF(f=0.90) goodput/$ > ZFHC(8) goodput/$
+#   (c) GSF(f=0.90) SLA violations ≈ ZFHC(8) SLA violations (near-zero)
+#   (d) North-star (+300% vs SLA-oracle) maintained
+# ---------------------------------------------------------------------------
+
+_GSF_FRACTIONS = (0.70, 0.80, 0.85, 0.90, 0.95, 1.00)
+
+
+def _gsf_spot_replicas(c: int, spot_fraction: float, zfhc_threshold: int = 8) -> int:
+    """Spot replicas under Graduated Spot Fleet (GSF) policy.
+
+    For c < zfhc_threshold: AFMS-style with higher base fraction.
+        c_spot = max(round(f × c), c − 1)
+    For c ≥ zfhc_threshold: all-spot (ZFHC).
+        c_spot = c
+
+    When f=0.70: identical to AFMS+ZFHC baseline.
+    When f=0.90: removes on-demand floor at c=2,3,4 (all-spot there).
+    When f=1.00: all-spot at every c (maximum fraction).
+
+    Args:
+        c:               Total replica count for this tick.
+        spot_fraction:   Fraction of fleet to allocate as spot (0–1).
+        zfhc_threshold:  Capacity level above which all-spot is used (ZFHC).
+    Returns:
+        Number of spot replicas (on-demand = c − return_value).
+    """
+    if c >= zfhc_threshold:
+        return c  # all-spot (ZFHC logic unchanged)
+    # AFMS-style with higher base fraction; at least c-1 spot
+    return min(c, max(round(spot_fraction * c), max(0, c - 1)))
+
+
+def _gsf_spot_fleet_cost(
+    c_schedule: list,
+    spot_fraction: float,
+    zfhc_threshold: int,
+    spot_price_usd_hr: float,
+    demand_price_usd_hr: float,
+    tick_seconds: float,
+) -> float:
+    """Total fleet cost under GSF policy."""
+    tick_hr = tick_seconds / 3600.0
+    total = 0.0
+    for c in c_schedule:
+        c_spot = _gsf_spot_replicas(c, spot_fraction, zfhc_threshold)
+        c_demand = c - c_spot
+        total += (c_demand * demand_price_usd_hr + c_spot * spot_price_usd_hr) * tick_hr
+    return total
+
+
+def _gsf_expected_interruptions(
+    c_schedule: list,
+    spot_fraction: float,
+    zfhc_threshold: int,
+    p_interrupt_hourly: float,
+    tick_seconds: float,
+) -> float:
+    """Expected interrupted replica-ticks under GSF."""
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+    return sum(
+        _gsf_spot_replicas(c, spot_fraction, zfhc_threshold) * (1.0 - p_survive)
+        for c in c_schedule
+    )
+
+
+def _simulate_fifo_gsf_spot_fleet(
+    requests: list,
+    c_schedule: list,
+    spot_fraction: float,
+    zfhc_threshold: int,
+    p_interrupt_hourly: float,
+    tick_seconds: float = 60.0,
+    seed: int = 42,
+) -> tuple:
+    """FIFO variable-c simulation with GSF stochastic spot interruptions.
+
+    Like ZFHC simulation but uses ``_gsf_spot_replicas`` for per-tick spot
+    counts: higher fraction removes on-demand floor at low-c ticks.
+
+    Args:
+        requests:            List of _Request objects.
+        c_schedule:          Per-tick total replica count from MCS.
+        spot_fraction:       GSF spot fraction parameter (0–1).
+        zfhc_threshold:      Capacity level above which all-spot is used.
+        p_interrupt_hourly:  Per-spot-instance hourly interruption probability.
+        tick_seconds:        Tick duration in seconds.
+        seed:                RNG seed for reproducibility.
+    Returns:
+        (sim_stats, response_times, n_served) tuple from
+        ``_simulate_fifo_variable_c``.
+    """
+    import numpy as _np
+    rng = _np.random.default_rng(seed)
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+
+    c_effective: list = []
+    for c in c_schedule:
+        c_spot = _gsf_spot_replicas(c, spot_fraction, zfhc_threshold)
+        c_demand = c - c_spot
+        survived = int(rng.binomial(c_spot, p_survive)) if c_spot > 0 else 0
+        # Guard: prevent 0-server tick (P(all interrupted) is negligible but
+        # included as a numerical safety net).
+        c_effective.append(max(1, c_demand + survived))
+
+    return _simulate_fifo_variable_c(requests, c_effective, tick_seconds)
+
+
+@dataclass
+class GSFFractionEntry:
+    """Per-fraction GSF result for one spot_fraction value."""
+    spot_fraction: float
+    n_ticks_c_all_spot: int     # ticks where c_spot == c (no on-demand)
+    cost_gsf: float
+    cost_vs_zfhc_reduction_pct: float   # % cheaper than ZFHC(8) baseline
+    goodput_per_dollar: float
+    goodput_vs_zfhc_pct: float   # % improvement vs ZFHC(8) (positive = better)
+    goodput_vs_sla_oracle_pct: float
+    north_star_achieved: bool
+    completion_rate: float
+    p99_s: float
+
+    def to_dict(self) -> dict:
+        return {
+            "spot_fraction": self.spot_fraction,
+            "n_ticks_c_all_spot": self.n_ticks_c_all_spot,
+            "cost_gsf": round(self.cost_gsf, 4),
+            "cost_vs_zfhc_reduction_pct": round(self.cost_vs_zfhc_reduction_pct, 4),
+            "goodput_per_dollar": round(self.goodput_per_dollar, 2),
+            "goodput_vs_zfhc_pct": round(self.goodput_vs_zfhc_pct, 4),
+            "goodput_vs_sla_oracle_pct": round(self.goodput_vs_sla_oracle_pct, 2),
+            "north_star_achieved": self.north_star_achieved,
+            "completion_rate": round(self.completion_rate, 4),
+            "p99_s": round(self.p99_s, 3),
+        }
+
+
+@dataclass
+class GSFReport:
+    """Graduated Spot Fleet (GSF) fraction sweep — run 2026-06-26.
+
+    Sweeps spot_fraction ∈ {0.70, 0.80, 0.85, 0.90, 0.95, 1.00} with fixed
+    ZFHC threshold=8. Identifies the Pareto-optimal fraction: highest
+    goodput/$ with zero SLA regression vs ZFHC(8) baseline.
+
+    Primary KPI: best_goodput_per_dollar (fraction with highest goodput/$
+    and completion_rate ≥ ZFHC(8) baseline − 0.001 tolerance).
+    """
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+
+    # MCS c_schedule stats (shared across all fractions)
+    c_schedule_mean: float
+    c_schedule_min: int
+    c_schedule_max: int
+    n_ticks: int
+
+    # Pricing parameters
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+
+    # ZFHC(8) baseline (from previous run — anchors the comparison)
+    cost_zfhc_baseline: float
+    zfhc_goodput_per_dollar: float
+    zfhc_vs_sla_oracle_pct: float
+
+    # GSF fraction sweep results
+    fraction_results: list  # list of GSFFractionEntry
+
+    # Best-fraction summary
+    best_fraction: float
+    best_goodput_per_dollar: float
+    best_vs_zfhc_pct: float
+    best_vs_sla_oracle_pct: float
+    best_north_star_achieved: bool
+
+    # Benchmark reference values
+    north_star_threshold: float
+    sla_oracle_goodput_per_dollar: float
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "c_schedule_mean": round(self.c_schedule_mean, 3),
+            "c_schedule_min": self.c_schedule_min,
+            "c_schedule_max": self.c_schedule_max,
+            "n_ticks": self.n_ticks,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "zfhc_threshold": self.zfhc_threshold,
+            "cost_zfhc_baseline": round(self.cost_zfhc_baseline, 4),
+            "zfhc_goodput_per_dollar": round(self.zfhc_goodput_per_dollar, 2),
+            "zfhc_vs_sla_oracle_pct": round(self.zfhc_vs_sla_oracle_pct, 2),
+            "fraction_results": [e.to_dict() for e in self.fraction_results],
+            "best_fraction": self.best_fraction,
+            "best_goodput_per_dollar": round(self.best_goodput_per_dollar, 2),
+            "best_vs_zfhc_pct": round(self.best_vs_zfhc_pct, 4),
+            "best_vs_sla_oracle_pct": round(self.best_vs_sla_oracle_pct, 2),
+            "best_north_star_achieved": self.best_north_star_achieved,
+            "north_star_threshold": self.north_star_threshold,
+            "sla_oracle_goodput_per_dollar": self.sla_oracle_goodput_per_dollar,
+        }
+
+
+def _run_gsf_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    mcs_gate: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_threshold: float,
+    zfhc_threshold: int = 8,
+    fractions: tuple = _GSF_FRACTIONS,
+) -> "GSFReport":
+    """Shared GSF fraction-sweep backtest logic."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    c_schedule = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=mcs_gate, sla_s=sla_s)
+    n_ticks = len(c_schedule)
+
+    # ZFHC(8) baseline for comparison
+    cost_zfhc_base = _zfhc_spot_fleet_cost(
+        c_schedule, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    zfhc_reqs = _build_live()
+    zfhc_sim, zfhc_resp, _ = _simulate_fifo_zfhc_spot_fleet(
+        zfhc_reqs, c_schedule, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    gp_zfhc = _sla_safe_goodput(zfhc_reqs, zfhc_resp, sla_s) / max(cost_zfhc_base, 1e-9)
+    zfhc_completion = len(zfhc_resp) / max(len(zfhc_reqs), 1)
+
+    entries = []
+    for f in fractions:
+        f_reqs = _build_live()
+        cost_f = _gsf_spot_fleet_cost(
+            c_schedule, f, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+        )
+        f_sim, f_resp, _ = _simulate_fifo_gsf_spot_fleet(
+            f_reqs, c_schedule, f, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+        )
+        gp_f = _sla_safe_goodput(f_reqs, f_resp, sla_s) / max(cost_f, 1e-9)
+        completion_f = len(f_resp) / max(len(f_reqs), 1)
+        n_all_spot = sum(
+            1 for c in c_schedule
+            if _gsf_spot_replicas(c, f, zfhc_threshold) == c
+        )
+        entries.append(GSFFractionEntry(
+            spot_fraction=f,
+            n_ticks_c_all_spot=n_all_spot,
+            cost_gsf=cost_f,
+            cost_vs_zfhc_reduction_pct=(cost_zfhc_base - cost_f) / max(cost_zfhc_base, 1e-9) * 100.0,
+            goodput_per_dollar=gp_f,
+            goodput_vs_zfhc_pct=(gp_f - gp_zfhc) / max(gp_zfhc, 1e-9) * 100.0,
+            goodput_vs_sla_oracle_pct=(gp_f - sla_oracle) / sla_oracle * 100.0,
+            north_star_achieved=gp_f >= north_star_threshold,
+            completion_rate=completion_f,
+            p99_s=f_sim.get("p99_response_s", 0.0),
+        ))
+
+    # Best fraction: highest goodput/$ with no SLA regression vs ZFHC baseline
+    safe_entries = [
+        e for e in entries
+        if e.completion_rate >= zfhc_completion - 0.001
+    ]
+    best = max(safe_entries, key=lambda e: e.goodput_per_dollar) if safe_entries else entries[0]
+
+    return GSFReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        c_schedule_mean=statistics.mean(c_schedule),
+        c_schedule_min=min(c_schedule),
+        c_schedule_max=max(c_schedule),
+        n_ticks=n_ticks,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        cost_zfhc_baseline=cost_zfhc_base,
+        zfhc_goodput_per_dollar=gp_zfhc,
+        zfhc_vs_sla_oracle_pct=(gp_zfhc - sla_oracle) / sla_oracle * 100.0,
+        fraction_results=entries,
+        best_fraction=best.spot_fraction,
+        best_goodput_per_dollar=best.goodput_per_dollar,
+        best_vs_zfhc_pct=best.goodput_vs_zfhc_pct,
+        best_vs_sla_oracle_pct=best.goodput_vs_sla_oracle_pct,
+        best_north_star_achieved=best.north_star_achieved,
+        north_star_threshold=north_star_threshold,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+    )
+
+
+def run_gsf_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    mcs_gate: float = 9.5,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    fractions: tuple = _GSF_FRACTIONS,
+) -> "GSFReport":
+    """GSF fraction sweep on Azure LLM 2024 — run 2026-06-26.
+
+    Sweeps spot_fraction ∈ {0.70..1.00} with ZFHC threshold=8.
+    Identifies the Pareto-optimal fraction for Azure LLM 2024
+    (SLA=10s, oracle=25,208, north-star=100,832).
+
+    The ZFHC(8) baseline from run 2026-06-25 (113,904 goodput/$) serves
+    as the comparison baseline. Improvements vs ZFHC(8) are the primary
+    frontier metric for this run.
+
+    Research basis:
+        SpotServe (arXiv:2311.15566): 0 on-demand at all c is safe with
+            checkpoint/drain mechanisms. Validates f=1.00 as safe.
+        GFS (arXiv:2509.11134): capacity-conditioned fraction graduation.
+        SkyPilot (arXiv:2205.07147): multi-cloud spot arbitrage shows
+            60%+ cost savings with spot-only fleets.
+
+    Args:
+        fixed_c:            On-demand replica count baseline.
+        target_rho:         Target cluster utilization.
+        job_limit:          Request cap (default 5880 for Azure).
+        sla_s:              E2E SLA budget (default 10s for Azure).
+        prior_window:       Sliding-window for running-median prior.
+        azure_fixture:      Path to Azure LLM 2024 fixture.
+        tick_seconds:       MCS tick duration.
+        mcs_gate:           Erlang-C timeout-rate threshold (%).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Spot interruption probability per hour.
+        seed:               RNG seed.
+        zfhc_threshold:     Capacity level above which all-spot is used.
+        fractions:          Spot fraction values to sweep.
+
+    Returns:
+        GSFReport with per-fraction results and best-fraction summary.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_gsf_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_gsf",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        mcs_gate=mcs_gate,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_threshold=100_832.0,
+        zfhc_threshold=zfhc_threshold,
+        fractions=fractions,
+    )
+
+
+def run_gsf_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    mcs_gate: float = 9.5,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    fractions: tuple = _GSF_FRACTIONS,
+) -> "GSFReport":
+    """GSF fraction sweep on BurstGPT HF — run 2026-06-26.
+
+    BurstGPT has c_max=14 and c_mean=4.3. Many ticks at c=2..5 have
+    on-demand replicas under AFMS; raising fraction removes these floors.
+    ZFHC(8) baseline from run 2026-06-25 (140,647 goodput/$).
+
+    Research basis: same as ``run_gsf_azure_backtest``.
+
+    Args:
+        fixed_c:            On-demand replica count baseline.
+        target_rho:         Target cluster utilization.
+        job_limit:          Request cap (default 5880).
+        sla_s:              E2E SLA budget (default 30s for BurstGPT).
+        prior_window:       Sliding-window for running-median prior.
+        jsonl_path:         Path to BurstGPT HF JSONL.
+        tick_seconds:       MCS tick duration.
+        mcs_gate:           Erlang-C timeout-rate threshold (%).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Spot interruption probability per hour.
+        seed:               RNG seed.
+        zfhc_threshold:     Capacity level above which all-spot is used.
+        fractions:          Spot fraction values to sweep.
+
+    Returns:
+        GSFReport with per-fraction results and best-fraction summary.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_gsf_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_gsf",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        mcs_gate=mcs_gate,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_threshold=4.0 * 20_280.0,
+        zfhc_threshold=zfhc_threshold,
+        fractions=fractions,
+    )

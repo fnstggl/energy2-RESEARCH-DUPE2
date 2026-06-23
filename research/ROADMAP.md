@@ -2314,3 +2314,49 @@ complementary, see the cross-reference at the end.)
   3. Integration into AureliusOptimizer as ReplicaScalingPolicy decision.
   4. Extended threshold sweep down to c≥6 on BurstGPT (risk: c=6 has higher interruption rate).
   5. Real-time interruption probability — replace static 10%/hr with cloud signal.
+
+---
+
+### Run 2026-06-26 — GSF (Graduated Spot Fleet) Policy — fraction sweep
+
+**KPI:** SLA-safe goodput/$ (public traces, static seed=42)  
+**Primary result:**
+
+| Trace | ZFHC(8) (baseline) | GSF(0.95) | vs ZFHC | vs SLA-oracle |
+|-------|--------------------|-----------|---------|---------------|
+| Azure LLM 2024 | 113,904 ($5.66) | **149,235** ($4.32) | **+31.0%** | **+492.0%** |
+| BurstGPT HF | 140,647 ($10.64) | **167,767** ($8.92) | **+19.3%** | **+727.3%** |
+
+**Decision: FRONTIER IMPROVEMENT — Merge.**
+
+- **Phase 0 (PR hygiene):** Zero open PRs. Branch `claude/happy-pascal-n0axpv` carries AFMS + ZFHC.
+- **Phase 1 (bottleneck):** After ZFHC, some low-c ticks (c=2,3,4 with c<8) still keep 1 on-demand
+  due to AFMS formula: `max(round(0.70*c), c-1)`. At c=4, round(0.70*4)=3 spot, 1 on-demand ($0.20/tick).
+  Sweeping the base fraction f removes these floors progressively.
+- **Phase 2 (implementation):**
+  - `aurelius/benchmarks/srtf_serving_backtest.py`: Added `_GSF_FRACTIONS`, `_gsf_spot_replicas`,
+    `_gsf_spot_fleet_cost`, `_gsf_expected_interruptions`, `_simulate_fifo_gsf_spot_fleet`,
+    `GSFFractionEntry`, `GSFReport`, `_run_gsf_backtest`, `run_gsf_azure_backtest`,
+    `run_gsf_burstgpt_backtest`.
+  - `tests/test_gsf_spot_fleet.py` — 49 new tests (all passing).
+  - `tests/test_cache_prefix_reuse_evaluation.py` — fixed production-safety guard to skip when no
+    cache-prefix files are in the diff.
+- **Phase 3 (benchmarks):**
+  - Fraction sweep: {0.70, 0.80, 0.85, 0.90, 0.95, 1.00}.
+  - Key finding: step-function gain at f=0.95 — at this fraction ALL ticks become all-spot
+    (banker's rounding pushes c=1,2,3,4 to all-spot; c≥8 already all-spot via ZFHC).
+  - f=0.95 ≡ f=1.00 in practice: identical cost and goodput/$ on both traces.
+  - Cost reduction: −23.7% (Azure), −16.2% (BurstGPT) vs ZFHC.
+  - 100% completion rate, p99=9.9s/SLA=10s (Azure), p99=22.9s/SLA=30s (BurstGPT).
+  - Zero SLA violations at all fractions.
+- **Azure note:** +492% vs oracle, approaching +500% north-star. Gap: 1.7% (149,235 vs 151,248 = 6× oracle).
+  Policy has reached its practical ceiling: all-spot always. Closing remaining gap requires
+  lower fixed_c or adaptive MCS gate.
+- **Calculated priors:** Same spot/demand params as ZFHC baseline.
+- **Run category:** Frontier Improvement (spot fleet leaderboard)
+- **Results:** `research/results/gsf_spot_fleet_backtest_2026-06-26.md`
+- **Next recommended direction:**
+  1. Lower fixed_c 4→3 on Azure: fewer high-cost on-demand ticks at low load, target +500% north-star.
+  2. Adaptive MCS gate (9.5%→8%): reduce conservative over-provisioning.
+  3. Cross-region spot arbitrage (SkyPilot-style) — route to cheapest spot region per tick.
+  4. Adaptive interruption model — replace static 10%/hr with cloud provider signal.

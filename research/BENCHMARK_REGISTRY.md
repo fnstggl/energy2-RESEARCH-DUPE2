@@ -115,6 +115,23 @@
 | `alibaba_genai_ablation` | ablation | Full-trace ablation for model-affinity signal |
 | `alibaba_genai_residency_decision` | residency | n=60 per-request (diagnostic only) |
 
+### 2A. Spot Fleet Provisioning Leaderboard (FIFO+MCS base, spot/on-demand mix)
+
+Separate from rollup — uses FIFO+MCS provisioner (not AureliusOptimizer energy policies).
+Metric: SLA-safe goodput/$ = completed_requests / total_spot_fleet_cost_usd.
+SLA-oracle baselines: Azure=25,208, BurstGPT=20,280 goodput/$.
+North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
+
+| Policy | Azure goodput/$ | vs oracle | BurstGPT goodput/$ | vs oracle | Date |
+|--------|----------------|-----------|--------------------|-----------|------|
+| Static 70% spot | 102,009 | +304.7% | 118,580 | +484.7% | 2026-06-23 |
+| AFMS (f=0.70, c-1 floor) | 112,316 | +345.6% | 134,093 | +561.2% | 2026-06-24 |
+| ZFHC(thr=8) | 113,904 | +351.9% | 140,647 | +593.5% | 2026-06-25 |
+| **GSF(f=0.95)** | **149,235** | **+492.0%** | **167,767** | **+727.3%** | **2026-06-26** |
+
+North-star (4× oracle) achieved at all policies. +500% north-star: BurstGPT ✓ (since AFMS), Azure 98.4% (gap: 1.7%).
+Results: `research/results/gsf_spot_fleet_backtest_2026-06-26.md`.
+
 ---
 
 ## 3. Ingested HF Datasets (not in rollup — research/training use only)

@@ -3960,3 +3960,112 @@ ZFHC is a spot fleet provisioning policy, operating in the same layer as AFMS �
 **Current frontier (leaderboard state after run-2026-06-25):**
 - Azure LLM 2024: 113,904 goodput/$ (ZFHC thr=8, +351.9% vs oracle, north-star ✓)
 - BurstGPT HF: 140,647 goodput/$ (ZFHC thr=8, +593.5% vs oracle, north-star ✓)
+
+---
+
+## Run 2026-06-26 — GSF Policy (FRONTIER IMPROVEMENT — +31.0%/+19.3% vs ZFHC)
+
+### Q1. What currently limits Aurelius most?
+
+**After ZFHC, some low-c ticks (c=2,3,4 with c<8) still keep 1 on-demand replica due to the AFMS base formula.** At c=4 with f=0.70: round(0.70×4)=3 spot replicas, 1 on-demand = $0.020/tick extra. The GSF policy sweeps the base spot fraction f over {0.70, 0.80, 0.85, 0.90, 0.95, 1.00}, progressively removing on-demand cost at low-c ticks:
+
+| Trace | ZFHC(8) baseline | GSF(0.95) | vs ZFHC | vs SLA-oracle |
+|-------|-----------------|-----------|---------|---------------|
+| Azure LLM 2024 | 113,904 ($5.66) | **149,235** ($4.32) | **+31.0%** | **+492.0%** |
+| BurstGPT HF | 140,647 ($10.64) | **167,767** ($8.92) | **+19.3%** | **+727.3%** |
+
+North-star maintained on both traces. Zero SLA violations. Both new repository records.
+
+### Q2. What theoretically offers the largest gain beyond the current state?
+
+The GSF policy has reached its practical ceiling: at f=0.95, ALL ticks become all-spot on both traces. The remaining avenue for goodput/$ improvement requires either:
+1. **Reducing provisioning cost further**: lower fixed_c, reduce MCS gate conservatism, or cross-region arbitrage.
+2. **Increasing completions at lower cost**: accept slightly higher interruption probability (higher f is already maxed at 1.00).
+
+Top opportunities post-GSF:
+1. **Lower fixed_c (4→3) on Azure**: At Azure's load level (c_mean=4.5), c=3 might satisfy demand at lower base cost. Expected: +5-10% if c=3 is sufficient.
+2. **Adaptive MCS gate (9.5%→8%)**: Less conservative over-provisioning; reduces c_mean from 4.5 toward 4.0.
+3. **Cross-region spot arbitrage**: Route each tick to cheapest available spot region. Literature: 20-40% additional cost reduction.
+
+### Q3. What was the hypothesis for this run?
+
+**H1:** Raising the spot fraction f above 0.70 at low-c ticks removes the on-demand floor and reduces cost.  
+**H2:** At f=0.95, banker's rounding on c=1,2,3,4 all yields c_spot=c (all-spot), making the policy equivalent to all-spot-always.  
+**H3:** The step from f=0.90 to f=0.95 produces the largest jump in goodput/$ due to the discrete nature of c values and rounding.
+
+### Q4. Were the hypotheses confirmed?
+
+**H1: CONFIRMED.** Cost reduction at f=0.95: −23.7% (Azure, $5.66→$4.32), −16.2% (BurstGPT, $10.64→$8.92).
+
+**H2: CONFIRMED.** At f=0.95: n_ticks_c_all_spot = 72/72 (Azure), 154/154 (BurstGPT). Every single tick is all-spot.
+
+**H3: CONFIRMED.** The jump from f=0.90 (40/72 ticks all-spot, $4.96) to f=0.95 (72/72 ticks, $4.32) is the dominant step. Gains at f=0.70→0.80→0.85→0.90 are monotonic but smaller.
+
+### Q5. What new information was learned?
+
+1. **The fraction sweep reveals a step-function gain at f=0.95, not a smooth gradient.** Between f=0.90 and f=0.95: Azure jumps +$0.64/run (12.9% additional cost reduction) and goodput/$ jumps +19,256 (14.8% additional). This is not visible from just testing f=0.70 and f=1.00.
+2. **f=0.95 ≡ f=1.00 in practice.** Both produce identical cost and goodput/$ because banker's rounding on c=1,2,3,4 at f=0.95 already reaches c_spot=c.
+3. **Azure north-star gap is 1.7%.** 149,235 vs 151,248 (6× oracle = +500%). The policy has been exhausted for fraction optimization; crossing the gap requires other levers.
+4. **BurstGPT now exceeds 7× oracle (+727%).** The BurstGPT trace benefits more from higher spot fractions due to its heavier load distribution and more sub-threshold ticks.
+
+### Q6. What remains uncertain?
+
+1. **Azure +500% north-star.** At 149,235 vs 151,248, the gap is only 1.7% but the policy ceiling has been reached. Need new lever (lower fixed_c or MCS gate).
+2. **Correlated interruptions.** i.i.d. Binomial model remains. Real cloud spot interruptions can be AZ-wide.
+3. **Spot price sensitivity.** Results anchored to spot=$0.80/hr. At spot=$1.00/hr, the all-spot savings shrink.
+
+### Q7. What are the most plausible next improvements?
+
+**Ranked by expected goodput/$ × implementation feasibility:**
+
+| Rank | Opportunity | Expected Δgoodput/$ | Basis | Risk |
+|------|------------|--------------------|----|------|
+| 1 | Lower fixed_c 4→3 on Azure | +5-10% | c=3 may saturate demand at c_mean=4.5; sub-threshold ticks cost less | Low: parameter change |
+| 2 | Adaptive MCS gate (9.5%→8%) | +3-5% | Less conservative over-provisioning; reduces c_mean | Low: parameter change |
+| 3 | Cross-region spot arbitrage | +15-30% | Literature (SkyPilot, SpotHedge): 20-40% multi-region discount | High: new infra |
+| 4 | Adaptive interruption model | ±2% | Replace static 10%/hr with cloud signal | Medium: data needed |
+| 5 | Wire into AureliusOptimizer | Structural | Phase 3 routing; no KPI change expected | Low: plumbing |
+
+### Q8. Is the north-star still achievable?
+
+**YES — and BurstGPT already exceeds 7× oracle.** Azure is at +492% vs 500% target (98.4% of way there).
+
+The +500% target on Azure requires goodput/$ ≥ 151,248 (6× oracle). Current: 149,235. Gap: 2,013 goodput/$. At same goodput (5880 completed), this means cost needs to drop from $4.32 to $4.26 — a further 1.4% cost reduction. Achievable with:
+- fixed_c 4→3: expected to reduce c_mean below 4.0, cutting cost proportionally
+- MCS gate 9.5%→8%: less over-provisioning at load troughs
+
+### Q9. What are the binding constraints going forward?
+
+1. **All-spot ceiling reached.** GSF(0.95) = 100% spot on all ticks. No further savings from fraction tuning.
+2. **c_mean=4.5 (Azure) is the next lever.** The MCS schedule drives cost; reducing provisioned capacity (via lower fixed_c or MCS gate) is the only remaining lever within this simulation framework.
+3. **Static interruption model.** i.i.d. Binomial. Production hardening requires real interrupt-rate signal.
+
+### Q10. What was the most important failure mode avoided?
+
+**Conflating f=0.95 and f=1.00 as identical before verifying.** The test suite confirms they are operationally identical (n_ticks_c_all_spot = 72/72 and 154/154 for both), preventing an incorrect claim that f=1.00 offers "additional" improvement beyond f=0.95.
+
+### Q11. What papers guided this run?
+
+1. GFS (arXiv:2509.11134, ASPLOS '26) — graduated spot quota: fraction sweep was directly motivated by GFS's dynamic spot quota parameter.
+2. SpotServe (arXiv:2311.15566, ASPLOS 2024) — 100% spot fleet at sufficient capacity; validated our f=1.00 ceiling result.
+3. SkyPilot (NSDI '23) — cross-region spot arbitrage: the top-ranked next opportunity post-GSF.
+
+### Q12. How does GSF relate to the architecture?
+
+GSF generalizes AFMS (f=0.70 with c-1 floor) and ZFHC (all-spot at c≥8). At f=0.95 the policies collapse to a single point: 100% spot always. GSF is implemented entirely in `srtf_serving_backtest.py` and does not touch:
+- The FIFO queue discipline
+- The MCS autoscaler (c_schedule computed by MCS, GSF allocates within each c)
+- The conformal predictor
+- AureliusOptimizer
+
+### Q13. What should be attempted next?
+
+**Highest priority (run 2026-06-27):** Lower fixed_c from 4 to 3 on Azure. At c_mean=4.5 with the current schedule, many ticks spend at c=3 or c=4 already. Reducing the fixed_c parameter shifts the distribution leftward, potentially reaching +500% vs oracle.
+
+**Second priority:** Adaptive MCS gate (9.5%→8%). Combined with lower fixed_c, this could close the remaining 1.7% gap.
+
+**Third priority:** Cross-region spot arbitrage. This is the single largest unmodeled lever.
+
+**Current frontier (leaderboard state after run-2026-06-26):**
+- Azure LLM 2024: **149,235** goodput/$ (GSF f=0.95, **+492.0%** vs oracle, north-star ✓, gap to +500%: 1.7%)
+- BurstGPT HF: **167,767** goodput/$ (GSF f=0.95, **+727.3%** vs oracle, north-star ✓)
