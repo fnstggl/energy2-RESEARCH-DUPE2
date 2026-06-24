@@ -14,16 +14,12 @@ Core contracts verified:
   - Predicted service times do NOT access actual future tokens (verified
     indirectly: flat trace with constant tokens yields oracle == online result).
 """
-import statistics
 
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
-    OnlineSOTSSReport,
-    _ONLINE_SOTSS_AGGRESSIVE_GATE,
     _ONLINE_SOTSS_MAX_ITERS,
-    _ONLINE_SOTSS_SAFE_GATE,
-    _online_sotss_cost_schedule,
+    OnlineSOTSSReport,
     run_online_sotss_azure_backtest,
     run_online_sotss_burstgpt_backtest,
 )
@@ -32,7 +28,6 @@ from aurelius.optimizer.policies.replica_scaling import (
     compute_online_sotss_schedule,
     compute_sotss_min_schedule,
 )
-
 
 # ---------------------------------------------------------------------------
 # Class 0: compute_online_sotss_schedule — unit tests

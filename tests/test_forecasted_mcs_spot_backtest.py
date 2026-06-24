@@ -21,20 +21,15 @@ Tests requiring numpy (the GSF spot-fleet stochastic simulation) are skipped
 automatically if numpy is not installed in the test environment.
 """
 import json
-import statistics
 
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     ForecastedMCSSpotReport,
-    _FMCS_SPOT_EWMA_ALPHA,
-    _FMCS_SPOT_MCS_GATE,
     _run_forecasted_mcs_spot_backtest,
     run_forecasted_mcs_spot_azure_backtest,
     run_forecasted_mcs_spot_burstgpt_backtest,
-    DEFAULT_AZURE_FIXTURE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
