@@ -876,6 +876,14 @@ class ReplicaScalingConfig:
     service-time pairs (correct SLA guarantee).  Default 0.0 disables OSSC
     (byte-identical to pre-OSSC behavior)."""
 
+    baseline_n_sla_safe: Optional[int] = None
+    """Safety-floor override for the ``online_sotss`` oracle loop.  When set, the
+    oracle converges once predicted n_sla_safe ≥ this value; when ``None`` the
+    oracle computes its own floor from a deterministic FIFO simulation (which
+    differs from the stochastic AMCSG baseline used by the validated backtest).
+    Set to ``amcsg_n_sla_safe`` from the AMCSG stochastic GSF evaluation to
+    reproduce the validated OSOTSS result through the canonical path."""
+
     # ---- forecasted_mcs mode (fully deployable; forecasts arrivals + service) ----
     forecast_method: str = "ewma"
     """``forecasted_mcs`` sub-method: ``"ewma"``, ``"quantile"``, or ``"lag1"``."""
@@ -923,6 +931,10 @@ class ReplicaScalingResult:
 
     baseline_n_sla_safe: int
     """Safety floor used by oracle (0 for ``amcsg`` mode)."""
+
+    initial_violations: int = 0
+    """Initial FIFO-violation count before the oracle started iterating.
+    Non-zero for ``online_sotss`` mode only; 0 for all other modes."""
 
 
 # ---------------------------------------------------------------------------
@@ -1058,13 +1070,14 @@ class ReplicaScalingPolicy(OptimizationPolicy):
             )
 
         if cfg.mode == "online_sotss":
-            c_sched, n_iters, _, n_ticks_cheaper, baseline_n_sla_safe = (
+            c_sched, n_iters, init_viols, n_ticks_cheaper, baseline_n_sla_safe = (
                 compute_online_sotss_schedule(
                     raw, cfg.tick_seconds, w,
                     sla_s=cfg.sla_s,
                     safe_gate=cfg.safe_gate_pct,
                     aggressive_gate=cfg.aggressive_gate_pct,
                     max_iters=cfg.max_oracle_iters,
+                    baseline_n_sla_safe=cfg.baseline_n_sla_safe,
                     ewma_alpha=cfg.ewma_alpha,
                     ewma_mode=cfg.ewma_mode,
                     burst_threshold=cfg.burst_threshold,
@@ -1084,6 +1097,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                 oracle_iters=n_iters,
                 n_ticks_cheaper=n_ticks_cheaper,
                 baseline_n_sla_safe=baseline_n_sla_safe,
+                initial_violations=init_viols,
             )
 
         if cfg.mode == "forecasted_mcs":

@@ -12955,23 +12955,25 @@ def _run_online_sotss_backtest(
     )
 
     # -----------------------------------------------------------------------
-    # Step 2: Run Online SOTSS oracle loop (causal EWMA predictions only).
-    # Production-deployable: no oracle access to future token counts.
+    # Step 2: Run Online SOTSS oracle loop via canonical AureliusOptimizer
+    # facade (policy="replica_scaling", mode="online_sotss").
     #
-    # The oracle's convergence baseline is set to amcsg_n_sla_safe — the
-    # same SLA-safe count achieved by AMCSG in the stochastic GSF simulation.
-    # This ensures OSOTSS targets the same safety floor as the baseline, not
-    # the more-conservative deterministic gate=9.5% baseline used by SOTSS-MIN.
+    # baseline_n_sla_safe = amcsg_n_sla_safe from the stochastic GSF simulation
+    # above, so OSOTSS targets the same SLA-safe floor as AMCSG (not the more-
+    # conservative deterministic floor). This is the Phase 3 canonical routing
+    # that makes AureliusOptimizer(policy="replica_scaling") the single owner
+    # of all per-tick capacity scheduling decisions, including OSOTSS.
     # -----------------------------------------------------------------------
-    c_osotss, n_iters, initial_violations, n_ticks_cheaper, baseline_used = (
-        _online_sotss_cost_schedule(
-            raw,
-            tick_seconds,
-            warp,
-            sla_s,
-            safe_gate=safe_gate,
-            aggressive_gate=aggressive_gate,
-            max_iters=max_iters,
+    _osotss_result = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="online_sotss",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=safe_gate,
+            aggressive_gate_pct=aggressive_gate,
+            max_oracle_iters=max_iters,
             baseline_n_sla_safe=amcsg_n_sla_safe,
             ewma_alpha=ewma_alpha,
             ewma_mode=ewma_mode,
@@ -12980,8 +12982,13 @@ def _run_online_sotss_backtest(
             burst_cooldown_ticks=burst_cooldown_ticks,
             interrupt_safety_margin=interrupt_safety_margin,
             borderline_margin_s=borderline_margin_s,
-        )
+        ),
     )
+    c_osotss = _osotss_result.c_schedule
+    n_iters = _osotss_result.oracle_iters
+    initial_violations = _osotss_result.initial_violations
+    n_ticks_cheaper = _osotss_result.n_ticks_cheaper
+    baseline_used = _osotss_result.baseline_n_sla_safe
 
     # -----------------------------------------------------------------------
     # Step 3: Final evaluation using same spot-fleet simulation as AMCSG.
