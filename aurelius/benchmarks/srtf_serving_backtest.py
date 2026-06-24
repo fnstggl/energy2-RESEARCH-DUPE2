@@ -13614,3 +13614,434 @@ def run_forecasted_mcs_spot_burstgpt_backtest(
         ewma_alpha=ewma_alpha,
         warmup_c=warmup_c,
     )
+
+
+# ---------------------------------------------------------------------------
+# Joint OSOTSS + Abs-Conformal SRPT Compound Backtest — Run 2026-06-24
+# ---------------------------------------------------------------------------
+#
+# Five-Failure Rule integration experiment. Tests whether the OSOTSS capacity
+# provisioner (causal-EWMA, production-deployable) compounds POSITIVELY with
+# the abs-conformal SRPT queue discipline.
+#
+# Background: The MCS+conformal joint backtest (2026-06-23) found a NEGATIVE
+# compound because MCS over-provisioned (c_mean≈4.9 vs fixed-c=4), reducing
+# queue depth and making SRPT less useful. OSOTSS under-provisions
+# (c_mean≈4.2 vs fixed-c=4) → deeper queues → conformal SRPT expected to be
+# more valuable → positive compound expected.
+#
+# 6-condition 2×3 factorial:
+#   {FIFO, conformal} × {fixed-c=4, AMCSG gate=12.5%, OSOTSS}
+# Strongest fair baseline: conformal + AMCSG (validated safe provisioner)
+# Candidate: conformal + OSOTSS (TRUE COMPOUND)
+# Cost denominator: provisioned GPU hours × GPU_HOUR_USD (no stochastic spot).
+
+_JOSOTSS_AMCSG_GATE: float = 12.5   # AMCSG best-safe validated gate
+
+
+@dataclass
+class JointOSOTSSAbsConformalReport:
+    """Joint OSOTSS × abs-conformal SRPT compound backtest — run 2026-06-24.
+
+    2×3 factorial — all conditions on the same warped trace:
+      FIFO + fixed-c:              do-nothing baseline
+      FIFO + AMCSG (gate=12.5%):   economic-only gain (FIFO)
+      FIFO + OSOTSS:               economic-only gain (FIFO, causal EWMA)
+      conformal + fixed-c:         queue-only gain
+      conformal + AMCSG:           compound (strongest fair baseline)
+      conformal + OSOTSS:          TRUE COMPOUND (candidate)
+
+    Cost denominator: provisioned GPU hours × GPU_HOUR_USD.
+    Headline: conformal_osotss_goodput_per_dollar vs conformal_amcsg_goodput_per_dollar.
+    SLA safety gate: conformal_osotss_n_sla_safe >= conformal_amcsg_n_sla_safe.
+    """
+
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+
+    # AMCSG capacity statistics
+    amcsg_c_mean: float
+    amcsg_c_min: int
+    amcsg_c_max: int
+    amcsg_n_ticks: int
+
+    # OSOTSS capacity statistics
+    osotss_c_mean: float
+    osotss_c_min: int
+    osotss_c_max: int
+    osotss_n_ticks: int
+
+    # Provisioned GPU-hour costs
+    cost_fixed_c: float
+    cost_amcsg: float
+    cost_osotss: float
+
+    # 6-condition goodput/$ (primary KPI)
+    fifo_fixed_goodput_per_dollar: float
+    fifo_amcsg_goodput_per_dollar: float
+    fifo_osotss_goodput_per_dollar: float
+    conformal_fixed_goodput_per_dollar: float
+    conformal_amcsg_goodput_per_dollar: float
+    conformal_osotss_goodput_per_dollar: float
+
+    # 6-condition n_sla_safe (SLA safety gate)
+    fifo_fixed_n_sla_safe: int
+    fifo_amcsg_n_sla_safe: int
+    fifo_osotss_n_sla_safe: int
+    conformal_fixed_n_sla_safe: int
+    conformal_amcsg_n_sla_safe: int
+    conformal_osotss_n_sla_safe: int
+
+    # 6-condition p99 response times
+    fifo_fixed_p99_s: float
+    fifo_amcsg_p99_s: float
+    fifo_osotss_p99_s: float
+    conformal_fixed_p99_s: float
+    conformal_amcsg_p99_s: float
+    conformal_osotss_p99_s: float
+
+    # 6-condition completion rates
+    fifo_fixed_completion_rate: float
+    fifo_amcsg_completion_rate: float
+    fifo_osotss_completion_rate: float
+    conformal_fixed_completion_rate: float
+    conformal_amcsg_completion_rate: float
+    conformal_osotss_completion_rate: float
+
+    # Preemption counts (conformal conditions only)
+    conformal_fixed_preemptions: int
+    conformal_amcsg_preemptions: int
+    conformal_osotss_preemptions: int
+
+    # Key percentage deltas vs fifo_fixed baseline
+    conformal_fixed_vs_fifo_fixed_pct: float
+    fifo_amcsg_vs_fifo_fixed_pct: float
+    fifo_osotss_vs_fifo_fixed_pct: float
+    conformal_amcsg_vs_fifo_fixed_pct: float
+    conformal_osotss_vs_fifo_fixed_pct: float
+
+    # Headline: candidate vs strongest fair baseline
+    conformal_osotss_vs_conformal_amcsg_pct: float
+
+    # Capacity cost comparison
+    osotss_vs_amcsg_cost_pct: float
+
+    # SLA safety delta: conformal_osotss_n_sla_safe - conformal_amcsg_n_sla_safe
+    osotss_conformal_sla_safe_delta: int
+
+    def to_dict(self) -> dict:
+        def _r(v, n=2):
+            return round(v, n) if isinstance(v, float) else v
+
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "amcsg_c_mean": _r(self.amcsg_c_mean, 3),
+            "amcsg_c_min": self.amcsg_c_min,
+            "amcsg_c_max": self.amcsg_c_max,
+            "amcsg_n_ticks": self.amcsg_n_ticks,
+            "osotss_c_mean": _r(self.osotss_c_mean, 3),
+            "osotss_c_min": self.osotss_c_min,
+            "osotss_c_max": self.osotss_c_max,
+            "osotss_n_ticks": self.osotss_n_ticks,
+            "cost_fixed_c": _r(self.cost_fixed_c, 6),
+            "cost_amcsg": _r(self.cost_amcsg, 6),
+            "cost_osotss": _r(self.cost_osotss, 6),
+            "fifo_fixed_goodput_per_dollar": _r(self.fifo_fixed_goodput_per_dollar),
+            "fifo_amcsg_goodput_per_dollar": _r(self.fifo_amcsg_goodput_per_dollar),
+            "fifo_osotss_goodput_per_dollar": _r(self.fifo_osotss_goodput_per_dollar),
+            "conformal_fixed_goodput_per_dollar": _r(self.conformal_fixed_goodput_per_dollar),
+            "conformal_amcsg_goodput_per_dollar": _r(self.conformal_amcsg_goodput_per_dollar),
+            "conformal_osotss_goodput_per_dollar": _r(self.conformal_osotss_goodput_per_dollar),
+            "fifo_fixed_n_sla_safe": self.fifo_fixed_n_sla_safe,
+            "fifo_amcsg_n_sla_safe": self.fifo_amcsg_n_sla_safe,
+            "fifo_osotss_n_sla_safe": self.fifo_osotss_n_sla_safe,
+            "conformal_fixed_n_sla_safe": self.conformal_fixed_n_sla_safe,
+            "conformal_amcsg_n_sla_safe": self.conformal_amcsg_n_sla_safe,
+            "conformal_osotss_n_sla_safe": self.conformal_osotss_n_sla_safe,
+            "fifo_fixed_p99_s": _r(self.fifo_fixed_p99_s, 3),
+            "fifo_amcsg_p99_s": _r(self.fifo_amcsg_p99_s, 3),
+            "fifo_osotss_p99_s": _r(self.fifo_osotss_p99_s, 3),
+            "conformal_fixed_p99_s": _r(self.conformal_fixed_p99_s, 3),
+            "conformal_amcsg_p99_s": _r(self.conformal_amcsg_p99_s, 3),
+            "conformal_osotss_p99_s": _r(self.conformal_osotss_p99_s, 3),
+            "fifo_fixed_completion_rate": _r(self.fifo_fixed_completion_rate, 4),
+            "fifo_amcsg_completion_rate": _r(self.fifo_amcsg_completion_rate, 4),
+            "fifo_osotss_completion_rate": _r(self.fifo_osotss_completion_rate, 4),
+            "conformal_fixed_completion_rate": _r(self.conformal_fixed_completion_rate, 4),
+            "conformal_amcsg_completion_rate": _r(self.conformal_amcsg_completion_rate, 4),
+            "conformal_osotss_completion_rate": _r(self.conformal_osotss_completion_rate, 4),
+            "conformal_fixed_preemptions": self.conformal_fixed_preemptions,
+            "conformal_amcsg_preemptions": self.conformal_amcsg_preemptions,
+            "conformal_osotss_preemptions": self.conformal_osotss_preemptions,
+            "conformal_fixed_vs_fifo_fixed_pct": _r(self.conformal_fixed_vs_fifo_fixed_pct),
+            "fifo_amcsg_vs_fifo_fixed_pct": _r(self.fifo_amcsg_vs_fifo_fixed_pct),
+            "fifo_osotss_vs_fifo_fixed_pct": _r(self.fifo_osotss_vs_fifo_fixed_pct),
+            "conformal_amcsg_vs_fifo_fixed_pct": _r(self.conformal_amcsg_vs_fifo_fixed_pct),
+            "conformal_osotss_vs_fifo_fixed_pct": _r(self.conformal_osotss_vs_fifo_fixed_pct),
+            "conformal_osotss_vs_conformal_amcsg_pct": _r(
+                self.conformal_osotss_vs_conformal_amcsg_pct
+            ),
+            "osotss_vs_amcsg_cost_pct": _r(self.osotss_vs_amcsg_cost_pct),
+            "osotss_conformal_sla_safe_delta": self.osotss_conformal_sla_safe_delta,
+        }
+
+
+def _run_joint_osotss_abs_conformal_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    target_p90_abs_tokens: float,
+    amcsg_gate: float = _JOSOTSS_AMCSG_GATE,
+) -> "JointOSOTSSAbsConformalReport":
+    """Shared 6-condition backtest logic for Azure and BurstGPT."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # Compute both c_schedules via canonical optimizer policy delegates
+    c_amcsg = _compute_mcs_c_schedule(
+        raw, tick_seconds, warp, mcs_gate=amcsg_gate, sla_s=sla_s
+    )
+    c_osotss, *_ = _compute_online_sotss_schedule(
+        raw, tick_seconds, warp, sla_s,
+        safe_gate=amcsg_gate,
+        aggressive_gate=_ONLINE_SOTSS_AGGRESSIVE_GATE,
+        ewma_alpha=_ONLINE_SOTSS_EWMA_ALPHA,
+    )
+    n_ticks = len(c_amcsg)
+
+    # Provisioned GPU-hour costs (no stochastic spot interruptions)
+    cost_fixed = fixed_c * n_ticks * tick_seconds / 3600.0 * GPU_HOUR_USD
+    cost_amcsg = sum(c_amcsg) * tick_seconds / 3600.0 * GPU_HOUR_USD
+    cost_osotss = sum(c_osotss) * tick_seconds / 3600.0 * GPU_HOUR_USD
+
+    def _pct(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    def _n_safe(reqs: list, resp: dict) -> int:
+        return sum(1 for r in reqs if r.idx in resp and resp[r.idx] <= sla_s)
+
+    def _completion(reqs: list, resp: dict) -> float:
+        return len(resp) / max(len(reqs), 1)
+
+    # -- CELL 1: FIFO + fixed-c -----------------------------------------------
+    ff_reqs = _build_live()
+    ff_sim, ff_resp, _ = simulate_queue(ff_reqs, fixed_c, "fifo")
+    gp_ff = _sla_safe_goodput(ff_reqs, ff_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # -- CELL 2: FIFO + AMCSG variable-c --------------------------------------
+    fa_reqs = _build_live()
+    fa_sim, fa_resp, _ = _simulate_fifo_variable_c(fa_reqs, c_amcsg, tick_seconds)
+    gp_fa = _sla_safe_goodput(fa_reqs, fa_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    # -- CELL 3: FIFO + OSOTSS variable-c -------------------------------------
+    fo_reqs = _build_live()
+    fo_sim, fo_resp, _ = _simulate_fifo_variable_c(fo_reqs, c_osotss, tick_seconds)
+    gp_fo = _sla_safe_goodput(fo_reqs, fo_resp, sla_s) / max(cost_osotss, 1e-9)
+
+    # -- CELL 4: conformal + fixed-c ------------------------------------------
+    cf_reqs = _build_live()
+    cf_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    cf_sim, cf_resp, _ = _simulate_decoupled_hybrid_abs_conformal(cf_reqs, fixed_c, cf_cal)
+    gp_cf = _sla_safe_goodput(cf_reqs, cf_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # -- CELL 5: conformal + AMCSG variable-c (strongest fair baseline) -------
+    ca_reqs = _build_live()
+    ca_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    ca_sim, ca_resp, _ = _simulate_abs_conformal_variable_c(
+        ca_reqs, c_amcsg, ca_cal, tick_seconds
+    )
+    gp_ca = _sla_safe_goodput(ca_reqs, ca_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    # -- CELL 6: conformal + OSOTSS variable-c (TRUE COMPOUND) ----------------
+    co_reqs = _build_live()
+    co_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    co_sim, co_resp, _ = _simulate_abs_conformal_variable_c(
+        co_reqs, c_osotss, co_cal, tick_seconds
+    )
+    gp_co = _sla_safe_goodput(co_reqs, co_resp, sla_s) / max(cost_osotss, 1e-9)
+
+    n_safe_ca = _n_safe(ca_reqs, ca_resp)
+    n_safe_co = _n_safe(co_reqs, co_resp)
+
+    return JointOSOTSSAbsConformalReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_c_min=min(c_amcsg),
+        amcsg_c_max=max(c_amcsg),
+        amcsg_n_ticks=n_ticks,
+        osotss_c_mean=statistics.mean(c_osotss),
+        osotss_c_min=min(c_osotss),
+        osotss_c_max=max(c_osotss),
+        osotss_n_ticks=len(c_osotss),
+        cost_fixed_c=cost_fixed,
+        cost_amcsg=cost_amcsg,
+        cost_osotss=cost_osotss,
+        fifo_fixed_goodput_per_dollar=gp_ff,
+        fifo_amcsg_goodput_per_dollar=gp_fa,
+        fifo_osotss_goodput_per_dollar=gp_fo,
+        conformal_fixed_goodput_per_dollar=gp_cf,
+        conformal_amcsg_goodput_per_dollar=gp_ca,
+        conformal_osotss_goodput_per_dollar=gp_co,
+        fifo_fixed_n_sla_safe=_n_safe(ff_reqs, ff_resp),
+        fifo_amcsg_n_sla_safe=_n_safe(fa_reqs, fa_resp),
+        fifo_osotss_n_sla_safe=_n_safe(fo_reqs, fo_resp),
+        conformal_fixed_n_sla_safe=_n_safe(cf_reqs, cf_resp),
+        conformal_amcsg_n_sla_safe=n_safe_ca,
+        conformal_osotss_n_sla_safe=n_safe_co,
+        fifo_fixed_p99_s=ff_sim.get("p99_response_s", 0.0),
+        fifo_amcsg_p99_s=fa_sim.get("p99_response_s", 0.0),
+        fifo_osotss_p99_s=fo_sim.get("p99_response_s", 0.0),
+        conformal_fixed_p99_s=cf_sim.get("p99_response_s", 0.0),
+        conformal_amcsg_p99_s=ca_sim.get("p99_response_s", 0.0),
+        conformal_osotss_p99_s=co_sim.get("p99_response_s", 0.0),
+        fifo_fixed_completion_rate=_completion(ff_reqs, ff_resp),
+        fifo_amcsg_completion_rate=_completion(fa_reqs, fa_resp),
+        fifo_osotss_completion_rate=_completion(fo_reqs, fo_resp),
+        conformal_fixed_completion_rate=_completion(cf_reqs, cf_resp),
+        conformal_amcsg_completion_rate=_completion(ca_reqs, ca_resp),
+        conformal_osotss_completion_rate=_completion(co_reqs, co_resp),
+        conformal_fixed_preemptions=cf_sim.get("preemption_count", 0),
+        conformal_amcsg_preemptions=ca_sim.get("preemption_count", 0),
+        conformal_osotss_preemptions=co_sim.get("preemption_count", 0),
+        conformal_fixed_vs_fifo_fixed_pct=_pct(gp_ff, gp_cf),
+        fifo_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_fa),
+        fifo_osotss_vs_fifo_fixed_pct=_pct(gp_ff, gp_fo),
+        conformal_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_ca),
+        conformal_osotss_vs_fifo_fixed_pct=_pct(gp_ff, gp_co),
+        conformal_osotss_vs_conformal_amcsg_pct=_pct(gp_ca, gp_co),
+        osotss_vs_amcsg_cost_pct=_pct(cost_amcsg, cost_osotss),
+        osotss_conformal_sla_safe_delta=n_safe_co - n_safe_ca,
+    )
+
+
+def run_joint_osotss_abs_conformal_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    amcsg_gate: float = _JOSOTSS_AMCSG_GATE,
+) -> "JointOSOTSSAbsConformalReport":
+    """Joint OSOTSS x abs-conformal SRPT compound backtest on Azure LLM 2024 [run 2026-06-24].
+
+    Integration experiment under Five-Failure Rule. Prior MCS+conformal joint
+    backtest (2026-06-23) found negative compound because MCS over-provisioned
+    (c_mean~4.9), reducing queue depth and making SRPT less useful. This run
+    replaces MCS with OSOTSS (c_mean~4.2, under-provisioned vs fixed-c=4) to
+    test whether conformal SRPT gains more from the deeper queues.
+
+    Strongest fair baseline: conformal + AMCSG gate=12.5% (c_mean~4.458).
+    Candidate: conformal + OSOTSS causal-EWMA (production-deployable).
+
+    Args:
+        fixed_c:               Replica count for time-warp calibration (default 4).
+        target_rho:            Target cluster utilization (for time warp).
+        job_limit:             Request cap (default 5880 = full Azure fixture).
+        sla_s:                 E2E SLA budget in seconds (default 10s).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Abs-error calibration target for conformal.
+        azure_fixture:         Path to Azure LLM 2024 CSV fixture.
+        tick_seconds:          Capacity tick duration in seconds (default 60s).
+        amcsg_gate:            AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        JointOSOTSSAbsConformalReport with the 6-cell 2x3 KPIs.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_joint_osotss_abs_conformal_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_joint_osotss_abs_conformal",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+        amcsg_gate=amcsg_gate,
+    )
+
+
+def run_joint_osotss_abs_conformal_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    amcsg_gate: float = _JOSOTSS_AMCSG_GATE,
+) -> "JointOSOTSSAbsConformalReport":
+    """Joint OSOTSS x abs-conformal SRPT compound backtest on BurstGPT [run 2026-06-24].
+
+    BurstGPT variant of the Azure joint compound backtest. Uses SLA budget of
+    30s (vs 10s for Azure). Note: OSOTSS has a known 15-request n_sla_safe gap
+    vs AMCSG on BurstGPT under spot interruptions; this backtest uses provisioned
+    cost (no spot) so the gap may differ.
+
+    Strongest fair baseline: conformal + AMCSG gate=12.5%.
+    Candidate: conformal + OSOTSS causal-EWMA.
+
+    Args:
+        fixed_c:               Replica count for time-warp calibration (default 4).
+        target_rho:            Target cluster utilization (for time warp).
+        job_limit:             Request cap (default 5880).
+        sla_s:                 E2E SLA budget (default 30s for BurstGPT).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Abs-error calibration target for conformal.
+        jsonl_path:            BurstGPT HF JSONL fixture path.
+        tick_seconds:          Capacity tick duration in seconds (default 60s).
+        amcsg_gate:            AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        JointOSOTSSAbsConformalReport with the 6-cell 2x3 KPIs.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_joint_osotss_abs_conformal_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_joint_osotss_abs_conformal",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+        amcsg_gate=amcsg_gate,
+    )
