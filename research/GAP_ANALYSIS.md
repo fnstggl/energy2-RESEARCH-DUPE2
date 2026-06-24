@@ -8,6 +8,77 @@
 
 ---
 
+## Run 2026-06-24 — Benchmark Realism Audit + Research Review (BENCHMARK REALISM AUDIT / NULL RESULT — Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Five-Failure Rule constraint** (6/5 triggered): No new modules or optimizer paths may be added. The binding limit is that all viable research directions have been exhausted in the current architecture: (a) queue discipline improvements are blocked by prediction-degeneracy (running-median prior is near-constant), (b) stochastic oracle tuning failed because the BurstGPT gap is structural/deterministic, (c) compound experiments (OSOTSS × conformal) produced negative interactions. Architecture integration (Phase 1b replay unification) remains the only allowed non-trivial direction.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+**Phase 1b replay loop unification** is the highest-EV architectural step: collapses four replay loops into one engine, enabling combination search across workload classes. Expected KPI delta: 0% (correctness gate), but unblocks future combination work. No benchmark number improvement from this run.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. Running-median prior (LIVE_PRIOR_WINDOW=200) produces near-constant predictions (stdev=8.1 vs actual stdev=93.1, 37 unique values). All token-length-prediction-dependent improvements remain blocked.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Per-tick capacity on 15 BurstGPT burst ticks: OSOTSS n_sla_safe=5849 vs AMCSG=5864 (-15 requests). Confirmed structural/deterministic (not stochastic). No viable fix identified under Five-Failure Rule.
+
+### Q5. Which workloads benefit least?
+
+BurstGPT at 1× and Azure at 1× show TIE between min_cost_safe and SHU (zero benefit from oracle per-tick optimization at low load). High-load fixtures (500×) show +24.55% (Azure) and +2.57% (BurstGPT) gains.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Architecture only:
+1. Phase 1b replay loop unification (most impactful allowed work)
+2. Phase 4 frontier promotion (partial evidence, Azure only)
+3. Third public trace cross-validation (Alibaba GenAI 2026 if accessible)
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under Five-Failure Rule: **none** without either Phase 1b (enables combination search) or pilot telemetry for per-request token prediction. All five research papers reviewed this run are inapplicable.
+
+### Q8. What is the current north-star status?
+
+**Both traces north-star achieved via OSOTSS.** Azure: 159,578 gp/$ (+533.1% vs SLA-oracle). BurstGPT: 178,109 gp/$ (+778.2% vs SLA-oracle). Energy baseline: constraint_aware=0.33730 gp/$ (+11.1%). High-load: Azure 500×=2,657,445 (+24.55% vs SHU). All confirmed reproducible (std=0 across seeds).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved on both serving traces. Status is stable — all benchmarks confirmed deterministic (std=0). No regression risk from this run (no code changes).
+
+### Q10. Which assumptions might be wrong?
+
+1. **Static interruption model (10%/hr):** Real cloud spot interruption rates vary by region, time of day, and instance type. The actual probability may be substantially different.
+2. **Calculated priors (spot_price=$0.80/hr):** Actual spot pricing is dynamic and history-dependent.
+3. **Running-median prior adequacy:** Confirmed to be near-constant (37 unique values). Production token prediction would differ.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure LLM 2024 and BurstGPT HF. No viable third trace identified (Alibaba: image-gen workload mismatch; ShareGPT: no timestamps; LMSYS: no processed data).
+2. **Running-median prior** — Not representative of production prediction quality.
+3. **Calculated spot parameters** — Not validated against real cloud provider data.
+
+### Q12. Which public datasets should be added?
+
+Unchanged. Alibaba GenAI 2026 remains the only candidate for OSOTSS cross-validation, but image-generation workload may not match LLM-serving physics.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (6/5). Allowed actions: integration, validation, diagnosis, architecture simplification only.**
+
+1. **Phase 1b replay loop unification** — Collapse four replay loops into one engine. Requires 0%-delta parity gate before any behavior change. High complexity, high impact, unlocks combination search.
+2. **Third trace cross-validation** — OSOTSS on Alibaba GenAI 2026 if raw data accessible.
+3. **Phase 4 frontier promotion** — Promote BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: Azure +13%, BurstGPT untested).
+
+**Do NOT** attempt new queue discipline variants, new stochastic oracle tuning, or any module not already in the OPTIMIZER_UNIFICATION_PLAN.md approved list.
+
+Results: `research/results/benchmark_realism_replay_2026-06-24.{md,json}`
+
+---
+
 ## Run 2026-06-24 — Dead Frontier Code Deprecation (ARCHITECTURE SIMPLIFICATION — Phase 5, Five-Failure Rule compliant)
 
 ### Q1. What currently limits Aurelius most?

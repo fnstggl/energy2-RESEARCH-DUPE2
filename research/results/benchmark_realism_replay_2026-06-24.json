@@ -1,0 +1,94 @@
+{
+  "run_date": "2026-06-24",
+  "branch": "claude/sweet-hawking-rfjltx",
+  "classification": "BENCHMARK_REALISM_AUDIT",
+  "five_failure_rule": "ACTIVE",
+  "five_failure_count": "6/5",
+  "new_code_changes": false,
+  "canonical_energy_backtest": {
+    "policy": "constraint_aware",
+    "goodput_per_dollar": 0.33730,
+    "vs_current_price_only_pct": 11.1,
+    "status": "CONFIRMED_MATCHES_ROADMAP"
+  },
+  "amcsg_backtest": {
+    "gate_pct": 12.5,
+    "seed": 42,
+    "spot_fraction": 0.95,
+    "azure_llm_2024": {
+      "goodput_per_dollar": 150630,
+      "status": "CONFIRMED_MATCHES_ROADMAP"
+    },
+    "burstgpt_hf": {
+      "goodput_per_dollar": 168270,
+      "status": "CONFIRMED_MATCHES_ROADMAP"
+    }
+  },
+  "osotss_backtest": {
+    "seed": 42,
+    "ewma_alpha": 0.1,
+    "azure_llm_2024": {
+      "goodput_per_dollar": 159578.22,
+      "vs_amcsg_pct": 5.9406,
+      "n_sla_safe": 5823,
+      "n_sla_safe_vs_amcsg": 0,
+      "status": "CONFIRMED_MATCHES_ROADMAP"
+    },
+    "burstgpt_hf": {
+      "goodput_per_dollar": 178108.97,
+      "vs_amcsg_pct": 5.8471,
+      "n_sla_safe": 5849,
+      "n_sla_safe_gap_vs_amcsg": -15,
+      "gap_confirmed_structural": true,
+      "status": "CONFIRMED_MATCHES_ROADMAP"
+    }
+  },
+  "min_cost_safe_backtest": {
+    "timeout_gate_pct": 9.5,
+    "azure_llm_2024_500x": {
+      "goodput_per_dollar": 2657445.38,
+      "vs_shu_pct": 24.55,
+      "vs_ca_pct": 52.06,
+      "verdict": "ALPHA_WIN"
+    },
+    "burstgpt_hf_500x": {
+      "goodput_per_dollar": 1715476.85,
+      "vs_shu_pct": 2.57,
+      "vs_ca_pct": 16.35,
+      "verdict": "ALPHA_WIN"
+    },
+    "status": "CONFIRMED_MATCHES_ROADMAP"
+  },
+  "research_papers_reviewed": [
+    {
+      "title": "TokenScale",
+      "verdict": "NOT_APPLICABLE",
+      "reason": "token-velocity ~ already-failed Adaptive EWMA (run 3/5)"
+    },
+    {
+      "title": "Competitive Non-Clairvoyant KV-Cache Scheduling",
+      "verdict": "NOT_APPLICABLE",
+      "reason": "KV eviction under memory pressure — different problem class"
+    },
+    {
+      "title": "OServe — Online Optimal LLM Serving",
+      "verdict": "NOT_APPLICABLE",
+      "reason": "requires per-request predicted output length — blocked by prediction-degeneracy"
+    },
+    {
+      "title": "Hybrid Reactive-Proactive Autoscaling",
+      "verdict": "NOT_APPLICABLE",
+      "reason": "proactive component requires workload forecasting — arrival oracle issue diagnosed"
+    },
+    {
+      "title": "Conformal Prediction for Time-Series",
+      "verdict": "NOT_APPLICABLE",
+      "reason": "serving_queue already has abs-conformal; negative interaction with variable-c confirmed"
+    }
+  ],
+  "next_actions": [
+    "Phase 1b replay loop unification (0%-delta parity gate required)",
+    "Third public trace cross-validation (Alibaba GenAI 2026 if accessible)",
+    "Phase 4 frontier promotion (partial evidence: Azure +13% only)"
+  ]
+}
