@@ -8,6 +8,86 @@
 
 ---
 
+## Run 2026-06-24 — Multi-Seed Stochastic Gap Audit (BENCHMARK REALISM — Five-Failure Rule mandated)
+
+### Q1. What currently limits Aurelius most?
+
+**BurstGPT 15-request n_sla_safe gap (OSOTSS 5849 vs AMCSG 5864).** This run diagnoses the root cause.
+Multi-seed audit (seeds {42, 123, 456, 789, 1337}) reveals both AMCSG and OSOTSS n_sla_safe are **fully deterministic** (std=0 across all seeds on both traces).
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Architecture integration — wire OSOTSS through AureliusOptimizer(policy="replica_scaling") for end-to-end
+evaluation. The BurstGPT n_sla_safe gap is deterministic and cannot be closed by stochastic tuning.
+
+### Q3. Which forecasts are weakest?
+
+EWMA service-time prediction on burst ticks — the confirmed root cause of the 15-request BurstGPT gap.
+EWMA is slow to adapt to sudden load spikes on bursty traces.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Per-tick capacity on 15 BurstGPT burst ticks where OSOTSS under-provisions by 1 server vs AMCSG.
+This is deterministic (same 15 ticks fail on all seeds).
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Bursty traces (BurstGPT) where EWMA under-predictions create deterministic capacity shortfalls.
+
+### Q6. Which research direction appears strongest?
+
+Architecture integration (AureliusOptimizer replica_scaling policy end-to-end evaluation).
+All stochastic-oracle approaches have now been ruled out as mechanism-incorrect.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under Five-Failure Rule: architecture integration. The OSOTSS +5.94% goodput/$ gain on Azure
+is already validated and deterministic; the BurstGPT +5.85% goodput/$ gain is also validated
+with the n_sla_safe caveat documented.
+
+### Q8. What is the current north-star status?
+
+Azure: goodput/$ north-star achieved (159,578 >> 151,248). BurstGPT: goodput/$ north-star
+achieved (178,109 >> 121,680). BurstGPT n_sla_safe: 5849 (-15 vs AMCSG 5864; **confirmed structural, deterministic**).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star achieved on both traces. No regression needed.
+
+### Q10. Which assumptions might be wrong?
+
+**CORRECTED:** "The gap comes from stochastic spot interruptions" was **WRONG**. Multi-seed audit
+proves p_survive≈0.9982 makes the simulation effectively deterministic. The gap is from EWMA
+under-prediction on specific burst ticks, not from spot interruptions.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Single-seed stochastic evaluation**: Now confirmed NOT a weakness — the simulation is
+   effectively deterministic at p_interrupt=10%/hr. All previous results are valid single-seed.
+2. **Two public traces**: Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+ShareGPT or LMSYS Chatbot Arena — third public trace for OSOTSS cross-validation.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE. No new modules. Focus on:**
+
+1. **Architecture integration** — AureliusOptimizer(policy="replica_scaling") end-to-end
+2. **Replay validation** — OSOTSS on third public trace (ShareGPT/LMSYS)
+3. **Architecture simplification** — deprecate dead/duplicate code (frontier EVAL_WORKLOAD/BATCH_INFERENCE)
+4. **Accept the BurstGPT n_sla_safe gap** — it is deterministic, structural, not closable without
+   better burst prediction. Document as known limitation.
+
+**Root cause update:** BurstGPT gap is EWMA prediction error (not stochastic), confirmed by
+multi-seed audit (std=0 across 5 seeds). All stochastic-oracle approaches ruled out.
+
+Results: `research/results/multi_seed_stochastic_audit_2026-06-24.{md,json}`
+Tests: `tests/test_multi_seed_stochastic_audit.py` (10 fast tests passing)
+
+---
+
 ## Run 2026-06-24 — Forecasted MCS Spot Fleet (NEUTRAL/NEGATIVE — forecasted_mcs below AMCSG on both traces)
 
 ### Q1. What currently limits Aurelius most?
@@ -87,12 +167,17 @@ Tests: `tests/test_forecasted_mcs_spot_backtest.py` (18 pass, 28 skip if numpy a
 
 ## Run 2026-06-24 — Oracle Soft-SLA Continuation (OSSC) OSOTSS (NEGATIVE RESULT — Five-Failure Rule TRIGGERED)
 
+> **Root-cause correction (multi-seed audit 2026-06-24):** The Q1 diagnosis below was
+> incorrect. The 3-15 request gap does NOT come from stochastic spot interruptions —
+> multi-seed audit (std=0 across 5 seeds) proves the simulation is deterministic.
+> The gap comes from EWMA under-prediction on 15 specific burst ticks.
+
 ### Q1. What currently limits Aurelius most?
 
-**Structural stochastic gap on BurstGPT.** The OSOTSS oracle is deterministic-FIFO-optimal:
-it eliminates all deterministic FIFO violations, but 3–15 requests fail under stochastic spot
-interruptions. No deterministic post-convergence phase can fully close this gap because the residual
-failures arise from Binomial(c_spot, 0.9982) capacity shortfalls, not from deterministic SLA violations.
+**~~Structural stochastic gap on BurstGPT.~~** *(Corrected: deterministic EWMA prediction gap.)*
+The OSOTSS oracle is deterministic-FIFO-optimal:
+it eliminates all deterministic FIFO violations, but 15 requests fail because EWMA under-predicts
+service time on burst ticks — NOT from stochastic spot interruptions (confirmed by multi-seed audit).
 
 ### Q2. What theoretically offers the largest gain beyond OSOTSS?
 
