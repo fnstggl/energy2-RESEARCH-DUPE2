@@ -558,6 +558,10 @@ def compute_online_sotss_schedule(
     max_iters: int = REPLICA_MAX_ORACLE_ITERS,
     baseline_n_sla_safe: Optional[int] = None,
     ewma_alpha: float = REPLICA_OSOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
 ) -> tuple[list[int], int, int, int, int]:
     """Online SOTSS: SOTSS oracle loop with causal EWMA service-time predictions.
 
@@ -611,11 +615,23 @@ def compute_online_sotss_schedule(
     # predicted_svc_per_tick[k] = EWMA prediction before observing tick k
     ewma_val = global_mean_svc
     predicted_svc_per_tick: list[float] = []
+    burst_cooldown_remaining = 0
     for bucket in tick_svcs:
-        predicted_svc_per_tick.append(ewma_val)  # emit BEFORE updating
+        predicted_svc_per_tick.append(ewma_val)  # emit BEFORE updating (causal)
         if bucket:
             tick_mean = statistics.mean(bucket)
-            ewma_val = ewma_alpha * tick_mean + (1.0 - ewma_alpha) * ewma_val
+            if ewma_mode == "adaptive":
+                # Boost alpha when actual load spikes above threshold × current EWMA
+                # to track burst patterns faster. Purely causal: decision made after
+                # observing tick_mean but before the next prediction.
+                if tick_mean > burst_threshold * ewma_val:
+                    burst_cooldown_remaining = burst_cooldown_ticks
+                alpha_t = burst_alpha if burst_cooldown_remaining > 0 else ewma_alpha
+                if burst_cooldown_remaining > 0:
+                    burst_cooldown_remaining -= 1
+            else:
+                alpha_t = ewma_alpha
+            ewma_val = alpha_t * tick_mean + (1.0 - alpha_t) * ewma_val
 
     predicted_pairs: list[tuple[float, float]] = []
     for arr_w, tok in warped:
@@ -786,6 +802,19 @@ class ReplicaScalingConfig:
 
     ewma_alpha: float = REPLICA_OSOTSS_EWMA_ALPHA
     """EWMA decay for Online SOTSS causal service-time prediction (default 0.1)."""
+
+    ewma_mode: str = "fixed"
+    """EWMA tracking mode: ``"fixed"`` (constant alpha) or ``"adaptive"`` (burst-
+    sensitive alpha boost when actual tick load > ``burst_threshold`` × EWMA)."""
+
+    burst_threshold: float = 1.5
+    """Load ratio above which adaptive EWMA boosts alpha (``ewma_mode="adaptive"``)."""
+
+    burst_alpha: float = 0.5
+    """Elevated EWMA alpha used during burst cooldown (``ewma_mode="adaptive"``)."""
+
+    burst_cooldown_ticks: int = 2
+    """Ticks the boosted alpha persists after a burst is detected."""
 
     # ---- forecasted_mcs mode (fully deployable; forecasts arrivals + service) ----
     forecast_method: str = "ewma"
@@ -977,6 +1006,10 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                     aggressive_gate=cfg.aggressive_gate_pct,
                     max_iters=cfg.max_oracle_iters,
                     ewma_alpha=cfg.ewma_alpha,
+                    ewma_mode=cfg.ewma_mode,
+                    burst_threshold=cfg.burst_threshold,
+                    burst_alpha=cfg.burst_alpha,
+                    burst_cooldown_ticks=cfg.burst_cooldown_ticks,
                 )
             )
             c_mean = statistics.mean(c_sched) if c_sched else 0.0

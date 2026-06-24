@@ -24,6 +24,22 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Adaptive EWMA Online SOTSS [run 2026-06-24] — NEGATIVE RESULT (hypothesis falsified; stochastic/deterministic gap, not EWMA prediction error):**
+Adaptive EWMA alpha (burst_threshold=1.5, burst_alpha=0.5, burst_cooldown_ticks=2) added to `compute_online_sotss_schedule`
+(ewma_mode="fixed"/"adaptive") and wired through `ReplicaScalingConfig`, `ReplicaScalingPolicy.optimize()`, and all public
+backtest runners. Hypothesis: burst-sensitive alpha boost closes BurstGPT 15-request gap without oracle access. Empirical
+result: NO configuration achieves frontier improvement on both traces. Azure LLM 2024: adaptive EWMA never triggers (smooth
+workload, tick_mean < 2.0×ewma_val at every tick) → 0.00% change. BurstGPT HF: threshold=2.0+ never triggers (identical
+to fixed, 178,109 goodput/$, n_sla_safe=5849); threshold=1.5 triggers and adds 2–4 n_sla_safe requests but regresses
+goodput/$ by 0.39–1.84% due to over-provisioning. Root cause (revised): 15-request gap is a stochastic/deterministic
+simulation mismatch — oracle convergence check uses deterministic FIFO (no spot interruptions) while GSF evaluation uses
+Binomial interruptions (p_survive≈0.9982/tick), occasionally reducing effective capacity on borderline ticks. Adaptive EWMA
+can compensate by over-provisioning but not by improving oracle guidance efficiency. Original hypothesis ("oracle fixes wrong
+ticks due to EWMA underestimation") FALSIFIED. Infrastructure changes retained; ewma_mode="fixed" default is byte-identical
+to pre-change behavior. Five-Failure counter: **3/5**.
+Results: `research/results/adaptive_ewma_osotss_backtest_2026-06-24.{md,json}`.
+Tests: `tests/test_adaptive_ewma_backtest.py` (8 tests, all passing).
+
 **Online SOTSS (OSOTSS) [run 2026-06-23] — FRONTIER IMPROVEMENT on Azure (+5.94% vs AMCSG), MIXED on BurstGPT (+5.85%, borderline SLA):**
 Production-deployable SOTSS: replaces oracle actual-token service times with causal per-tick EWMA
 predictions (alpha=0.1). Dual-simulation design: violation identification uses predicted pairs
