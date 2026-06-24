@@ -23,15 +23,13 @@ import tempfile
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
+    DECOUPLED_HYBRID_ALPHA_DEFAULT,
     DEFAULT_BURSTGPT_HF_JSONL,
     DEFAULT_BURSTGPT_SLA_S,
-    DECOUPLED_HYBRID_ALPHA_DEFAULT,
     DecoupledHybridReport,
-    _run_decoupled_hybrid_backtest_on_trace,
     load_burstgpt_serving_requests_jsonl,
     run_burstgpt_hf_decoupled_hybrid_backtest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

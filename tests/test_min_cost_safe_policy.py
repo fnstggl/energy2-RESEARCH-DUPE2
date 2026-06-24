@@ -26,15 +26,14 @@ import os
 import pytest
 
 from aurelius.traces.backtest import (
+    _MCS_TIMEOUT_GATE,
     ALL_POLICIES,
     MIN_REPLICAS,
-    _MCS_TIMEOUT_GATE,
     _min_cost_safe_replicas,
     evaluate_tick,
     run_backtest,
 )
 from aurelius.traces.replay import requests_to_arrival_ticks
-from aurelius.traces.schema import time_rescale
 
 AZURE_FIXTURE = "tests/fixtures/azure_llm_2024_sample.csv"
 BURSTGPT_FIXTURE = "tests/fixtures/burstgpt_sample.csv"

@@ -29,18 +29,16 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional
 
 from .training_models import (
     TrainingFrontierCandidate,
     TrainingFrontierPoint,
-    TrainingSafetyStatus,
 )
 from .training_safety import (
     TrainingSafetyConfig,
     classify_training_frontier_point,
 )
-
 
 # ---------------------------------------------------------------------------
 # Per-policy candidate descriptors (transparent mapping; no hidden tuning).
@@ -154,7 +152,7 @@ def _point_from_philly_policy(
     # Queue / scheduling metrics that Philly reports directly.
     queue_wait_p95 = pol.get("queue_wait_s_p95")
     queue_wait_p99 = pol.get("queue_wait_s_p99")
-    completion_mean = pol.get("mean_completion_s")
+    pol.get("mean_completion_s")
     # Philly's existing summary doesn't expose p95/p99 completion; we
     # leave the predicted_*p95/p99 completion fields as ``None`` rather
     # than synthesize them.
@@ -168,8 +166,8 @@ def _point_from_philly_policy(
     # exceed 100% when one job blocks multiple times — that's surfaced
     # as a diagnostic only.
     failed_placement_rate_pct = pol.get("failed_placement_rate_pct")
-    fragmentation_block_events = pol.get("fragmentation_block_events")
-    fragmentation_loss_pct = pol.get("fragmentation_loss_pct")
+    pol.get("fragmentation_block_events")
+    pol.get("fragmentation_loss_pct")
     fragmentation_block_rate_pct = failed_placement_rate_pct
 
     backfill_placements = pol.get("backfill_placements")

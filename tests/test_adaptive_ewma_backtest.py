@@ -18,14 +18,11 @@ run in < 5s without network access.
 
 from __future__ import annotations
 
-import pytest
-
 from aurelius.optimizer.policies.replica_scaling import (
     ReplicaScalingConfig,
     ReplicaScalingPolicy,
     compute_online_sotss_schedule,
 )
-
 
 # ---------------------------------------------------------------------------
 # Synthetic trace helpers

@@ -9,7 +9,6 @@ direction on the real Azure LLM 2024 public trace.
 from __future__ import annotations
 
 import logging
-import math
 import os
 
 import pytest

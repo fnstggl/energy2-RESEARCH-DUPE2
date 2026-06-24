@@ -40,8 +40,8 @@ import time
 from typing import Optional
 
 from .schemas import (
-    CANONICAL_TRACE_TYPES,
     CANONICAL_TRACE_TYPE_TO_TRUST_TIER,
+    CANONICAL_TRACE_TYPES,
 )
 
 logger = logging.getLogger(__name__)

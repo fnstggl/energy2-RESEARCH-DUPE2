@@ -41,11 +41,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from aurelius.frontier import (  # noqa: E402
     batch_inference_estimator as bie,
+)
+from aurelius.frontier import (
     batch_inference_models as bim,
+)
+from aurelius.frontier import (
     batch_inference_safety as bis,
 )
 from aurelius.frontier.batch_inference_controller import (  # noqa: E402
-    BatchInferenceFrontierControllerConfig,
     choose_batch_inference_frontier_target,
     execute_batch_inference_frontier_decision,
 )
@@ -300,8 +303,12 @@ def test_azure_2024_phase_a_sanity_deadline_slack_slope():
 
 def test_existing_serving_frontier_modules_still_import():
     from aurelius.frontier import (  # noqa: F401
-        controller, dynamic_controller, dynamic_estimator, estimator,
-        models, safety,
+        controller,
+        dynamic_controller,
+        dynamic_estimator,
+        estimator,
+        models,
+        safety,
     )
 
 

@@ -32,8 +32,8 @@ shadow-mode evidence only — NOT production savings (``docs/RESULTS.md``
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Iterable, Optional, Sequence
+from dataclasses import dataclass
+from typing import Optional, Sequence
 
 from .dynamic_models import ServingTelemetryTick
 

@@ -17,9 +17,9 @@ import pytest
 from aurelius.benchmarks.srtf_serving_backtest import (
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
-    _Request,
     _erlang_c_sla_timeout_pct,
     _joint_mcs_c_schedule,
+    _Request,
     _service_time_s,
     _simulate_fifo_variable_c,
     _sotss_min_cost_schedule,
@@ -43,7 +43,6 @@ from aurelius.optimizer.policies.replica_scaling import (
     compute_mcs_c_schedule,
     compute_sotss_min_schedule,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -149,7 +148,6 @@ class TestMCSScheduleParity:
         assert policy == bench
 
     def test_burstgpt_30s_sla(self, raw_burstgpt, tmp_path):
-        from aurelius.benchmarks.srtf_serving_backtest import load_burstgpt_serving_requests
         raw = raw_burstgpt
         if not raw:
             pytest.skip("BurstGPT fixture unavailable")
@@ -439,7 +437,6 @@ class TestEdgeCases:
         assert c_sched[0] >= 1
 
     def test_single_request_oracle_matches_benchmark(self):
-        raw = [(0.0, 200)]
         warp = 1.0
         c_sched = [1]
         reqs = [

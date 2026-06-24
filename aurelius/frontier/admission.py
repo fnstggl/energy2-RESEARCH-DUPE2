@@ -43,7 +43,6 @@ Directional simulator/backtest evidence only — NOT production savings.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
@@ -51,12 +50,9 @@ from .dynamic_models import ServingTelemetryTick
 from .risk import (
     RiskConfig,
     _clip,
-    _cv,
     _ema,
     _ema_slope,
     _telemetry_confidence_ok,
-    estimate_queue_blowup_risk,
-    estimate_sla_risk,
 )
 
 # ---------------------------------------------------------------------------
@@ -371,7 +367,7 @@ def evaluate_admission(
     # ADMIT   — otherwise.
 
     is_best_effort = sla_class in {"best_effort", "background", "background_maintenance"}
-    hard_ceiling = kv_score is not None and kv_score >= _clip(
+    kv_score is not None and kv_score >= _clip(
         cfg.kv_hard_ceiling / cfg.kv_hard_ceiling  # = 1.0
     )
 

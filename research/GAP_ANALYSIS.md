@@ -8,6 +8,69 @@
 
 ---
 
+## Run 2026-06-24 — OSOTSS Canonical Routing Parity (ARCHITECTURE CONVERGENCE — Five-Failure Rule integration)
+
+### Q1. What currently limits Aurelius most?
+
+**Architecture divergence**: OSOTSS was the only frontier mode not routing through the canonical `AureliusOptimizer` facade.  A production user calling `AureliusOptimizer(policy="replica_scaling", mode="online_sotss")` would receive a different (weaker) schedule because `ReplicaScalingConfig` lacked `baseline_n_sla_safe`, causing the oracle to use a more-conservative deterministic floor instead of the AMCSG stochastic baseline.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Architecture integration complete. Next highest-EV options: (1) energy × replica_scaling compound (+11.1% energy standalone, unknown compound; disallowed by Five-Failure Rule until reset). (2) OSOTSS on third public trace (Alibaba GenAI 2026 if compatible).
+
+### Q3. Which forecasts are weakest?
+
+EWMA service-time prediction on burst ticks — root cause of 15-request BurstGPT n_sla_safe gap (structural, deterministic, confirmed by multi-seed audit).
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Per-tick capacity on 15 BurstGPT burst ticks where OSOTSS under-provisions by 1 server vs AMCSG. Structural; cannot be closed without better burst prediction or oracle access to AMCSG's fixed higher-c schedule.
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Bursty traces (BurstGPT) on the n_sla_safe metric. Goodput/$ improvement holds (+5.85%).
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Allowed work: architecture simplification (thin-delegate promotion), third-trace cross-validation (Alibaba/LMSYS if timestamp data exists).
+
+### Q7. What is the shortest path to another +1% gain?
+
+Architecture is now converged. Third-trace cross-validation would confirm generalizability of OSOTSS +5.9% gain beyond Azure and BurstGPT.
+
+### Q8. What is the current north-star status?
+
+**Azure: goodput/$ north-star achieved** (159,578 >> 151,248). **BurstGPT: goodput/$ north-star achieved** (178,109 >> 121,680). BurstGPT n_sla_safe: 5849 (−15 vs AMCSG 5864; confirmed structural, deterministic, not closable without better burst prediction).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved on both traces. No regression needed.
+
+### Q10. Which assumptions might be wrong?
+
+All previously wrong assumptions corrected: stochastic gap hypothesis falsified (multi-seed audit), conformal SRPT compound hypothesis falsified (PR #66 joint backtest). Current assumptions are well-calibrated.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure LLM 2024 and BurstGPT HF. Third trace (Alibaba GenAI 2026) not yet evaluated with OSOTSS.
+2. **Single cost model** — GSF spot-fleet at 95% spot, $0.80/hr.
+
+### Q12. Which public datasets should be added?
+
+Alibaba GenAI 2026 (`alibaba_genai_2026` — already in `data/external/alibaba_genai/`) for OSOTSS cross-validation if arrival timestamps are available.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Canonical architecture is now complete. Next allowed actions:
+1. **Third trace cross-validation** — OSOTSS on Alibaba GenAI 2026 (check timestamp format compatibility)
+2. **Thin-delegate promotion** — route `amcsg` / `sotss_min` backtests through optimizer facade too (lower priority since OSOTSS is frontier)
+3. **Architecture simplification** — deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE)
+
+Results: `research/results/osotss_canonical_routing_parity_2026-06-24.md`
+Tests: `tests/test_osotss_canonical_routing_parity.py` (38 tests, all passing)
+
+---
+
 ## Run 2026-06-24 — Multi-Seed Stochastic Gap Audit (BENCHMARK REALISM — Five-Failure Rule mandated)
 
 ### Q1. What currently limits Aurelius most?

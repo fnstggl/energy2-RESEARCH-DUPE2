@@ -21,7 +21,6 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aurelius.traces.hf_corpus import discovery  # noqa: E402
 
 REPO_ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CANDIDATES_PATH = (

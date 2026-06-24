@@ -27,12 +27,10 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 
 import pytest
 
 from aurelius.frontier import (
-    ANTICIPATORY,
     REAL_DISABLED,
     REAL_ENABLED,
     SHADOW_MODE,
@@ -40,7 +38,6 @@ from aurelius.frontier import (
     FrontierAction,
     FrontierControllerConfig,
     FrontierDecision,
-    FrontierEstimatorConfig,
     FrontierPoint,
     FrontierShadowDecisionLog,
     FrontierShadowLog,
@@ -403,7 +400,7 @@ def test_real_enabled_safety_vetoes_block_execution():
         _pt(0.65, 2.0e6, queue_p99=5000.0),
     ])
     profile = _profile()
-    d = choose_safe_utilization_target(profile, pts, current_rho=0.55)
+    choose_safe_utilization_target(profile, pts, current_rho=0.55)
     # Forge a decision with vetoes (LOWER_RHO carries them)
     # Now executor MUST NOT be called.
     called: list = []

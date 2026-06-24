@@ -15,14 +15,12 @@ Core contracts verified:
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
-    SOTSSReport,
-    _SOTSS_AGGRESSIVE_GATE,
     _SOTSS_SAFE_GATE,
+    SOTSSReport,
     _sotss_min_cost_schedule,
     run_sotss_azure_backtest,
     run_sotss_burstgpt_backtest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Class 1: SOTSSReport dataclass contract
@@ -167,7 +165,10 @@ class TestSOTSSMinCostSchedule:
     @pytest.fixture(scope="class")
     def tiny_raw(self):
         """Minimal synthetic trace: 10 requests, ~1 request per tick."""
-        from aurelius.benchmarks.srtf_serving_backtest import load_serving_requests, DEFAULT_AZURE_FIXTURE
+        from aurelius.benchmarks.srtf_serving_backtest import (
+            DEFAULT_AZURE_FIXTURE,
+            load_serving_requests,
+        )
         raw = load_serving_requests(DEFAULT_AZURE_FIXTURE, limit=100)
         return raw
 

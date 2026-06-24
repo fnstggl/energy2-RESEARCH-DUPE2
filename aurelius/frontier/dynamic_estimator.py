@@ -27,8 +27,7 @@ Hard rules (asserted by tests):
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence
 
 from .dynamic_models import (

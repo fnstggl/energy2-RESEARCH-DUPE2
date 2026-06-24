@@ -47,11 +47,14 @@ from aurelius.frontier import (  # noqa: E402
 )
 from aurelius.frontier import (  # noqa: E402
     eval_workload_estimator as ewe,
+)
+from aurelius.frontier import (
     eval_workload_models as ewm,
+)
+from aurelius.frontier import (
     eval_workload_safety as ews,
 )
 from aurelius.frontier.eval_workload_controller import (  # noqa: E402
-    EvalWorkloadFrontierControllerConfig,
     choose_eval_workload_frontier_target,
     execute_eval_workload_frontier_decision,
 )
@@ -347,6 +350,10 @@ def test_frontier_decision_to_dict_serializable():
 def test_serving_rho_frontier_still_imports():
     # Confirm existing serving frontier modules still importable.
     from aurelius.frontier import (  # noqa: F401
-        controller, dynamic_controller, dynamic_estimator, estimator,
-        models, safety,
+        controller,
+        dynamic_controller,
+        dynamic_estimator,
+        estimator,
+        models,
+        safety,
     )

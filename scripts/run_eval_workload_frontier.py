@@ -31,15 +31,17 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from aurelius.frontier import (  # noqa: E402
     eval_workload_estimator as ewe,
+)
+from aurelius.frontier import (
     eval_workload_models as ewm,
+)
+from aurelius.frontier import (
     eval_workload_safety as ews,
 )
 from aurelius.frontier.eval_workload_controller import (  # noqa: E402
     choose_eval_workload_frontier_target,
 )
 from aurelius.traces import sharegpt_aiperf  # noqa: E402
-from aurelius.traces.eval_schema import EvalWorkloadRequest  # noqa: E402
-
 
 DEFAULT_BOUNDED = (REPO_ROOT / "data" / "external" / "sharegpt_aiperf"
                    / "raw" / "sg_52k_head.json")
