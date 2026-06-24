@@ -8,6 +8,130 @@
 
 ---
 
+## Run 2026-06-24 — Dead Frontier Code Deprecation (ARCHITECTURE SIMPLIFICATION — Phase 5, Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Maintenance tax from dead frontier families**: `aurelius/frontier/eval_workload_*` and `batch_inference_*` (8 modules, ~1,827 LOC) had zero non-test/non-script consumers but remained in the repo as maintenance surface. EVAL_WORKLOAD and BATCH_INFERENCE frontier families were benchmarked in the Phase 6 impact table and found to have no benchmark consumer (confirmed by grep). Dead code creates confusion about which families are active and wastes review bandwidth.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Unchanged. Dead code removal does not affect KPIs.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Unchanged. Per-tick capacity on 15 BurstGPT burst ticks.
+
+### Q5. Which workloads benefit least?
+
+Unchanged.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Remaining allowed architecture work: Phase 1b replay loop unification.
+
+### Q7. What is the shortest path to another +1% gain?
+
+No new gain from this run (0% KPI delta by design). Replay loop unification (Phase 1b) would unblock combination search.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: goodput/$ achieved (+5.94% via OSOTSS). BurstGPT: goodput/$ achieved (+5.85%). BurstGPT n_sla_safe gap: −15 requests (structural, confirmed deterministic).
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged.
+
+### Q10. Which assumptions might be wrong?
+
+Unchanged.
+
+### Q11. Which benchmark weaknesses exist?
+
+Unchanged (two public traces only, single cost model).
+
+### Q12. Which public datasets should be added?
+
+Unchanged (Alibaba GenAI 2026 for OSOTSS cross-validation).
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Dead code deprecation complete (Phase 5). Remaining architecture work:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact; requires 0%-delta parity gate)
+2. **Third trace cross-validation** — OSOTSS on Alibaba GenAI 2026 if raw data available
+3. **Phase 4** — Promote frontier BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: SUF +13% Azure only)
+
+Results: `research/results/dead_frontier_deprecation_2026-06-24.json`
+
+---
+
+## Run 2026-06-24 — AMCSG + SOTSS-MIN Canonical Routing Parity (ARCHITECTURE CONVERGENCE — Phase 3b, Five-Failure Rule integration)
+
+### Q1. What currently limits Aurelius most?
+
+**Architecture divergence**: `_run_amcsg_backtest` and `_run_sotss_backtest` called `_joint_mcs_c_schedule` / `_sotss_min_cost_schedule` directly instead of routing through `_REPLICA_SCALING_OPTIMIZER.optimize()`. Additionally, `ReplicaScalingPolicy.optimize(mode="sotss_min")` silently discarded `initial_violations` (using `_`), making it unavailable to any caller going through the canonical optimizer facade.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Unchanged from previous run. Architecture integration complete for all primary backtest entry points.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA service-time prediction on burst ticks.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+All primary decisions now route through canonical optimizer. Secondary research paths (compound experiments, gate sweep variations) still call delegate functions directly — acceptable since these are research-only paths, not primary benchmarks.
+
+### Q5. Which workloads benefit least?
+
+Bursty traces (BurstGPT) on n_sla_safe metric — structural, confirmed deterministic.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Architecture is now converged for primary paths. Next: deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE) or Phase 1b replay loop unification.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Architecture is now fully converged for primary paths. Third-trace cross-validation (Alibaba GenAI 2026) would confirm generalizability — but raw data not present.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: north-star achieved (159,578 >> 151,248). BurstGPT: north-star achieved.
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved.
+
+### Q10. Which assumptions might be wrong?
+
+None identified. All previously wrong assumptions corrected.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. Two public traces only (Azure LLM 2024, BurstGPT HF).
+2. Secondary research backtest paths (compound experiments, gate sweeps) still call delegate functions directly — not a KPI issue, but architecture inconsistency.
+
+### Q12. Which public datasets should be added?
+
+Alibaba GenAI 2026 raw data not present. BurstGPT and Azure remain the only two fully integrated public traces.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Canonical architecture is now complete for all primary paths. Next allowed actions:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact)
+2. **Architecture simplification** — deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE)
+3. **Route secondary research paths** — gate sweep variations, compound experiments through canonical optimizer
+
+Results: `research/results/amcsg_sotss_canonical_routing_parity_2026-06-24.md`
+Tests: `tests/test_amcsg_sotss_canonical_routing_parity.py` (33 tests, all passing)
+
+---
+
 ## Run 2026-06-24 — OSOTSS Canonical Routing Parity (ARCHITECTURE CONVERGENCE — Five-Failure Rule integration)
 
 ### Q1. What currently limits Aurelius most?

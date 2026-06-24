@@ -10075,9 +10075,18 @@ def _run_amcsg_backtest(
     baseline_entry = None
 
     for gate in gates:
-        c_schedule = _joint_mcs_c_schedule(
-            raw, tick_seconds, warp, mcs_gate=gate, sla_s=sla_s
+        # [Phase 4 delegate] Route AMCSG gate sweep through canonical optimizer.
+        _amcsg_r = _REPLICA_SCALING_OPTIMIZER.optimize(
+            raw,
+            warp=warp,
+            config=_ReplicaScalingConfig(
+                mode="amcsg",
+                tick_seconds=tick_seconds,
+                sla_s=sla_s,
+                safe_gate_pct=gate,
+            ),
         )
+        c_schedule = _amcsg_r.c_schedule
         n_ticks = len(c_schedule)
 
         # Cost at f=0.95: all ticks are all-spot at these load levels
@@ -11254,9 +11263,20 @@ def _run_sotss_backtest(
 
     # -----------------------------------------------------------------------
     # Step 1: Compute AMCSG safe-gate baseline (gate=12.5%) for comparison.
+    # [Phase 4 delegate] Routes through canonical AureliusOptimizer facade.
     # Same simulation path as _run_amcsg_backtest for apple-to-apple parity.
     # -----------------------------------------------------------------------
-    c_amcsg = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=safe_gate, sla_s=sla_s)
+    _sotss_amcsg_r = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="amcsg",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=safe_gate,
+        ),
+    )
+    c_amcsg = _sotss_amcsg_r.c_schedule
     amcsg_cost = _gsf_spot_fleet_cost(
         c_amcsg, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
     )
@@ -11271,20 +11291,26 @@ def _run_sotss_backtest(
 
     # -----------------------------------------------------------------------
     # Step 2: Run SOTSS oracle loop (deterministic, uses actual tokens).
+    # [Phase 4 delegate] Routes through canonical AureliusOptimizer facade.
     # The oracle can see actual token counts — it is an offline capacity planner.
     # -----------------------------------------------------------------------
-    c_sotss, n_iters, initial_violations, n_ticks_cheaper, baseline_used = (
-        _sotss_min_cost_schedule(
-            raw,
-            tick_seconds,
-            warp,
-            sla_s,
-            safe_gate=safe_gate,
-            aggressive_gate=aggressive_gate,
-            max_iters=max_iters,
-            baseline_n_sla_safe=None,  # computed from gate=9.5% inside oracle
-        )
+    _sotss_r = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="sotss_min",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=safe_gate,
+            aggressive_gate_pct=aggressive_gate,
+            max_oracle_iters=max_iters,
+        ),
     )
+    c_sotss = _sotss_r.c_schedule
+    n_iters = _sotss_r.oracle_iters
+    initial_violations = _sotss_r.initial_violations
+    n_ticks_cheaper = _sotss_r.n_ticks_cheaper
+    baseline_used = _sotss_r.baseline_n_sla_safe
 
     # -----------------------------------------------------------------------
     # Step 3: Final SOTSS evaluation using same spot-fleet simulation as AMCSG

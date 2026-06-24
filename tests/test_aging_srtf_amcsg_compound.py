@@ -27,16 +27,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     AgingSRTFAMCSGReport,
-    _simulate_aging_srtf_variable_c,
     _apply_gsf_spot_interruptions,
+    _Request,
+    _simulate_aging_srtf_variable_c,
     run_aging_srtf_amcsg_azure_backtest,
     run_aging_srtf_amcsg_burstgpt_backtest,
-    _Request,
-    DEFAULT_AZURE_FIXTURE,
-    DEFAULT_BURSTGPT_HF_JSONL,
-    AGING_ALPHA_DEFAULT,
 )
-
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 

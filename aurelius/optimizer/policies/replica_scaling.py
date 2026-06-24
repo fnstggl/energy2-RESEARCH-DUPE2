@@ -934,7 +934,8 @@ class ReplicaScalingResult:
 
     initial_violations: int = 0
     """Initial FIFO-violation count before the oracle started iterating.
-    Non-zero for ``online_sotss`` mode only; 0 for all other modes."""
+    Non-zero for oracle modes (``sotss_min``, ``sotss_gsf``, ``online_sotss``);
+    0 for ``amcsg`` mode."""
 
 
 # ---------------------------------------------------------------------------
@@ -1022,7 +1023,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
             )
 
         if cfg.mode == "sotss_min":
-            c_sched, n_iters, _, n_ticks_cheaper, baseline_n_sla_safe = (
+            c_sched, n_iters, init_viols, n_ticks_cheaper, baseline_n_sla_safe = (
                 compute_sotss_min_schedule(
                     raw, cfg.tick_seconds, w,
                     sla_s=cfg.sla_s,
@@ -1041,6 +1042,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                 oracle_iters=n_iters,
                 n_ticks_cheaper=n_ticks_cheaper,
                 baseline_n_sla_safe=baseline_n_sla_safe,
+                initial_violations=init_viols,
             )
 
         if cfg.mode == "sotss_gsf":
