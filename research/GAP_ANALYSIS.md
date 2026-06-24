@@ -8,6 +8,83 @@
 
 ---
 
+## Run 2026-06-24 — Forecasted MCS Spot Fleet (NEUTRAL/NEGATIVE — forecasted_mcs below AMCSG on both traces)
+
+### Q1. What currently limits Aurelius most?
+
+**The forecasted_mcs modes cannot match AMCSG's arrival-oracle advantage.** AMCSG uses actual tick-t
+arrival counts (oracle). Forecasted_mcs uses only data ≤ t-1. On bursty traffic (BurstGPT), the one-tick
+lag causes 520 additional SLA violations (lag1) or 2024 additional violations (ewma) vs AMCSG.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Same as prior run — architecture integration, cross-trace validation. The forecasted_mcs deployment-realism
+finding confirms the fundamental tradeoff: full deployability comes at a cost vs arrival-oracle baselines.
+
+### Q3. Which forecasts are weakest?
+
+Forecasted_mcs arrival forecast is weakest on bursty traces. Lag1 misses the burst by exactly one tick;
+EWMA smooths out the burst onset, making under-provisioning even worse.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Forecasted arrival for bursty traffic** — no single-tick lag approach can anticipate a burst.
+2. **BurstGPT border ticks** — same structural stochastic gap from prior analysis.
+
+### Q5. Which workloads benefit least from forecasted_mcs?
+
+Bursty traces. Smooth traces (Azure) are closer — ewma is only −0.31% below AMCSG on Azure. BurstGPT
+lag1 p99=47.5s (vs 30s SLA); ewma p99=67.4s. The mode is unsafe on bursty traces at default settings.
+
+### Q6. Which research direction appears strongest?
+
+**Same as prior run: architecture integration and replay validation.** The forecasted_mcs result
+independently confirms the Five-Failure Rule focus: adding new scheduling approaches does not improve
+on AMCSG without oracle arrival knowledge. The canonical integration path (Phase 1b unified replay)
+remains the highest-value unblocked work.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under the architectural focus rule, the shortest path is validation: OSOTSS on a third public trace.
+
+### Q8. What is the current north-star status?
+
+Azure: OSOTSS 159,578 (+5.94% vs AMCSG). BurstGPT: OSOTSS 178,109 (+5.85% vs AMCSG). Both above
+north-star goodput/$ threshold. Forecasted_mcs: below north-star on both traces.
+
+### Q9. What would need to be true to maintain north-star?
+
+No regressions to OSOTSS. Forecasted_mcs is not a leaderboard entry — negative result, no update.
+
+### Q10. Which assumptions might be wrong?
+
+The arrival-oracle hypothesis is confirmed: forecasted_mcs disadvantage is structural, not a tuning
+issue. EWMA alpha, window, or safety buffer changes would not close a one-tick structural lag.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure (smooth) and BurstGPT (bursty). Third trace needed.
+2. **Single seed (42)** — stochastic evaluation; multi-seed audit merged (PR #64).
+
+### Q12. Which public datasets should be added?
+
+ShareGPT or LMSYS Chatbot Arena for OSOTSS cross-validation.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (5/5). No new modules. Focus on:**
+
+1. **Architecture integration** — Phase 1b unified replay engine (see OPTIMIZER_UNIFICATION_PLAN.md)
+2. **Replay validation** — OSOTSS on a third public trace (ShareGPT/LMSYS)
+3. **Benchmark realism** — multi-seed audit for BurstGPT stochastic gap (PR #64 merged)
+4. **Bottleneck diagnosis** — stochastic oracle characterization for residual 3-request gap
+5. **Architecture simplification** — see Phase 4/5 in OPTIMIZER_UNIFICATION_PLAN.md
+
+Results: `research/results/forecasted_mcs_spot_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_forecasted_mcs_spot_backtest.py` (18 pass, 28 skip if numpy absent)
+
+---
+
 ## Run 2026-06-24 — Oracle Soft-SLA Continuation (OSSC) OSOTSS (NEGATIVE RESULT — Five-Failure Rule TRIGGERED)
 
 ### Q1. What currently limits Aurelius most?
