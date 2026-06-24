@@ -562,6 +562,7 @@ def compute_online_sotss_schedule(
     burst_threshold: float = 1.5,
     burst_alpha: float = 0.5,
     burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
 ) -> tuple[list[int], int, int, int, int]:
     """Online SOTSS: SOTSS oracle loop with causal EWMA service-time predictions.
 
@@ -579,15 +580,23 @@ def compute_online_sotss_schedule(
     service times, so reported goodput/$ reflects real-world performance.
 
     Args:
-        raw:                  ``(arrival_s_unwarped, output_tokens)`` tuples.
-        tick_seconds:         Tick duration in warped seconds.
-        warp:                 Time-warp scalar.
-        sla_s:                E2E SLA budget in seconds.
-        safe_gate:            Ceiling gate (%) — AMCSG best-safe schedule.
-        aggressive_gate:      Starting gate (%) — minimum stable c.
-        max_iters:            Hard iteration cap.
-        baseline_n_sla_safe:  Safety floor override.
-        ewma_alpha:           EWMA decay for per-tick mean prediction (default 0.1).
+        raw:                     ``(arrival_s_unwarped, output_tokens)`` tuples.
+        tick_seconds:            Tick duration in warped seconds.
+        warp:                    Time-warp scalar.
+        sla_s:                   E2E SLA budget in seconds.
+        safe_gate:               Ceiling gate (%) — AMCSG best-safe schedule.
+        aggressive_gate:         Starting gate (%) — minimum stable c.
+        max_iters:               Hard iteration cap.
+        baseline_n_sla_safe:     Safety floor override.
+        ewma_alpha:              EWMA decay for per-tick mean prediction (default 0.1).
+        interrupt_safety_margin: Extra SLA-safe requests the oracle must achieve above
+            ``baseline_n_sla_safe`` before converging.  Compensates for the
+            stochastic/deterministic mismatch: the oracle uses deterministic FIFO
+            (no spot interruptions) while the evaluation uses stochastic Binomial
+            interruptions.  Setting this to the expected interruption-induced SLA
+            misses (e.g. 15–25 for BurstGPT at p_interrupt=10%/hr) closes the
+            gap without future-token access.  Default 0 preserves byte-identical
+            behavior with the pre-margin OSOTSS.
 
     Returns:
         ``(c_schedule, n_iters, initial_violations, n_ticks_cheaper,
@@ -667,7 +676,10 @@ def compute_online_sotss_schedule(
 
         n_iters = iteration + 1
 
-        if n_sla_safe >= baseline_n_sla_safe:
+        # Convergence target includes interrupt_safety_margin to account for the
+        # stochastic/deterministic mismatch: the oracle runs deterministic FIFO
+        # while the final evaluation uses stochastic spot interruptions.
+        if n_sla_safe >= baseline_n_sla_safe + interrupt_safety_margin:
             break
 
         # Violation identification uses predicted service times → causal/production-safe
@@ -815,6 +827,15 @@ class ReplicaScalingConfig:
 
     burst_cooldown_ticks: int = 2
     """Ticks the boosted alpha persists after a burst is detected."""
+
+    interrupt_safety_margin: int = 0
+    """Extra SLA-safe requests the oracle must reach above ``baseline_n_sla_safe``
+    before converging.  Compensates for the stochastic/deterministic mismatch:
+    the oracle uses deterministic FIFO (no spot interruptions) while the GSF
+    evaluation includes Binomial interruptions.  Set to the expected
+    interruption-induced SLA misses for the target trace and spot fraction
+    (e.g. 15–25 for BurstGPT at p_interrupt=10%/hr, spot_fraction=0.95).
+    Default 0 preserves byte-identical behavior with the pre-margin OSOTSS."""
 
     # ---- forecasted_mcs mode (fully deployable; forecasts arrivals + service) ----
     forecast_method: str = "ewma"
@@ -1010,6 +1031,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                     burst_threshold=cfg.burst_threshold,
                     burst_alpha=cfg.burst_alpha,
                     burst_cooldown_ticks=cfg.burst_cooldown_ticks,
+                    interrupt_safety_margin=cfg.interrupt_safety_margin,
                 )
             )
             c_mean = statistics.mean(c_sched) if c_sched else 0.0

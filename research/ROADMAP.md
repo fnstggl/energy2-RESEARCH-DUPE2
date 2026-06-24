@@ -24,6 +24,21 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**Stochastic Safety Margin OSOTSS [run 2026-06-24] — NEGATIVE RESULT (mechanism misdiagnosed; margin ineffective due to oracle secondary-break):**
+`interrupt_safety_margin` parameter (∈ {0,10,15,20,25,30}) added to `compute_online_sotss_schedule` and wired through
+`ReplicaScalingConfig`, `ReplicaScalingPolicy.optimize()`, and all public backtest runners.  Hypothesis: adding margin to
+oracle convergence target (`baseline_n_sla_safe + interrupt_safety_margin`) forces oracle to over-provision, closing the
+BurstGPT 15-request SLA gap caused by the stochastic/deterministic mismatch.  Empirical result: zero effect on both traces
+(all 6 margin values identical).  Root cause: oracle's secondary termination condition (`violators=[]` in deterministic FIFO)
+fires at n_sla_safe=5849 before the primary convergence check `n_sla_safe >= 5864+margin` is evaluated.  The oracle exits via
+the secondary break because it has no remaining deterministic violations — the margin-adjusted primary threshold is never tested.
+The oracle ceiling (5849) is structural: it has no mechanism to add capacity beyond "no deterministic violations."  AMCSG
+achieves 5864 stochastically because its fixed higher-c schedule (gate=12.5%) provides more total server capacity than OSOTSS's
+optimized minimum-violation schedule, absorbing stochastic interruptions on borderline ticks.  Infrastructure retained (default=0
+is byte-identical); approach is architecturally ineffective.  Five-Failure counter: **4/5** (⚠️ one away from architectural focus rule).
+Results: `research/results/stochastic_safety_margin_osotss_backtest_2026-06-24.{md,json}`.
+Tests: `tests/test_stochastic_safety_margin_backtest.py` (10 tests, all passing).
+
 **Adaptive EWMA Online SOTSS [run 2026-06-24] — NEGATIVE RESULT (hypothesis falsified; stochastic/deterministic gap, not EWMA prediction error):**
 Adaptive EWMA alpha (burst_threshold=1.5, burst_alpha=0.5, burst_cooldown_ticks=2) added to `compute_online_sotss_schedule`
 (ewma_mode="fixed"/"adaptive") and wired through `ReplicaScalingConfig`, `ReplicaScalingPolicy.optimize()`, and all public
