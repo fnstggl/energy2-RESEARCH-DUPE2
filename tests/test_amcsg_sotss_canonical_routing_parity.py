@@ -30,12 +30,7 @@ from aurelius.benchmarks.srtf_serving_backtest import (
 )
 from aurelius.optimizer import AureliusOptimizer
 from aurelius.optimizer.policies.replica_scaling import (
-    REPLICA_AGGRESSIVE_GATE,
-    REPLICA_MAX_ORACLE_ITERS,
-    REPLICA_SAFE_GATE,
     ReplicaScalingConfig,
-    compute_mcs_c_schedule,
-    compute_sotss_min_schedule,
 )
 
 _OPTIMIZER = AureliusOptimizer(policy="replica_scaling")
