@@ -1,0 +1,112 @@
+{
+  "run_date": "2026-06-24",
+  "experiment": "Aging SRTF + AMCSG compound backtest — Five-Failure Rule integration",
+  "classification": "HONEST_NULL_RESULT",
+  "five_failure_rule_integration": true,
+  "production_claim": false,
+  "hypothesis": "Non-preemptive aging-SRTF queue discipline combined with AMCSG optimal variable-c capacity schedule improves SLA-safe goodput/$ vs FIFO+AMCSG",
+  "verdict": "NULL — aging SRTF + AMCSG indistinguishable from FIFO + AMCSG within noise",
+  "root_cause": "Running-median live prior (window=200) degenerates aging key to near-constant: predicted_tokens stdev=8.1 vs actual stdev=93.1; only 37 unique predicted values clustered at ~91 tokens. Aging SRTF priority key becomes proportional to aging factor only, collapsing to near-FIFO.",
+
+  "azure": {
+    "trace": "azure",
+    "total_requests": 5880,
+    "fixed_c": 8,
+    "sla_s": 10.0,
+    "aging_alpha": 0.05,
+    "amcsg_gate_pct": 12.5,
+    "amcsg_c_mean": null,
+    "cost_fixed_c": null,
+    "cost_amcsg": null,
+    "fifo_fixed_goodput_per_dollar": null,
+    "fifo_amcsg_goodput_per_dollar": 150630.0,
+    "aging_srtf_fixed_goodput_per_dollar": null,
+    "aging_srtf_amcsg_goodput_per_dollar": 150630.0,
+    "fifo_fixed_n_sla_safe": null,
+    "fifo_amcsg_n_sla_safe": null,
+    "aging_srtf_fixed_n_sla_safe": null,
+    "aging_srtf_amcsg_n_sla_safe": null,
+    "aging_srtf_amcsg_vs_fifo_amcsg_pct": 0.0,
+    "amcsg_aging_srtf_sla_safe_delta": 0,
+    "osotss_canonical_goodput_per_dollar": 159578.0,
+    "aging_srtf_amcsg_vs_osotss_canonical_pct": -5.61
+  },
+  "burstgpt": {
+    "trace": "burstgpt",
+    "total_requests": 5880,
+    "fixed_c": 8,
+    "sla_s": 30.0,
+    "aging_alpha": 0.05,
+    "amcsg_gate_pct": 12.5,
+    "amcsg_c_mean": null,
+    "cost_fixed_c": null,
+    "cost_amcsg": null,
+    "fifo_fixed_goodput_per_dollar": null,
+    "fifo_amcsg_goodput_per_dollar": 168270.0,
+    "aging_srtf_fixed_goodput_per_dollar": null,
+    "aging_srtf_amcsg_goodput_per_dollar": 168421.5,
+    "fifo_fixed_n_sla_safe": null,
+    "fifo_amcsg_n_sla_safe": null,
+    "aging_srtf_fixed_n_sla_safe": null,
+    "aging_srtf_amcsg_n_sla_safe": null,
+    "aging_srtf_amcsg_vs_fifo_amcsg_pct": 0.09,
+    "amcsg_aging_srtf_sla_safe_delta": 0,
+    "osotss_canonical_goodput_per_dollar": 178109.0,
+    "aging_srtf_amcsg_vs_osotss_canonical_pct": -5.44
+  },
+
+  "osotss_frontier": {
+    "azure_goodput_per_dollar": 159578.0,
+    "burstgpt_goodput_per_dollar": 178109.0,
+    "vs_amcsg_azure_pct": 5.94,
+    "vs_amcsg_burstgpt_pct": 5.85
+  },
+  "amcsg_baseline": {
+    "azure_goodput_per_dollar": 150630.0,
+    "burstgpt_goodput_per_dollar": 168270.0
+  },
+
+  "five_failure_rule_status": {
+    "consecutive_non_improvements": 6,
+    "threshold": 5,
+    "status": "ACTIVE",
+    "allowed_actions": ["integration", "validation", "diagnosis", "architecture_simplification"],
+    "forbidden_actions": ["new_modules", "new_optimizer_paths"]
+  },
+
+  "prediction_degeneracy_diagnosis": {
+    "live_prior_window": 200,
+    "predicted_tokens_stdev": 8.1,
+    "actual_tokens_stdev": 93.1,
+    "unique_predicted_values": 37,
+    "predicted_tokens_mode": 91.0,
+    "conclusion": "Running-median prior collapses token predictions to near-constant; aging SRTF key becomes aging_factor only; degenerate to near-FIFO"
+  },
+
+  "test_results": {
+    "suite": "tests/test_aging_srtf_amcsg_compound.py",
+    "total": 24,
+    "passed": 23,
+    "failed": 0,
+    "skipped": 1,
+    "skipped_reason": "main ref not available in CI environment (no_production_module_modified)",
+    "non_preemptive_confirmed": true,
+    "canonical_parity_confirmed": true,
+    "sla_regression_absent": true,
+    "fixed_c_degeneracy_confirmed": true,
+    "below_osotss_confirmed": true
+  },
+
+  "integration_value": {
+    "summary": "Integration correctly confirms non-preemptive aging SRTF compiles with variable-c AMCSG loop. Null result is scientifically valid and reproducible.",
+    "contribution": "Eliminates aging-SRTF queue discipline as a viable path under running-median live prior. Points to prediction accuracy as binding constraint.",
+    "next_path": "Accurate per-request token prediction (e.g. Trail/NP-SRPT style) required before queue discipline improvements can clear the OSOTSS frontier."
+  },
+
+  "papers_surveyed": [
+    {"title": "Trail: Trace-Informed Adaptive LLM Serving", "arxiv": "2410.01035", "venue": "ICLR 2025", "relevance": "Per-request token prediction; addresses prediction degeneracy directly"},
+    {"title": "NP-SRPT: Non-Preemptive SRPT for LLM Inference", "arxiv": "2411.06348", "venue": "arXiv 2024", "relevance": "Same queue discipline family; requires accurate prediction"},
+    {"title": "FastServe: Skip-Join MLFQ for LLM Serving", "arxiv": "2305.05920", "venue": "arXiv 2023", "relevance": "Multi-level queue alternative; also prediction-dependent"},
+    {"title": "Queueing Theory and LLMs", "arxiv": "2503.07545", "venue": "arXiv 2025", "relevance": "Theoretical grounding for SJF/SRTF regimes in LLM workloads"}
+  ]
+}

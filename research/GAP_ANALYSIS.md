@@ -5313,3 +5313,74 @@ This exploits the M/M/c conservatism without changing the external SLA contract.
 **Priority 3:** DLAG on a synthetically bursty Azure re-sample (interleave high-load and idle ticks).
 This isolates whether DLAG's mechanism is sound and just needs a bursty trace to prove it. Do NOT
 use this for north-star claims — it's a mechanistic validator only.
+
+---
+
+## Run 2026-06-24 — Aging SRTF + AMCSG Compound (HONEST NULL RESULT — Five-Failure Rule integration experiment)
+
+### Q1. What currently limits Aurelius most?
+
+**Prediction degeneracy**: The running-median live prior (window=200) collapses per-request token predictions to near-constant (stdev=8.1 vs actual stdev=93.1, 37 unique values ≈91 tokens). Aging SRTF priority key degenerates to near-FIFO. Queue discipline cannot exceed FIFO performance without accurate per-request predictions.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Per-request token prediction accuracy (Trail/NP-SRPT style). Under current running-median prior, queue discipline is ceiling-limited at FIFO performance.
+
+### Q3. Which forecasts are weakest?
+
+Per-request token length prediction. Running-median window=200 is the binding constraint for queue discipline experiments.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Queue dispatch order — but only improvable if prediction accuracy is substantially improved.
+
+### Q5. Which workloads benefit least from aging SRTF?
+
+Both traces show null result. BurstGPT shows +0.09% (noise level). Azure shows +0.00%.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Per-request token prediction (blocked by pilot telemetry) is the highest-EV research direction. Trail (ICLR 2025, arXiv:2410.01035) addresses this directly.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under Five-Failure Rule: none available without pilot telemetry for per-request token prediction. Architecture is converged, all queue discipline paths are prediction-limited.
+
+### Q8. What is the current north-star status?
+
+**Both traces north-star achieved.** Azure: 159,578 gp/$ (OSOTSS). BurstGPT: 178,109 gp/$ (OSOTSS). The aging SRTF experiment does not change these.
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved. No regression present.
+
+### Q10. Which assumptions might be wrong?
+
+**CONFIRMED:** "Running-median prior produces useful predictions" was wrong. stdev=8.1 vs actual stdev=93.1. Only 37 unique predicted values. The prediction diversity needed for SRTF-class improvements is absent.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure LLM 2024 and BurstGPT HF. Third trace blocked (Alibaba: image gen workload; ShareGPT: no timestamps; LMSYS: no processed data).
+2. **Running-median prior** — Not representative of production token prediction quality.
+
+### Q12. Which public datasets should be added?
+
+None viable for OSOTSS/aging-SRTF replay. All three candidate traces are blocked for different structural reasons.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (6/5). Allowed actions: integration, validation, diagnosis, architecture simplification.**
+
+1. **Accept prediction-degeneracy as binding constraint** — Document that aging SRTF / SRPT improvements require per-request token prediction accuracy that the running-median prior cannot provide.
+2. **Architecture simplification** — Deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE).
+3. **Thin-delegate promotion** — Route remaining non-OSOTSS backtests through AureliusOptimizer facade.
+4. **Do NOT attempt new queue discipline variants** — All are prediction-limited; outcomes are predetermined.
+
+**Prediction degeneracy diagnosis:**
+- `LIVE_PRIOR_WINDOW=200`: running-median stdev=8.1 (actual stdev=93.1)
+- 37 unique predicted values, mode≈91 tokens
+- Aging key collapses to near-constant → degenerate to near-FIFO
+- BLOCKED by pilot telemetry — no path to per-request accuracy without production deployment
+
+Results: `research/results/aging_srtf_amcsg_compound_2026-06-24.{md,json}`
+Tests: `tests/test_aging_srtf_amcsg_compound.py` (24 tests: 23 passed, 1 skipped)
