@@ -181,7 +181,6 @@ def _compute_schedule_metrics(
     energy_cost = realized.total_energy_cost_usd
 
     job_by_id = {j.job_id: j for j in jobs}
-    baseline_sched_by_id = {}  # no baseline region needed for simple cost
     gpu_infra = 0.0
     migrations = 0
     deadline_misses = 0

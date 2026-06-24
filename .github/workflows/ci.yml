@@ -61,6 +61,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch main branch ref (for git-diff guard tests)
+        run: git fetch origin main:main || true
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -126,7 +129,8 @@ jobs:
             scikit-learn \
             lightgbm \
             pulp \
-            pyyaml
+            pyyaml \
+            requests
 
       - name: Install aurelius package
         run: pip install -e aurelius/
@@ -157,6 +161,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: false
+          load: true
           tags: aurelius:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

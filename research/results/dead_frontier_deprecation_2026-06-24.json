@@ -1,0 +1,45 @@
+{
+  "run_name": "dead_frontier_deprecation_2026-06-24",
+  "run_date": "2026-06-24",
+  "classification": "ARCHITECTURE_SIMPLIFICATION",
+  "five_failure_rule_compliant": true,
+  "production_claim": false,
+  "kpi_change_pct": 0.0,
+  "phase": "5",
+  "description": "Delete EVAL_WORKLOAD and BATCH_INFERENCE frontier families. Zero non-test/non-script consumers confirmed by repo-wide import check. No benchmark KPI affected.",
+  "deleted_files": {
+    "frontier_modules": [
+      "aurelius/frontier/eval_workload_models.py",
+      "aurelius/frontier/eval_workload_estimator.py",
+      "aurelius/frontier/eval_workload_controller.py",
+      "aurelius/frontier/eval_workload_safety.py",
+      "aurelius/frontier/batch_inference_models.py",
+      "aurelius/frontier/batch_inference_estimator.py",
+      "aurelius/frontier/batch_inference_controller.py",
+      "aurelius/frontier/batch_inference_safety.py"
+    ],
+    "test_files": [
+      "tests/test_eval_workload_frontier.py",
+      "tests/test_batch_inference_frontier.py"
+    ],
+    "script_files": [
+      "scripts/run_eval_workload_frontier.py",
+      "scripts/run_batch_inference_frontier.py"
+    ]
+  },
+  "loc_removed": {
+    "frontier_modules": 1827,
+    "test_files": 692,
+    "script_files": 354,
+    "total": 2873
+  },
+  "tests_deleted": {
+    "test_eval_workload_frontier": 20,
+    "test_batch_inference_frontier": 19,
+    "total": 39
+  },
+  "import_check": "zero non-test/non-script consumers (confirmed by grep -rn across all aurelius/ excluding frontier/eval_workload* and frontier/batch_inference*)",
+  "lint_result": "All checks passed (ruff check aurelius/ scripts/ tests/)",
+  "mypy_result": "No type errors introduced (mypy passes on remaining code)",
+  "merge_recommendation": "MERGE — safe dead-code removal, 0% KPI drift, ends 5-parallel-frontier-family maintenance tax"
+}

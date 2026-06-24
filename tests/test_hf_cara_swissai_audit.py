@@ -9,7 +9,6 @@ regress the audit's promises.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
@@ -21,9 +20,11 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from aurelius.traces.hf_corpus import (  # noqa: E402
-    ingestion, promotion, schema_profile, schemas,
+    ingestion,
+    promotion,
+    schema_profile,
+    schemas,
 )
-
 
 # ---------- 1. schema_profile module --------------------------------------
 

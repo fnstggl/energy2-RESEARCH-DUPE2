@@ -142,9 +142,9 @@ def _print_verdict(label: str, d: dict) -> None:
     print(f"    Abs vs Rel improvement: {abs_vs_rel:+.2f}%")
     print(f"    α: rel={rel_alpha:.5f}  abs={abs_alpha:.5f}")
     if abs_vs_rel > 0:
-        print(f"    → FRONTIER IMPROVEMENT: abs-conformal BEATS rel-conformal")
+        print("    → FRONTIER IMPROVEMENT: abs-conformal BEATS rel-conformal")
     else:
-        print(f"    → NEUTRAL/NEGATIVE: hypothesis NOT confirmed for this trace")
+        print("    → NEUTRAL/NEGATIVE: hypothesis NOT confirmed for this trace")
 
 
 if __name__ == "__main__":

@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from typing import Iterable, Optional
 
 from .training_models import (
-    TrainingFrontierCandidate,
     TrainingFrontierDecision,
 )
 

@@ -33,10 +33,8 @@ spec):
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import subprocess
 
 import pytest
 
@@ -49,11 +47,10 @@ from aurelius.constraints.frontier_integration import (
     select_constraint_aware_rho,
 )
 from aurelius.frontier import (
+    SHADOW_MODE,
     FrontierPoint,
     SafetyStatus,
-    SHADOW_MODE,
 )
-from aurelius.traces import azure_llm as az
 from aurelius.traces import backtest as bt
 from aurelius.traces import burstgpt as bg
 from aurelius.traces.replay import requests_to_arrival_ticks

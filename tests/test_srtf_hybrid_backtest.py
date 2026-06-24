@@ -23,7 +23,6 @@ Invariant assertions tested:
 
 from __future__ import annotations
 
-import math
 import os
 
 import pytest
@@ -31,20 +30,15 @@ import pytest
 from aurelius.benchmarks.srtf_serving_backtest import (
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
-    DEFAULT_BURSTGPT_SLA_S,
-    DEFAULT_SLA_S,
     HYBRID_AGING_ALPHA_DEFAULT,
     HybridAgingPreemptiveReport,
     _Request,
     _run_hybrid_backtest_on_trace,
-    _simulate_hybrid_aging_preemptive,
     _sla_safe_goodput_per_dollar,
-    calibrate_time_warp,
     run_burstgpt_hybrid_backtest,
     run_hybrid_aging_preemptive_backtest,
     simulate_queue,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -591,7 +585,7 @@ class TestRegressionInvariants:
         # With higher alpha, the long job (idx=0) has faster priority growth.
         assert resp_hi[0] != resp_lo[0] or True, "alpha is forwarded to simulator"
 
-    def test_constant_HYBRID_AGING_ALPHA_DEFAULT(self):
+    def test_constant_HYBRID_AGING_ALPHA_DEFAULT(self):  # noqa: N802
         assert HYBRID_AGING_ALPHA_DEFAULT == 0.01
 
     def test_report_sla_field_matches_input(self):

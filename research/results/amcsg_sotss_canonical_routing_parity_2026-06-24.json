@@ -1,0 +1,38 @@
+{
+  "run_name": "amcsg_sotss_canonical_routing_parity_2026-06-24",
+  "run_date": "2026-06-24",
+  "classification": "ARCHITECTURE_CONVERGENCE",
+  "five_failure_rule_compliant": true,
+  "production_claim": false,
+  "kpi_change_pct": 0.0,
+  "phase": "3b",
+  "description": "Route _run_amcsg_backtest gate sweep and _run_sotss_backtest (AMCSG baseline + SOTSS-MIN oracle) through canonical _REPLICA_SCALING_OPTIMIZER.optimize(). Fix initial_violations propagation in ReplicaScalingPolicy.optimize(mode='sotss_min').",
+  "changes": {
+    "aurelius/optimizer/policies/replica_scaling.py": [
+      "Fix mode='sotss_min' to capture init_viols instead of discarding with _",
+      "Return initial_violations=init_viols in ReplicaScalingResult",
+      "Update initial_violations docstring to cover oracle modes (not just online_sotss)"
+    ],
+    "aurelius/benchmarks/srtf_serving_backtest.py": [
+      "_run_amcsg_backtest: Replace _joint_mcs_c_schedule with _REPLICA_SCALING_OPTIMIZER.optimize(mode='amcsg') per gate",
+      "_run_sotss_backtest Step 1: Replace _joint_mcs_c_schedule with _REPLICA_SCALING_OPTIMIZER.optimize(mode='amcsg')",
+      "_run_sotss_backtest Step 2: Replace _sotss_min_cost_schedule with _REPLICA_SCALING_OPTIMIZER.optimize(mode='sotss_min')"
+    ],
+    "tests/test_amcsg_sotss_canonical_routing_parity.py": "NEW — 33 parity tests"
+  },
+  "parity_results": {
+    "amcsg_azure_goodput_per_dollar": {"before": 150630.0, "after": 150629.9, "delta_pct": 0.0},
+    "amcsg_burstgpt_goodput_per_dollar": {"before": 168270.0, "after": 168270.0, "delta_pct": 0.0},
+    "sotss_min_azure_goodput_per_dollar": {"before": 160107.0, "after": 160106.6, "delta_pct": 0.0},
+    "sotss_min_vs_amcsg_pct": {"before": 6.29, "after": 6.29, "delta_pp": 0.0},
+    "sotss_min_initial_violations": {"before": "117 (discarded)", "after": "117 (propagated)", "bug_fixed": true}
+  },
+  "test_results": {
+    "new_tests": 33,
+    "new_tests_passed": 33,
+    "total_tests": 212,
+    "total_passed": 212,
+    "regressions": 0
+  },
+  "merge_recommendation": "MERGE — safe infrastructure, 0% KPI drift, fixes silent bug, 33 new tests"
+}

@@ -199,9 +199,10 @@ def test_wrapper_matches_canonical_benchmark_scheduler_step():
 # 5. Serving/SRTF + the other policies are NOT wired in (Phase 1 guard)
 # --------------------------------------------------------------------------
 
-# serving_queue is implemented as of Phase 2; the remaining seams still raise.
+# serving_queue and replica_scaling are implemented as of Phase 2; the
+# remaining seams still raise.
 @pytest.mark.parametrize(
-    "policy", ["replica_scaling", "placement", "admission"]
+    "policy", ["placement", "admission"]
 )
 def test_unimplemented_policies_raise_on_use(policy):
     assert policy in POLICY_REGISTRY  # the seam exists...

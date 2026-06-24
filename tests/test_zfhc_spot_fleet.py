@@ -56,8 +56,8 @@ def azure_raw():
 @pytest.fixture
 def c_schedule_200(azure_raw):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        calibrate_time_warp,
         _joint_mcs_c_schedule,
+        calibrate_time_warp,
     )
     warp = calibrate_time_warp(azure_raw, servers=4, target_rho=0.85)
     return _joint_mcs_c_schedule(azure_raw, tick_seconds=60.0, warp=warp)
@@ -89,8 +89,8 @@ def test_zfhc_all_spot_at_high_c():
 # 2. _zfhc_spot_replicas == _abs_floor_spot_replicas for c < threshold
 def test_zfhc_matches_afms_below_threshold():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _zfhc_spot_replicas,
         _abs_floor_spot_replicas,
+        _zfhc_spot_replicas,
     )
     for thr in (8, 10, 12):
         for c in range(1, thr):
@@ -117,8 +117,8 @@ def test_zfhc_threshold_10_all_spot_at_c10():
 # 5. Below threshold, ZFHC behaves identically to AFMS for c=5
 def test_zfhc_below_threshold_c5():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _zfhc_spot_replicas,
         _abs_floor_spot_replicas,
+        _zfhc_spot_replicas,
     )
     assert _zfhc_spot_replicas(5, 10) == _abs_floor_spot_replicas(5, min_ondemand=1)
 
@@ -126,9 +126,9 @@ def test_zfhc_below_threshold_c5():
 # 6. _zfhc_spot_fleet_cost <= _abs_floor_spot_fleet_cost
 def test_zfhc_cost_le_afms(c_schedule_200):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _zfhc_spot_fleet_cost,
-        _abs_floor_spot_fleet_cost,
         GPU_HOUR_USD,
+        _abs_floor_spot_fleet_cost,
+        _zfhc_spot_fleet_cost,
     )
     for thr in (8, 10, 12):
         cost_zfhc = _zfhc_spot_fleet_cost(c_schedule_200, thr, 0.80, GPU_HOUR_USD, 60.0)
@@ -141,9 +141,9 @@ def test_zfhc_cost_le_afms(c_schedule_200):
 # 7. ZFHC strictly cheaper when affected ticks exist
 def test_zfhc_strictly_cheaper_with_high_c_ticks():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _zfhc_spot_fleet_cost,
-        _abs_floor_spot_fleet_cost,
         GPU_HOUR_USD,
+        _abs_floor_spot_fleet_cost,
+        _zfhc_spot_fleet_cost,
     )
     # Schedule with c=10 ticks — threshold=10 should save vs AFMS
     c_sched = [3, 5, 8, 10, 12, 10, 8, 5]
@@ -157,9 +157,9 @@ def test_zfhc_strictly_cheaper_with_high_c_ticks():
 # 8. Cost saving at c>=threshold is exactly $0.020/tick (1 demand replaced by 1 spot)
 def test_zfhc_cost_saving_per_tick():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _zfhc_spot_fleet_cost,
-        _abs_floor_spot_fleet_cost,
         GPU_HOUR_USD,
+        _abs_floor_spot_fleet_cost,
+        _zfhc_spot_fleet_cost,
     )
     # Single tick at c=10 with threshold=10
     # AFMS: 9 spot + 1 on-demand; ZFHC: 10 spot + 0 on-demand
@@ -185,8 +185,8 @@ def test_zfhc_expected_interruptions_positive(c_schedule_200):
 # 10. ZFHC interruptions >= AFMS interruptions (more spot exposure)
 def test_zfhc_interruptions_ge_afms():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _zfhc_expected_interruptions,
         _abs_floor_expected_interruptions,
+        _zfhc_expected_interruptions,
     )
     # Schedule with high-c ticks
     c_sched = [4, 6, 10, 12, 8, 10, 5]
@@ -228,8 +228,8 @@ def test_zfhc_zero_interrupt_matches_fifo(azure_raw, c_schedule_200):
     from aurelius.benchmarks.srtf_serving_backtest import (
         _Request,
         _service_time_s,
-        _simulate_fifo_zfhc_spot_fleet,
         _simulate_fifo_variable_c,
+        _simulate_fifo_zfhc_spot_fleet,
         calibrate_time_warp,
         make_live_prior_predictions,
     )
@@ -299,9 +299,9 @@ def test_zfhc_all_entries_completion_high(zfhc_report):
 # 18. Threshold with n_ticks_affected=0 has cost == cost_afms (no savings)
 def test_zfhc_no_affected_ticks_no_savings():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _zfhc_spot_fleet_cost,
-        _abs_floor_spot_fleet_cost,
         GPU_HOUR_USD,
+        _abs_floor_spot_fleet_cost,
+        _zfhc_spot_fleet_cost,
     )
     # Schedule where all c < threshold=12
     c_sched = [1, 2, 3, 4, 5, 6, 7, 8, 10, 11]

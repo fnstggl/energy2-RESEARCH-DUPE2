@@ -56,9 +56,7 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     CONFORMAL_ABS_TARGET_P90_TOKENS,
     CONFORMAL_ALPHA_MAX,
     CONFORMAL_WARMUP,
-    DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_HF_JSONL,
-    DEFAULT_BURSTGPT_SLA_S,
     DEFAULT_SLA_S,
     AbsConformalReport,
     AbsoluteErrorConformalCalibrator,
@@ -66,8 +64,6 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     _service_time_s,
     _simulate_decoupled_hybrid_abs_conformal,
     _sla_safe_goodput_per_dollar,
-    calibrate_time_warp,
-    load_serving_requests,
     run_abs_conformal_azure_backtest,
     run_abs_conformal_burstgpt_backtest,
     simulate_queue,
@@ -327,7 +323,6 @@ def test_18_to_dict_required_keys():
 
 
 def test_19_to_dict_shadow_tag():
-    dummy_dict = {}
     rpt = AbsConformalReport(
         trace="t", total_requests=10, servers=1, target_rho=0.5,
         time_warp=1.0, sla_s=10.0, target_p90_abs_tokens=500.0,

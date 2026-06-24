@@ -45,7 +45,10 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aurelius.traces.hf_corpus import (  # noqa: E402
-    discovery, ingestion, promotion, schema_profile,
+    discovery,
+    ingestion,
+    promotion,
+    schema_profile,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

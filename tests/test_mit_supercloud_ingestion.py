@@ -39,10 +39,7 @@ import pytest
 
 from aurelius.frontier import (
     TrainingFrontierAction,
-    TrainingFrontierCandidate,
-    TrainingFrontierPoint,
     TrainingSafetyConfig,
-    TrainingSafetyStatus,
     choose_training_frontier_target,
 )
 from aurelius.traces import mit_supercloud as mit
@@ -395,10 +392,10 @@ def test_training_frontier_public_api_unchanged():
 
 
 def test_philly_and_alibaba_trace_modules_importable():
-    import aurelius.traces.philly  # noqa: F401
     import aurelius.traces.alibaba_gpu  # noqa: F401
-    import aurelius.traces.gpu_scheduling  # noqa: F401
     import aurelius.traces.gpu_packing  # noqa: F401
+    import aurelius.traces.gpu_scheduling  # noqa: F401
+    import aurelius.traces.philly  # noqa: F401
 
 
 # ===========================================================================

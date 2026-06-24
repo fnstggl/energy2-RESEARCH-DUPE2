@@ -35,13 +35,11 @@ from typing import Iterable, Optional
 from .training_models import (
     TrainingFrontierCandidate,
     TrainingFrontierPoint,
-    TrainingSafetyStatus,
 )
 from .training_safety import (
     TrainingSafetyConfig,
     classify_training_frontier_point,
 )
-
 
 # Per-policy candidate descriptors for Alibaba GPU packing. Each
 # descriptor labels the packing dimension the policy emphasizes; the

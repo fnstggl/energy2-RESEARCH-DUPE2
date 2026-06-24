@@ -27,9 +27,6 @@ import logging
 import os
 import statistics
 import time
-from typing import Optional
-
-from .schemas import CANONICAL_TRACE_TYPES
 
 logger = logging.getLogger(__name__)
 

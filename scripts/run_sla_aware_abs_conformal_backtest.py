@@ -62,7 +62,7 @@ def _print_report(label: str, rpt) -> None:
     print(f"  Abs-conformal vs SLA-aware (live):   {rpt.abs_vs_sla_aware_live_delta_pct:>+.2f}%")
     print(f"  Abs-conformal vs Rel-conformal:      {rpt.abs_vs_rel_delta_pct:>+.2f}%")
     print()
-    print(f"  Calibrator diagnostics:")
+    print("  Calibrator diagnostics:")
     print(f"    abs_mean_alpha={rpt.abs_mean_alpha:.6f}  rel_mean_alpha={rpt.rel_mean_alpha:.6f}")
     print(f"    abs_p90_abs_err_tokens={rpt.abs_p90_abs_err_tokens:.1f}")
 
@@ -82,7 +82,7 @@ def main() -> None:
     print("\n" + "="*65)
     print("  NORTH-STAR ASSESSMENT")
     print("="*65)
-    print(f"  Target: +300% vs SLA-aware")
+    print("  Target: +300% vs SLA-aware")
     print(f"  Azure:    abs-conformal is {azure.abs_vs_sla_aware_oracle_delta_pct:+.2f}% vs oracle SLA-aware")
     print(f"  BurstGPT: abs-conformal is {burstgpt.abs_vs_sla_aware_oracle_delta_pct:+.2f}% vs oracle SLA-aware")
     gap_met = (

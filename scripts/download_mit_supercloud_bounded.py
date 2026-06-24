@@ -41,11 +41,10 @@ import os
 import random
 import re
 import sys
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Iterable, Iterator, Optional
+from typing import Iterator, Optional
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_RAW = os.path.join(REPO_ROOT, "data", "external",

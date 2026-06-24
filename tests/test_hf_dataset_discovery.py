@@ -18,8 +18,8 @@ if REPO_ROOT not in sys.path:
 
 from aurelius.traces.hf_corpus import discovery  # noqa: E402
 from aurelius.traces.hf_corpus.schemas import (  # noqa: E402
-    CANONICAL_TRACE_TYPES,
     CANONICAL_TRACE_TYPE_TO_TRUST_TIER,
+    CANONICAL_TRACE_TYPES,
 )
 
 FIXTURES = os.path.join(REPO_ROOT, "tests", "fixtures", "hf_api")

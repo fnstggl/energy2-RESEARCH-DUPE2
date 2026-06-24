@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 from dataclasses import replace
@@ -283,7 +282,8 @@ def _synthesize(rows: list[dict]) -> dict:
     for r in applicable:
         v = r["comparison"]["verdict"]
         verdicts[v] = verdicts.get(v, 0) + 1
-    pct = lambda x: round(x / max(1, len(applicable)) * 100.0, 2)
+    def pct(x):
+        return round(x / max(1, len(applicable)) * 100.0, 2)
     safe = verdicts["SAFE_TIE"] + verdicts["INTEGRATION_WIN"]
     return {
         "n_applicable": len(applicable), "n_skipped": len(skipped),

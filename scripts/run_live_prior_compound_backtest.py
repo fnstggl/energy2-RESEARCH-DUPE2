@@ -47,13 +47,9 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aurelius.benchmarks.srtf_serving_backtest import (
-    DEFAULT_AZURE_FIXTURE,
-    DEFAULT_BURSTGPT_FIXTURE,
     DEFAULT_BURSTGPT_HF_JSONL,
-    DEFAULT_BURSTGPT_SLA_S,
-    DEFAULT_SLA_S,
-    run_live_prior_conformal_backtest,
     run_burstgpt_hf_live_prior_backtest,
+    run_live_prior_conformal_backtest,
 )
 
 RESULTS_DIR = "research/results"
@@ -208,7 +204,7 @@ def _write_markdown(today: str, azure: dict, burstgpt: dict | None, compound: di
         "",
         "### Azure LLM 2024 (5,880 requests, ρ=0.85, 4 servers, SLA=10s)",
         "",
-        f"- Dataset: Azure LLM Inference Trace 2024 (public, DynamoLLM HPCA 2025)",
+        "- Dataset: Azure LLM Inference Trace 2024 (public, DynamoLLM HPCA 2025)",
         f"- Requests: {azure.get('total_requests', 0)}  |  Servers: {azure.get('servers', 4)}",
         f"- Target ρ: {azure.get('target_rho', 0.85)}  |  SLA: {azure.get('sla_s', 10)}s",
         "",
@@ -222,7 +218,7 @@ def _write_markdown(today: str, azure: dict, burstgpt: dict | None, compound: di
         "",
         f"**Live vs oracle retention: {azure_ret:.1f}%**",
         f"Prior CV: {azure_cv:.1f}%  |  Prior MAE: {azure_mae:.1f} tokens",
-        f"(30%-CV lognormal floor from run -n: 83.1% retention)",
+        "(30%-CV lognormal floor from run -n: 83.1% retention)",
         "",
     ]
 
@@ -230,7 +226,7 @@ def _write_markdown(today: str, azure: dict, burstgpt: dict | None, compound: di
         lines += [
             "### BurstGPT HF (5,880-record sample, ρ=0.85, 4 servers, SLA=30s)",
             "",
-            f"- Dataset: BurstGPT HF (59,999 records, CC-BY-4.0, 5,880 sampled)",
+            "- Dataset: BurstGPT HF (59,999 records, CC-BY-4.0, 5,880 sampled)",
             f"- Requests: {burstgpt.get('total_requests', 0)}  |  Servers: {burstgpt.get('servers', 4)}",
             f"- Target ρ: {burstgpt.get('target_rho', 0.85)}  |  SLA: {burstgpt.get('sla_s', 30)}s",
             "",
@@ -258,7 +254,7 @@ def _write_markdown(today: str, azure: dict, burstgpt: dict | None, compound: di
         "|---|---:|---|",
         f"| SLA-aware binary priority | +{compound['economic_scheduling']['sla_aware_vs_fifo_pct']:.1f}% | run -n |",
         f"| Economic scheduling only (constraint_aware) | +{compound['economic_scheduling']['constraint_aware_vs_fifo_pct']:.1f}% | BENCHMARK_REGISTRY |",
-        f"| Conformal queue only (oracle) | +322.24% | run -q |",
+        "| Conformal queue only (oracle) | +322.24% | run -q |",
         f"| Conformal queue only (live prior) | +{azure.get('live_delta_pct', 0):.2f}% | **this run** |",
         f"| Compound: live queue + economic (est.) | {compound['azure_llm_2024']['compound_live_plus_economic']} | independence estimate |",
         "",
@@ -272,7 +268,7 @@ def _write_markdown(today: str, azure: dict, burstgpt: dict | None, compound: di
         "North Star target: +300% SLA-safe goodput/$ vs SLA-aware schedulers.",
         "",
         "Current best (live prior conformal vs SLA-aware):",
-        f"  = conformal_live_vs_fifo / (sla_aware_vs_fifo + 1) × 100 − 100",
+        "  = conformal_live_vs_fifo / (sla_aware_vs_fifo + 1) × 100 − 100",
         "",
     ]
 
@@ -392,10 +388,10 @@ def main(argv=None) -> int:
     # Final assessment
     retention = azure_result.get("live_vs_oracle_retention_pct", 0.0)
     live_delta = azure_result.get("live_delta_pct", 0.0)
-    print(f"\n=== ASSESSMENT ===")
+    print("\n=== ASSESSMENT ===")
     print(f"Azure live prior retention: {retention:.1f}% (threshold: ≥83%)")
     if retention >= 83.0:
-        print(f"GATE PASSED: live causal prior retains ≥83% of oracle gain.")
+        print("GATE PASSED: live causal prior retains ≥83% of oracle gain.")
         print(f"Live conformal: +{live_delta:.2f}% vs FIFO (PRODUCTION VIABLE prior)")
         return 0
     else:
