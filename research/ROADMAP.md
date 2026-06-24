@@ -26,6 +26,11 @@ unsafe regressions. LLM-serving subset median **+23%**.
 
 **⛔ FIVE-FAILURE RULE TRIGGERED (5/5). Runs: C1PGS → SOTSS-GSF → Adaptive EWMA → Stochastic Safety Margin → OSSC/Borderline. ARCHITECTURAL FOCUS RULE NOW ACTIVE: stop adding new modules; focus on integration, replay validation, benchmark realism, bottleneck diagnosis, architecture simplification.**
 
+**AMCSG + SOTSS-MIN Canonical Routing Parity [run 2026-06-24] — ARCHITECTURE CONVERGENCE (Phase 3b integration, Five-Failure Rule compliant):**
+Routes `_run_amcsg_backtest` gate sweep and `_run_sotss_backtest` (both AMCSG baseline and SOTSS-MIN oracle) through `_REPLICA_SCALING_OPTIMIZER.optimize()` — completing canonical AureliusOptimizer ownership of every primary replica-scaling backtest entry point. Fixes `ReplicaScalingPolicy.optimize(mode="sotss_min")` which previously discarded `initial_violations` (now propagated as `init_viols`). Parity confirmed: AMCSG Azure 150,629.9 gp/$ (vs 150,630 historical), AMCSG BurstGPT 168,270 gp/$, SOTSS-MIN Azure 160,106.6 gp/$ (+6.29% vs AMCSG) — bit-identical to previously validated results. 33 new parity tests; 212 total passing. KPI change: 0.00%.
+Results: `research/results/amcsg_sotss_canonical_routing_parity_2026-06-24.md`.
+Tests: `tests/test_amcsg_sotss_canonical_routing_parity.py` (33 tests).
+
 **OSOTSS Canonical Routing Parity [run 2026-06-24] — ARCHITECTURE CONVERGENCE (Phase 3 integration, Five-Failure Rule compliant):**
 Routes `_run_online_sotss_backtest` through `_REPLICA_SCALING_OPTIMIZER.optimize(config=ReplicaScalingConfig(mode="online_sotss", baseline_n_sla_safe=amcsg_n_sla_safe, ...))` — closing the last production-decision gap where OSOTSS called the policy function directly instead of the canonical optimizer facade. Added `baseline_n_sla_safe: Optional[int] = None` to `ReplicaScalingConfig` and `initial_violations: int = 0` to `ReplicaScalingResult`. Parity confirmed: Azure 159,578 gp/$ (+5.94%), BurstGPT 178,109 gp/$ (+5.85%) — bit-identical to previously validated results. 38 new parity tests + 143 total passing. All four modes (`amcsg`, `sotss_min`, `online_sotss`, `forecasted_mcs`) now have canonical paths through `AureliusOptimizer(policy="replica_scaling")`. KPI change: 0.00%.
 Results: `research/results/osotss_canonical_routing_parity_2026-06-24.md`.
