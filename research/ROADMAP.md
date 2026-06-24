@@ -2696,3 +2696,32 @@ complementary, see the cross-reference at the end.)
   any queue-discipline improvement. Trail (ICLR 2025) is the best available method;
   requires pilot telemetry (blocked).
 - **Results:** `research/results/aging_srtf_amcsg_compound_2026-06-24.{md,json}`
+
+### Run 2026-06-24 — Alibaba GenAI Third-Trace Cross-Validation (Benchmark Realism, Five-Failure Rule)
+
+**Five-Failure Rule counter: 6/5 (ACTIVE)**
+
+- **Goal:** Third-trace cross-validation on Alibaba GenAI 2026 (lora_request_trace.csv):
+  stable diffusion LoRA serving, 26,392 requests, 553 ticks. Benchmark realism: does
+  the constraint_aware gain generalize to a structurally different workload?
+- **Trace:** `data/external/alibaba_genai/raw/lora_request_trace.csv` (26,824 rows, 26,392 valid)
+- **Methodology:** Full factorial ablation (10 configs: 5 sizing × 2 affinity), Shapley
+  attribution. Entry points: `run_ablation()` in `aurelius/traces/genai_ablation.py`.
+- **Honest headline comparison (both SLA-safe):**
+
+  | Condition | gp/$ | GPU-hrs | Timeout% | p99-lat |
+  |---|---|---|---|---|
+  | constraint_aware (candidate) | 9.8514 | 893 | 0.000% | 53.7s |
+  | constraint_aware_no_affinity (strongest SLA-safe baseline) | 7.1291 | 1,234 | 0.000% | 65.9s |
+  | **Delta** | **+38.2%** | **−27.6%** | — | — |
+
+- **Excluded misleading comparison:** +86.9% vs sla_aware — EXCLUDED because sla_aware
+  has 6.214% SLA violations (17,888/26,392 compliant). Invalid baseline.
+- **Attribution (Shapley):** affinity/prewarming 61.7%, anticipatory sizing 38.3%, interaction 0%.
+  Cold-start dominates: 2.79s with affinity vs 22.85s without.
+- **Cross-validation verdict:** Gain generalizes to image-gen LoRA workload. Affinity routing
+  is the dominant mechanism (+61.7%) on this multi-model trace.
+- **Integration status:** genai_backtest.py is standalone; NOT routed through AureliusOptimizer.
+  Path to canonical integration documented in result file.
+- **Run category:** Useful Research / Benchmark Realism
+- **Results:** `research/results/alibaba_genai_third_trace_2026-06-24.{md,json}`

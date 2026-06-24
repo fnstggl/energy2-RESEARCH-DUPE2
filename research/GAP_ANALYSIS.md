@@ -5508,3 +5508,100 @@ None viable for OSOTSS/aging-SRTF replay. All three candidate traces are blocked
 
 Results: `research/results/aging_srtf_amcsg_compound_2026-06-24.{md,json}`
 Tests: `tests/test_aging_srtf_amcsg_compound.py` (24 tests: 23 passed, 1 skipped)
+
+---
+
+## Run 2026-06-24 — Alibaba GenAI Third-Trace Cross-Validation (Benchmark Realism)
+
+**Five-Failure Rule counter: 6/5 (ACTIVE)**
+
+### Q1. What currently limits Aurelius most?
+
+**Five-Failure Rule ACTIVE (6/5).** The binding constraint is prediction degeneracy: the running-median
+prior collapses per-request predictions to near-constant (stdev=8.1 vs actual 93.1). All queue-discipline
+experiments are ceiling-limited at FIFO. The second constraint is the absence of a third production-grade
+trace class for LLM serving.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Per-request token prediction (Trail/ICLR 2025, arXiv:2410.01035) is the highest-EV path, blocked by
+pilot telemetry requirements. Energy-denominator reduction (GreenLLM arXiv:2508.16449: 45% energy via
+SLO-aware DVFS) is a second candidate that doesn't require prediction accuracy.
+
+### Q3. Which forecasts are weakest?
+
+Per-request token length prediction. Running-median window=200 is near-constant and cannot support
+queue-discipline improvements. Cold-start duration is well-calibrated when affinity metadata is available
+(2.79s), but degrades to 22.85s without it.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Queue dispatch order (prediction-limited, blocked). Cold-start / adapter preloading policy (already
+exploited by affinity routing). Energy denominator (GreenLLM DVFS not implemented).
+
+### Q5. Which workloads benefit least from current constraint_aware?
+
+Text-LLM serving (Azure, BurstGPT) shows +5.94–5.85% OSOTSS gains but requires token-prediction accuracy
+for further gains. Both traces are relatively homogeneous (single-model-class). The Alibaba GenAI trace
+(multi-model-class LoRA) shows much larger gains (+38.2%) because the affinity signal is stronger when
+adapter cold-starts are costly.
+
+### Q6. Which research direction appears strongest?
+
+1. Energy-denominator reduction (GreenLLM DVFS, arXiv:2508.16449) — orthogonal to prediction accuracy, no pilot requirement.
+2. Canonical integration of genai_backtest.py through AureliusOptimizer (architecture convergence).
+3. Per-request token prediction via Trail (blocked, requires pilot telemetry).
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under Five-Failure Rule: energy-denominator reduction via DVFS scheduling (if CAISO/energy data available
+in serving benchmark). Alternative: canonical integration of GenAI policy through AureliusOptimizer.
+No new LLM-serving queue-discipline experiments — all prediction-limited.
+
+### Q8. What is the current north-star status?
+
+**Both LLM traces north-star achieved.** Azure: 159,578 gp/$ (OSOTSS). BurstGPT: 178,109 gp/$ (OSOTSS).
+The GenAI ablation adds a third data point (9.8514 gp/$ constraint_aware) on a separate workload type.
+Not directly comparable (different units/scale: LLM uses per-job tokens, GenAI uses exec_time seconds).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved on both LLM traces. No regression present. GenAI workload is a separate
+benchmark track — north-star for GenAI is constraint_aware (9.8514 gp/$), not yet routed through
+AureliusOptimizer.
+
+### Q10. Which assumptions might be wrong?
+
+1. **"Affinity effect is universal"** — VERIFIED across two workload classes (LLM + LoRA image gen).
+   Confidence increased.
+2. **"Cold-start is the dominant cost driver"** — CONFIRMED on Alibaba GenAI: 22.85s without affinity
+   vs 2.79s with affinity. 61.7% of the gain is affinity/cold-start.
+3. **"sla_aware is a fair baseline"** — CONFIRMED WRONG. sla_aware fails SLA (6.214% timeout on GenAI
+   trace) and is excluded. Strongest SLA-safe baseline is constraint_aware_no_affinity.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Alibaba GenAI cold-start calibration absent:** `cold_start_calibration_s: {}` because pipeline
+   CSV files are not publicly available (empty downloads). Default cold-start values used.
+2. **No per-request latency SLA:** GenAI SLA is `2.0 × exec_time + 30.0s` — a generous proxy.
+3. **genai_backtest.py not canonical:** not routed through AureliusOptimizer; separate simulation.
+
+### Q12. Which public datasets should be added?
+
+No new datasets recommended under Five-Failure Rule. The three committed traces (Azure LLM 2024,
+BurstGPT, Alibaba GenAI 2026) cover the main serving workload classes. Next priority is canonical
+integration of the existing GenAI benchmark, not new data.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (6/5). Allowed actions: integration, validation, diagnosis, architecture simplification.**
+
+1. **Canonical GenAI integration:** Route genai_backtest.py through `AureliusOptimizer(policy="replica_scaling")`
+   or a new `GenAIServingPolicy`. Requires 0% KPI drift parity gate. Updates OPTIMIZER_UNIFICATION_PLAN.md.
+2. **Energy denominator experiment:** GreenLLM-style DVFS scheduling. Orthogonal to prediction accuracy.
+   Does not require new queue discipline.
+3. **OSOTSS parity test suite:** 38 tests committed, all passing — confirms Phase 3 canonical routing closure.
+4. **Do NOT attempt new queue discipline variants** — all are prediction-limited.
+
+Results: `research/results/alibaba_genai_third_trace_2026-06-24.{md,json}`
+Tests: `tests/test_osotss_canonical_routing_parity.py` (38 tests: 38 passed)

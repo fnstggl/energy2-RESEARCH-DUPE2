@@ -1,0 +1,123 @@
+{
+  "run_id": "alibaba_genai_third_trace_2026-06-24",
+  "date": "2026-06-24",
+  "classification": "Useful Research / Benchmark Realism",
+  "five_failure_rule_active": true,
+  "five_failure_counter": "6/5",
+  "trace": {
+    "id": "alibaba_genai_2026",
+    "file": "lora_request_trace.csv",
+    "raw_rows": 26824,
+    "valid_requests": 26392,
+    "ticks_60s": 553,
+    "workload_type": "stable_diffusion_lora_serving",
+    "gpu_price_per_hr": 3.0,
+    "sla_formula": "2.0 * exec_time_seconds + 30.0",
+    "target_rho_sla": 0.65
+  },
+  "honest_headline": {
+    "candidate": "constraint_aware",
+    "baseline": "constraint_aware_no_affinity",
+    "baseline_rationale": "strongest SLA-safe config without affinity routing; 0.000% timeout",
+    "delta_goodput_per_dollar_pct": 38.2,
+    "delta_gpu_hours_pct": -27.6,
+    "candidate_goodput_per_dollar": 9.8514,
+    "baseline_goodput_per_dollar": 7.1291,
+    "candidate_gpu_hours": 893,
+    "baseline_gpu_hours": 1234,
+    "candidate_timeout_rate_pct": 0.0,
+    "baseline_timeout_rate_pct": 0.0,
+    "sla_safe_requests_both": 26392
+  },
+  "misleading_comparison_excluded": {
+    "vs_sla_aware_pct": 86.86,
+    "reason": "sla_aware has 6.214% SLA violations — invalid SLA-safe baseline"
+  },
+  "configs": {
+    "constraint_aware": {
+      "goodput_per_dollar": 9.8514,
+      "sla_compliant": 26392,
+      "timeout_pct": 0.0,
+      "gpu_hours": 893,
+      "p99_latency_s": 53.71,
+      "mean_cold_start_s": 2.79
+    },
+    "constraint_aware_no_affinity": {
+      "goodput_per_dollar": 7.1291,
+      "sla_compliant": 26392,
+      "timeout_pct": 0.0,
+      "gpu_hours": 1234,
+      "p99_latency_s": 65.91,
+      "mean_cold_start_s": 22.85
+    },
+    "fifo_plus_affinity": {
+      "goodput_per_dollar": 3.1817,
+      "sla_compliant": 26392,
+      "timeout_pct": 0.0,
+      "gpu_hours": 2765,
+      "p99_latency_s": 35.78
+    },
+    "fifo": {
+      "goodput_per_dollar": 1.7676,
+      "sla_compliant": 26392,
+      "timeout_pct": 0.0,
+      "gpu_hours": 4977,
+      "p99_latency_s": 52.64
+    },
+    "sla_aware": {
+      "goodput_per_dollar": 5.272,
+      "sla_compliant": 17888,
+      "timeout_pct": 6.214,
+      "gpu_hours": 1131,
+      "p99_latency_s": 1213.7,
+      "excluded": true,
+      "exclusion_reason": "SLA violations > 0%"
+    },
+    "queue_aware": {
+      "goodput_per_dollar": 5.3823,
+      "sla_compliant": 16147,
+      "timeout_pct": 8.746,
+      "gpu_hours": 1000,
+      "excluded": true,
+      "exclusion_reason": "SLA violations > 0%"
+    },
+    "utilization_aware": {
+      "goodput_per_dollar": 6.9265,
+      "sla_compliant": 18182,
+      "timeout_pct": 8.890,
+      "gpu_hours": 875,
+      "excluded": true,
+      "exclusion_reason": "SLA violations > 0%"
+    }
+  },
+  "attribution": {
+    "method": "Shapley decomposition (2-factor: affinity × sizing)",
+    "affinity_routing_share_pct": 61.7,
+    "anticipatory_sizing_share_pct": 38.3,
+    "interaction_pct": 0.0,
+    "dominant_driver": "model_affinity_prewarming",
+    "cold_start_with_affinity_s": 2.79,
+    "cold_start_without_affinity_s": 22.85
+  },
+  "integration_status": {
+    "through_aurelius_optimizer": false,
+    "path_note": "genai_backtest.py is standalone; not routed through AureliusOptimizer",
+    "path_to_canonical": [
+      "Implement ReplicaScalingPolicy.optimize(mode='genai') or GenAIServingPolicy",
+      "Route genai_backtest.py through AureliusOptimizer(policy='replica_scaling')",
+      "Confirm 0% KPI drift parity gate",
+      "Update OPTIMIZER_UNIFICATION_PLAN.md"
+    ]
+  },
+  "papers_surveyed": [
+    {"id": "arXiv:2603.16054", "title": "inference-fleet-sim", "relevance": "Erlang-C fleet sizing"},
+    {"id": "arXiv:2508.16449", "title": "GreenLLM", "relevance": "SLO-aware DVFS 45% energy"},
+    {"id": "HPCA:2025:DynamoLLM", "title": "DynamoLLM", "relevance": "EWMA autoscaling Azure"},
+    {"id": "arXiv:2511.00807", "title": "FREESH", "relevance": "Heterogeneous GPU + energy"},
+    {"id": "arXiv:2602.02987", "title": "Asymptotic Optimality", "relevance": "Prefill-decode contention"},
+    {"id": "arXiv:2410.01035", "title": "Trail (ICLR 2025)", "relevance": "Per-request token prediction"}
+  ],
+  "new_modules_added": 0,
+  "new_optimizer_paths_added": 0,
+  "aurelius_optimizer_changed": false
+}
