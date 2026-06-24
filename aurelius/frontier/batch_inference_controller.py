@@ -28,14 +28,13 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 from .batch_inference_models import (
+    EXECUTION_MODE_SHADOW,
     BatchInferenceFrontierAction,
     BatchInferenceFrontierCandidate,
     BatchInferenceFrontierDecision,
     BatchInferenceFrontierPoint,
-    BatchInferenceFrontierSchemaError,
     BatchInferenceSafetyStatus,
     BatchInferenceWorkloadProfile,
-    EXECUTION_MODE_SHADOW,
 )
 
 

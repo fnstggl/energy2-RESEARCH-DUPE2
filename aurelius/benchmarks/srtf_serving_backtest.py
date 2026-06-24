@@ -135,21 +135,32 @@ from typing import Optional
 # its calibrator now live in the optimizer package. The benchmark imports them
 # back so it no longer owns the optimizer logic (parity-preserving extraction).
 from aurelius.optimizer import AureliusOptimizer
-from aurelius.optimizer.policies.serving_queue import (
-    AbsoluteErrorConformalCalibrator,
-    simulate_decoupled_hybrid_abs_conformal,
-)
+
 # Canonical replica-scaling policy [Phase 2/3 unification]: per-tick replica
 # count decisions (AMCSG MCS gate sweep and SOTSS-MIN oracle loop) now live in
 # the optimizer package. _joint_mcs_c_schedule and _sotss_min_cost_schedule
 # become thin delegates — same algorithm, constants, and tie-breaks (0% KPI drift).
 from aurelius.optimizer.policies.replica_scaling import (
     ReplicaScalingConfig as _ReplicaScalingConfig,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_c1pgs_spot_replicas as _compute_c1pgs_spot_replicas,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_mcs_c_schedule as _compute_mcs_c_schedule,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_online_sotss_schedule as _compute_online_sotss_schedule,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_sotss_gsf_schedule as _compute_sotss_gsf_schedule,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_sotss_min_schedule as _compute_sotss_min_schedule,
+)
+from aurelius.optimizer.policies.serving_queue import (
+    AbsoluteErrorConformalCalibrator,
+    simulate_decoupled_hybrid_abs_conformal,
 )
 
 # Phase 3: the benchmark routes the abs-conformal serving discipline through the
@@ -6974,7 +6985,6 @@ def _compute_compound_economic_queue(
     gp_fifo = queue_rpt.fifo_goodput_per_dollar
     gp_sla = queue_rpt.sla_aware_oracle_goodput_per_dollar
     gp_abs = queue_rpt.abs_conformal_goodput_per_dollar
-    oracle_gp = queue_rpt.oracle_goodput_per_dollar
 
     compound_gp = gp_abs * economic_cost_factor
 

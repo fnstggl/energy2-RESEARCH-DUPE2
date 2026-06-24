@@ -95,7 +95,7 @@ def build_synthetic_prior(
     seed: int = 42,
     rows_per_gpu: int = _SYNTHETIC_ROWS_PER_GPU,
     ttft_values: Optional[dict] = None,
-) -> "TTFTShadowPrior":  # type: ignore[name-defined]
+) -> "TTFTShadowPrior":  # type: ignore[name-defined]  # noqa: F821
     """Build a ``TTFTShadowPrior`` calibrated to CARA median TTFT values.
 
     Generates ``rows_per_gpu`` synthetic rows per GPU type (H100/A100/T4)

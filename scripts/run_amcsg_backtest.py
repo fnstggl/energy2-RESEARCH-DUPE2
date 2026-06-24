@@ -139,14 +139,14 @@ def main() -> None:
         "NULL RESULT" if azure_improvement <= 0 else "MARGINAL"
     )
     with open(md_path, "w") as f:
-        f.write(f"# AMCSG Gate Sweep Backtest — 2026-06-27\n\n")
-        f.write(f"**Policy:** AMCSG (Adaptive MCS Gate Sweep)  \n")
+        f.write("# AMCSG Gate Sweep Backtest — 2026-06-27\n\n")
+        f.write("**Policy:** AMCSG (Adaptive MCS Gate Sweep)  \n")
         f.write(f"**Status:** {azure_status}  \n\n")
-        f.write(f"## Primary Result\n\n")
+        f.write("## Primary Result\n\n")
         f.write(f"| Trace | Baseline (gate=9.5%) | Best (gate={azure.best_gate}%) | "
                 f"vs Baseline | vs SLA-oracle | NS +500% |\n")
-        f.write(f"|-------|---------------------|--------------------------------|"
-                f"------------|---------------|----------|\n")
+        f.write("|-------|---------------------|--------------------------------|"
+                "------------|---------------|----------|\n")
         f.write(f"| Azure LLM 2024 | {azure.baseline_goodput_per_dollar:,.0f} "
                 f"(${azure.baseline_cost:.2f}) | **{azure.best_goodput_per_dollar:,.0f}** "
                 f"| **{azure_improvement:+.2f}%** | **{azure.best_vs_sla_oracle_pct:+.1f}%** "
@@ -155,25 +155,25 @@ def main() -> None:
                 f"(${burstgpt.baseline_cost:.2f}) | **{burstgpt.best_goodput_per_dollar:,.0f}** "
                 f"| **{burstgpt_improvement:+.2f}%** | **{burstgpt.best_vs_sla_oracle_pct:+.1f}%** "
                 f"| {'✓' if burstgpt_ns500 else '✗'} |\n\n")
-        f.write(f"## Gate Sweep Detail — Azure LLM 2024\n\n")
-        f.write(f"| Gate% | c_mean | cost($) | goodput/$ | Δbaseline | p99(s) | NS-500 |\n")
-        f.write(f"|-------|--------|---------|-----------|-----------|--------|--------|\n")
+        f.write("## Gate Sweep Detail — Azure LLM 2024\n\n")
+        f.write("| Gate% | c_mean | cost($) | goodput/$ | Δbaseline | p99(s) | NS-500 |\n")
+        f.write("|-------|--------|---------|-----------|-----------|--------|--------|\n")
         for e in azure.gate_results:
             f.write(
                 f"| {e.gate_pct:.1f}% | {e.c_schedule_mean:.3f} | ${e.cost:.4f} "
                 f"| {e.goodput_per_dollar:,.0f} | {e.goodput_vs_baseline_pct:+.2f}% "
                 f"| {e.p99_s:.3f} | {'✓' if e.north_star_500_achieved else '✗'} |\n"
             )
-        f.write(f"\n## Gate Sweep Detail — BurstGPT HF\n\n")
-        f.write(f"| Gate% | c_mean | cost($) | goodput/$ | Δbaseline | p99(s) | NS-500 |\n")
-        f.write(f"|-------|--------|---------|-----------|-----------|--------|--------|\n")
+        f.write("\n## Gate Sweep Detail — BurstGPT HF\n\n")
+        f.write("| Gate% | c_mean | cost($) | goodput/$ | Δbaseline | p99(s) | NS-500 |\n")
+        f.write("|-------|--------|---------|-----------|-----------|--------|--------|\n")
         for e in burstgpt.gate_results:
             f.write(
                 f"| {e.gate_pct:.1f}% | {e.c_schedule_mean:.3f} | ${e.cost:.4f} "
                 f"| {e.goodput_per_dollar:,.0f} | {e.goodput_vs_baseline_pct:+.2f}% "
                 f"| {e.p99_s:.3f} | {'✓' if e.north_star_500_achieved else '✗'} |\n"
             )
-        f.write(f"\n## Erlang-C Conservatism Finding\n\n")
+        f.write("\n## Erlang-C Conservatism Finding\n\n")
         f.write(f"- Azure max safe gate: {azure.max_safe_gate}% "
                 f"(margin: +{azure.erlang_c_margin_pct:.1f}% above 9.5%)\n")
         f.write(f"- BurstGPT max safe gate: {burstgpt.max_safe_gate}% "

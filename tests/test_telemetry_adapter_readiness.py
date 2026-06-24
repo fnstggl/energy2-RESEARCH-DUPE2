@@ -32,8 +32,6 @@ import json
 import os
 from datetime import datetime, timezone
 
-import pytest
-
 from aurelius.frontier import (
     ServingTelemetryTick,
     build_serving_telemetry_window,

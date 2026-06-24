@@ -39,18 +39,14 @@ import pytest
 
 from aurelius.frontier import (
     DynamicControllerConfig,
-    DynamicEstimatorConfig,
     DynamicFrontierCandidate,
     DynamicFrontierDecision,
     DynamicFrontierEstimate,
-    DynamicFrontierOutcome,
     DynamicFrontierShadowLog,
     FrontierAction,
-    FrontierControllerConfig,
     FrontierDecision,
     FrontierPoint,
     RiskConfig,
-    SafetyConfig,
     SafetyStatus,
     ServingTelemetryTick,
     WorkloadFrontierProfile,
@@ -60,14 +56,10 @@ from aurelius.frontier import (
     compare_prediction_to_observed,
     dynamic_estimate_to_frontier_decision,
     estimate_dynamic_frontier,
-    estimate_frontier_from_points,
     estimate_queue_blowup_risk,
     estimate_sla_risk,
-    read_dynamic_outcomes,
     read_dynamic_shadow_log,
-    telemetry_tick_from_arrival_tick,
     validate_dynamic_window,
-    write_dynamic_outcome,
     write_dynamic_shadow_log_entry,
 )
 

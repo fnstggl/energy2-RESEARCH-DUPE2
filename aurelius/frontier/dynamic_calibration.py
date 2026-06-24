@@ -26,9 +26,8 @@ Hard rules (asserted by tests):
 
 from __future__ import annotations
 
-import math
-from dataclasses import asdict, dataclass, field, replace
-from typing import Callable, Iterable, Optional, Sequence
+from dataclasses import dataclass, field, replace
+from typing import Callable, Optional, Sequence
 
 from .dynamic_confidence import (
     ConfidenceUpdateConfig,
@@ -45,14 +44,12 @@ from .dynamic_evaluation import (
     compute_frontier_calibration_summary,
 )
 from .dynamic_models import (
-    DynamicFrontierDecision,
     DynamicFrontierEstimate,
     ServingTelemetryTick,
 )
 from .models import WorkloadFrontierProfile
 from .risk import RiskConfig
 from .safety import SafetyConfig
-
 
 # ---------------------------------------------------------------------------
 # Configuration.
@@ -530,7 +527,6 @@ def run_multi_pass_calibration(
 
     result = CalibrationReplayResult(
         target_oracle_alpha_capture=multi_cfg.target_oracle_alpha_capture)
-    last_pass: Optional[CalibrationPassResult] = None
 
     for pi in range(multi_cfg.passes):
         pr = run_dynamic_frontier_calibration_replay(

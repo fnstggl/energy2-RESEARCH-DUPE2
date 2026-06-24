@@ -10,15 +10,15 @@ Core contract:
   - best_north_star_500_achieved documents whether +500% was reached.
 """
 import pytest
+
 from aurelius.benchmarks.srtf_serving_backtest import (
+    _AMCSG_GATES,
+    GPU_HOUR_USD,
     AMCSGEntry,
     AMCSGReport,
     run_amcsg_azure_backtest,
     run_amcsg_burstgpt_backtest,
-    _AMCSG_GATES,
-    GPU_HOUR_USD,
 )
-
 
 # ---------------------------------------------------------------------------
 # Class 1: AMCSGEntry — dataclass correctness

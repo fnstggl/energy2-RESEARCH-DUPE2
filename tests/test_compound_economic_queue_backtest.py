@@ -37,9 +37,7 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     run_compound_economic_queue_azure_backtest,
     run_compound_economic_queue_burstgpt_backtest,
     run_sla_aware_abs_conformal_azure_backtest,
-    run_sla_aware_abs_conformal_burstgpt_backtest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixture helpers

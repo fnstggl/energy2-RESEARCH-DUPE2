@@ -23,17 +23,15 @@ Invariants tested:
 
 from __future__ import annotations
 
-import math
 import os
 
 import pytest
 
 from aurelius.traces.backtest import (
-    ALL_POLICIES,
     _SHU_TARGET_RHO,
     _SHU_TIMEOUT_TOL,
+    ALL_POLICIES,
     _constraint_trim,
-    evaluate_tick,
     run_backtest,
 )
 from aurelius.traces.replay import requests_to_arrival_ticks

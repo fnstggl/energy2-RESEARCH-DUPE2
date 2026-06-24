@@ -20,8 +20,6 @@ from __future__ import annotations
 import json
 import os
 
-import pytest
-
 from scripts import run_azure_2024_frontier_controller as fc
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

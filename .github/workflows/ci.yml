@@ -126,7 +126,8 @@ jobs:
             scikit-learn \
             lightgbm \
             pulp \
-            pyyaml
+            pyyaml \
+            requests
 
       - name: Install aurelius package
         run: pip install -e aurelius/
@@ -157,6 +158,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: false
+          load: true
           tags: aurelius:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

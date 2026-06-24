@@ -29,10 +29,6 @@ from .telemetry_provenance import (
     TickProvenance,
     TimeoutFallback,
     derive_sla_violation_pct,
-    make_derived,
-    make_missing,
-    make_proxy,
-    make_real,
     resolve_timeout_pct,
 )
 

@@ -63,7 +63,7 @@ def _print_report(label: str, rpt: CompoundEconomicQueueReport) -> None:
     print(f"  Economic cost factor: {rpt.economic_cost_factor}×  ({rpt.economic_cost_factor_source})")
     print()
     print("  NORTH-STAR ASSESSMENT:")
-    print(f"    Target:   +300% vs oracle SLA-aware")
+    print("    Target:   +300% vs oracle SLA-aware")
     print(f"    Compound: {rpt.compound_vs_sla_aware_oracle_delta_pct:>+.2f}% vs oracle SLA-aware")
     status = "ACHIEVED" if rpt.north_star_achieved else "NOT ACHIEVED"
     print(f"    Status:   {status}")
@@ -72,7 +72,7 @@ def _print_report(label: str, rpt: CompoundEconomicQueueReport) -> None:
     print(f"    run-t estimate vs FIFO:    {rpt.run_t_compound_estimate_vs_fifo_pct:>+.2f}%")
     print(f"    Corrected compound vs FIFO: {rpt.corrected_compound_vs_fifo_pct:>+.2f}%")
     print(f"    Over-estimate factor: {rpt.over_estimate_factor:.3f}×")
-    print(f"    (run-t double-counted the SLA-aware component)")
+    print("    (run-t double-counted the SLA-aware component)")
     print()
     print("  PATH TO +300%:")
     print(f"    Economic factor needed:  {rpt.economic_factor_needed_for_north_star:.4f}×")
@@ -99,19 +99,19 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("  COMPOUND NORTH-STAR SUMMARY")
     print("=" * 70)
-    print(f"  Queue-only vs oracle SLA-aware:")
+    print("  Queue-only vs oracle SLA-aware:")
     print(f"    Azure:    {azure.queue_vs_sla_aware_oracle_delta_pct:>+.2f}%  (run -y)")
     print(f"    BurstGPT: {burstgpt.queue_vs_sla_aware_oracle_delta_pct:>+.2f}%  (run -y)")
     print(f"  Compound (queue + economic {ECONOMIC_COST_FACTOR_BENCHMARK_REGISTRY}×) vs oracle SLA-aware:")
     print(f"    Azure:    {azure.compound_vs_sla_aware_oracle_delta_pct:>+.2f}%")
     print(f"    BurstGPT: {burstgpt.compound_vs_sla_aware_oracle_delta_pct:>+.2f}%")
-    print(f"  Target: +300% vs oracle SLA-aware")
+    print("  Target: +300% vs oracle SLA-aware")
     both_achieved = azure.north_star_achieved and burstgpt.north_star_achieved
     if both_achieved:
         print("  STATUS: NORTH-STAR ACHIEVED on both traces")
     else:
         print("  STATUS: NORTH-STAR NOT YET ACHIEVED")
-        print(f"  Compound reaches +130-166% vs oracle SLA-aware (not +300%)")
+        print("  Compound reaches +130-166% vs oracle SLA-aware (not +300%)")
         print(f"  Path: economic factor must increase from {ECONOMIC_COST_FACTOR_BENCHMARK_REGISTRY:.4f}× to:")
         print(f"    Azure:    {azure.economic_factor_needed_for_north_star:.4f}× (need +{azure.economic_factor_needed_delta_vs_current:.4f}× more)")
         print(f"    BurstGPT: {burstgpt.economic_factor_needed_for_north_star:.4f}× (need +{burstgpt.economic_factor_needed_delta_vs_current:.4f}× more)")
@@ -119,8 +119,8 @@ def main() -> None:
         print(f"  Equivalent: need ~{azure_gpu_needed:.1f}% GPU-hour savings (vs current -21.2%)")
         print()
         print("  CORRECTION OF RUN-T OVER-ESTIMATE:")
-        print(f"    run-t estimated +876% vs FIFO (rel-conformal) — used multiplicative")
-        print(f"    queue_vs_fifo × economic_vs_fifo, double-counting SLA-aware component.")
+        print("    run-t estimated +876% vs FIFO (rel-conformal) — used multiplicative")
+        print("    queue_vs_fifo × economic_vs_fifo, double-counting SLA-aware component.")
         print(f"    Corrected (abs-conformal): +{azure.corrected_compound_vs_fifo_pct:.2f}% vs FIFO ({azure.over_estimate_factor:.3f}× over-estimated)")
 
     # Save JSON output

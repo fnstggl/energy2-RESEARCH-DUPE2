@@ -20,11 +20,7 @@ from __future__ import annotations
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
-    DEFAULT_AZURE_FIXTURE,
-    DEFAULT_BURSTGPT_FIXTURE,
-    _ReplicaScalingConfig,
     calibrate_time_warp,
-    load_serving_requests,
 )
 from aurelius.optimizer import AureliusOptimizer
 from aurelius.optimizer.policies.replica_scaling import (
@@ -33,7 +29,6 @@ from aurelius.optimizer.policies.replica_scaling import (
     REPLICA_OSOTSS_EWMA_ALPHA,
     REPLICA_SAFE_GATE,
     ReplicaScalingConfig,
-    ReplicaScalingPolicy,
     compute_online_sotss_schedule,
 )
 

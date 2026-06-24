@@ -40,16 +40,13 @@ Invariants tested:
 
 from __future__ import annotations
 
-import math
-import os
-import tempfile
 import json
+import os
 
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     DEFAULT_BURSTGPT_HF_JSONL,
-    DEFAULT_BURSTGPT_SLA_S,
     LIVE_PRIOR_WINDOW,
     ML_PRIOR_WARMUP_N,
     MLPriorReport,
@@ -57,7 +54,6 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     make_ml_prior_predictions_burstgpt,
     run_burstgpt_hf_ml_prior_backtest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -169,7 +165,7 @@ def test_warmup_n_gte_n_returns_running_median():
 def test_phase1_matches_running_median():
     """6. First warmup_n predictions match running-median (Phase 1)."""
     raw, feats = _make_two_model_trace()
-    n = len(raw)
+    len(raw)
     warmup_n = 40
     preds_ml, _ = make_ml_prior_predictions_burstgpt(raw, feats, warmup_n=warmup_n)
     preds_median, _ = make_live_prior_predictions(raw, window=LIVE_PRIOR_WINDOW)

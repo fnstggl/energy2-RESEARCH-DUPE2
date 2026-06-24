@@ -24,17 +24,14 @@ Research basis:
 
 from __future__ import annotations
 
-import math
 from datetime import datetime, timedelta, timezone
-
-import pytest
 
 from aurelius.forecasting.gpu_placement_scorer import (
     GpuPlacementConfig,
     GpuPlacementScorer,
 )
 from aurelius.forecasting.ttft_shadow_prior import TTFTShadowPrior
-from aurelius.models import Job, OptimizationConfig, ScheduleDecision
+from aurelius.models import Job, OptimizationConfig
 from aurelius.optimization.scheduler import JobScheduler
 
 UTC = timezone.utc

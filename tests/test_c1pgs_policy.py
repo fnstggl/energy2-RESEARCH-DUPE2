@@ -12,30 +12,24 @@ Class structure:
   5. TestC1PGSAzureBacktest      — full Azure LLM 2024 backtest
   6. TestC1PGSBurstGPTBacktest   — full BurstGPT HF backtest (main hypothesis)
 """
-import math
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
+    _C1PGS_GATE,
     DEFAULT_AZURE_FIXTURE,
-    DEFAULT_BURSTGPT_HF_JSONL,
     GPU_HOUR_USD,
     C1PGSReport,
-    _c1pgs_spot_replicas,
     _c1pgs_spot_fleet_cost,
-    _simulate_fifo_c1pgs_spot_fleet,
-    _gsf_spot_replicas,
+    _c1pgs_spot_replicas,
     _gsf_spot_fleet_cost,
+    _gsf_spot_replicas,
+    _simulate_fifo_c1pgs_spot_fleet,
     _simulate_fifo_gsf_spot_fleet,
     load_serving_requests,
-    load_burstgpt_serving_requests_jsonl,
     run_c1pgs_azure_backtest,
     run_c1pgs_burstgpt_backtest,
-    _C1PGS_GATE,
-    _C1PGS_SAFE_GATE,
-    _C1PGS_SPOT_FRACTION,
 )
 from aurelius.optimizer.policies.replica_scaling import compute_c1pgs_spot_replicas
-
 
 # ---------------------------------------------------------------------------
 # Class 1: compute_c1pgs_spot_replicas — formula correctness
@@ -179,7 +173,10 @@ class TestC1PGSSimulation:
     @pytest.fixture(scope="class")
     def small_requests(self, raw_small):
         from aurelius.benchmarks.srtf_serving_backtest import (
-            _Request, _service_time_s, calibrate_time_warp, make_live_prior_predictions,
+            _Request,
+            _service_time_s,
+            calibrate_time_warp,
+            make_live_prior_predictions,
         )
         warp = calibrate_time_warp(raw_small, servers=4, target_rho=0.85)
         preds, _ = make_live_prior_predictions(raw_small, window=200)
@@ -224,7 +221,7 @@ class TestC1PGSSimulation:
         behaviour is equivalent — the difference is purely in cost and interruption risk.
         """
         from aurelius.benchmarks.srtf_serving_backtest import (
-            _Request, _service_time_s,
+            _Request,
         )
         tiny_reqs = [
             _Request(idx=i, arrival_s=float(i), actual_tokens=50,

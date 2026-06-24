@@ -42,7 +42,7 @@ Classification target: Benchmark Realism Audit (not a frontier improvement claim
 from __future__ import annotations
 
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List
 
 from .srtf_serving_backtest import (

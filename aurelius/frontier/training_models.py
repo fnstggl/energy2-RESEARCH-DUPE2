@@ -29,8 +29,7 @@ savings (``docs/RESULTS.md`` §8).
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Iterable, Optional
-
+from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Categorical enums — sibling of the serving FrontierAction / SafetyStatus.

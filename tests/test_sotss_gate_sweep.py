@@ -13,16 +13,14 @@ Validates:
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
+    _SOTSS_MIN_GATE,
+    _SOTSS_SWEEP_GATES,
     SOTSSGateSweepEntry,
     SOTSSGateSweepReport,
-    _SOTSS_MIN_GATE,
-    _SOTSS_MIN_MAX_ITERS,
-    _SOTSS_SWEEP_GATES,
     run_sotss_gate_sweep_azure_backtest,
     run_sotss_gate_sweep_burstgpt_backtest,
     run_sotss_min_azure_backtest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Smoke: SOTSS-MIN on Azure (small job limit)

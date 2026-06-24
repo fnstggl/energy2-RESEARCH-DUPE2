@@ -28,7 +28,6 @@ from aurelius.optimizer.policies.replica_scaling import (
     compute_online_sotss_schedule,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic trace helpers
 # ---------------------------------------------------------------------------
@@ -195,8 +194,8 @@ def test_borderline_sweep_entry_importable():
 
 def test_borderline_osotss_report_importable():
     from aurelius.benchmarks.borderline_osotss_backtest import (
-        BorderlineSweepEntry,
         BorderlineOSOTSSReport,
+        BorderlineSweepEntry,
     )
     entry = BorderlineSweepEntry(
         trace="burstgpt_hf",

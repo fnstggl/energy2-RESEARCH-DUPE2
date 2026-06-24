@@ -81,7 +81,7 @@ def main() -> None:
     print()
     print(f"  AFMS vs static: cost reduction = {azure_afms.afms_vs_static_cost_reduction_pct:.3f}%, "
           f"goodput/$ improvement = {azure_afms.afms_vs_static_improvement_pct:.3f}%")
-    print(f"  SLA-oracle baseline: 25,208 | North-star threshold: 100,832")
+    print("  SLA-oracle baseline: 25,208 | North-star threshold: 100,832")
     results["azure"] = azure_afms.to_dict()
 
     # ── BurstGPT HF ──────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ def main() -> None:
         print()
         print(f"  AFMS vs static: cost reduction = {burst_afms.afms_vs_static_cost_reduction_pct:.3f}%, "
               f"goodput/$ improvement = {burst_afms.afms_vs_static_improvement_pct:.3f}%")
-        print(f"  SLA-oracle baseline: 20,280 | North-star threshold: 81,120")
+        print("  SLA-oracle baseline: 20,280 | North-star threshold: 81,120")
         results["burstgpt"] = burst_afms.to_dict()
     else:
         print()
@@ -142,7 +142,7 @@ def main() -> None:
     print()
     if "azure" in results:
         r = results["azure"]
-        print(f"  Azure LLM 2024:")
+        print("  Azure LLM 2024:")
         print(f"    Static 70%:   {r['static_goodput_per_dollar']:,.0f} goodput/$ "
               f"({r['static_vs_sla_oracle_pct']:.1f}% vs SLA-oracle)")
         print(f"    AFMS:         {r['afms_goodput_per_dollar']:,.0f} goodput/$ "
@@ -152,7 +152,7 @@ def main() -> None:
         print(f"    North-star:   {'ACHIEVED' if r['north_star_achieved'] else 'NOT ACHIEVED'}")
     if "burstgpt" in results:
         r = results["burstgpt"]
-        print(f"  BurstGPT HF:")
+        print("  BurstGPT HF:")
         print(f"    Static 70%:   {r['static_goodput_per_dollar']:,.0f} goodput/$ "
               f"({r['static_vs_sla_oracle_pct']:.1f}% vs SLA-oracle)")
         print(f"    AFMS:         {r['afms_goodput_per_dollar']:,.0f} goodput/$ "
