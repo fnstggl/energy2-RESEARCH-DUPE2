@@ -911,6 +911,20 @@ Proposed convergence and a phased, benchmark-gated migration are in
 
 ## 7. Experiment History
 
+### Frontier Research Audit 2026-06-24 — NO FRONTIER ADVANCE (FINDINGS RECORDED)
+
+Frontier-driven research (decisions, not pricing). No code changed. Full report:
+`research/results/frontier_research_audit_2026-06-24.md`.
+- Legitimate decision frontier = **FIFO + OSOTSS** (`serving_queue` off — negative
+  under variable-c). On provisioned cost: **+153% (Azure) / +183% (BurstGPT) vs
+  SLA-oracle**.
+- Honesty correction: the "159,578 / +533%" headline is **71% spot pricing** (×2.50
+  cost denominator) and only **29% provisioning decision** → spot is **NOT AURELIUS
+  VALUE** per the GPU-cluster product rule.
+- Decision levers exhausted (7-run no-advance streak); largest bottleneck is
+  **data/signal** (placement/cache/admission need model-id / KV-cache /
+  heterogeneity the public traces lack). Recommend a richer public trace.
+
 ### Phase 5 — Canonical Integration Master Plan (PLANNING — NO CODE CHANGED)
 
 Planning/architecture run. Produced the authoritative integration roadmap:
