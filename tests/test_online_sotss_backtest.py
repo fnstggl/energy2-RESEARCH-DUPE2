@@ -146,6 +146,7 @@ class TestOnlineSOTSSReportDataclass:
 
     @pytest.fixture(scope="class")
     def report(self):
+        pytest.importorskip("numpy")
         return run_online_sotss_azure_backtest()
 
     def test_is_online_sotss_report(self, report):
@@ -194,6 +195,7 @@ class TestOnlineSOTSSAzure:
 
     @pytest.fixture(scope="class")
     def report(self):
+        pytest.importorskip("numpy")
         return run_online_sotss_azure_backtest()
 
     def test_north_star_500_achieved(self, report):
@@ -253,6 +255,7 @@ class TestOnlineSOTSSBurstGPT:
 
     @pytest.fixture(scope="class")
     def report(self):
+        pytest.importorskip("numpy")
         return run_online_sotss_burstgpt_backtest()
 
     def test_goodput_exceeds_north_star(self, report):
