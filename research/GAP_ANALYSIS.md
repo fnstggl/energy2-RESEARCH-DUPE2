@@ -8,6 +8,98 @@
 
 ---
 
+## Run 2026-06-24 — Adaptive EWMA Online SOTSS (NEGATIVE RESULT — hypothesis falsified)
+
+### Q1. What currently limits Aurelius most?
+
+**Stochastic/deterministic simulation mismatch in OSOTSS BurstGPT.** The 15-request gap (n_sla_safe=5849
+vs AMCSG 5864) arises because the oracle convergence check uses deterministic FIFO simulation while the
+stochastic GSF evaluation includes spot interruptions. This run tested whether adaptive EWMA predictions
+could close this gap; they cannot without over-provisioning.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+1. **Stochastic interrupt buffer in oracle convergence target** — set baseline_n_sla_safe = amcsg_n_sla_safe +
+   interrupt_safety_margin (e.g., +20 to +30 on BurstGPT). This directly addresses the confirmed root cause.
+2. **Transformer service-time predictor** — replace EWMA with a learned predictor; estimated MAPE reduction
+   from ~15% to ~5-8%; closes OSOTSS-vs-SOTSS-MIN gap on Azure.
+3. **ShareGPT/LMSYS cross-validation** — third/fourth public trace to validate OSOTSS generalization.
+
+### Q3. Which forecasts are weakest?
+
+1. **EWMA alpha=0.1 fixed** — adaptive alpha (this run) was tested and found not to help; the prediction
+   accuracy gap is NOT the bottleneck for the 15-request BurstGPT gap.
+2. **Deterministic oracle convergence target** — oracle targets deterministic n_sla_safe, but stochastic
+   evaluation needs a buffer. A +20-30 safety margin may close the BurstGPT gap.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Deterministic oracle baseline target** — oracle targets amcsg_n_sla_safe from stochastic simulation but
+   convergence uses deterministic FIFO; a safety buffer on the baseline would address the stochastic gap.
+2. **Single-step EWMA prediction** — still predicts only current tick's service time; multi-step prediction
+   could anticipate arrival bursts ahead of time.
+3. **Global mean warm-start** — production would use a rolling prior, not offline global mean.
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Same as previous run: traces with bursty arrivals (BurstGPT). The gap is now confirmed to be a
+stochastic/deterministic oracle-simulation mismatch, not a prediction quality issue.
+
+### Q6. Which research direction appears strongest?
+
+**Stochastic interrupt buffer in oracle convergence target.** The confirmed root cause of the BurstGPT
+15-request gap is that the oracle targets a deterministic baseline while the stochastic evaluation
+exposes spot-interruption-induced capacity reductions on borderline ticks. Adding a +20-30 request
+safety buffer to the oracle baseline would directly address this without prediction improvements.
+
+### Q7. What is the shortest path to another +1% gain?
+
+**Stochastic safety margin.** Change `baseline_n_sla_safe = amcsg_n_sla_safe` to
+`baseline_n_sla_safe = amcsg_n_sla_safe + safety_margin` (e.g., +20 on BurstGPT).
+This should close the 15/5849 = 0.26% n_sla_safe gap without changing goodput/$ materially
+(oracle adds a few extra servers on borderline ticks, matched precisely to the interruption buffer).
+Must verify Azure regression-free (Azure already meets baseline with no gap).
+
+### Q8. What is the current north-star status?
+
+Same as run 2026-06-23: both Azure and BurstGPT goodput/$ north-stars achieved. BurstGPT
+n_sla_safe remains 15 below AMCSG (known limitation).
+
+### Q9. What would need to be true to maintain north-star?
+
+Same as run 2026-06-23.
+
+### Q10. Which assumptions might be wrong?
+
+1. **EWMA prediction accuracy is the bottleneck.** FALSIFIED by this run. The 15-request gap
+   is a stochastic/deterministic simulation mismatch, not a prediction error.
+2. **Oracle convergence target equals final evaluation metric.** CONFIRMED WRONG. Oracle uses
+   deterministic n_sla_safe; evaluation uses stochastic GSF. A safety buffer is needed.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Deterministic/stochastic oracle-evaluation mismatch** — oracle convergence in deterministic
+   FIFO; evaluation in stochastic GSF. A 15-request gap on BurstGPT results. Known limitation.
+2. **Two public traces** — Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+Same as run 2026-06-23: ShareGPT, LMSYS Chatbot Arena.
+
+### Q13. What should be attempted next?
+
+1. **Stochastic safety margin** — oracle baseline_n_sla_safe += interrupt_safety_margin; directly
+   targets the confirmed root cause of the BurstGPT 15-request gap.
+2. **ShareGPT/LMSYS cross-validation** — third public trace.
+3. **Transformer service-time predictor** — replace EWMA for Azure oracle gap (SOTSS-MIN vs OSOTSS).
+
+**Five-Failure Rule counter: 3 of 5 consecutive non-frontier runs.**
+
+Results: `research/results/adaptive_ewma_osotss_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_adaptive_ewma_backtest.py` (8 tests, all passing)
+
+---
+
 ## Run 2026-06-23 — Online SOTSS / OSOTSS (FRONTIER IMPROVEMENT on Azure, MIXED on BurstGPT)
 
 ### Q1. What currently limits Aurelius most?
@@ -118,21 +210,22 @@ Tests: `tests/test_online_sotss_backtest.py` (30 tests, all passing)
 
 ---
 
-## Future Opportunity Ranking — Updated After Run 2026-06-23 (Online SOTSS)
+## Future Opportunity Ranking — Updated After Run 2026-06-24 (Adaptive EWMA — Negative Result)
 
 | rank | opportunity | EV | feasibility | status |
 |---|---|---|---|---|
-| 1 | Adaptive EWMA alpha per tick/trace (burst-tracking) | High | High | Closes BurstGPT 15-request gap; straightforward heuristic |
+| 1 | Stochastic safety margin (oracle baseline += interrupt buffer) | High | High | Directly targets confirmed root cause of BurstGPT 15-req gap |
 | 2 | ShareGPT/LMSYS cross-validation of OSOTSS | Medium | High | Third/fourth public trace; validates EWMA approach |
 | 3 | Transformer service-time predictor (replace EWMA) | High | Medium | Larger SOTSS-MIN fraction recovered; production-safe |
 | 4 | Multi-region spot arbitrage (SkyPilot/arXiv:2605.22778) | High | Medium | OSOTSS is production baseline; multi-region on top |
-| 5 | Stochastic oracle variant (run oracle with GSF not FIFO) | Medium | Medium | Closes deterministic/stochastic gap |
+| 5 | Stochastic oracle variant (run oracle with GSF not FIFO) | Medium | Medium | Closes deterministic/stochastic gap (may combine with #1) |
 
-**Closed/characterized opportunities (Online SOTSS):**
+**Closed/characterized opportunities:**
+- Adaptive EWMA alpha (this run): **NEGATIVE RESULT** — hypothesis falsified. Gap is stochastic/deterministic mismatch.
 - OSOTSS (EWMA alpha=0.1): **FRONTIER IMPROVEMENT** — 159,578 goodput/$ (Azure, +5.94% vs AMCSG)
 - Dual-simulation design: violation ID from predicted pairs, convergence from actual pairs
 - 94.4% of SOTSS-MIN oracle gain recovered while being production-deployable
-- BurstGPT causal-prediction limitation: 15-request SLA gap (0.26%) — known, documented
+- BurstGPT causal-prediction limitation: 15-request SLA gap (0.26%) — root cause now confirmed (stochastic gap)
 
 ---
 

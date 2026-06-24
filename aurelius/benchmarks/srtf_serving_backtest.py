@@ -12777,6 +12777,10 @@ def _online_sotss_cost_schedule(
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     baseline_n_sla_safe: int | None = None,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
 ) -> tuple:
     """Online SOTSS schedule — delegates to canonical ReplicaScalingPolicy.
 
@@ -12792,6 +12796,10 @@ def _online_sotss_cost_schedule(
         max_iters=max_iters,
         baseline_n_sla_safe=baseline_n_sla_safe,
         ewma_alpha=ewma_alpha,
+        ewma_mode=ewma_mode,
+        burst_threshold=burst_threshold,
+        burst_alpha=burst_alpha,
+        burst_cooldown_ticks=burst_cooldown_ticks,
     )
 
 
@@ -12901,6 +12909,10 @@ def _run_online_sotss_backtest(
     zfhc_threshold: int = 8,
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
 ) -> "OnlineSOTSSReport":
     """Shared Online SOTSS backtest logic for both Azure and BurstGPT traces."""
     warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
@@ -12955,6 +12967,10 @@ def _run_online_sotss_backtest(
             max_iters=max_iters,
             baseline_n_sla_safe=amcsg_n_sla_safe,
             ewma_alpha=ewma_alpha,
+            ewma_mode=ewma_mode,
+            burst_threshold=burst_threshold,
+            burst_alpha=burst_alpha,
+            burst_cooldown_ticks=burst_cooldown_ticks,
         )
     )
 
@@ -13030,6 +13046,10 @@ def run_online_sotss_azure_backtest(
     safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
 ) -> "OnlineSOTSSReport":
     """Online SOTSS backtest on Azure LLM 2024 — run 2026-06-23.
 
@@ -13084,6 +13104,10 @@ def run_online_sotss_azure_backtest(
         zfhc_threshold=zfhc_threshold,
         max_iters=max_iters,
         ewma_alpha=ewma_alpha,
+        ewma_mode=ewma_mode,
+        burst_threshold=burst_threshold,
+        burst_alpha=burst_alpha,
+        burst_cooldown_ticks=burst_cooldown_ticks,
     )
 
 
@@ -13103,6 +13127,10 @@ def run_online_sotss_burstgpt_backtest(
     safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
 ) -> "OnlineSOTSSReport":
     """Online SOTSS backtest on BurstGPT HF — run 2026-06-23.
 
@@ -13151,4 +13179,8 @@ def run_online_sotss_burstgpt_backtest(
         zfhc_threshold=zfhc_threshold,
         max_iters=max_iters,
         ewma_alpha=ewma_alpha,
+        ewma_mode=ewma_mode,
+        burst_threshold=burst_threshold,
+        burst_alpha=burst_alpha,
+        burst_cooldown_ticks=burst_cooldown_ticks,
     )
