@@ -1,0 +1,169 @@
+{
+  "audit_seeds": [
+    42,
+    123,
+    456,
+    789,
+    1337
+  ],
+  "azure_summary": {
+    "trace": "azure_llm_2024",
+    "seeds": [
+      42,
+      123,
+      456,
+      789,
+      1337
+    ],
+    "per_seed": [
+      {
+        "trace": "azure_llm_2024",
+        "seed": 42,
+        "amcsg_n_sla_safe": 5823,
+        "osotss_n_sla_safe": 5823,
+        "amcsg_goodput_per_dollar": 150629.91,
+        "osotss_goodput_per_dollar": 159578.22,
+        "gap_n_sla_safe": 0,
+        "osotss_vs_amcsg_pct": 5.9406
+      },
+      {
+        "trace": "azure_llm_2024",
+        "seed": 123,
+        "amcsg_n_sla_safe": 5823,
+        "osotss_n_sla_safe": 5823,
+        "amcsg_goodput_per_dollar": 150629.91,
+        "osotss_goodput_per_dollar": 159578.22,
+        "gap_n_sla_safe": 0,
+        "osotss_vs_amcsg_pct": 5.9406
+      },
+      {
+        "trace": "azure_llm_2024",
+        "seed": 456,
+        "amcsg_n_sla_safe": 5823,
+        "osotss_n_sla_safe": 5823,
+        "amcsg_goodput_per_dollar": 150629.91,
+        "osotss_goodput_per_dollar": 159578.22,
+        "gap_n_sla_safe": 0,
+        "osotss_vs_amcsg_pct": 5.9406
+      },
+      {
+        "trace": "azure_llm_2024",
+        "seed": 789,
+        "amcsg_n_sla_safe": 5823,
+        "osotss_n_sla_safe": 5823,
+        "amcsg_goodput_per_dollar": 150629.91,
+        "osotss_goodput_per_dollar": 159578.22,
+        "gap_n_sla_safe": 0,
+        "osotss_vs_amcsg_pct": 5.9406
+      },
+      {
+        "trace": "azure_llm_2024",
+        "seed": 1337,
+        "amcsg_n_sla_safe": 5823,
+        "osotss_n_sla_safe": 5823,
+        "amcsg_goodput_per_dollar": 150629.91,
+        "osotss_goodput_per_dollar": 159578.22,
+        "gap_n_sla_safe": 0,
+        "osotss_vs_amcsg_pct": 5.9406
+      }
+    ],
+    "amcsg_n_sla_safe_mean": 5823,
+    "amcsg_n_sla_safe_std": 0.0,
+    "amcsg_n_sla_safe_min": 5823,
+    "amcsg_n_sla_safe_max": 5823,
+    "osotss_n_sla_safe_mean": 5823,
+    "osotss_n_sla_safe_std": 0.0,
+    "osotss_n_sla_safe_min": 5823,
+    "osotss_n_sla_safe_max": 5823,
+    "gap_mean": 0,
+    "gap_std": 0.0,
+    "gap_min": 0,
+    "gap_max": 0,
+    "seeds_osotss_wins": 5,
+    "seeds_osotss_loses": 0,
+    "goodput_gap_is_structural": false,
+    "goodput_gap_is_noise": true
+  },
+  "burstgpt_summary": {
+    "trace": "burstgpt_hf",
+    "seeds": [
+      42,
+      123,
+      456,
+      789,
+      1337
+    ],
+    "per_seed": [
+      {
+        "trace": "burstgpt_hf",
+        "seed": 42,
+        "amcsg_n_sla_safe": 5864,
+        "osotss_n_sla_safe": 5849,
+        "amcsg_goodput_per_dollar": 168269.98,
+        "osotss_goodput_per_dollar": 178108.97,
+        "gap_n_sla_safe": -15,
+        "osotss_vs_amcsg_pct": 5.8471
+      },
+      {
+        "trace": "burstgpt_hf",
+        "seed": 123,
+        "amcsg_n_sla_safe": 5864,
+        "osotss_n_sla_safe": 5849,
+        "amcsg_goodput_per_dollar": 168269.98,
+        "osotss_goodput_per_dollar": 178108.97,
+        "gap_n_sla_safe": -15,
+        "osotss_vs_amcsg_pct": 5.8471
+      },
+      {
+        "trace": "burstgpt_hf",
+        "seed": 456,
+        "amcsg_n_sla_safe": 5864,
+        "osotss_n_sla_safe": 5849,
+        "amcsg_goodput_per_dollar": 168269.98,
+        "osotss_goodput_per_dollar": 178108.97,
+        "gap_n_sla_safe": -15,
+        "osotss_vs_amcsg_pct": 5.8471
+      },
+      {
+        "trace": "burstgpt_hf",
+        "seed": 789,
+        "amcsg_n_sla_safe": 5864,
+        "osotss_n_sla_safe": 5849,
+        "amcsg_goodput_per_dollar": 168269.98,
+        "osotss_goodput_per_dollar": 178108.97,
+        "gap_n_sla_safe": -15,
+        "osotss_vs_amcsg_pct": 5.8471
+      },
+      {
+        "trace": "burstgpt_hf",
+        "seed": 1337,
+        "amcsg_n_sla_safe": 5864,
+        "osotss_n_sla_safe": 5849,
+        "amcsg_goodput_per_dollar": 168269.98,
+        "osotss_goodput_per_dollar": 178108.97,
+        "gap_n_sla_safe": -15,
+        "osotss_vs_amcsg_pct": 5.8471
+      }
+    ],
+    "amcsg_n_sla_safe_mean": 5864,
+    "amcsg_n_sla_safe_std": 0.0,
+    "amcsg_n_sla_safe_min": 5864,
+    "amcsg_n_sla_safe_max": 5864,
+    "osotss_n_sla_safe_mean": 5849,
+    "osotss_n_sla_safe_std": 0.0,
+    "osotss_n_sla_safe_min": 5849,
+    "osotss_n_sla_safe_max": 5849,
+    "gap_mean": -15,
+    "gap_std": 0.0,
+    "gap_min": -15,
+    "gap_max": -15,
+    "seeds_osotss_wins": 0,
+    "seeds_osotss_loses": 5,
+    "goodput_gap_is_structural": true,
+    "goodput_gap_is_noise": false
+  },
+  "burstgpt_gap_is_structural": true,
+  "azure_gap_is_structural": false,
+  "conclusion": "MIXED: BurstGPT gap is structural (OSOTSS loses on all seeds); Azure gap is NOT structural (OSOTSS ties or wins on some seeds). Azure n_sla_safe parity is achievable; BurstGPT 15-request gap is hard.",
+  "elapsed_s": 11.0
+}
