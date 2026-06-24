@@ -14062,3 +14062,553 @@ def run_joint_osotss_abs_conformal_burstgpt_backtest(
         target_p90_abs_tokens=target_p90_abs_tokens,
         amcsg_gate=amcsg_gate,
     )
+
+
+# ---------------------------------------------------------------------------
+# Aging SRTF + AMCSG Compound Backtest — Run 2026-06-24
+# ---------------------------------------------------------------------------
+#
+# Five-Failure Rule integration experiment. Tests whether non-preemptive aging
+# SRTF queue discipline (existing: simulate_queue discipline="aging_srtf")
+# compounds POSITIVELY with the AMCSG optimal variable-c capacity schedule
+# (existing: _joint_mcs_c_schedule gate=12.5%) under GSF spot-fleet economics.
+#
+# Background: Joint OSOTSS × conformal SRPT (2026-06-24) found preemptive
+# conformal SRPT HURTS at variable-c (−1.5% at AMCSG, −4.0% at OSOTSS).
+# Root cause: preemption overhead × capacity reduction creates starvation.
+# Hypothesis: non-preemptive aging SRTF avoids overhead → neutral or positive.
+#
+# Research basis:
+#   Trail (arXiv:2410.01035, ICLR 2025): limited-preemption beats pure SRPT
+#   NP-SRPT (arXiv:2411.06348, 2024): non-preemptive SRPT optimal for M/G/N
+#   FastServe (arXiv:2305.05920, 2023): preemption = 7× KV overhead at low-c
+#   Queueing+LLMs (arXiv:2503.07545, 2025): preemption overhead 59.9% of P99
+#
+# 4-condition 2x2 factorial:
+#   {FIFO, aging_srtf} × {fixed-c=4, AMCSG gate=12.5%}
+#
+# Cost: GSF spot fleet (95% spot, $0.80/hr, 10%/hr interrupt, seed=42, ZFHC=8)
+# Headline: aging_srtf_amcsg vs fifo_amcsg (same capacity, better dispatch)
+# Five-Failure gate: aging_srtf_amcsg goodput/$ > OSOTSS canonical (159,578/$)
+# SLA safety gate: aging_srtf_amcsg_n_sla_safe >= fifo_amcsg_n_sla_safe
+
+_AGING_SRTF_AMCSG_GATE: float = 12.5        # AMCSG best-safe validated gate
+_AGING_SRTF_COMPOUND_ALPHA: float = AGING_ALPHA_DEFAULT  # 0.05 calibrated default
+
+
+def _simulate_aging_srtf_variable_c(
+    requests: list,
+    c_schedule: list,
+    aging_alpha: float = AGING_ALPHA_DEFAULT,
+    tick_seconds: float = 60.0,
+) -> tuple:
+    """Non-preemptive aging SRTF M/G/c with per-tick variable server count.
+
+    At each dispatch event (server completion), selects the waiting request
+    with the minimum aging key:
+        key(r, t) = predicted_tokens / (1 + aging_alpha * max(0, t - arrived_t))
+
+    This is the aging discipline from simulate_queue(discipline="aging_srtf"),
+    applied inside the variable-c event loop of _simulate_fifo_variable_c.
+
+    Variable-c semantics: servers >= c(t) complete running requests but do not
+    accept new arrivals until c(t) increases at a later tick.
+
+    Returns (summary, response_map, wait_map) matching simulate_queue contract.
+    """
+    n = len(requests)
+    if not c_schedule:
+        return {}, {}, {}
+    max_c = max(c_schedule)
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+
+    s_req: list = [None] * max_c
+    s_ver: list = [0] * max_c
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _c_now(t: float) -> int:
+        idx = min(int(t / tick_seconds), len(c_schedule) - 1)
+        return max(1, c_schedule[idx])
+
+    def _start(sid: int, req, t: float) -> None:
+        s_req[sid] = req
+        s_ver[sid] += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + req.service_s, 1, _en(), sid, v, req))
+
+    response: dict = {}
+    wait_map: dict = {}
+    waiting: list = []   # list of (arrived_t: float, req: _Request)
+
+    while events:
+        ev = heapq.heappop(events)
+        t, ety = ev[0], ev[1]
+        c = _c_now(t)
+
+        if ety == 0:   # ARRIVAL
+            req = ev[5]
+            free = next((s for s in range(c) if s_req[s] is None), None)
+            if free is not None:
+                wait_map[req.idx] = 0.0
+                _start(free, req, t)
+            else:
+                waiting.append((t, req))
+
+        else:   # COMPLETION
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue
+            response[req.idx] = t - req.arrival_s
+            s_req[sid] = None
+            s_ver[sid] += 1
+
+            if sid < c and waiting:
+                # Aging SRTF: pick minimum aging key, stable tiebreak on idx
+                best_j = min(
+                    range(len(waiting)),
+                    key=lambda j: (
+                        waiting[j][1].predicted_tokens
+                        / max(1e-9, 1.0 + aging_alpha * max(0.0, t - waiting[j][0])),
+                        waiting[j][1].idx,
+                    ),
+                )
+                arrived_t, nxt = waiting.pop(best_j)
+                wait_map[nxt.idx] = t - arrived_t
+                _start(sid, nxt, t)
+
+    resp = [response[r.idx] for r in requests if r.idx in response]
+    waits_list = [wait_map.get(r.idx, 0.0) for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits_list, max_c)
+    summary["preemption_count"] = 0
+    summary["variable_c"] = True
+    return summary, response, wait_map
+
+
+def _apply_gsf_spot_interruptions(
+    c_schedule: list,
+    spot_fraction: float,
+    zfhc_threshold: int,
+    p_interrupt_hourly: float,
+    tick_seconds: float,
+    seed: int,
+) -> list:
+    """Pre-compute effective c_schedule after GSF stochastic spot interruptions.
+
+    Replicates the inner loop of _simulate_fifo_gsf_spot_fleet so that the
+    effective schedule can be shared between FIFO and aging_srtf conditions
+    that use the same underlying capacity plan and same random seed.
+    """
+    import numpy as _np
+    rng = _np.random.default_rng(seed)
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+    c_eff: list = []
+    for c in c_schedule:
+        c_spot = _gsf_spot_replicas(c, spot_fraction, zfhc_threshold)
+        c_demand = c - c_spot
+        survived = int(rng.binomial(c_spot, p_survive)) if c_spot > 0 else 0
+        c_eff.append(max(1, c_demand + survived))
+    return c_eff
+
+
+@dataclass
+class AgingSRTFAMCSGReport:
+    """Aging SRTF × AMCSG compound backtest — run 2026-06-24.
+
+    2x2 factorial under GSF spot-fleet economics:
+      FIFO + fixed-c=4:         do-nothing baseline
+      FIFO + AMCSG gate=12.5%:  capacity-only gain (canonical baseline)
+      aging_srtf + fixed-c=4:   queue-only gain
+      aging_srtf + AMCSG:       compound candidate (HEADLINE)
+
+    Headline: aging_srtf_amcsg goodput/$ vs fifo_amcsg goodput/$ (same capacity).
+    Five-Failure gate: aging_srtf_amcsg vs OSOTSS canonical gp/$ per trace.
+    SLA safety gate: aging_srtf_amcsg_n_sla_safe >= fifo_amcsg_n_sla_safe.
+    """
+
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+    aging_alpha: float
+
+    amcsg_gate_pct: float
+    amcsg_c_mean: float
+    amcsg_c_min: int
+    amcsg_c_max: int
+    amcsg_n_ticks: int
+
+    spot_fraction: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+    rng_seed: int
+
+    cost_fixed_c: float
+    cost_amcsg: float
+
+    fifo_fixed_goodput_per_dollar: float
+    fifo_amcsg_goodput_per_dollar: float
+    aging_srtf_fixed_goodput_per_dollar: float
+    aging_srtf_amcsg_goodput_per_dollar: float
+
+    fifo_fixed_n_sla_safe: int
+    fifo_amcsg_n_sla_safe: int
+    aging_srtf_fixed_n_sla_safe: int
+    aging_srtf_amcsg_n_sla_safe: int
+
+    fifo_fixed_p99_s: float
+    fifo_amcsg_p99_s: float
+    aging_srtf_fixed_p99_s: float
+    aging_srtf_amcsg_p99_s: float
+
+    fifo_fixed_completion_rate: float
+    fifo_amcsg_completion_rate: float
+    aging_srtf_fixed_completion_rate: float
+    aging_srtf_amcsg_completion_rate: float
+
+    fifo_amcsg_vs_fifo_fixed_pct: float
+    aging_srtf_fixed_vs_fifo_fixed_pct: float
+    aging_srtf_amcsg_vs_fifo_fixed_pct: float
+    aging_srtf_amcsg_vs_fifo_amcsg_pct: float   # HEADLINE
+
+    amcsg_aging_srtf_sla_safe_delta: int   # aging_srtf_amcsg - fifo_amcsg
+
+    osotss_canonical_goodput_per_dollar: float
+    aging_srtf_amcsg_vs_osotss_canonical_pct: float
+
+    production_claim: bool = False
+    five_failure_rule_integration: bool = True
+
+    def to_dict(self) -> dict:
+        def _r(v, n: int = 2):
+            return round(v, n) if isinstance(v, float) else v
+
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": _r(self.target_rho, 3),
+            "sla_s": _r(self.sla_s, 1),
+            "tick_seconds": _r(self.tick_seconds, 1),
+            "aging_alpha": _r(self.aging_alpha, 4),
+            "amcsg_gate_pct": _r(self.amcsg_gate_pct, 1),
+            "amcsg_c_mean": _r(self.amcsg_c_mean, 3),
+            "amcsg_c_min": self.amcsg_c_min,
+            "amcsg_c_max": self.amcsg_c_max,
+            "amcsg_n_ticks": self.amcsg_n_ticks,
+            "spot_fraction": _r(self.spot_fraction, 2),
+            "p_interrupt_hourly": _r(self.p_interrupt_hourly, 2),
+            "zfhc_threshold": self.zfhc_threshold,
+            "rng_seed": self.rng_seed,
+            "cost_fixed_c": _r(self.cost_fixed_c, 6),
+            "cost_amcsg": _r(self.cost_amcsg, 6),
+            "fifo_fixed_goodput_per_dollar": _r(self.fifo_fixed_goodput_per_dollar),
+            "fifo_amcsg_goodput_per_dollar": _r(self.fifo_amcsg_goodput_per_dollar),
+            "aging_srtf_fixed_goodput_per_dollar": _r(self.aging_srtf_fixed_goodput_per_dollar),
+            "aging_srtf_amcsg_goodput_per_dollar": _r(self.aging_srtf_amcsg_goodput_per_dollar),
+            "fifo_fixed_n_sla_safe": self.fifo_fixed_n_sla_safe,
+            "fifo_amcsg_n_sla_safe": self.fifo_amcsg_n_sla_safe,
+            "aging_srtf_fixed_n_sla_safe": self.aging_srtf_fixed_n_sla_safe,
+            "aging_srtf_amcsg_n_sla_safe": self.aging_srtf_amcsg_n_sla_safe,
+            "fifo_fixed_p99_s": _r(self.fifo_fixed_p99_s, 3),
+            "fifo_amcsg_p99_s": _r(self.fifo_amcsg_p99_s, 3),
+            "aging_srtf_fixed_p99_s": _r(self.aging_srtf_fixed_p99_s, 3),
+            "aging_srtf_amcsg_p99_s": _r(self.aging_srtf_amcsg_p99_s, 3),
+            "fifo_fixed_completion_rate": _r(self.fifo_fixed_completion_rate, 4),
+            "fifo_amcsg_completion_rate": _r(self.fifo_amcsg_completion_rate, 4),
+            "aging_srtf_fixed_completion_rate": _r(self.aging_srtf_fixed_completion_rate, 4),
+            "aging_srtf_amcsg_completion_rate": _r(self.aging_srtf_amcsg_completion_rate, 4),
+            "fifo_amcsg_vs_fifo_fixed_pct": _r(self.fifo_amcsg_vs_fifo_fixed_pct),
+            "aging_srtf_fixed_vs_fifo_fixed_pct": _r(self.aging_srtf_fixed_vs_fifo_fixed_pct),
+            "aging_srtf_amcsg_vs_fifo_fixed_pct": _r(self.aging_srtf_amcsg_vs_fifo_fixed_pct),
+            "aging_srtf_amcsg_vs_fifo_amcsg_pct": _r(self.aging_srtf_amcsg_vs_fifo_amcsg_pct),
+            "amcsg_aging_srtf_sla_safe_delta": self.amcsg_aging_srtf_sla_safe_delta,
+            "osotss_canonical_goodput_per_dollar": _r(self.osotss_canonical_goodput_per_dollar),
+            "aging_srtf_amcsg_vs_osotss_canonical_pct": _r(
+                self.aging_srtf_amcsg_vs_osotss_canonical_pct
+            ),
+            "production_claim": self.production_claim,
+            "five_failure_rule_integration": self.five_failure_rule_integration,
+        }
+
+
+def _run_aging_srtf_amcsg_compound_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    aging_alpha: float,
+    osotss_canonical_goodput_per_dollar: float,
+    zfhc_threshold: int = 8,
+    amcsg_gate: float = _AGING_SRTF_AMCSG_GATE,
+    spot_fraction: float = 0.95,
+) -> "AgingSRTFAMCSGReport":
+    """Shared 4-condition aging SRTF × AMCSG compound backtest logic."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # AMCSG capacity schedule (gate=12.5%, best-safe validated)
+    c_amcsg = _compute_mcs_c_schedule(
+        raw, tick_seconds, warp, mcs_gate=amcsg_gate, sla_s=sla_s
+    )
+    n_ticks = len(c_amcsg)
+
+    # Pre-apply GSF spot interruptions. Same seed used for conditions that
+    # share a c_schedule so FIFO vs aging_srtf see identical effective capacity.
+    c_fixed_eff = _apply_gsf_spot_interruptions(
+        [fixed_c] * n_ticks, spot_fraction, zfhc_threshold,
+        p_interrupt_hourly, tick_seconds, seed,
+    )
+    c_amcsg_eff = _apply_gsf_spot_interruptions(
+        c_amcsg, spot_fraction, zfhc_threshold,
+        p_interrupt_hourly, tick_seconds, seed,
+    )
+
+    # GSF spot fleet costs (deterministic from schedule — same formula as AMCSG)
+    cost_fixed = _gsf_spot_fleet_cost(
+        [fixed_c] * n_ticks, spot_fraction, zfhc_threshold,
+        spot_price_usd_hr, GPU_HOUR_USD, tick_seconds,
+    )
+    cost_amcsg = _gsf_spot_fleet_cost(
+        c_amcsg, spot_fraction, zfhc_threshold,
+        spot_price_usd_hr, GPU_HOUR_USD, tick_seconds,
+    )
+
+    def _pct(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    def _n_safe(reqs: list, resp: dict) -> int:
+        return sum(1 for r in reqs if r.idx in resp and resp[r.idx] <= sla_s)
+
+    def _compl(reqs: list, resp: dict) -> float:
+        return len(resp) / max(len(reqs), 1)
+
+    # Cell 1: FIFO + fixed-c
+    ff_reqs = _build_live()
+    ff_sim, ff_resp, _ = _simulate_fifo_variable_c(ff_reqs, c_fixed_eff, tick_seconds)
+    gp_ff = _sla_safe_goodput(ff_reqs, ff_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # Cell 2: FIFO + AMCSG (should reproduce canonical fifo_amcsg ~150,630/168,270)
+    fa_reqs = _build_live()
+    fa_sim, fa_resp, _ = _simulate_fifo_variable_c(fa_reqs, c_amcsg_eff, tick_seconds)
+    gp_fa = _sla_safe_goodput(fa_reqs, fa_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    # Cell 3: aging_srtf + fixed-c (queue-only gain)
+    af_reqs = _build_live()
+    af_sim, af_resp, _ = _simulate_aging_srtf_variable_c(
+        af_reqs, c_fixed_eff, aging_alpha, tick_seconds
+    )
+    gp_af = _sla_safe_goodput(af_reqs, af_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # Cell 4: aging_srtf + AMCSG (the compound candidate — HEADLINE)
+    aa_reqs = _build_live()
+    aa_sim, aa_resp, _ = _simulate_aging_srtf_variable_c(
+        aa_reqs, c_amcsg_eff, aging_alpha, tick_seconds
+    )
+    gp_aa = _sla_safe_goodput(aa_reqs, aa_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    n_safe_fa = _n_safe(fa_reqs, fa_resp)
+    n_safe_aa = _n_safe(aa_reqs, aa_resp)
+
+    return AgingSRTFAMCSGReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        aging_alpha=aging_alpha,
+        amcsg_gate_pct=amcsg_gate,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_c_min=min(c_amcsg),
+        amcsg_c_max=max(c_amcsg),
+        amcsg_n_ticks=n_ticks,
+        spot_fraction=spot_fraction,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        rng_seed=seed,
+        cost_fixed_c=cost_fixed,
+        cost_amcsg=cost_amcsg,
+        fifo_fixed_goodput_per_dollar=gp_ff,
+        fifo_amcsg_goodput_per_dollar=gp_fa,
+        aging_srtf_fixed_goodput_per_dollar=gp_af,
+        aging_srtf_amcsg_goodput_per_dollar=gp_aa,
+        fifo_fixed_n_sla_safe=_n_safe(ff_reqs, ff_resp),
+        fifo_amcsg_n_sla_safe=n_safe_fa,
+        aging_srtf_fixed_n_sla_safe=_n_safe(af_reqs, af_resp),
+        aging_srtf_amcsg_n_sla_safe=n_safe_aa,
+        fifo_fixed_p99_s=ff_sim.get("p99_response_s", 0.0),
+        fifo_amcsg_p99_s=fa_sim.get("p99_response_s", 0.0),
+        aging_srtf_fixed_p99_s=af_sim.get("p99_response_s", 0.0),
+        aging_srtf_amcsg_p99_s=aa_sim.get("p99_response_s", 0.0),
+        fifo_fixed_completion_rate=_compl(ff_reqs, ff_resp),
+        fifo_amcsg_completion_rate=_compl(fa_reqs, fa_resp),
+        aging_srtf_fixed_completion_rate=_compl(af_reqs, af_resp),
+        aging_srtf_amcsg_completion_rate=_compl(aa_reqs, aa_resp),
+        fifo_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_fa),
+        aging_srtf_fixed_vs_fifo_fixed_pct=_pct(gp_ff, gp_af),
+        aging_srtf_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_aa),
+        aging_srtf_amcsg_vs_fifo_amcsg_pct=_pct(gp_fa, gp_aa),
+        amcsg_aging_srtf_sla_safe_delta=n_safe_aa - n_safe_fa,
+        osotss_canonical_goodput_per_dollar=osotss_canonical_goodput_per_dollar,
+        aging_srtf_amcsg_vs_osotss_canonical_pct=_pct(
+            osotss_canonical_goodput_per_dollar, gp_aa
+        ),
+    )
+
+
+def run_aging_srtf_amcsg_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    aging_alpha: float = _AGING_SRTF_COMPOUND_ALPHA,
+    amcsg_gate: float = _AGING_SRTF_AMCSG_GATE,
+) -> "AgingSRTFAMCSGReport":
+    """Aging SRTF × AMCSG compound backtest on Azure LLM 2024 — run 2026-06-24.
+
+    Integration experiment under Five-Failure Rule. Tests whether the existing
+    non-preemptive aging SRTF discipline (simulate_queue discipline=aging_srtf)
+    compounds POSITIVELY with the AMCSG optimal variable-c capacity schedule.
+
+    Prior joint compound backtest (2026-06-24) found preemptive conformal SRPT
+    NEGATIVE at variable-c (−1.5% at AMCSG, −4.0% at OSOTSS). Root cause:
+    preemption overhead × capacity reduction. Hypothesis: non-preemptive aging
+    SRTF avoids the overhead by never interrupting running requests.
+
+    Cost: GSF spot fleet (95% spot, $0.80/hr, 10%/hr interrupt, seed=42).
+    Strongest fair baseline: FIFO + AMCSG gate=12.5% (canonical ~150,630 gp/$).
+    Candidate: aging_srtf + AMCSG gate=12.5% (same capacity, better dispatch).
+    Five-Failure Rule clears if aging_srtf_amcsg > OSOTSS canonical (159,578).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880 for Azure).
+        sla_s:              E2E SLA budget (10s).
+        prior_window:       Sliding-window for running-median live prior.
+        azure_fixture:      Azure LLM 2024 fixture CSV path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        aging_alpha:        Aging decay constant for aging SRTF (default 0.05).
+        amcsg_gate:         AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        AgingSRTFAMCSGReport with 4-cell 2x2 KPIs.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_aging_srtf_amcsg_compound_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_aging_srtf_amcsg",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        aging_alpha=aging_alpha,
+        osotss_canonical_goodput_per_dollar=159_578.0,
+        zfhc_threshold=zfhc_threshold,
+        amcsg_gate=amcsg_gate,
+    )
+
+
+def run_aging_srtf_amcsg_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    aging_alpha: float = _AGING_SRTF_COMPOUND_ALPHA,
+    amcsg_gate: float = _AGING_SRTF_AMCSG_GATE,
+) -> "AgingSRTFAMCSGReport":
+    """Aging SRTF × AMCSG compound backtest on BurstGPT HF — run 2026-06-24.
+
+    Cross-validates the Azure aging SRTF × AMCSG compound on BurstGPT.
+    Same 4-condition design; SLA budget is 30s (BurstGPT default).
+    OSOTSS canonical reference: 178,109 gp/$ (BurstGPT).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880).
+        sla_s:              E2E SLA budget (30s).
+        prior_window:       Sliding-window for running-median live prior.
+        jsonl_path:         BurstGPT HF JSONL fixture path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        aging_alpha:        Aging decay constant for aging SRTF (default 0.05).
+        amcsg_gate:         AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        AgingSRTFAMCSGReport with 4-cell 2x2 KPIs.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_aging_srtf_amcsg_compound_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_aging_srtf_amcsg",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        aging_alpha=aging_alpha,
+        osotss_canonical_goodput_per_dollar=178_109.0,
+        zfhc_threshold=zfhc_threshold,
+        amcsg_gate=amcsg_gate,
+    )

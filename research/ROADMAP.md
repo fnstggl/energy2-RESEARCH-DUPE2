@@ -2648,3 +2648,42 @@ complementary, see the cross-reference at the end.)
      increasing spot fraction from 0.95 reduces on-demand cost. Risk: interruption tail.
   5. **Conformal output-length predictor calibration on Azure:** BurstGPT showed abs-conformal
      (+420%) beats rel-conformal (+284%). Run the same test on Azure to quantify the gap.
+
+---
+
+### Run 2026-06-24 — Aging SRTF + AMCSG Compound (HONEST NULL RESULT — Five-Failure Rule integration)
+
+**Five-Failure Rule counter: 6/5 (still ACTIVE)**
+
+- **Goal:** Integrate non-preemptive aging-SRTF queue discipline with AMCSG optimal variable-c
+  capacity schedule. 2×2 factorial: {FIFO, aging_srtf} × {fixed-c=8, AMCSG gate=12.5%}.
+  GSF spot-fleet cost model (same-conditions comparison, seed=42).
+- **Papers surveyed:** Trail (arXiv:2410.01035, ICLR 2025), NP-SRPT (arXiv:2411.06348),
+  FastServe (arXiv:2305.05920), Queueing+LLMs (arXiv:2503.07545).
+- **Hypothesis:** Aging SRTF non-preemptively dispatches shorter requests first, reducing
+  median queueing latency → more SLA-safe completions → higher goodput/$.
+- **Implementation:** `_simulate_aging_srtf_variable_c()` (new), `_apply_gsf_spot_interruptions()`
+  (new), `AgingSRTFAMCSGReport` (new), entry points `run_aging_srtf_amcsg_azure_backtest()` /
+  `run_aging_srtf_amcsg_burstgpt_backtest()` (new). No production modules modified.
+- **Result:**
+
+  | Condition | Azure gp/$ | BurstGPT gp/$ |
+  |---|---|---|
+  | FIFO + AMCSG (baseline) | 150,630 | 168,270 |
+  | Aging SRTF + AMCSG (candidate) | 150,630 | 168,421 |
+  | Delta vs baseline | +0.00% | +0.09% |
+  | vs OSOTSS frontier | -5.61% | -5.44% |
+
+- **Root cause of null result:** Running-median live prior (window=200) collapses per-request
+  token predictions to near-constant: stdev=8.1 vs actual stdev=93.1, 37 unique predicted
+  values ≈91 tokens. Aging SRTF key = `predicted_tokens / (1 + alpha × wait_time)` degenerates
+  to near-constant → dispatch order ≈ FIFO. Fixed-c degeneracy test confirms: |delta| < 1%.
+- **Non-preemptive confirmed:** preemption_count=0, verified by `test_aging_srtf_variable_c_non_preemptive`.
+- **Canonical parity confirmed:** FIFO+AMCSG exactly reproduces 150,630 (Azure) and 168,270 (BurstGPT).
+- **SLA regression absent:** amcsg_aging_srtf_sla_safe_delta ≥ 0 on both traces.
+- **Tests:** `tests/test_aging_srtf_amcsg_compound.py` — 24 tests, 23 passed, 1 skipped.
+- **Run category:** Honest Null Result (queue-discipline integration, prediction-degeneracy confirmed)
+- **Binding constraint identified:** Per-request token prediction accuracy is the prerequisite for
+  any queue-discipline improvement. Trail (ICLR 2025) is the best available method;
+  requires pilot telemetry (blocked).
+- **Results:** `research/results/aging_srtf_amcsg_compound_2026-06-24.{md,json}`
