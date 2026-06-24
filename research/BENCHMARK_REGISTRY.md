@@ -146,6 +146,17 @@ North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
 Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 2/3].
 Results: `research/results/sotss_gate_sweep_2026-06-23.md`, `research/results/online_sotss_backtest_2026-06-23.md`.
 
+**NEUTRAL/NEGATIVE RESULT — Forecasted MCS Spot Fleet [run 2026-06-24]:**
+First apples-to-apples evaluation of `forecasted_mcs` (fully deployable; uses data ≤ t-1) under the
+GSF spot-fleet cost model. Two sub-modes (lag1, ewma) evaluated vs AMCSG on both traces.
+Azure: lag1=149,110 (−1.01% vs AMCSG), ewma=150,162 (−0.31%). BurstGPT: lag1=147,181 (−12.5%),
+ewma=103,192 (−38.7%). n_sla_safe fails for all cases. BurstGPT p99 exceeds SLA (lag1: 47.5s, ewma: 67.4s).
+Root cause: AMCSG's arrival-oracle advantage (actual tick-t counts) cannot be matched by past-data forecasting
+on bursty traffic. Structural gap confirmed for all forecasted sub-modes.
+No leaderboard update. Routing: `AureliusOptimizer(policy="replica_scaling", mode="forecasted_mcs")`.
+Results: `research/results/forecasted_mcs_spot_backtest_2026-06-24.{md,json}`.
+Tests: `tests/test_forecasted_mcs_spot_backtest.py` (18 pass, 28 skip if numpy absent).
+
 **NEGATIVE RESULT — OSSC/Borderline (post-convergence borderline-tick continuation) [run 2026-06-24]:**
 OSSC adds capacity after primary convergence to ticks with response times within `borderline_margin_s`
 of the SLA limit. Sweep: {0.5, 1.0, 2.0, 3.0, 5.0}s. BurstGPT gap narrows -15→-3 at 5.0s margin

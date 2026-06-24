@@ -144,6 +144,7 @@ from aurelius.optimizer.policies.serving_queue import (
 # the optimizer package. _joint_mcs_c_schedule and _sotss_min_cost_schedule
 # become thin delegates — same algorithm, constants, and tie-breaks (0% KPI drift).
 from aurelius.optimizer.policies.replica_scaling import (
+    ReplicaScalingConfig as _ReplicaScalingConfig,
     compute_c1pgs_spot_replicas as _compute_c1pgs_spot_replicas,
     compute_mcs_c_schedule as _compute_mcs_c_schedule,
     compute_online_sotss_schedule as _compute_online_sotss_schedule,
@@ -13199,4 +13200,417 @@ def run_online_sotss_burstgpt_backtest(
         burst_cooldown_ticks=burst_cooldown_ticks,
         interrupt_safety_margin=interrupt_safety_margin,
         borderline_margin_s=borderline_margin_s,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Forecasted MCS Spot Fleet backtest — run 2026-06-24
+#
+# Evaluates the ONLY fully deployable replica-scaling mode (forecasted_mcs)
+# under the GSF spot-fleet cost model (95% spot, $0.80/hr, 10%/hr interruption).
+# Prior evaluations used on-demand pricing only; this is the first apples-to-
+# apples comparison vs AMCSG/OSOTSS under spot-fleet economics.
+#
+# Two sub-modes evaluated:
+#   lag1  — reactive: uses actual tick-(t-1) counts and service times
+#   ewma  — EWMA-smoothed arrival forecast + service time prediction
+#
+# Routing: uses _REPLICA_SCALING_OPTIMIZER (AureliusOptimizer(policy=
+# "replica_scaling")) for canonical entry-point compliance.
+# ---------------------------------------------------------------------------
+
+_FMCS_SPOT_MCS_GATE: float = 12.5     # same safe gate as AMCSG
+_FMCS_SPOT_EWMA_ALPHA: float = 0.5    # default from ReplicaScalingConfig
+
+
+@dataclass
+class ForecastedMCSSpotReport:
+    """Forecasted MCS Spot Fleet backtest report — run 2026-06-24.
+
+    Compares the fully deployable forecasted_mcs modes (lag1, ewma) against
+    AMCSG (gate=12.5%) on the GSF spot-fleet cost model.  Unlike OSOTSS, there
+    is no oracle inner loop: the c_schedule is computed in a single forward pass
+    using only data available at decision time (≤ t-1).
+
+    Same-conditions rule: identical trace, SLA, cost denominator, GPU-hour
+    accounting, physics, capacity model, spot-fleet model, and evaluation method
+    as AMCSG and OSOTSS.
+
+    Primary KPI: lag1/ewma goodput_per_dollar vs amcsg_goodput_per_dollar.
+    """
+
+    trace: str
+    total_requests: int
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+    mcs_gate: float
+    ewma_alpha: float
+
+    # North-star reference
+    sla_oracle_goodput_per_dollar: float
+    north_star_500_threshold: float
+
+    # AMCSG safe-gate baseline (gate=12.5%)
+    amcsg_goodput_per_dollar: float
+    amcsg_cost: float
+    amcsg_c_mean: float
+    amcsg_n_sla_safe: int
+    amcsg_p99_s: float
+
+    # Forecasted MCS lag1 (reactive: tick t-1 counts + service times)
+    lag1_goodput_per_dollar: float
+    lag1_cost: float
+    lag1_c_mean: float
+    lag1_n_sla_safe: int
+    lag1_p99_s: float
+    lag1_vs_amcsg_pct: float
+    lag1_vs_sla_oracle_pct: float
+    lag1_north_star_500_achieved: bool
+    lag1_n_sla_safe_safe: bool   # lag1_n_sla_safe >= amcsg_n_sla_safe
+
+    # Forecasted MCS ewma (EWMA-smoothed arrival + service forecast)
+    ewma_goodput_per_dollar: float
+    ewma_cost: float
+    ewma_c_mean: float
+    ewma_n_sla_safe: int
+    ewma_p99_s: float
+    ewma_vs_amcsg_pct: float
+    ewma_vs_sla_oracle_pct: float
+    ewma_north_star_500_achieved: bool
+    ewma_n_sla_safe_safe: bool   # ewma_n_sla_safe >= amcsg_n_sla_safe
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "zfhc_threshold": self.zfhc_threshold,
+            "mcs_gate": self.mcs_gate,
+            "ewma_alpha": self.ewma_alpha,
+            "sla_oracle_goodput_per_dollar": round(self.sla_oracle_goodput_per_dollar, 2),
+            "north_star_500_threshold": round(self.north_star_500_threshold, 2),
+            "amcsg_goodput_per_dollar": round(self.amcsg_goodput_per_dollar, 2),
+            "amcsg_cost": round(self.amcsg_cost, 4),
+            "amcsg_c_mean": round(self.amcsg_c_mean, 3),
+            "amcsg_n_sla_safe": self.amcsg_n_sla_safe,
+            "amcsg_p99_s": round(self.amcsg_p99_s, 3),
+            "lag1_goodput_per_dollar": round(self.lag1_goodput_per_dollar, 2),
+            "lag1_cost": round(self.lag1_cost, 4),
+            "lag1_c_mean": round(self.lag1_c_mean, 3),
+            "lag1_n_sla_safe": self.lag1_n_sla_safe,
+            "lag1_p99_s": round(self.lag1_p99_s, 3),
+            "lag1_vs_amcsg_pct": round(self.lag1_vs_amcsg_pct, 4),
+            "lag1_vs_sla_oracle_pct": round(self.lag1_vs_sla_oracle_pct, 2),
+            "lag1_north_star_500_achieved": self.lag1_north_star_500_achieved,
+            "lag1_n_sla_safe_safe": self.lag1_n_sla_safe_safe,
+            "ewma_goodput_per_dollar": round(self.ewma_goodput_per_dollar, 2),
+            "ewma_cost": round(self.ewma_cost, 4),
+            "ewma_c_mean": round(self.ewma_c_mean, 3),
+            "ewma_n_sla_safe": self.ewma_n_sla_safe,
+            "ewma_p99_s": round(self.ewma_p99_s, 3),
+            "ewma_vs_amcsg_pct": round(self.ewma_vs_amcsg_pct, 4),
+            "ewma_vs_sla_oracle_pct": round(self.ewma_vs_sla_oracle_pct, 2),
+            "ewma_north_star_500_achieved": self.ewma_north_star_500_achieved,
+            "ewma_n_sla_safe_safe": self.ewma_n_sla_safe_safe,
+        }
+
+
+def _run_forecasted_mcs_spot_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_500_threshold: float,
+    mcs_gate: float = _FMCS_SPOT_MCS_GATE,
+    zfhc_threshold: int = 8,
+    ewma_alpha: float = _FMCS_SPOT_EWMA_ALPHA,
+    warmup_c: int = 4,
+) -> "ForecastedMCSSpotReport":
+    """Shared Forecasted MCS Spot Fleet backtest logic for Azure and BurstGPT.
+
+    Three-step evaluation (same structure as _run_online_sotss_backtest):
+      1. Compute AMCSG safe-gate baseline (gate=mcs_gate) for comparison.
+      2. Compute forecasted_mcs lag1 and ewma c_schedules via AureliusOptimizer.
+      3. Evaluate all three under the same GSF spot-fleet simulation.
+
+    Same-conditions rule: identical trace, SLA, cost denominator, GPU-hour
+    accounting, physics, capacity model, spot-fleet model, evaluation method.
+    """
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+
+    def _build_reqs() -> list:
+        # FIFO simulation: predicted_tokens not used for ordering; set to actual.
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # -----------------------------------------------------------------------
+    # Step 1: AMCSG safe-gate baseline (gate=mcs_gate%, same as OSOTSS step 1)
+    # -----------------------------------------------------------------------
+    c_amcsg = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=mcs_gate, sla_s=sla_s)
+    amcsg_cost = _gsf_spot_fleet_cost(
+        c_amcsg, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_amcsg = _build_reqs()
+    amcsg_sim, amcsg_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_amcsg, c_amcsg, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    amcsg_gp = _sla_safe_goodput(reqs_amcsg, amcsg_resp, sla_s) / max(amcsg_cost, 1e-9)
+    amcsg_n_sla_safe = sum(
+        1 for r in reqs_amcsg if r.idx in amcsg_resp and amcsg_resp[r.idx] <= sla_s
+    )
+
+    # -----------------------------------------------------------------------
+    # Step 2a: Forecasted MCS lag1 — reactive (tick t-1 counts + service times)
+    # Routed through AureliusOptimizer(policy="replica_scaling") canonical path.
+    # -----------------------------------------------------------------------
+    lag1_result = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="forecasted_mcs",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=mcs_gate,
+            forecast_method="lag1",
+            forecast_warmup_c=warmup_c,
+        ),
+    )
+    c_lag1 = lag1_result.c_schedule
+
+    # -----------------------------------------------------------------------
+    # Step 2b: Forecasted MCS ewma — EWMA-smoothed arrival + service forecast
+    # -----------------------------------------------------------------------
+    ewma_result = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="forecasted_mcs",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=mcs_gate,
+            forecast_method="ewma",
+            forecast_ewma_alpha=ewma_alpha,
+            forecast_warmup_c=warmup_c,
+        ),
+    )
+    c_ewma = ewma_result.c_schedule
+
+    # -----------------------------------------------------------------------
+    # Step 3: Evaluate lag1 and ewma under same GSF spot-fleet simulation.
+    # -----------------------------------------------------------------------
+    lag1_cost = _gsf_spot_fleet_cost(
+        c_lag1, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_lag1 = _build_reqs()
+    lag1_sim, lag1_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_lag1, c_lag1, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    lag1_gp = _sla_safe_goodput(reqs_lag1, lag1_resp, sla_s) / max(lag1_cost, 1e-9)
+    lag1_n_sla_safe = sum(
+        1 for r in reqs_lag1 if r.idx in lag1_resp and lag1_resp[r.idx] <= sla_s
+    )
+
+    ewma_cost = _gsf_spot_fleet_cost(
+        c_ewma, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_ewma = _build_reqs()
+    ewma_sim, ewma_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_ewma, c_ewma, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    ewma_gp = _sla_safe_goodput(reqs_ewma, ewma_resp, sla_s) / max(ewma_cost, 1e-9)
+    ewma_n_sla_safe = sum(
+        1 for r in reqs_ewma if r.idx in ewma_resp and ewma_resp[r.idx] <= sla_s
+    )
+
+    lag1_vs_amcsg = (lag1_gp - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+    lag1_vs_oracle = (lag1_gp - sla_oracle) / sla_oracle * 100.0
+    ewma_vs_amcsg = (ewma_gp - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+    ewma_vs_oracle = (ewma_gp - sla_oracle) / sla_oracle * 100.0
+
+    return ForecastedMCSSpotReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        mcs_gate=mcs_gate,
+        ewma_alpha=ewma_alpha,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+        north_star_500_threshold=north_star_500_threshold,
+        amcsg_goodput_per_dollar=amcsg_gp,
+        amcsg_cost=amcsg_cost,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_n_sla_safe=amcsg_n_sla_safe,
+        amcsg_p99_s=amcsg_sim.get("p99_response_s", 0.0),
+        lag1_goodput_per_dollar=lag1_gp,
+        lag1_cost=lag1_cost,
+        lag1_c_mean=statistics.mean(c_lag1),
+        lag1_n_sla_safe=lag1_n_sla_safe,
+        lag1_p99_s=lag1_sim.get("p99_response_s", 0.0),
+        lag1_vs_amcsg_pct=lag1_vs_amcsg,
+        lag1_vs_sla_oracle_pct=lag1_vs_oracle,
+        lag1_north_star_500_achieved=(lag1_gp >= north_star_500_threshold and lag1_n_sla_safe >= amcsg_n_sla_safe),
+        lag1_n_sla_safe_safe=(lag1_n_sla_safe >= amcsg_n_sla_safe),
+        ewma_goodput_per_dollar=ewma_gp,
+        ewma_cost=ewma_cost,
+        ewma_c_mean=statistics.mean(c_ewma),
+        ewma_n_sla_safe=ewma_n_sla_safe,
+        ewma_p99_s=ewma_sim.get("p99_response_s", 0.0),
+        ewma_vs_amcsg_pct=ewma_vs_amcsg,
+        ewma_vs_sla_oracle_pct=ewma_vs_oracle,
+        ewma_north_star_500_achieved=(ewma_gp >= north_star_500_threshold and ewma_n_sla_safe >= amcsg_n_sla_safe),
+        ewma_n_sla_safe_safe=(ewma_n_sla_safe >= amcsg_n_sla_safe),
+    )
+
+
+def run_forecasted_mcs_spot_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    mcs_gate: float = _FMCS_SPOT_MCS_GATE,
+    ewma_alpha: float = _FMCS_SPOT_EWMA_ALPHA,
+    warmup_c: int = 4,
+) -> "ForecastedMCSSpotReport":
+    """Forecasted MCS Spot Fleet backtest on Azure LLM 2024 — run 2026-06-24.
+
+    First apples-to-apples comparison of the fully deployable forecasted_mcs
+    modes (lag1, ewma) against AMCSG under GSF spot-fleet cost model.
+
+    Candidate claim: if lag1/ewma goodput_per_dollar > amcsg_goodput_per_dollar
+    AND lag1/ewma n_sla_safe >= amcsg_n_sla_safe, that sub-mode is a frontier
+    improvement over AMCSG — fully deployable with no oracle information.
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880 for Azure).
+        sla_s:              E2E SLA budget (10s).
+        azure_fixture:      Azure LLM 2024 fixture CSV path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr, default $0.80).
+        p_interrupt_hourly: Hourly spot interruption probability (default 0.10).
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        mcs_gate:           MCS Erlang-C utilization gate % (default 12.5%).
+        ewma_alpha:         EWMA smoothing for ewma sub-mode (default 0.5).
+        warmup_c:           Cold-start replica count (default 4).
+
+    Returns:
+        ForecastedMCSSpotReport comparing lag1 and ewma vs AMCSG.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_forecasted_mcs_spot_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_forecasted_mcs_spot",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_500_threshold=6.0 * 25_208.0,  # 151,248
+        mcs_gate=mcs_gate,
+        zfhc_threshold=zfhc_threshold,
+        ewma_alpha=ewma_alpha,
+        warmup_c=warmup_c,
+    )
+
+
+def run_forecasted_mcs_spot_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    mcs_gate: float = _FMCS_SPOT_MCS_GATE,
+    ewma_alpha: float = _FMCS_SPOT_EWMA_ALPHA,
+    warmup_c: int = 4,
+) -> "ForecastedMCSSpotReport":
+    """Forecasted MCS Spot Fleet backtest on BurstGPT HF — run 2026-06-24.
+
+    First apples-to-apples comparison of the fully deployable forecasted_mcs
+    modes (lag1, ewma) against AMCSG on BurstGPT under GSF spot-fleet pricing.
+    SLA budget is 30s (BurstGPT default).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880).
+        sla_s:              E2E SLA budget (30s).
+        jsonl_path:         BurstGPT HF JSONL path.
+        tick_seconds:       Tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr, default $0.80).
+        p_interrupt_hourly: Hourly spot interruption probability (default 0.10).
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        mcs_gate:           MCS Erlang-C utilization gate % (default 12.5%).
+        ewma_alpha:         EWMA smoothing for ewma sub-mode (default 0.5).
+        warmup_c:           Cold-start replica count (default 4).
+
+    Returns:
+        ForecastedMCSSpotReport comparing lag1 and ewma vs AMCSG on BurstGPT.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_forecasted_mcs_spot_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_forecasted_mcs_spot",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_500_threshold=6.0 * 20_280.0,  # 121,680
+        mcs_gate=mcs_gate,
+        zfhc_threshold=zfhc_threshold,
+        ewma_alpha=ewma_alpha,
+        warmup_c=warmup_c,
     )
