@@ -52,7 +52,6 @@ import pytest
 
 from aurelius.connectors import (
     K8sPlacementSnapshot,
-    K8sReplicaDelta,
     PodPlacement,
     compute_k8s_scale_delta,
 )
@@ -62,22 +61,15 @@ from aurelius.frontier import (
     DynamicFrontierObservedOutcome,
     DynamicFrontierPrediction,
     FieldOrigin,
-    OracleSeriesPoint,
-    ServingTelemetryTick,
     TickProvenance,
     TimeoutFallback,
     WorkloadFrontierProfile,
-    apply_confidence_update,
-    build_serving_telemetry_window,
     compute_calibration_record,
-    compute_calibration_records,
     compute_frontier_calibration_summary,
     derive_sla_violation_pct,
     resolve_timeout_pct,
     run_dynamic_frontier_calibration_replay,
-    telemetry_tick_from_inference_service_state,
     telemetry_tick_with_provenance_from_inference_service_state,
-    validate_dynamic_window,
 )
 from aurelius.state.models import InferenceServiceState, Provenance
 
@@ -137,7 +129,7 @@ def _triton_state():
 # 1 — timeout fallback hierarchy
 # ---------------------------------------------------------------------------
 
-def test_timeout_fallback_returns_A_when_explicit_counter():
+def test_timeout_fallback_returns_A_when_explicit_counter():  # noqa: N802
     res = resolve_timeout_pct(
         explicit_timeout_counter_rate=2.0,
         total_request_rate=100.0,
@@ -149,7 +141,7 @@ def test_timeout_fallback_returns_A_when_explicit_counter():
     assert res.value == pytest.approx(2.0)
 
 
-def test_timeout_fallback_returns_B_when_deadline_counter():
+def test_timeout_fallback_returns_B_when_deadline_counter():  # noqa: N802
     res = resolve_timeout_pct(
         deadline_exceeded_rate=1.0,
         total_request_rate=50.0,
@@ -159,13 +151,13 @@ def test_timeout_fallback_returns_B_when_deadline_counter():
     assert res.value == pytest.approx(2.0)
 
 
-def test_timeout_fallback_returns_C_when_only_error_rate():
+def test_timeout_fallback_returns_C_when_only_error_rate():  # noqa: N802
     res = resolve_timeout_pct(error_rate_pct=3.5)
     assert res.level == TimeoutFallback.C_ERROR_RATE
     assert res.value == pytest.approx(3.5)
 
 
-def test_timeout_fallback_returns_D_when_only_sla_proxy():
+def test_timeout_fallback_returns_D_when_only_sla_proxy():  # noqa: N802
     res = resolve_timeout_pct(
         latency_p99_ms=1500.0,
         latency_sla_p99_ms=1000.0,
@@ -530,10 +522,11 @@ def test_vllm_preemptions_metric_registered():
 
 
 def test_vllm_adapter_scrapes_preemptions_from_fixture():
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
+
     from aurelius.connectors.base import TelemetrySnapshot
     from aurelius.connectors.prometheus import parse_prometheus_text
-    from aurelius.connectors.metric_mapping import vllm_registry
     from aurelius.connectors.vllm import VLLMAdapter
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -630,7 +623,7 @@ def test_calibration_replay_consumes_real_iss_derived_telemetry():
 # 17 — timeout fallback uses C_ERROR_RATE when error_rate_pct present
 # ---------------------------------------------------------------------------
 
-def test_bridge_timeout_uses_C_when_error_rate_pct_present():
+def test_bridge_timeout_uses_C_when_error_rate_pct_present():  # noqa: N802
     state = _vllm_state(p99_latency_ms=900.0, error_rate_pct=2.5)
     tick, prov = telemetry_tick_with_provenance_from_inference_service_state(
         state, latency_sla_p99_ms=1000.0)
@@ -644,7 +637,7 @@ def test_bridge_timeout_uses_C_when_error_rate_pct_present():
 # 18 — timeout fallback falls back to D when no error_rate
 # ---------------------------------------------------------------------------
 
-def test_bridge_timeout_falls_back_to_D_when_no_error_rate():
+def test_bridge_timeout_falls_back_to_D_when_no_error_rate():  # noqa: N802
     state = _vllm_state(p99_latency_ms=1500.0, error_rate_pct=None)
     tick, prov = telemetry_tick_with_provenance_from_inference_service_state(
         state, latency_sla_p99_ms=1000.0)

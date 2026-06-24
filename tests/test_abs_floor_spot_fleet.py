@@ -34,7 +34,6 @@ Invariants tested:
 from __future__ import annotations
 
 import os
-import statistics
 
 import pytest
 
@@ -57,8 +56,8 @@ def azure_raw():
 @pytest.fixture
 def c_schedule_200(azure_raw):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        calibrate_time_warp,
         _joint_mcs_c_schedule,
+        calibrate_time_warp,
     )
     warp = calibrate_time_warp(azure_raw, servers=4, target_rho=0.85)
     return _joint_mcs_c_schedule(azure_raw, tick_seconds=60.0, warp=warp)
@@ -109,9 +108,9 @@ def test_abs_floor_one_ondemand_at_high_c():
 # 4. _abs_floor_spot_fleet_cost <= static 70% cost for any schedule
 def test_abs_floor_cost_le_static(c_schedule_200):
     from aurelius.benchmarks.srtf_serving_backtest import (
+        GPU_HOUR_USD,
         _abs_floor_spot_fleet_cost,
         _spot_fleet_cost,
-        GPU_HOUR_USD,
     )
     cost_static = _spot_fleet_cost(c_schedule_200, 0.70, 0.80, GPU_HOUR_USD, 60.0)
     cost_afms = _abs_floor_spot_fleet_cost(c_schedule_200, 0.80, GPU_HOUR_USD, 60.0)
@@ -123,9 +122,9 @@ def test_abs_floor_cost_le_static(c_schedule_200):
 # 5. AFMS strictly cheaper when c>=6 exists
 def test_abs_floor_strictly_cheaper_with_high_c():
     from aurelius.benchmarks.srtf_serving_backtest import (
+        GPU_HOUR_USD,
         _abs_floor_spot_fleet_cost,
         _spot_fleet_cost,
-        GPU_HOUR_USD,
     )
     # A schedule with c=8 ticks should show strict savings
     c_sched = [4, 6, 8, 7, 4, 6]
@@ -291,9 +290,9 @@ def test_afms_n_ticks_c_ge_6_consistent(afms_report):
 # 19. Schedule with only c<=5 gives equal cost (no regression)
 def test_afms_no_regression_small_c_only():
     from aurelius.benchmarks.srtf_serving_backtest import (
+        GPU_HOUR_USD,
         _abs_floor_spot_fleet_cost,
         _spot_fleet_cost,
-        GPU_HOUR_USD,
     )
     c_sched_small = [1, 2, 3, 4, 5, 3, 2, 1]
     cost_static = _spot_fleet_cost(c_sched_small, 0.70, 0.80, GPU_HOUR_USD, 60.0)
@@ -315,8 +314,8 @@ def test_afms_no_regression_small_c_only():
 )
 def test_spot_fleet_burstgpt_returns_report():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        run_spot_fleet_mcs_burstgpt_backtest,
         SpotFleetMCSReport,
+        run_spot_fleet_mcs_burstgpt_backtest,
     )
     report = run_spot_fleet_mcs_burstgpt_backtest(
         fixed_c=4, target_rho=0.85, job_limit=200, tick_seconds=60.0,

@@ -32,9 +32,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     _AMCSG_LFC_FINE_GATES,
+    run_amcsg_fine_grid_azure_backtest,
     run_amcsg_lfc_azure_backtest,
     run_amcsg_lfc_burstgpt_backtest,
-    run_amcsg_fine_grid_azure_backtest,
     run_amcsg_lfc_fine_grid_azure_backtest,
 )
 
@@ -65,7 +65,7 @@ def _print_gate_table(report) -> None:
 def _print_summary(report, variant_name: str, baseline_ref: float) -> None:
     safe_entries = [e for e in report.gate_results if e.n_sla_safe >= report.gate_results[0].n_sla_safe]
     if not safe_entries:
-        print(f"  ⚠ No safe entries found")
+        print("  ⚠ No safe entries found")
         return
     best = max(safe_entries, key=lambda e: e.goodput_per_dollar)
     gap_pct = (AZURE_NS_500 - best.goodput_per_dollar) / AZURE_NS_500 * 100.0 if "azure" in report.trace else 0.0
@@ -81,7 +81,7 @@ def _print_summary(report, variant_name: str, baseline_ref: float) -> None:
     print(f"    p99            : {best.p99_s:.3f}s")
     if "azure" in report.trace:
         if ns_achieved:
-            print(f"    +500% NS       : ✓ ACHIEVED (gap: 0.00%)")
+            print("    +500% NS       : ✓ ACHIEVED (gap: 0.00%)")
         else:
             print(f"    +500% NS       : ✗ Gap = {gap_pct:.2f}%")
 
@@ -137,7 +137,7 @@ def run_all() -> dict:
         lfc_fine_azure.best_north_star_500_achieved,
     ])
     if any_achieved:
-        print(f"\n  ✓ NORTH-STAR +500% ACHIEVED on Azure!")
+        print("\n  ✓ NORTH-STAR +500% ACHIEVED on Azure!")
     else:
         remaining = AZURE_NS_500 - max(best_lfc, best_fine, best_lfc_fine)
         print(f"\n  ✗ North-star not yet achieved. Remaining gap: {remaining:,.0f} goodput/$")

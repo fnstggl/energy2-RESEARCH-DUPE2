@@ -39,6 +39,7 @@ def main() -> None:
         sys.exit(1)
 
     import os
+
     from aurelius.benchmarks.srtf_serving_backtest import DEFAULT_BURSTGPT_HF_JSONL
 
     if not os.path.exists(DEFAULT_BURSTGPT_HF_JSONL):

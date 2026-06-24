@@ -10,30 +10,20 @@ Class structure:
   4. TestSOTSSGSFAzureBacktest     — full Azure LLM 2024 integration test
   5. TestSOTSSGSFBurstGPTBacktest  — full BurstGPT HF integration test
 """
-import math
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     DEFAULT_AZURE_FIXTURE,
-    DEFAULT_BURSTGPT_HF_JSONL,
-    GPU_HOUR_USD,
     SOTSSGSFReport,
-    _gsf_spot_fleet_cost,
-    _simulate_fifo_gsf_spot_fleet,
     load_serving_requests,
-    load_burstgpt_serving_requests_jsonl,
     run_sotss_gsf_azure_backtest,
     run_sotss_gsf_burstgpt_backtest,
-    _SOTSS_GSF_SAFE_GATE,
-    _SOTSS_GSF_MAX_ITERS,
 )
 from aurelius.optimizer.policies.replica_scaling import (
     _oracle_stochastic_response_times,
-    compute_sotss_gsf_schedule,
     compute_mcs_c_schedule,
-    REPLICA_SAFE_GATE,
+    compute_sotss_gsf_schedule,
 )
-
 
 # ---------------------------------------------------------------------------
 # Class 1: _oracle_stochastic_response_times — stochastic oracle properties

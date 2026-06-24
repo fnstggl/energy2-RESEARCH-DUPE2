@@ -8,26 +8,646 @@
 
 ---
 
-## Phase 5 — Canonical Integration Master Plan (PLANNING — NO CODE CHANGED)
+## Run 2026-06-24 — Dead Frontier Code Deprecation (ARCHITECTURE SIMPLIFICATION — Phase 5, Five-Failure Rule compliant)
 
-> Planning/architecture run. See `research/CANONICAL_INTEGRATION_MASTER_PLAN.md`
-> (+ inventory, dependency graph, next-phase prompt). No optimizer logic added.
+### Q1. What currently limits Aurelius most?
 
-- **AO state:** `{energy, serving_queue, replica_scaling}` implemented;
-  `placement`/`admission` stubs.
-- **Largest remaining bottleneck (and next phase):** the **spot/preemptible cost
-  denominator** is the dominant measured lever (GSF: Azure +492% / BurstGPT +727%
-  vs SLA-oracle) but is **benchmark-local**, not a canonical objective. Phase 5.1
-  extracts it into a canonical **ObjectiveLayer cost interface** (parity, 0% drift).
-- **Dependency order:** ObjectiveLayer cost → GSF spot policy into ReplicaScaling
-  → consolidate duplicate trace-replay provisioning + route BacktestEngine →
-  **unified ReplayLayer** (hard prerequisite) → honest policy-combination search →
-  ConstraintLayer.
-- **Keep shadow:** GpuPlacementScorer (harmful −7.3% lc), admission gate (neutral),
-  CARA/output-length forecasters, residency, C1PGS/SOTSS-GSF (validated null/neg).
-- **Deprecate:** `frontier` EVAL_WORKLOAD + BATCH_INFERENCE (dead copy-paste).
-- **Composition is blocked** until the unified replay exists (Phase 4 showed
-  ordering × provisioning is negative/substitutive; energy × serving disjoint).
+**Maintenance tax from dead frontier families**: `aurelius/frontier/eval_workload_*` and `batch_inference_*` (8 modules, ~1,827 LOC) had zero non-test/non-script consumers but remained in the repo as maintenance surface. EVAL_WORKLOAD and BATCH_INFERENCE frontier families were benchmarked in the Phase 6 impact table and found to have no benchmark consumer (confirmed by grep). Dead code creates confusion about which families are active and wastes review bandwidth.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Unchanged. Dead code removal does not affect KPIs.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Unchanged. Per-tick capacity on 15 BurstGPT burst ticks.
+
+### Q5. Which workloads benefit least?
+
+Unchanged.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Remaining allowed architecture work: Phase 1b replay loop unification.
+
+### Q7. What is the shortest path to another +1% gain?
+
+No new gain from this run (0% KPI delta by design). Replay loop unification (Phase 1b) would unblock combination search.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: goodput/$ achieved (+5.94% via OSOTSS). BurstGPT: goodput/$ achieved (+5.85%). BurstGPT n_sla_safe gap: −15 requests (structural, confirmed deterministic).
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged.
+
+### Q10. Which assumptions might be wrong?
+
+Unchanged.
+
+### Q11. Which benchmark weaknesses exist?
+
+Unchanged (two public traces only, single cost model).
+
+### Q12. Which public datasets should be added?
+
+Unchanged (Alibaba GenAI 2026 for OSOTSS cross-validation).
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Dead code deprecation complete (Phase 5). Remaining architecture work:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact; requires 0%-delta parity gate)
+2. **Third trace cross-validation** — OSOTSS on Alibaba GenAI 2026 if raw data available
+3. **Phase 4** — Promote frontier BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: SUF +13% Azure only)
+
+Results: `research/results/dead_frontier_deprecation_2026-06-24.json`
+
+---
+
+## Run 2026-06-24 — AMCSG + SOTSS-MIN Canonical Routing Parity (ARCHITECTURE CONVERGENCE — Phase 3b, Five-Failure Rule integration)
+
+### Q1. What currently limits Aurelius most?
+
+**Architecture divergence**: `_run_amcsg_backtest` and `_run_sotss_backtest` called `_joint_mcs_c_schedule` / `_sotss_min_cost_schedule` directly instead of routing through `_REPLICA_SCALING_OPTIMIZER.optimize()`. Additionally, `ReplicaScalingPolicy.optimize(mode="sotss_min")` silently discarded `initial_violations` (using `_`), making it unavailable to any caller going through the canonical optimizer facade.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Unchanged from previous run. Architecture integration complete for all primary backtest entry points.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA service-time prediction on burst ticks.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+All primary decisions now route through canonical optimizer. Secondary research paths (compound experiments, gate sweep variations) still call delegate functions directly — acceptable since these are research-only paths, not primary benchmarks.
+
+### Q5. Which workloads benefit least?
+
+Bursty traces (BurstGPT) on n_sla_safe metric — structural, confirmed deterministic.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Architecture is now converged for primary paths. Next: deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE) or Phase 1b replay loop unification.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Architecture is now fully converged for primary paths. Third-trace cross-validation (Alibaba GenAI 2026) would confirm generalizability — but raw data not present.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: north-star achieved (159,578 >> 151,248). BurstGPT: north-star achieved.
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved.
+
+### Q10. Which assumptions might be wrong?
+
+None identified. All previously wrong assumptions corrected.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. Two public traces only (Azure LLM 2024, BurstGPT HF).
+2. Secondary research backtest paths (compound experiments, gate sweeps) still call delegate functions directly — not a KPI issue, but architecture inconsistency.
+
+### Q12. Which public datasets should be added?
+
+Alibaba GenAI 2026 raw data not present. BurstGPT and Azure remain the only two fully integrated public traces.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Canonical architecture is now complete for all primary paths. Next allowed actions:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact)
+2. **Architecture simplification** — deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE)
+3. **Route secondary research paths** — gate sweep variations, compound experiments through canonical optimizer
+
+Results: `research/results/amcsg_sotss_canonical_routing_parity_2026-06-24.md`
+Tests: `tests/test_amcsg_sotss_canonical_routing_parity.py` (33 tests, all passing)
+
+---
+
+## Run 2026-06-24 — OSOTSS Canonical Routing Parity (ARCHITECTURE CONVERGENCE — Five-Failure Rule integration)
+
+### Q1. What currently limits Aurelius most?
+
+**Architecture divergence**: OSOTSS was the only frontier mode not routing through the canonical `AureliusOptimizer` facade.  A production user calling `AureliusOptimizer(policy="replica_scaling", mode="online_sotss")` would receive a different (weaker) schedule because `ReplicaScalingConfig` lacked `baseline_n_sla_safe`, causing the oracle to use a more-conservative deterministic floor instead of the AMCSG stochastic baseline.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Architecture integration complete. Next highest-EV options: (1) energy × replica_scaling compound (+11.1% energy standalone, unknown compound; disallowed by Five-Failure Rule until reset). (2) OSOTSS on third public trace (Alibaba GenAI 2026 if compatible).
+
+### Q3. Which forecasts are weakest?
+
+EWMA service-time prediction on burst ticks — root cause of 15-request BurstGPT n_sla_safe gap (structural, deterministic, confirmed by multi-seed audit).
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Per-tick capacity on 15 BurstGPT burst ticks where OSOTSS under-provisions by 1 server vs AMCSG. Structural; cannot be closed without better burst prediction or oracle access to AMCSG's fixed higher-c schedule.
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Bursty traces (BurstGPT) on the n_sla_safe metric. Goodput/$ improvement holds (+5.85%).
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Allowed work: architecture simplification (thin-delegate promotion), third-trace cross-validation (Alibaba/LMSYS if timestamp data exists).
+
+### Q7. What is the shortest path to another +1% gain?
+
+Architecture is now converged. Third-trace cross-validation would confirm generalizability of OSOTSS +5.9% gain beyond Azure and BurstGPT.
+
+### Q8. What is the current north-star status?
+
+**Azure: goodput/$ north-star achieved** (159,578 >> 151,248). **BurstGPT: goodput/$ north-star achieved** (178,109 >> 121,680). BurstGPT n_sla_safe: 5849 (−15 vs AMCSG 5864; confirmed structural, deterministic, not closable without better burst prediction).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved on both traces. No regression needed.
+
+### Q10. Which assumptions might be wrong?
+
+All previously wrong assumptions corrected: stochastic gap hypothesis falsified (multi-seed audit), conformal SRPT compound hypothesis falsified (PR #66 joint backtest). Current assumptions are well-calibrated.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure LLM 2024 and BurstGPT HF. Third trace (Alibaba GenAI 2026) not yet evaluated with OSOTSS.
+2. **Single cost model** — GSF spot-fleet at 95% spot, $0.80/hr.
+
+### Q12. Which public datasets should be added?
+
+Alibaba GenAI 2026 (`alibaba_genai_2026` — already in `data/external/alibaba_genai/`) for OSOTSS cross-validation if arrival timestamps are available.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Canonical architecture is now complete. Next allowed actions:
+1. **Third trace cross-validation** — OSOTSS on Alibaba GenAI 2026 (check timestamp format compatibility)
+2. **Thin-delegate promotion** — route `amcsg` / `sotss_min` backtests through optimizer facade too (lower priority since OSOTSS is frontier)
+3. **Architecture simplification** — deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE)
+
+Results: `research/results/osotss_canonical_routing_parity_2026-06-24.md`
+Tests: `tests/test_osotss_canonical_routing_parity.py` (38 tests, all passing)
+
+---
+
+## Run 2026-06-24 — Multi-Seed Stochastic Gap Audit (BENCHMARK REALISM — Five-Failure Rule mandated)
+
+### Q1. What currently limits Aurelius most?
+
+**BurstGPT 15-request n_sla_safe gap (OSOTSS 5849 vs AMCSG 5864).** This run diagnoses the root cause.
+Multi-seed audit (seeds {42, 123, 456, 789, 1337}) reveals both AMCSG and OSOTSS n_sla_safe are **fully deterministic** (std=0 across all seeds on both traces).
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Architecture integration — wire OSOTSS through AureliusOptimizer(policy="replica_scaling") for end-to-end
+evaluation. The BurstGPT n_sla_safe gap is deterministic and cannot be closed by stochastic tuning.
+
+### Q3. Which forecasts are weakest?
+
+EWMA service-time prediction on burst ticks — the confirmed root cause of the 15-request BurstGPT gap.
+EWMA is slow to adapt to sudden load spikes on bursty traces.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Per-tick capacity on 15 BurstGPT burst ticks where OSOTSS under-provisions by 1 server vs AMCSG.
+This is deterministic (same 15 ticks fail on all seeds).
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Bursty traces (BurstGPT) where EWMA under-predictions create deterministic capacity shortfalls.
+
+### Q6. Which research direction appears strongest?
+
+Architecture integration (AureliusOptimizer replica_scaling policy end-to-end evaluation).
+All stochastic-oracle approaches have now been ruled out as mechanism-incorrect.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under Five-Failure Rule: architecture integration. The OSOTSS +5.94% goodput/$ gain on Azure
+is already validated and deterministic; the BurstGPT +5.85% goodput/$ gain is also validated
+with the n_sla_safe caveat documented.
+
+### Q8. What is the current north-star status?
+
+Azure: goodput/$ north-star achieved (159,578 >> 151,248). BurstGPT: goodput/$ north-star
+achieved (178,109 >> 121,680). BurstGPT n_sla_safe: 5849 (-15 vs AMCSG 5864; **confirmed structural, deterministic**).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star achieved on both traces. No regression needed.
+
+### Q10. Which assumptions might be wrong?
+
+**CORRECTED:** "The gap comes from stochastic spot interruptions" was **WRONG**. Multi-seed audit
+proves p_survive≈0.9982 makes the simulation effectively deterministic. The gap is from EWMA
+under-prediction on specific burst ticks, not from spot interruptions.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Single-seed stochastic evaluation**: Now confirmed NOT a weakness — the simulation is
+   effectively deterministic at p_interrupt=10%/hr. All previous results are valid single-seed.
+2. **Two public traces**: Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+ShareGPT or LMSYS Chatbot Arena — third public trace for OSOTSS cross-validation.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE. No new modules. Focus on:**
+
+1. **Architecture integration** — AureliusOptimizer(policy="replica_scaling") end-to-end
+2. **Replay validation** — OSOTSS on third public trace (ShareGPT/LMSYS)
+3. **Architecture simplification** — deprecate dead/duplicate code (frontier EVAL_WORKLOAD/BATCH_INFERENCE)
+4. **Accept the BurstGPT n_sla_safe gap** — it is deterministic, structural, not closable without
+   better burst prediction. Document as known limitation.
+
+**Root cause update:** BurstGPT gap is EWMA prediction error (not stochastic), confirmed by
+multi-seed audit (std=0 across 5 seeds). All stochastic-oracle approaches ruled out.
+
+Results: `research/results/multi_seed_stochastic_audit_2026-06-24.{md,json}`
+Tests: `tests/test_multi_seed_stochastic_audit.py` (10 fast tests passing)
+
+---
+
+## Run 2026-06-24 — Forecasted MCS Spot Fleet (NEUTRAL/NEGATIVE — forecasted_mcs below AMCSG on both traces)
+
+### Q1. What currently limits Aurelius most?
+
+**The forecasted_mcs modes cannot match AMCSG's arrival-oracle advantage.** AMCSG uses actual tick-t
+arrival counts (oracle). Forecasted_mcs uses only data ≤ t-1. On bursty traffic (BurstGPT), the one-tick
+lag causes 520 additional SLA violations (lag1) or 2024 additional violations (ewma) vs AMCSG.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Same as prior run — architecture integration, cross-trace validation. The forecasted_mcs deployment-realism
+finding confirms the fundamental tradeoff: full deployability comes at a cost vs arrival-oracle baselines.
+
+### Q3. Which forecasts are weakest?
+
+Forecasted_mcs arrival forecast is weakest on bursty traces. Lag1 misses the burst by exactly one tick;
+EWMA smooths out the burst onset, making under-provisioning even worse.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Forecasted arrival for bursty traffic** — no single-tick lag approach can anticipate a burst.
+2. **BurstGPT border ticks** — same structural stochastic gap from prior analysis.
+
+### Q5. Which workloads benefit least from forecasted_mcs?
+
+Bursty traces. Smooth traces (Azure) are closer — ewma is only −0.31% below AMCSG on Azure. BurstGPT
+lag1 p99=47.5s (vs 30s SLA); ewma p99=67.4s. The mode is unsafe on bursty traces at default settings.
+
+### Q6. Which research direction appears strongest?
+
+**Same as prior run: architecture integration and replay validation.** The forecasted_mcs result
+independently confirms the Five-Failure Rule focus: adding new scheduling approaches does not improve
+on AMCSG without oracle arrival knowledge. The canonical integration path (Phase 1b unified replay)
+remains the highest-value unblocked work.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under the architectural focus rule, the shortest path is validation: OSOTSS on a third public trace.
+
+### Q8. What is the current north-star status?
+
+Azure: OSOTSS 159,578 (+5.94% vs AMCSG). BurstGPT: OSOTSS 178,109 (+5.85% vs AMCSG). Both above
+north-star goodput/$ threshold. Forecasted_mcs: below north-star on both traces.
+
+### Q9. What would need to be true to maintain north-star?
+
+No regressions to OSOTSS. Forecasted_mcs is not a leaderboard entry — negative result, no update.
+
+### Q10. Which assumptions might be wrong?
+
+The arrival-oracle hypothesis is confirmed: forecasted_mcs disadvantage is structural, not a tuning
+issue. EWMA alpha, window, or safety buffer changes would not close a one-tick structural lag.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure (smooth) and BurstGPT (bursty). Third trace needed.
+2. **Single seed (42)** — stochastic evaluation; multi-seed audit merged (PR #64).
+
+### Q12. Which public datasets should be added?
+
+ShareGPT or LMSYS Chatbot Arena for OSOTSS cross-validation.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (5/5). No new modules. Focus on:**
+
+1. **Architecture integration** — Phase 1b unified replay engine (see OPTIMIZER_UNIFICATION_PLAN.md)
+2. **Replay validation** — OSOTSS on a third public trace (ShareGPT/LMSYS)
+3. **Benchmark realism** — multi-seed audit for BurstGPT stochastic gap (PR #64 merged)
+4. **Bottleneck diagnosis** — stochastic oracle characterization for residual 3-request gap
+5. **Architecture simplification** — see Phase 4/5 in OPTIMIZER_UNIFICATION_PLAN.md
+
+Results: `research/results/forecasted_mcs_spot_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_forecasted_mcs_spot_backtest.py` (18 pass, 28 skip if numpy absent)
+
+---
+
+## Run 2026-06-24 — Oracle Soft-SLA Continuation (OSSC) OSOTSS (NEGATIVE RESULT — Five-Failure Rule TRIGGERED)
+
+> **Root-cause correction (multi-seed audit 2026-06-24):** The Q1 diagnosis below was
+> incorrect. The 3-15 request gap does NOT come from stochastic spot interruptions —
+> multi-seed audit (std=0 across 5 seeds) proves the simulation is deterministic.
+> The gap comes from EWMA under-prediction on 15 specific burst ticks.
+
+### Q1. What currently limits Aurelius most?
+
+**~~Structural stochastic gap on BurstGPT.~~** *(Corrected: deterministic EWMA prediction gap.)*
+The OSOTSS oracle is deterministic-FIFO-optimal:
+it eliminates all deterministic FIFO violations, but 15 requests fail because EWMA under-predicts
+service time on burst ticks — NOT from stochastic spot interruptions (confirmed by multi-seed audit).
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+1. **Full stochastic oracle** — run the actual Binomial interruption simulation inside the oracle loop,
+   not a separate post-convergence deterministic phase. This would directly optimize for stochastic n_sla_safe
+   rather than deterministic n_sla_safe. However, stochastic oracles are expensive and non-convergent.
+2. **ShareGPT/LMSYS cross-validation** — validate OSOTSS generalization on a third public trace.
+3. **Architecture integration** — wire energy + serving + replica policy into a single AureliusOptimizer
+   chain for end-to-end evaluation.
+
+### Q3. Which forecasts are weakest?
+
+1. **BurstGPT gap diagnoses** — four consecutive hypotheses (C1PGS, SOTSS-GSF, Adaptive EWMA, SSM, OSSC)
+   all failed to close the gap. Each was architecturally different but empirically equivalent.
+2. **Oracle borderline tightening** — OSSC made progress (gap -15 → -3) but didn't converge. The 3
+   remaining failures at 5.0s margin are beyond deterministic-oracle reach.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **BurstGPT borderline ticks** — n_sla_safe=5861 (best OSSC) vs AMCSG 5864. A structural
+   3-request gap remains at maximum tested margin.
+2. **Azure goodput/$ vs BurstGPT SLA tradeoff** — any approach that adds capacity to fix BurstGPT
+   costs Azure goodput/$ at the same time (confirmed by OSSC sweep).
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Bursty traces (BurstGPT) show structural stochastic limitations. The gap is now well-characterized:
+5849–5861 range (deterministic post-convergence ceiling). Closing the last 3–15 requests requires
+stochastic oracle computation.
+
+### Q6. Which research direction appears strongest?
+
+**Architecture integration and replay validation** — the Five-Failure Rule is now active.
+The strongest next step is an end-to-end integration audit:
+- Verify AureliusOptimizer(policy="replica_scaling") path with ReplicaScalingConfig.borderline_margin_s
+- Cross-validate OSOTSS on ShareGPT or LMSYS trace
+- Audit the BurstGPT stochastic gap root cause with a controlled stochastic oracle experiment
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under the Five-Failure architectural focus rule, new module development is suspended.
+The shortest path is validation: confirm OSOTSS (159,578 goodput/$, +5.94%) holds on a third
+public trace. If it generalizes, that is a publishable frontier result.
+
+### Q8. What is the current north-star status?
+
+Azure: goodput/$ north-star achieved (159,578 >> 151,248 threshold). BurstGPT: goodput/$ north-star
+achieved (178,109 >> 121,680 threshold). BurstGPT n_sla_safe: best OSSC = 5861 (-3 vs AMCSG 5864).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star is already achieved on both traces on goodput/$. Maintaining it requires no regressions.
+
+### Q10. Which assumptions might be wrong?
+
+1. **AMCSG achieves 5864 stochastically by accident** — AMCSG's fixed higher-c provides global over-provisioning
+   that absorbs stochastic interruptions on borderline ticks. This was confirmed by the structural gap analysis.
+2. **Closing to 5864 is the right target** — BurstGPT n_sla_safe=5861 (-3) may be within noise if the
+   stochastic seed changes. A multi-seed validation would clarify whether the 3-request gap is structural.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Single seed stochastic evaluation** — all results use seed=42. Gap of 3 requests at best OSSC margin
+   may reverse with different seeds. Multi-seed validation is a natural next step.
+2. **Two public traces** — Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+**ShareGPT** or **LMSYS Chatbot Arena** — third public trace for OSOTSS cross-validation.
+This is the highest priority under the architectural focus rule.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE. No new modules. Focus on:**
+
+1. **Architecture integration** — end-to-end AureliusOptimizer chain validation
+2. **Replay validation** — OSOTSS on a third public trace (ShareGPT/LMSYS)
+3. **Benchmark realism audit** — multi-seed stochastic evaluation for BurstGPT gap characterization
+4. **Bottleneck diagnosis** — stochastic oracle experiment to characterize the 3-request residual
+5. **Architecture simplification** — review wired-through params, reduce dead code
+
+**Five-Failure Rule counter: 5/5 — ARCHITECTURAL FOCUS RULE ACTIVE.**
+
+Results: `research/results/borderline_osotss_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_borderline_osotss_backtest.py` (10 tests, all passing)
+
+---
+
+## Run 2026-06-24 — Stochastic Safety Margin OSOTSS (NEGATIVE RESULT — mechanism misdiagnosed)
+
+### Q1. What currently limits Aurelius most?
+
+**Structural oracle-ceiling on BurstGPT.** The oracle's secondary termination condition (`violators=[]`
+in deterministic FIFO) fires at n_sla_safe=5849, which is 15 below the AMCSG stochastic target (5864).
+Adding `interrupt_safety_margin` to the convergence threshold cannot overcome this because the loop exits
+via the secondary break before the primary convergence check is evaluated.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+1. **Oracle borderline-tick continuation** — allow the oracle to add capacity to ticks with response
+   times within ε of the SLA limit (e.g., within 1s of 30s), even after all hard violations are resolved.
+   This would let the oracle buffer borderline ticks against stochastic interruptions without future-token
+   access. Requires a new "close to SLA" signal in the oracle loop.
+2. **ShareGPT/LMSYS cross-validation** — third/fourth public trace to validate OSOTSS generalization.
+3. **Transformer service-time predictor** — replace EWMA; closes OSOTSS-vs-SOTSS-MIN gap on Azure.
+
+### Q3. Which forecasts are weakest?
+
+1. **Oracle ceiling diagnosis** — the original hypothesis (safety margin would force oracle to over-provision)
+   was falsified. The oracle's natural ceiling is set by "no deterministic FIFO violations" not by a
+   convergence threshold.
+2. **Stochastic/deterministic gap root cause** — confirmed: AMCSG's higher fixed-c schedule provides more
+   capacity than OSOTSS's optimized minimum-violation schedule, which is lean but not stochastic-robust.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Hard "no violators" oracle exit** — oracle cannot buffer borderline ticks; only fixes hard violations.
+   A soft "close-to-SLA" signal would allow proactive over-provisioning on vulnerable ticks.
+2. **Aggressive starting gate (100%)** — minimum stable c leaves borderline ticks exposed; could use a
+   slightly higher floor without losing most of the cost savings.
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Same as previous runs: traces with bursty arrivals (BurstGPT). The BurstGPT 15-request gap is now
+confirmed to be structural (oracle ceiling at 5849 in deterministic FIFO), not addressable by
+convergence-threshold adjustments.
+
+### Q6. Which research direction appears strongest?
+
+**Oracle borderline-tick continuation** — modify the oracle loop to continue adding capacity to
+ticks whose deterministic-FIFO response times are within ε of the SLA (e.g., 28–30s on BurstGPT
+SLA=30s), even after `violators=[]`. These are the ticks most vulnerable to stochastic interruptions.
+This is causal (uses only actual service times already simulated in the convergence check) and
+doesn't require future-token access.
+
+**WARNING: Five-Failure counter is 4/5. One more negative run triggers the architectural focus rule.**
+
+### Q7. What is the shortest path to another +1% gain?
+
+**Oracle soft-SLA continuation.** Add a second pass after `violators=[]`: identify ticks where
+any request's deterministic-FIFO response time is in (sla_s - ε, sla_s] (borderline ticks) and
+increment c on those ticks up to c_ceil. This buffers the stochastic interruption window without
+over-provisioning every tick.
+
+### Q8. What is the current north-star status?
+
+Azure: goodput/$ north-star achieved (159,578 >> 151,248 threshold). BurstGPT: goodput/$ north-star
+achieved (178,109 >> 121,680 threshold). BurstGPT n_sla_safe remains 15 below AMCSG (known structural
+limitation — oracle ceiling at 5849).
+
+### Q9. What would need to be true to maintain north-star?
+
+Same as run 2026-06-23. North-star is already achieved on both traces.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Safety margin fixes the convergence threshold problem.** FALSIFIED by this run. The problem is the
+   secondary `violators=[]` break, not the convergence threshold value.
+2. **EWMA prediction accuracy is the bottleneck.** FALSIFIED by adaptive EWMA run (2026-06-24).
+3. **Oracle ceiling at 5849 is hard.** May be addressable by oracle soft-SLA continuation — not yet tested.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Oracle secondary-break exits before margin test** — confirmed structural limitation on BurstGPT.
+2. **Two public traces** — Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+Same as previous runs: ShareGPT, LMSYS Chatbot Arena.
+
+### Q13. What should be attempted next?
+
+**⚠️ FIVE-FAILURE WARNING: Counter is 4/5. If the next run is also negative, the architectural focus
+rule activates: stop adding modules; focus only on integration, replay validation, and simplification.**
+
+Priority 1 (before architectural focus triggers):
+1. **Oracle soft-SLA continuation** — allow oracle to continue adding capacity to borderline ticks
+   (response time within ε of SLA) even after `violators=[]`. Directly targets the confirmed structural
+   mechanism. Causal and production-deployable.
+
+Priority 2 (if Five-Failure rule activates):
+1. **Architecture simplification** — review all wired-through params for dead-code cleanup
+2. **Integration validation** — verify full AureliusOptimizer path with all new parameters
+3. **ShareGPT/LMSYS replay** — cross-validation on third public trace
+
+**Five-Failure Rule counter: 4 of 5 consecutive non-frontier runs.**
+
+Results: `research/results/stochastic_safety_margin_osotss_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_stochastic_safety_margin_backtest.py` (10 tests)
+
+---
+
+## Run 2026-06-24 — Adaptive EWMA Online SOTSS (NEGATIVE RESULT — hypothesis falsified)
+
+### Q1. What currently limits Aurelius most?
+
+**Stochastic/deterministic simulation mismatch in OSOTSS BurstGPT.** The 15-request gap (n_sla_safe=5849
+vs AMCSG 5864) arises because the oracle convergence check uses deterministic FIFO simulation while the
+stochastic GSF evaluation includes spot interruptions. This run tested whether adaptive EWMA predictions
+could close this gap; they cannot without over-provisioning.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+1. **Stochastic interrupt buffer in oracle convergence target** — set baseline_n_sla_safe = amcsg_n_sla_safe +
+   interrupt_safety_margin (e.g., +20 to +30 on BurstGPT). This directly addresses the confirmed root cause.
+2. **Transformer service-time predictor** — replace EWMA with a learned predictor; estimated MAPE reduction
+   from ~15% to ~5-8%; closes OSOTSS-vs-SOTSS-MIN gap on Azure.
+3. **ShareGPT/LMSYS cross-validation** — third/fourth public trace to validate OSOTSS generalization.
+
+### Q3. Which forecasts are weakest?
+
+1. **EWMA alpha=0.1 fixed** — adaptive alpha (this run) was tested and found not to help; the prediction
+   accuracy gap is NOT the bottleneck for the 15-request BurstGPT gap.
+2. **Deterministic oracle convergence target** — oracle targets deterministic n_sla_safe, but stochastic
+   evaluation needs a buffer. A +20-30 safety margin may close the BurstGPT gap.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Deterministic oracle baseline target** — oracle targets amcsg_n_sla_safe from stochastic simulation but
+   convergence uses deterministic FIFO; a safety buffer on the baseline would address the stochastic gap.
+2. **Single-step EWMA prediction** — still predicts only current tick's service time; multi-step prediction
+   could anticipate arrival bursts ahead of time.
+3. **Global mean warm-start** — production would use a rolling prior, not offline global mean.
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Same as previous run: traces with bursty arrivals (BurstGPT). The gap is now confirmed to be a
+stochastic/deterministic oracle-simulation mismatch, not a prediction quality issue.
+
+### Q6. Which research direction appears strongest?
+
+**Stochastic interrupt buffer in oracle convergence target.** The confirmed root cause of the BurstGPT
+15-request gap is that the oracle targets a deterministic baseline while the stochastic evaluation
+exposes spot-interruption-induced capacity reductions on borderline ticks. Adding a +20-30 request
+safety buffer to the oracle baseline would directly address this without prediction improvements.
+
+### Q7. What is the shortest path to another +1% gain?
+
+**Stochastic safety margin.** Change `baseline_n_sla_safe = amcsg_n_sla_safe` to
+`baseline_n_sla_safe = amcsg_n_sla_safe + safety_margin` (e.g., +20 on BurstGPT).
+This should close the 15/5849 = 0.26% n_sla_safe gap without changing goodput/$ materially
+(oracle adds a few extra servers on borderline ticks, matched precisely to the interruption buffer).
+Must verify Azure regression-free (Azure already meets baseline with no gap).
+
+### Q8. What is the current north-star status?
+
+Same as run 2026-06-23: both Azure and BurstGPT goodput/$ north-stars achieved. BurstGPT
+n_sla_safe remains 15 below AMCSG (known limitation).
+
+### Q9. What would need to be true to maintain north-star?
+
+Same as run 2026-06-23.
+
+### Q10. Which assumptions might be wrong?
+
+1. **EWMA prediction accuracy is the bottleneck.** FALSIFIED by this run. The 15-request gap
+   is a stochastic/deterministic simulation mismatch, not a prediction error.
+2. **Oracle convergence target equals final evaluation metric.** CONFIRMED WRONG. Oracle uses
+   deterministic n_sla_safe; evaluation uses stochastic GSF. A safety buffer is needed.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Deterministic/stochastic oracle-evaluation mismatch** — oracle convergence in deterministic
+   FIFO; evaluation in stochastic GSF. A 15-request gap on BurstGPT results. Known limitation.
+2. **Two public traces** — Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+Same as run 2026-06-23: ShareGPT, LMSYS Chatbot Arena.
+
+### Q13. What should be attempted next?
+
+1. **Stochastic safety margin** — oracle baseline_n_sla_safe += interrupt_safety_margin; directly
+   targets the confirmed root cause of the BurstGPT 15-request gap.
+2. **ShareGPT/LMSYS cross-validation** — third public trace.
+3. **Transformer service-time predictor** — replace EWMA for Azure oracle gap (SOTSS-MIN vs OSOTSS).
+
+**Five-Failure Rule counter: 3 of 5 consecutive non-frontier runs.**
+
+Results: `research/results/adaptive_ewma_osotss_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_adaptive_ewma_backtest.py` (8 tests, all passing)
+
+---
 
 ## Run 2026-06-23 — Online SOTSS / OSOTSS (FRONTIER IMPROVEMENT on Azure, MIXED on BurstGPT)
 
@@ -139,21 +759,22 @@ Tests: `tests/test_online_sotss_backtest.py` (30 tests, all passing)
 
 ---
 
-## Future Opportunity Ranking — Updated After Run 2026-06-23 (Online SOTSS)
+## Future Opportunity Ranking — Updated After Run 2026-06-24 (Adaptive EWMA — Negative Result)
 
 | rank | opportunity | EV | feasibility | status |
 |---|---|---|---|---|
-| 1 | Adaptive EWMA alpha per tick/trace (burst-tracking) | High | High | Closes BurstGPT 15-request gap; straightforward heuristic |
+| 1 | Stochastic safety margin (oracle baseline += interrupt buffer) | High | High | Directly targets confirmed root cause of BurstGPT 15-req gap |
 | 2 | ShareGPT/LMSYS cross-validation of OSOTSS | Medium | High | Third/fourth public trace; validates EWMA approach |
 | 3 | Transformer service-time predictor (replace EWMA) | High | Medium | Larger SOTSS-MIN fraction recovered; production-safe |
 | 4 | Multi-region spot arbitrage (SkyPilot/arXiv:2605.22778) | High | Medium | OSOTSS is production baseline; multi-region on top |
-| 5 | Stochastic oracle variant (run oracle with GSF not FIFO) | Medium | Medium | Closes deterministic/stochastic gap |
+| 5 | Stochastic oracle variant (run oracle with GSF not FIFO) | Medium | Medium | Closes deterministic/stochastic gap (may combine with #1) |
 
-**Closed/characterized opportunities (Online SOTSS):**
+**Closed/characterized opportunities:**
+- Adaptive EWMA alpha (this run): **NEGATIVE RESULT** — hypothesis falsified. Gap is stochastic/deterministic mismatch.
 - OSOTSS (EWMA alpha=0.1): **FRONTIER IMPROVEMENT** — 159,578 goodput/$ (Azure, +5.94% vs AMCSG)
 - Dual-simulation design: violation ID from predicted pairs, convergence from actual pairs
 - 94.4% of SOTSS-MIN oracle gain recovered while being production-deployable
-- BurstGPT causal-prediction limitation: 15-request SLA gap (0.26%) — known, documented
+- BurstGPT causal-prediction limitation: 15-request SLA gap (0.26%) — root cause now confirmed (stochastic gap)
 
 ---
 
@@ -4816,3 +5437,74 @@ This exploits the M/M/c conservatism without changing the external SLA contract.
 **Priority 3:** DLAG on a synthetically bursty Azure re-sample (interleave high-load and idle ticks).
 This isolates whether DLAG's mechanism is sound and just needs a bursty trace to prove it. Do NOT
 use this for north-star claims — it's a mechanistic validator only.
+
+---
+
+## Run 2026-06-24 — Aging SRTF + AMCSG Compound (HONEST NULL RESULT — Five-Failure Rule integration experiment)
+
+### Q1. What currently limits Aurelius most?
+
+**Prediction degeneracy**: The running-median live prior (window=200) collapses per-request token predictions to near-constant (stdev=8.1 vs actual stdev=93.1, 37 unique values ≈91 tokens). Aging SRTF priority key degenerates to near-FIFO. Queue discipline cannot exceed FIFO performance without accurate per-request predictions.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Per-request token prediction accuracy (Trail/NP-SRPT style). Under current running-median prior, queue discipline is ceiling-limited at FIFO performance.
+
+### Q3. Which forecasts are weakest?
+
+Per-request token length prediction. Running-median window=200 is the binding constraint for queue discipline experiments.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Queue dispatch order — but only improvable if prediction accuracy is substantially improved.
+
+### Q5. Which workloads benefit least from aging SRTF?
+
+Both traces show null result. BurstGPT shows +0.09% (noise level). Azure shows +0.00%.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Per-request token prediction (blocked by pilot telemetry) is the highest-EV research direction. Trail (ICLR 2025, arXiv:2410.01035) addresses this directly.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under Five-Failure Rule: none available without pilot telemetry for per-request token prediction. Architecture is converged, all queue discipline paths are prediction-limited.
+
+### Q8. What is the current north-star status?
+
+**Both traces north-star achieved.** Azure: 159,578 gp/$ (OSOTSS). BurstGPT: 178,109 gp/$ (OSOTSS). The aging SRTF experiment does not change these.
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved. No regression present.
+
+### Q10. Which assumptions might be wrong?
+
+**CONFIRMED:** "Running-median prior produces useful predictions" was wrong. stdev=8.1 vs actual stdev=93.1. Only 37 unique predicted values. The prediction diversity needed for SRTF-class improvements is absent.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Two public traces only** — Azure LLM 2024 and BurstGPT HF. Third trace blocked (Alibaba: image gen workload; ShareGPT: no timestamps; LMSYS: no processed data).
+2. **Running-median prior** — Not representative of production token prediction quality.
+
+### Q12. Which public datasets should be added?
+
+None viable for OSOTSS/aging-SRTF replay. All three candidate traces are blocked for different structural reasons.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (6/5). Allowed actions: integration, validation, diagnosis, architecture simplification.**
+
+1. **Accept prediction-degeneracy as binding constraint** — Document that aging SRTF / SRPT improvements require per-request token prediction accuracy that the running-median prior cannot provide.
+2. **Architecture simplification** — Deprecate dead frontier code (EVAL_WORKLOAD, BATCH_INFERENCE).
+3. **Thin-delegate promotion** — Route remaining non-OSOTSS backtests through AureliusOptimizer facade.
+4. **Do NOT attempt new queue discipline variants** — All are prediction-limited; outcomes are predetermined.
+
+**Prediction degeneracy diagnosis:**
+- `LIVE_PRIOR_WINDOW=200`: running-median stdev=8.1 (actual stdev=93.1)
+- 37 unique predicted values, mode≈91 tokens
+- Aging key collapses to near-constant → degenerate to near-FIFO
+- BLOCKED by pilot telemetry — no path to per-request accuracy without production deployment
+
+Results: `research/results/aging_srtf_amcsg_compound_2026-06-24.{md,json}`
+Tests: `tests/test_aging_srtf_amcsg_compound.py` (24 tests: 23 passed, 1 skipped)

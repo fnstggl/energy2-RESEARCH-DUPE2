@@ -33,23 +33,19 @@ from __future__ import annotations
 import math
 import os
 import random
+
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     DECOUPLED_HYBRID_ALPHA_DEFAULT,
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
-    DEFAULT_BURSTGPT_SLA_S,
     DEFAULT_SLA_S,
-    NoisyPriorRobustnessReport,
-    SLAAwareBaselineReport,
     _Request,
     _run_noisy_prior_on_trace,
     _run_sla_aware_baseline_on_trace,
     _service_time_s,
     calibrate_time_warp,
-    load_burstgpt_serving_requests,
-    load_serving_requests,
     run_burstgpt_noisy_prior_backtest,
     run_burstgpt_sla_aware_baseline_backtest,
     run_decoupled_hybrid_noisy_prior_backtest,

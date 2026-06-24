@@ -35,7 +35,6 @@ from aurelius.frontier import (  # noqa: E402
     FrontierControllerConfig,
     FrontierShadowLog,
     SafetyConfig,
-    SafetyStatus,
     WorkloadFrontierProfile,
     choose_safe_utilization_target,
     estimate_frontier_from_points,

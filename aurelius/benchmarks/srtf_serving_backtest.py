@@ -135,20 +135,32 @@ from typing import Optional
 # its calibrator now live in the optimizer package. The benchmark imports them
 # back so it no longer owns the optimizer logic (parity-preserving extraction).
 from aurelius.optimizer import AureliusOptimizer
-from aurelius.optimizer.policies.serving_queue import (
-    AbsoluteErrorConformalCalibrator,
-    simulate_decoupled_hybrid_abs_conformal,
-)
+
 # Canonical replica-scaling policy [Phase 2/3 unification]: per-tick replica
 # count decisions (AMCSG MCS gate sweep and SOTSS-MIN oracle loop) now live in
 # the optimizer package. _joint_mcs_c_schedule and _sotss_min_cost_schedule
 # become thin delegates — same algorithm, constants, and tie-breaks (0% KPI drift).
 from aurelius.optimizer.policies.replica_scaling import (
+    ReplicaScalingConfig as _ReplicaScalingConfig,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_c1pgs_spot_replicas as _compute_c1pgs_spot_replicas,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_mcs_c_schedule as _compute_mcs_c_schedule,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_online_sotss_schedule as _compute_online_sotss_schedule,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_sotss_gsf_schedule as _compute_sotss_gsf_schedule,
+)
+from aurelius.optimizer.policies.replica_scaling import (
     compute_sotss_min_schedule as _compute_sotss_min_schedule,
+)
+from aurelius.optimizer.policies.serving_queue import (
+    AbsoluteErrorConformalCalibrator,
+    simulate_decoupled_hybrid_abs_conformal,
 )
 
 # Phase 3: the benchmark routes the abs-conformal serving discipline through the
@@ -6973,7 +6985,6 @@ def _compute_compound_economic_queue(
     gp_fifo = queue_rpt.fifo_goodput_per_dollar
     gp_sla = queue_rpt.sla_aware_oracle_goodput_per_dollar
     gp_abs = queue_rpt.abs_conformal_goodput_per_dollar
-    oracle_gp = queue_rpt.oracle_goodput_per_dollar
 
     compound_gp = gp_abs * economic_cost_factor
 
@@ -10064,9 +10075,18 @@ def _run_amcsg_backtest(
     baseline_entry = None
 
     for gate in gates:
-        c_schedule = _joint_mcs_c_schedule(
-            raw, tick_seconds, warp, mcs_gate=gate, sla_s=sla_s
+        # [Phase 4 delegate] Route AMCSG gate sweep through canonical optimizer.
+        _amcsg_r = _REPLICA_SCALING_OPTIMIZER.optimize(
+            raw,
+            warp=warp,
+            config=_ReplicaScalingConfig(
+                mode="amcsg",
+                tick_seconds=tick_seconds,
+                sla_s=sla_s,
+                safe_gate_pct=gate,
+            ),
         )
+        c_schedule = _amcsg_r.c_schedule
         n_ticks = len(c_schedule)
 
         # Cost at f=0.95: all ticks are all-spot at these load levels
@@ -11243,9 +11263,20 @@ def _run_sotss_backtest(
 
     # -----------------------------------------------------------------------
     # Step 1: Compute AMCSG safe-gate baseline (gate=12.5%) for comparison.
+    # [Phase 4 delegate] Routes through canonical AureliusOptimizer facade.
     # Same simulation path as _run_amcsg_backtest for apple-to-apple parity.
     # -----------------------------------------------------------------------
-    c_amcsg = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=safe_gate, sla_s=sla_s)
+    _sotss_amcsg_r = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="amcsg",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=safe_gate,
+        ),
+    )
+    c_amcsg = _sotss_amcsg_r.c_schedule
     amcsg_cost = _gsf_spot_fleet_cost(
         c_amcsg, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
     )
@@ -11260,20 +11291,26 @@ def _run_sotss_backtest(
 
     # -----------------------------------------------------------------------
     # Step 2: Run SOTSS oracle loop (deterministic, uses actual tokens).
+    # [Phase 4 delegate] Routes through canonical AureliusOptimizer facade.
     # The oracle can see actual token counts — it is an offline capacity planner.
     # -----------------------------------------------------------------------
-    c_sotss, n_iters, initial_violations, n_ticks_cheaper, baseline_used = (
-        _sotss_min_cost_schedule(
-            raw,
-            tick_seconds,
-            warp,
-            sla_s,
-            safe_gate=safe_gate,
-            aggressive_gate=aggressive_gate,
-            max_iters=max_iters,
-            baseline_n_sla_safe=None,  # computed from gate=9.5% inside oracle
-        )
+    _sotss_r = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="sotss_min",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=safe_gate,
+            aggressive_gate_pct=aggressive_gate,
+            max_oracle_iters=max_iters,
+        ),
     )
+    c_sotss = _sotss_r.c_schedule
+    n_iters = _sotss_r.oracle_iters
+    initial_violations = _sotss_r.initial_violations
+    n_ticks_cheaper = _sotss_r.n_ticks_cheaper
+    baseline_used = _sotss_r.baseline_n_sla_safe
 
     # -----------------------------------------------------------------------
     # Step 3: Final SOTSS evaluation using same spot-fleet simulation as AMCSG
@@ -12777,6 +12814,12 @@ def _online_sotss_cost_schedule(
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     baseline_n_sla_safe: int | None = None,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
+    borderline_margin_s: float = 0.0,
 ) -> tuple:
     """Online SOTSS schedule — delegates to canonical ReplicaScalingPolicy.
 
@@ -12792,6 +12835,12 @@ def _online_sotss_cost_schedule(
         max_iters=max_iters,
         baseline_n_sla_safe=baseline_n_sla_safe,
         ewma_alpha=ewma_alpha,
+        ewma_mode=ewma_mode,
+        burst_threshold=burst_threshold,
+        burst_alpha=burst_alpha,
+        burst_cooldown_ticks=burst_cooldown_ticks,
+        interrupt_safety_margin=interrupt_safety_margin,
+        borderline_margin_s=borderline_margin_s,
     )
 
 
@@ -12901,6 +12950,12 @@ def _run_online_sotss_backtest(
     zfhc_threshold: int = 8,
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
+    borderline_margin_s: float = 0.0,
 ) -> "OnlineSOTSSReport":
     """Shared Online SOTSS backtest logic for both Azure and BurstGPT traces."""
     warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
@@ -12936,27 +12991,40 @@ def _run_online_sotss_backtest(
     )
 
     # -----------------------------------------------------------------------
-    # Step 2: Run Online SOTSS oracle loop (causal EWMA predictions only).
-    # Production-deployable: no oracle access to future token counts.
+    # Step 2: Run Online SOTSS oracle loop via canonical AureliusOptimizer
+    # facade (policy="replica_scaling", mode="online_sotss").
     #
-    # The oracle's convergence baseline is set to amcsg_n_sla_safe — the
-    # same SLA-safe count achieved by AMCSG in the stochastic GSF simulation.
-    # This ensures OSOTSS targets the same safety floor as the baseline, not
-    # the more-conservative deterministic gate=9.5% baseline used by SOTSS-MIN.
+    # baseline_n_sla_safe = amcsg_n_sla_safe from the stochastic GSF simulation
+    # above, so OSOTSS targets the same SLA-safe floor as AMCSG (not the more-
+    # conservative deterministic floor). This is the Phase 3 canonical routing
+    # that makes AureliusOptimizer(policy="replica_scaling") the single owner
+    # of all per-tick capacity scheduling decisions, including OSOTSS.
     # -----------------------------------------------------------------------
-    c_osotss, n_iters, initial_violations, n_ticks_cheaper, baseline_used = (
-        _online_sotss_cost_schedule(
-            raw,
-            tick_seconds,
-            warp,
-            sla_s,
-            safe_gate=safe_gate,
-            aggressive_gate=aggressive_gate,
-            max_iters=max_iters,
+    _osotss_result = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="online_sotss",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=safe_gate,
+            aggressive_gate_pct=aggressive_gate,
+            max_oracle_iters=max_iters,
             baseline_n_sla_safe=amcsg_n_sla_safe,
             ewma_alpha=ewma_alpha,
-        )
+            ewma_mode=ewma_mode,
+            burst_threshold=burst_threshold,
+            burst_alpha=burst_alpha,
+            burst_cooldown_ticks=burst_cooldown_ticks,
+            interrupt_safety_margin=interrupt_safety_margin,
+            borderline_margin_s=borderline_margin_s,
+        ),
     )
+    c_osotss = _osotss_result.c_schedule
+    n_iters = _osotss_result.oracle_iters
+    initial_violations = _osotss_result.initial_violations
+    n_ticks_cheaper = _osotss_result.n_ticks_cheaper
+    baseline_used = _osotss_result.baseline_n_sla_safe
 
     # -----------------------------------------------------------------------
     # Step 3: Final evaluation using same spot-fleet simulation as AMCSG.
@@ -13030,6 +13098,12 @@ def run_online_sotss_azure_backtest(
     safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
+    borderline_margin_s: float = 0.0,
 ) -> "OnlineSOTSSReport":
     """Online SOTSS backtest on Azure LLM 2024 — run 2026-06-23.
 
@@ -13084,6 +13158,12 @@ def run_online_sotss_azure_backtest(
         zfhc_threshold=zfhc_threshold,
         max_iters=max_iters,
         ewma_alpha=ewma_alpha,
+        ewma_mode=ewma_mode,
+        burst_threshold=burst_threshold,
+        burst_alpha=burst_alpha,
+        burst_cooldown_ticks=burst_cooldown_ticks,
+        interrupt_safety_margin=interrupt_safety_margin,
+        borderline_margin_s=borderline_margin_s,
     )
 
 
@@ -13103,6 +13183,12 @@ def run_online_sotss_burstgpt_backtest(
     safe_gate: float = _ONLINE_SOTSS_SAFE_GATE,
     max_iters: int = _ONLINE_SOTSS_MAX_ITERS,
     ewma_alpha: float = _ONLINE_SOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
+    borderline_margin_s: float = 0.0,
 ) -> "OnlineSOTSSReport":
     """Online SOTSS backtest on BurstGPT HF — run 2026-06-23.
 
@@ -13151,4 +13237,1404 @@ def run_online_sotss_burstgpt_backtest(
         zfhc_threshold=zfhc_threshold,
         max_iters=max_iters,
         ewma_alpha=ewma_alpha,
+        ewma_mode=ewma_mode,
+        burst_threshold=burst_threshold,
+        burst_alpha=burst_alpha,
+        burst_cooldown_ticks=burst_cooldown_ticks,
+        interrupt_safety_margin=interrupt_safety_margin,
+        borderline_margin_s=borderline_margin_s,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Forecasted MCS Spot Fleet backtest — run 2026-06-24
+#
+# Evaluates the ONLY fully deployable replica-scaling mode (forecasted_mcs)
+# under the GSF spot-fleet cost model (95% spot, $0.80/hr, 10%/hr interruption).
+# Prior evaluations used on-demand pricing only; this is the first apples-to-
+# apples comparison vs AMCSG/OSOTSS under spot-fleet economics.
+#
+# Two sub-modes evaluated:
+#   lag1  — reactive: uses actual tick-(t-1) counts and service times
+#   ewma  — EWMA-smoothed arrival forecast + service time prediction
+#
+# Routing: uses _REPLICA_SCALING_OPTIMIZER (AureliusOptimizer(policy=
+# "replica_scaling")) for canonical entry-point compliance.
+# ---------------------------------------------------------------------------
+
+_FMCS_SPOT_MCS_GATE: float = 12.5     # same safe gate as AMCSG
+_FMCS_SPOT_EWMA_ALPHA: float = 0.5    # default from ReplicaScalingConfig
+
+
+@dataclass
+class ForecastedMCSSpotReport:
+    """Forecasted MCS Spot Fleet backtest report — run 2026-06-24.
+
+    Compares the fully deployable forecasted_mcs modes (lag1, ewma) against
+    AMCSG (gate=12.5%) on the GSF spot-fleet cost model.  Unlike OSOTSS, there
+    is no oracle inner loop: the c_schedule is computed in a single forward pass
+    using only data available at decision time (≤ t-1).
+
+    Same-conditions rule: identical trace, SLA, cost denominator, GPU-hour
+    accounting, physics, capacity model, spot-fleet model, and evaluation method
+    as AMCSG and OSOTSS.
+
+    Primary KPI: lag1/ewma goodput_per_dollar vs amcsg_goodput_per_dollar.
+    """
+
+    trace: str
+    total_requests: int
+    sla_s: float
+    tick_seconds: float
+    rng_seed: int
+    spot_price_usd_hr: float
+    demand_price_usd_hr: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+    mcs_gate: float
+    ewma_alpha: float
+
+    # North-star reference
+    sla_oracle_goodput_per_dollar: float
+    north_star_500_threshold: float
+
+    # AMCSG safe-gate baseline (gate=12.5%)
+    amcsg_goodput_per_dollar: float
+    amcsg_cost: float
+    amcsg_c_mean: float
+    amcsg_n_sla_safe: int
+    amcsg_p99_s: float
+
+    # Forecasted MCS lag1 (reactive: tick t-1 counts + service times)
+    lag1_goodput_per_dollar: float
+    lag1_cost: float
+    lag1_c_mean: float
+    lag1_n_sla_safe: int
+    lag1_p99_s: float
+    lag1_vs_amcsg_pct: float
+    lag1_vs_sla_oracle_pct: float
+    lag1_north_star_500_achieved: bool
+    lag1_n_sla_safe_safe: bool   # lag1_n_sla_safe >= amcsg_n_sla_safe
+
+    # Forecasted MCS ewma (EWMA-smoothed arrival + service forecast)
+    ewma_goodput_per_dollar: float
+    ewma_cost: float
+    ewma_c_mean: float
+    ewma_n_sla_safe: int
+    ewma_p99_s: float
+    ewma_vs_amcsg_pct: float
+    ewma_vs_sla_oracle_pct: float
+    ewma_north_star_500_achieved: bool
+    ewma_n_sla_safe_safe: bool   # ewma_n_sla_safe >= amcsg_n_sla_safe
+
+    def to_dict(self) -> dict:
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "rng_seed": self.rng_seed,
+            "spot_price_usd_hr": self.spot_price_usd_hr,
+            "demand_price_usd_hr": self.demand_price_usd_hr,
+            "p_interrupt_hourly": self.p_interrupt_hourly,
+            "zfhc_threshold": self.zfhc_threshold,
+            "mcs_gate": self.mcs_gate,
+            "ewma_alpha": self.ewma_alpha,
+            "sla_oracle_goodput_per_dollar": round(self.sla_oracle_goodput_per_dollar, 2),
+            "north_star_500_threshold": round(self.north_star_500_threshold, 2),
+            "amcsg_goodput_per_dollar": round(self.amcsg_goodput_per_dollar, 2),
+            "amcsg_cost": round(self.amcsg_cost, 4),
+            "amcsg_c_mean": round(self.amcsg_c_mean, 3),
+            "amcsg_n_sla_safe": self.amcsg_n_sla_safe,
+            "amcsg_p99_s": round(self.amcsg_p99_s, 3),
+            "lag1_goodput_per_dollar": round(self.lag1_goodput_per_dollar, 2),
+            "lag1_cost": round(self.lag1_cost, 4),
+            "lag1_c_mean": round(self.lag1_c_mean, 3),
+            "lag1_n_sla_safe": self.lag1_n_sla_safe,
+            "lag1_p99_s": round(self.lag1_p99_s, 3),
+            "lag1_vs_amcsg_pct": round(self.lag1_vs_amcsg_pct, 4),
+            "lag1_vs_sla_oracle_pct": round(self.lag1_vs_sla_oracle_pct, 2),
+            "lag1_north_star_500_achieved": self.lag1_north_star_500_achieved,
+            "lag1_n_sla_safe_safe": self.lag1_n_sla_safe_safe,
+            "ewma_goodput_per_dollar": round(self.ewma_goodput_per_dollar, 2),
+            "ewma_cost": round(self.ewma_cost, 4),
+            "ewma_c_mean": round(self.ewma_c_mean, 3),
+            "ewma_n_sla_safe": self.ewma_n_sla_safe,
+            "ewma_p99_s": round(self.ewma_p99_s, 3),
+            "ewma_vs_amcsg_pct": round(self.ewma_vs_amcsg_pct, 4),
+            "ewma_vs_sla_oracle_pct": round(self.ewma_vs_sla_oracle_pct, 2),
+            "ewma_north_star_500_achieved": self.ewma_north_star_500_achieved,
+            "ewma_n_sla_safe_safe": self.ewma_n_sla_safe_safe,
+        }
+
+
+def _run_forecasted_mcs_spot_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    sla_oracle: float,
+    north_star_500_threshold: float,
+    mcs_gate: float = _FMCS_SPOT_MCS_GATE,
+    zfhc_threshold: int = 8,
+    ewma_alpha: float = _FMCS_SPOT_EWMA_ALPHA,
+    warmup_c: int = 4,
+) -> "ForecastedMCSSpotReport":
+    """Shared Forecasted MCS Spot Fleet backtest logic for Azure and BurstGPT.
+
+    Three-step evaluation (same structure as _run_online_sotss_backtest):
+      1. Compute AMCSG safe-gate baseline (gate=mcs_gate) for comparison.
+      2. Compute forecasted_mcs lag1 and ewma c_schedules via AureliusOptimizer.
+      3. Evaluate all three under the same GSF spot-fleet simulation.
+
+    Same-conditions rule: identical trace, SLA, cost denominator, GPU-hour
+    accounting, physics, capacity model, spot-fleet model, evaluation method.
+    """
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+
+    def _build_reqs() -> list:
+        # FIFO simulation: predicted_tokens not used for ordering; set to actual.
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=float(tok),
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # -----------------------------------------------------------------------
+    # Step 1: AMCSG safe-gate baseline (gate=mcs_gate%, same as OSOTSS step 1)
+    # -----------------------------------------------------------------------
+    c_amcsg = _joint_mcs_c_schedule(raw, tick_seconds, warp, mcs_gate=mcs_gate, sla_s=sla_s)
+    amcsg_cost = _gsf_spot_fleet_cost(
+        c_amcsg, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_amcsg = _build_reqs()
+    amcsg_sim, amcsg_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_amcsg, c_amcsg, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    amcsg_gp = _sla_safe_goodput(reqs_amcsg, amcsg_resp, sla_s) / max(amcsg_cost, 1e-9)
+    amcsg_n_sla_safe = sum(
+        1 for r in reqs_amcsg if r.idx in amcsg_resp and amcsg_resp[r.idx] <= sla_s
+    )
+
+    # -----------------------------------------------------------------------
+    # Step 2a: Forecasted MCS lag1 — reactive (tick t-1 counts + service times)
+    # Routed through AureliusOptimizer(policy="replica_scaling") canonical path.
+    # -----------------------------------------------------------------------
+    lag1_result = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="forecasted_mcs",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=mcs_gate,
+            forecast_method="lag1",
+            forecast_warmup_c=warmup_c,
+        ),
+    )
+    c_lag1 = lag1_result.c_schedule
+
+    # -----------------------------------------------------------------------
+    # Step 2b: Forecasted MCS ewma — EWMA-smoothed arrival + service forecast
+    # -----------------------------------------------------------------------
+    ewma_result = _REPLICA_SCALING_OPTIMIZER.optimize(
+        raw,
+        warp=warp,
+        config=_ReplicaScalingConfig(
+            mode="forecasted_mcs",
+            tick_seconds=tick_seconds,
+            sla_s=sla_s,
+            safe_gate_pct=mcs_gate,
+            forecast_method="ewma",
+            forecast_ewma_alpha=ewma_alpha,
+            forecast_warmup_c=warmup_c,
+        ),
+    )
+    c_ewma = ewma_result.c_schedule
+
+    # -----------------------------------------------------------------------
+    # Step 3: Evaluate lag1 and ewma under same GSF spot-fleet simulation.
+    # -----------------------------------------------------------------------
+    lag1_cost = _gsf_spot_fleet_cost(
+        c_lag1, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_lag1 = _build_reqs()
+    lag1_sim, lag1_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_lag1, c_lag1, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    lag1_gp = _sla_safe_goodput(reqs_lag1, lag1_resp, sla_s) / max(lag1_cost, 1e-9)
+    lag1_n_sla_safe = sum(
+        1 for r in reqs_lag1 if r.idx in lag1_resp and lag1_resp[r.idx] <= sla_s
+    )
+
+    ewma_cost = _gsf_spot_fleet_cost(
+        c_ewma, 0.95, zfhc_threshold, spot_price_usd_hr, GPU_HOUR_USD, tick_seconds
+    )
+    reqs_ewma = _build_reqs()
+    ewma_sim, ewma_resp, _ = _simulate_fifo_gsf_spot_fleet(
+        reqs_ewma, c_ewma, 0.95, zfhc_threshold, p_interrupt_hourly, tick_seconds, seed
+    )
+    ewma_gp = _sla_safe_goodput(reqs_ewma, ewma_resp, sla_s) / max(ewma_cost, 1e-9)
+    ewma_n_sla_safe = sum(
+        1 for r in reqs_ewma if r.idx in ewma_resp and ewma_resp[r.idx] <= sla_s
+    )
+
+    lag1_vs_amcsg = (lag1_gp - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+    lag1_vs_oracle = (lag1_gp - sla_oracle) / sla_oracle * 100.0
+    ewma_vs_amcsg = (ewma_gp - amcsg_gp) / max(amcsg_gp, 1e-9) * 100.0
+    ewma_vs_oracle = (ewma_gp - sla_oracle) / sla_oracle * 100.0
+
+    return ForecastedMCSSpotReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        rng_seed=seed,
+        spot_price_usd_hr=spot_price_usd_hr,
+        demand_price_usd_hr=GPU_HOUR_USD,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        mcs_gate=mcs_gate,
+        ewma_alpha=ewma_alpha,
+        sla_oracle_goodput_per_dollar=sla_oracle,
+        north_star_500_threshold=north_star_500_threshold,
+        amcsg_goodput_per_dollar=amcsg_gp,
+        amcsg_cost=amcsg_cost,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_n_sla_safe=amcsg_n_sla_safe,
+        amcsg_p99_s=amcsg_sim.get("p99_response_s", 0.0),
+        lag1_goodput_per_dollar=lag1_gp,
+        lag1_cost=lag1_cost,
+        lag1_c_mean=statistics.mean(c_lag1),
+        lag1_n_sla_safe=lag1_n_sla_safe,
+        lag1_p99_s=lag1_sim.get("p99_response_s", 0.0),
+        lag1_vs_amcsg_pct=lag1_vs_amcsg,
+        lag1_vs_sla_oracle_pct=lag1_vs_oracle,
+        lag1_north_star_500_achieved=(lag1_gp >= north_star_500_threshold and lag1_n_sla_safe >= amcsg_n_sla_safe),
+        lag1_n_sla_safe_safe=(lag1_n_sla_safe >= amcsg_n_sla_safe),
+        ewma_goodput_per_dollar=ewma_gp,
+        ewma_cost=ewma_cost,
+        ewma_c_mean=statistics.mean(c_ewma),
+        ewma_n_sla_safe=ewma_n_sla_safe,
+        ewma_p99_s=ewma_sim.get("p99_response_s", 0.0),
+        ewma_vs_amcsg_pct=ewma_vs_amcsg,
+        ewma_vs_sla_oracle_pct=ewma_vs_oracle,
+        ewma_north_star_500_achieved=(ewma_gp >= north_star_500_threshold and ewma_n_sla_safe >= amcsg_n_sla_safe),
+        ewma_n_sla_safe_safe=(ewma_n_sla_safe >= amcsg_n_sla_safe),
+    )
+
+
+def run_forecasted_mcs_spot_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    mcs_gate: float = _FMCS_SPOT_MCS_GATE,
+    ewma_alpha: float = _FMCS_SPOT_EWMA_ALPHA,
+    warmup_c: int = 4,
+) -> "ForecastedMCSSpotReport":
+    """Forecasted MCS Spot Fleet backtest on Azure LLM 2024 — run 2026-06-24.
+
+    First apples-to-apples comparison of the fully deployable forecasted_mcs
+    modes (lag1, ewma) against AMCSG under GSF spot-fleet cost model.
+
+    Candidate claim: if lag1/ewma goodput_per_dollar > amcsg_goodput_per_dollar
+    AND lag1/ewma n_sla_safe >= amcsg_n_sla_safe, that sub-mode is a frontier
+    improvement over AMCSG — fully deployable with no oracle information.
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880 for Azure).
+        sla_s:              E2E SLA budget (10s).
+        azure_fixture:      Azure LLM 2024 fixture CSV path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr, default $0.80).
+        p_interrupt_hourly: Hourly spot interruption probability (default 0.10).
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        mcs_gate:           MCS Erlang-C utilization gate % (default 12.5%).
+        ewma_alpha:         EWMA smoothing for ewma sub-mode (default 0.5).
+        warmup_c:           Cold-start replica count (default 4).
+
+    Returns:
+        ForecastedMCSSpotReport comparing lag1 and ewma vs AMCSG.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_forecasted_mcs_spot_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_forecasted_mcs_spot",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=25_208.0,
+        north_star_500_threshold=6.0 * 25_208.0,  # 151,248
+        mcs_gate=mcs_gate,
+        zfhc_threshold=zfhc_threshold,
+        ewma_alpha=ewma_alpha,
+        warmup_c=warmup_c,
+    )
+
+
+def run_forecasted_mcs_spot_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    mcs_gate: float = _FMCS_SPOT_MCS_GATE,
+    ewma_alpha: float = _FMCS_SPOT_EWMA_ALPHA,
+    warmup_c: int = 4,
+) -> "ForecastedMCSSpotReport":
+    """Forecasted MCS Spot Fleet backtest on BurstGPT HF — run 2026-06-24.
+
+    First apples-to-apples comparison of the fully deployable forecasted_mcs
+    modes (lag1, ewma) against AMCSG on BurstGPT under GSF spot-fleet pricing.
+    SLA budget is 30s (BurstGPT default).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880).
+        sla_s:              E2E SLA budget (30s).
+        jsonl_path:         BurstGPT HF JSONL path.
+        tick_seconds:       Tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr, default $0.80).
+        p_interrupt_hourly: Hourly spot interruption probability (default 0.10).
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        mcs_gate:           MCS Erlang-C utilization gate % (default 12.5%).
+        ewma_alpha:         EWMA smoothing for ewma sub-mode (default 0.5).
+        warmup_c:           Cold-start replica count (default 4).
+
+    Returns:
+        ForecastedMCSSpotReport comparing lag1 and ewma vs AMCSG on BurstGPT.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_forecasted_mcs_spot_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_forecasted_mcs_spot",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        sla_oracle=20_280.0,
+        north_star_500_threshold=6.0 * 20_280.0,  # 121,680
+        mcs_gate=mcs_gate,
+        zfhc_threshold=zfhc_threshold,
+        ewma_alpha=ewma_alpha,
+        warmup_c=warmup_c,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Joint OSOTSS + Abs-Conformal SRPT Compound Backtest — Run 2026-06-24
+# ---------------------------------------------------------------------------
+#
+# Five-Failure Rule integration experiment. Tests whether the OSOTSS capacity
+# provisioner (causal-EWMA, production-deployable) compounds POSITIVELY with
+# the abs-conformal SRPT queue discipline.
+#
+# Background: The MCS+conformal joint backtest (2026-06-23) found a NEGATIVE
+# compound because MCS over-provisioned (c_mean≈4.9 vs fixed-c=4), reducing
+# queue depth and making SRPT less useful. OSOTSS under-provisions
+# (c_mean≈4.2 vs fixed-c=4) → deeper queues → conformal SRPT expected to be
+# more valuable → positive compound expected.
+#
+# 6-condition 2×3 factorial:
+#   {FIFO, conformal} × {fixed-c=4, AMCSG gate=12.5%, OSOTSS}
+# Strongest fair baseline: conformal + AMCSG (validated safe provisioner)
+# Candidate: conformal + OSOTSS (TRUE COMPOUND)
+# Cost denominator: provisioned GPU hours × GPU_HOUR_USD (no stochastic spot).
+
+_JOSOTSS_AMCSG_GATE: float = 12.5   # AMCSG best-safe validated gate
+
+
+@dataclass
+class JointOSOTSSAbsConformalReport:
+    """Joint OSOTSS × abs-conformal SRPT compound backtest — run 2026-06-24.
+
+    2×3 factorial — all conditions on the same warped trace:
+      FIFO + fixed-c:              do-nothing baseline
+      FIFO + AMCSG (gate=12.5%):   economic-only gain (FIFO)
+      FIFO + OSOTSS:               economic-only gain (FIFO, causal EWMA)
+      conformal + fixed-c:         queue-only gain
+      conformal + AMCSG:           compound (strongest fair baseline)
+      conformal + OSOTSS:          TRUE COMPOUND (candidate)
+
+    Cost denominator: provisioned GPU hours × GPU_HOUR_USD.
+    Headline: conformal_osotss_goodput_per_dollar vs conformal_amcsg_goodput_per_dollar.
+    SLA safety gate: conformal_osotss_n_sla_safe >= conformal_amcsg_n_sla_safe.
+    """
+
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+
+    # AMCSG capacity statistics
+    amcsg_c_mean: float
+    amcsg_c_min: int
+    amcsg_c_max: int
+    amcsg_n_ticks: int
+
+    # OSOTSS capacity statistics
+    osotss_c_mean: float
+    osotss_c_min: int
+    osotss_c_max: int
+    osotss_n_ticks: int
+
+    # Provisioned GPU-hour costs
+    cost_fixed_c: float
+    cost_amcsg: float
+    cost_osotss: float
+
+    # 6-condition goodput/$ (primary KPI)
+    fifo_fixed_goodput_per_dollar: float
+    fifo_amcsg_goodput_per_dollar: float
+    fifo_osotss_goodput_per_dollar: float
+    conformal_fixed_goodput_per_dollar: float
+    conformal_amcsg_goodput_per_dollar: float
+    conformal_osotss_goodput_per_dollar: float
+
+    # 6-condition n_sla_safe (SLA safety gate)
+    fifo_fixed_n_sla_safe: int
+    fifo_amcsg_n_sla_safe: int
+    fifo_osotss_n_sla_safe: int
+    conformal_fixed_n_sla_safe: int
+    conformal_amcsg_n_sla_safe: int
+    conformal_osotss_n_sla_safe: int
+
+    # 6-condition p99 response times
+    fifo_fixed_p99_s: float
+    fifo_amcsg_p99_s: float
+    fifo_osotss_p99_s: float
+    conformal_fixed_p99_s: float
+    conformal_amcsg_p99_s: float
+    conformal_osotss_p99_s: float
+
+    # 6-condition completion rates
+    fifo_fixed_completion_rate: float
+    fifo_amcsg_completion_rate: float
+    fifo_osotss_completion_rate: float
+    conformal_fixed_completion_rate: float
+    conformal_amcsg_completion_rate: float
+    conformal_osotss_completion_rate: float
+
+    # Preemption counts (conformal conditions only)
+    conformal_fixed_preemptions: int
+    conformal_amcsg_preemptions: int
+    conformal_osotss_preemptions: int
+
+    # Key percentage deltas vs fifo_fixed baseline
+    conformal_fixed_vs_fifo_fixed_pct: float
+    fifo_amcsg_vs_fifo_fixed_pct: float
+    fifo_osotss_vs_fifo_fixed_pct: float
+    conformal_amcsg_vs_fifo_fixed_pct: float
+    conformal_osotss_vs_fifo_fixed_pct: float
+
+    # Headline: candidate vs strongest fair baseline
+    conformal_osotss_vs_conformal_amcsg_pct: float
+
+    # Capacity cost comparison
+    osotss_vs_amcsg_cost_pct: float
+
+    # SLA safety delta: conformal_osotss_n_sla_safe - conformal_amcsg_n_sla_safe
+    osotss_conformal_sla_safe_delta: int
+
+    def to_dict(self) -> dict:
+        def _r(v, n=2):
+            return round(v, n) if isinstance(v, float) else v
+
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": self.target_rho,
+            "sla_s": self.sla_s,
+            "tick_seconds": self.tick_seconds,
+            "amcsg_c_mean": _r(self.amcsg_c_mean, 3),
+            "amcsg_c_min": self.amcsg_c_min,
+            "amcsg_c_max": self.amcsg_c_max,
+            "amcsg_n_ticks": self.amcsg_n_ticks,
+            "osotss_c_mean": _r(self.osotss_c_mean, 3),
+            "osotss_c_min": self.osotss_c_min,
+            "osotss_c_max": self.osotss_c_max,
+            "osotss_n_ticks": self.osotss_n_ticks,
+            "cost_fixed_c": _r(self.cost_fixed_c, 6),
+            "cost_amcsg": _r(self.cost_amcsg, 6),
+            "cost_osotss": _r(self.cost_osotss, 6),
+            "fifo_fixed_goodput_per_dollar": _r(self.fifo_fixed_goodput_per_dollar),
+            "fifo_amcsg_goodput_per_dollar": _r(self.fifo_amcsg_goodput_per_dollar),
+            "fifo_osotss_goodput_per_dollar": _r(self.fifo_osotss_goodput_per_dollar),
+            "conformal_fixed_goodput_per_dollar": _r(self.conformal_fixed_goodput_per_dollar),
+            "conformal_amcsg_goodput_per_dollar": _r(self.conformal_amcsg_goodput_per_dollar),
+            "conformal_osotss_goodput_per_dollar": _r(self.conformal_osotss_goodput_per_dollar),
+            "fifo_fixed_n_sla_safe": self.fifo_fixed_n_sla_safe,
+            "fifo_amcsg_n_sla_safe": self.fifo_amcsg_n_sla_safe,
+            "fifo_osotss_n_sla_safe": self.fifo_osotss_n_sla_safe,
+            "conformal_fixed_n_sla_safe": self.conformal_fixed_n_sla_safe,
+            "conformal_amcsg_n_sla_safe": self.conformal_amcsg_n_sla_safe,
+            "conformal_osotss_n_sla_safe": self.conformal_osotss_n_sla_safe,
+            "fifo_fixed_p99_s": _r(self.fifo_fixed_p99_s, 3),
+            "fifo_amcsg_p99_s": _r(self.fifo_amcsg_p99_s, 3),
+            "fifo_osotss_p99_s": _r(self.fifo_osotss_p99_s, 3),
+            "conformal_fixed_p99_s": _r(self.conformal_fixed_p99_s, 3),
+            "conformal_amcsg_p99_s": _r(self.conformal_amcsg_p99_s, 3),
+            "conformal_osotss_p99_s": _r(self.conformal_osotss_p99_s, 3),
+            "fifo_fixed_completion_rate": _r(self.fifo_fixed_completion_rate, 4),
+            "fifo_amcsg_completion_rate": _r(self.fifo_amcsg_completion_rate, 4),
+            "fifo_osotss_completion_rate": _r(self.fifo_osotss_completion_rate, 4),
+            "conformal_fixed_completion_rate": _r(self.conformal_fixed_completion_rate, 4),
+            "conformal_amcsg_completion_rate": _r(self.conformal_amcsg_completion_rate, 4),
+            "conformal_osotss_completion_rate": _r(self.conformal_osotss_completion_rate, 4),
+            "conformal_fixed_preemptions": self.conformal_fixed_preemptions,
+            "conformal_amcsg_preemptions": self.conformal_amcsg_preemptions,
+            "conformal_osotss_preemptions": self.conformal_osotss_preemptions,
+            "conformal_fixed_vs_fifo_fixed_pct": _r(self.conformal_fixed_vs_fifo_fixed_pct),
+            "fifo_amcsg_vs_fifo_fixed_pct": _r(self.fifo_amcsg_vs_fifo_fixed_pct),
+            "fifo_osotss_vs_fifo_fixed_pct": _r(self.fifo_osotss_vs_fifo_fixed_pct),
+            "conformal_amcsg_vs_fifo_fixed_pct": _r(self.conformal_amcsg_vs_fifo_fixed_pct),
+            "conformal_osotss_vs_fifo_fixed_pct": _r(self.conformal_osotss_vs_fifo_fixed_pct),
+            "conformal_osotss_vs_conformal_amcsg_pct": _r(
+                self.conformal_osotss_vs_conformal_amcsg_pct
+            ),
+            "osotss_vs_amcsg_cost_pct": _r(self.osotss_vs_amcsg_cost_pct),
+            "osotss_conformal_sla_safe_delta": self.osotss_conformal_sla_safe_delta,
+        }
+
+
+def _run_joint_osotss_abs_conformal_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    target_p90_abs_tokens: float,
+    amcsg_gate: float = _JOSOTSS_AMCSG_GATE,
+) -> "JointOSOTSSAbsConformalReport":
+    """Shared 6-condition backtest logic for Azure and BurstGPT."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # Compute both c_schedules via canonical optimizer policy delegates
+    c_amcsg = _compute_mcs_c_schedule(
+        raw, tick_seconds, warp, mcs_gate=amcsg_gate, sla_s=sla_s
+    )
+    c_osotss, *_ = _compute_online_sotss_schedule(
+        raw, tick_seconds, warp, sla_s,
+        safe_gate=amcsg_gate,
+        aggressive_gate=_ONLINE_SOTSS_AGGRESSIVE_GATE,
+        ewma_alpha=_ONLINE_SOTSS_EWMA_ALPHA,
+    )
+    n_ticks = len(c_amcsg)
+
+    # Provisioned GPU-hour costs (no stochastic spot interruptions)
+    cost_fixed = fixed_c * n_ticks * tick_seconds / 3600.0 * GPU_HOUR_USD
+    cost_amcsg = sum(c_amcsg) * tick_seconds / 3600.0 * GPU_HOUR_USD
+    cost_osotss = sum(c_osotss) * tick_seconds / 3600.0 * GPU_HOUR_USD
+
+    def _pct(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    def _n_safe(reqs: list, resp: dict) -> int:
+        return sum(1 for r in reqs if r.idx in resp and resp[r.idx] <= sla_s)
+
+    def _completion(reqs: list, resp: dict) -> float:
+        return len(resp) / max(len(reqs), 1)
+
+    # -- CELL 1: FIFO + fixed-c -----------------------------------------------
+    ff_reqs = _build_live()
+    ff_sim, ff_resp, _ = simulate_queue(ff_reqs, fixed_c, "fifo")
+    gp_ff = _sla_safe_goodput(ff_reqs, ff_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # -- CELL 2: FIFO + AMCSG variable-c --------------------------------------
+    fa_reqs = _build_live()
+    fa_sim, fa_resp, _ = _simulate_fifo_variable_c(fa_reqs, c_amcsg, tick_seconds)
+    gp_fa = _sla_safe_goodput(fa_reqs, fa_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    # -- CELL 3: FIFO + OSOTSS variable-c -------------------------------------
+    fo_reqs = _build_live()
+    fo_sim, fo_resp, _ = _simulate_fifo_variable_c(fo_reqs, c_osotss, tick_seconds)
+    gp_fo = _sla_safe_goodput(fo_reqs, fo_resp, sla_s) / max(cost_osotss, 1e-9)
+
+    # -- CELL 4: conformal + fixed-c ------------------------------------------
+    cf_reqs = _build_live()
+    cf_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    cf_sim, cf_resp, _ = _simulate_decoupled_hybrid_abs_conformal(cf_reqs, fixed_c, cf_cal)
+    gp_cf = _sla_safe_goodput(cf_reqs, cf_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # -- CELL 5: conformal + AMCSG variable-c (strongest fair baseline) -------
+    ca_reqs = _build_live()
+    ca_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    ca_sim, ca_resp, _ = _simulate_abs_conformal_variable_c(
+        ca_reqs, c_amcsg, ca_cal, tick_seconds
+    )
+    gp_ca = _sla_safe_goodput(ca_reqs, ca_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    # -- CELL 6: conformal + OSOTSS variable-c (TRUE COMPOUND) ----------------
+    co_reqs = _build_live()
+    co_cal = AbsoluteErrorConformalCalibrator(target_p90_abs_tokens=target_p90_abs_tokens)
+    co_sim, co_resp, _ = _simulate_abs_conformal_variable_c(
+        co_reqs, c_osotss, co_cal, tick_seconds
+    )
+    gp_co = _sla_safe_goodput(co_reqs, co_resp, sla_s) / max(cost_osotss, 1e-9)
+
+    n_safe_ca = _n_safe(ca_reqs, ca_resp)
+    n_safe_co = _n_safe(co_reqs, co_resp)
+
+    return JointOSOTSSAbsConformalReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_c_min=min(c_amcsg),
+        amcsg_c_max=max(c_amcsg),
+        amcsg_n_ticks=n_ticks,
+        osotss_c_mean=statistics.mean(c_osotss),
+        osotss_c_min=min(c_osotss),
+        osotss_c_max=max(c_osotss),
+        osotss_n_ticks=len(c_osotss),
+        cost_fixed_c=cost_fixed,
+        cost_amcsg=cost_amcsg,
+        cost_osotss=cost_osotss,
+        fifo_fixed_goodput_per_dollar=gp_ff,
+        fifo_amcsg_goodput_per_dollar=gp_fa,
+        fifo_osotss_goodput_per_dollar=gp_fo,
+        conformal_fixed_goodput_per_dollar=gp_cf,
+        conformal_amcsg_goodput_per_dollar=gp_ca,
+        conformal_osotss_goodput_per_dollar=gp_co,
+        fifo_fixed_n_sla_safe=_n_safe(ff_reqs, ff_resp),
+        fifo_amcsg_n_sla_safe=_n_safe(fa_reqs, fa_resp),
+        fifo_osotss_n_sla_safe=_n_safe(fo_reqs, fo_resp),
+        conformal_fixed_n_sla_safe=_n_safe(cf_reqs, cf_resp),
+        conformal_amcsg_n_sla_safe=n_safe_ca,
+        conformal_osotss_n_sla_safe=n_safe_co,
+        fifo_fixed_p99_s=ff_sim.get("p99_response_s", 0.0),
+        fifo_amcsg_p99_s=fa_sim.get("p99_response_s", 0.0),
+        fifo_osotss_p99_s=fo_sim.get("p99_response_s", 0.0),
+        conformal_fixed_p99_s=cf_sim.get("p99_response_s", 0.0),
+        conformal_amcsg_p99_s=ca_sim.get("p99_response_s", 0.0),
+        conformal_osotss_p99_s=co_sim.get("p99_response_s", 0.0),
+        fifo_fixed_completion_rate=_completion(ff_reqs, ff_resp),
+        fifo_amcsg_completion_rate=_completion(fa_reqs, fa_resp),
+        fifo_osotss_completion_rate=_completion(fo_reqs, fo_resp),
+        conformal_fixed_completion_rate=_completion(cf_reqs, cf_resp),
+        conformal_amcsg_completion_rate=_completion(ca_reqs, ca_resp),
+        conformal_osotss_completion_rate=_completion(co_reqs, co_resp),
+        conformal_fixed_preemptions=cf_sim.get("preemption_count", 0),
+        conformal_amcsg_preemptions=ca_sim.get("preemption_count", 0),
+        conformal_osotss_preemptions=co_sim.get("preemption_count", 0),
+        conformal_fixed_vs_fifo_fixed_pct=_pct(gp_ff, gp_cf),
+        fifo_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_fa),
+        fifo_osotss_vs_fifo_fixed_pct=_pct(gp_ff, gp_fo),
+        conformal_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_ca),
+        conformal_osotss_vs_fifo_fixed_pct=_pct(gp_ff, gp_co),
+        conformal_osotss_vs_conformal_amcsg_pct=_pct(gp_ca, gp_co),
+        osotss_vs_amcsg_cost_pct=_pct(cost_amcsg, cost_osotss),
+        osotss_conformal_sla_safe_delta=n_safe_co - n_safe_ca,
+    )
+
+
+def run_joint_osotss_abs_conformal_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    amcsg_gate: float = _JOSOTSS_AMCSG_GATE,
+) -> "JointOSOTSSAbsConformalReport":
+    """Joint OSOTSS x abs-conformal SRPT compound backtest on Azure LLM 2024 [run 2026-06-24].
+
+    Integration experiment under Five-Failure Rule. Prior MCS+conformal joint
+    backtest (2026-06-23) found negative compound because MCS over-provisioned
+    (c_mean~4.9), reducing queue depth and making SRPT less useful. This run
+    replaces MCS with OSOTSS (c_mean~4.2, under-provisioned vs fixed-c=4) to
+    test whether conformal SRPT gains more from the deeper queues.
+
+    Strongest fair baseline: conformal + AMCSG gate=12.5% (c_mean~4.458).
+    Candidate: conformal + OSOTSS causal-EWMA (production-deployable).
+
+    Args:
+        fixed_c:               Replica count for time-warp calibration (default 4).
+        target_rho:            Target cluster utilization (for time warp).
+        job_limit:             Request cap (default 5880 = full Azure fixture).
+        sla_s:                 E2E SLA budget in seconds (default 10s).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Abs-error calibration target for conformal.
+        azure_fixture:         Path to Azure LLM 2024 CSV fixture.
+        tick_seconds:          Capacity tick duration in seconds (default 60s).
+        amcsg_gate:            AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        JointOSOTSSAbsConformalReport with the 6-cell 2x3 KPIs.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_joint_osotss_abs_conformal_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_joint_osotss_abs_conformal",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+        amcsg_gate=amcsg_gate,
+    )
+
+
+def run_joint_osotss_abs_conformal_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    target_p90_abs_tokens: float = CONFORMAL_ABS_TARGET_P90_TOKENS,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    amcsg_gate: float = _JOSOTSS_AMCSG_GATE,
+) -> "JointOSOTSSAbsConformalReport":
+    """Joint OSOTSS x abs-conformal SRPT compound backtest on BurstGPT [run 2026-06-24].
+
+    BurstGPT variant of the Azure joint compound backtest. Uses SLA budget of
+    30s (vs 10s for Azure). Note: OSOTSS has a known 15-request n_sla_safe gap
+    vs AMCSG on BurstGPT under spot interruptions; this backtest uses provisioned
+    cost (no spot) so the gap may differ.
+
+    Strongest fair baseline: conformal + AMCSG gate=12.5%.
+    Candidate: conformal + OSOTSS causal-EWMA.
+
+    Args:
+        fixed_c:               Replica count for time-warp calibration (default 4).
+        target_rho:            Target cluster utilization (for time warp).
+        job_limit:             Request cap (default 5880).
+        sla_s:                 E2E SLA budget (default 30s for BurstGPT).
+        prior_window:          Sliding-window size for running-median prior.
+        target_p90_abs_tokens: Abs-error calibration target for conformal.
+        jsonl_path:            BurstGPT HF JSONL fixture path.
+        tick_seconds:          Capacity tick duration in seconds (default 60s).
+        amcsg_gate:            AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        JointOSOTSSAbsConformalReport with the 6-cell 2x3 KPIs.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_joint_osotss_abs_conformal_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_joint_osotss_abs_conformal",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        target_p90_abs_tokens=target_p90_abs_tokens,
+        amcsg_gate=amcsg_gate,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Aging SRTF + AMCSG Compound Backtest — Run 2026-06-24
+# ---------------------------------------------------------------------------
+#
+# Five-Failure Rule integration experiment. Tests whether non-preemptive aging
+# SRTF queue discipline (existing: simulate_queue discipline="aging_srtf")
+# compounds POSITIVELY with the AMCSG optimal variable-c capacity schedule
+# (existing: _joint_mcs_c_schedule gate=12.5%) under GSF spot-fleet economics.
+#
+# Background: Joint OSOTSS × conformal SRPT (2026-06-24) found preemptive
+# conformal SRPT HURTS at variable-c (−1.5% at AMCSG, −4.0% at OSOTSS).
+# Root cause: preemption overhead × capacity reduction creates starvation.
+# Hypothesis: non-preemptive aging SRTF avoids overhead → neutral or positive.
+#
+# Research basis:
+#   Trail (arXiv:2410.01035, ICLR 2025): limited-preemption beats pure SRPT
+#   NP-SRPT (arXiv:2411.06348, 2024): non-preemptive SRPT optimal for M/G/N
+#   FastServe (arXiv:2305.05920, 2023): preemption = 7× KV overhead at low-c
+#   Queueing+LLMs (arXiv:2503.07545, 2025): preemption overhead 59.9% of P99
+#
+# 4-condition 2x2 factorial:
+#   {FIFO, aging_srtf} × {fixed-c=4, AMCSG gate=12.5%}
+#
+# Cost: GSF spot fleet (95% spot, $0.80/hr, 10%/hr interrupt, seed=42, ZFHC=8)
+# Headline: aging_srtf_amcsg vs fifo_amcsg (same capacity, better dispatch)
+# Five-Failure gate: aging_srtf_amcsg goodput/$ > OSOTSS canonical (159,578/$)
+# SLA safety gate: aging_srtf_amcsg_n_sla_safe >= fifo_amcsg_n_sla_safe
+
+_AGING_SRTF_AMCSG_GATE: float = 12.5        # AMCSG best-safe validated gate
+_AGING_SRTF_COMPOUND_ALPHA: float = AGING_ALPHA_DEFAULT  # 0.05 calibrated default
+
+
+def _simulate_aging_srtf_variable_c(
+    requests: list,
+    c_schedule: list,
+    aging_alpha: float = AGING_ALPHA_DEFAULT,
+    tick_seconds: float = 60.0,
+) -> tuple:
+    """Non-preemptive aging SRTF M/G/c with per-tick variable server count.
+
+    At each dispatch event (server completion), selects the waiting request
+    with the minimum aging key:
+        key(r, t) = predicted_tokens / (1 + aging_alpha * max(0, t - arrived_t))
+
+    This is the aging discipline from simulate_queue(discipline="aging_srtf"),
+    applied inside the variable-c event loop of _simulate_fifo_variable_c.
+
+    Variable-c semantics: servers >= c(t) complete running requests but do not
+    accept new arrivals until c(t) increases at a later tick.
+
+    Returns (summary, response_map, wait_map) matching simulate_queue contract.
+    """
+    n = len(requests)
+    if not c_schedule:
+        return {}, {}, {}
+    max_c = max(c_schedule)
+    by_arrival = sorted(requests, key=lambda r: (r.arrival_s, r.idx))
+
+    s_req: list = [None] * max_c
+    s_ver: list = [0] * max_c
+    events: list = []
+    _eseq = [n + 1]
+
+    def _en() -> int:
+        _eseq[0] += 1
+        return _eseq[0]
+
+    for i, r in enumerate(by_arrival):
+        heapq.heappush(events, (r.arrival_s, 0, i, -1, -1, r))
+
+    def _c_now(t: float) -> int:
+        idx = min(int(t / tick_seconds), len(c_schedule) - 1)
+        return max(1, c_schedule[idx])
+
+    def _start(sid: int, req, t: float) -> None:
+        s_req[sid] = req
+        s_ver[sid] += 1
+        v = s_ver[sid]
+        heapq.heappush(events, (t + req.service_s, 1, _en(), sid, v, req))
+
+    response: dict = {}
+    wait_map: dict = {}
+    waiting: list = []   # list of (arrived_t: float, req: _Request)
+
+    while events:
+        ev = heapq.heappop(events)
+        t, ety = ev[0], ev[1]
+        c = _c_now(t)
+
+        if ety == 0:   # ARRIVAL
+            req = ev[5]
+            free = next((s for s in range(c) if s_req[s] is None), None)
+            if free is not None:
+                wait_map[req.idx] = 0.0
+                _start(free, req, t)
+            else:
+                waiting.append((t, req))
+
+        else:   # COMPLETION
+            _, _, _, sid, ver, req = ev
+            if ver != s_ver[sid]:
+                continue
+            response[req.idx] = t - req.arrival_s
+            s_req[sid] = None
+            s_ver[sid] += 1
+
+            if sid < c and waiting:
+                # Aging SRTF: pick minimum aging key, stable tiebreak on idx
+                best_j = min(
+                    range(len(waiting)),
+                    key=lambda j: (
+                        waiting[j][1].predicted_tokens
+                        / max(1e-9, 1.0 + aging_alpha * max(0.0, t - waiting[j][0])),
+                        waiting[j][1].idx,
+                    ),
+                )
+                arrived_t, nxt = waiting.pop(best_j)
+                wait_map[nxt.idx] = t - arrived_t
+                _start(sid, nxt, t)
+
+    resp = [response[r.idx] for r in requests if r.idx in response]
+    waits_list = [wait_map.get(r.idx, 0.0) for r in requests if r.idx in response]
+    summary = _summarize(requests, response, wait_map, resp, waits_list, max_c)
+    summary["preemption_count"] = 0
+    summary["variable_c"] = True
+    return summary, response, wait_map
+
+
+def _apply_gsf_spot_interruptions(
+    c_schedule: list,
+    spot_fraction: float,
+    zfhc_threshold: int,
+    p_interrupt_hourly: float,
+    tick_seconds: float,
+    seed: int,
+) -> list:
+    """Pre-compute effective c_schedule after GSF stochastic spot interruptions.
+
+    Replicates the inner loop of _simulate_fifo_gsf_spot_fleet so that the
+    effective schedule can be shared between FIFO and aging_srtf conditions
+    that use the same underlying capacity plan and same random seed.
+    """
+    import numpy as _np
+    rng = _np.random.default_rng(seed)
+    p_survive = (1.0 - p_interrupt_hourly) ** (tick_seconds / 3600.0)
+    c_eff: list = []
+    for c in c_schedule:
+        c_spot = _gsf_spot_replicas(c, spot_fraction, zfhc_threshold)
+        c_demand = c - c_spot
+        survived = int(rng.binomial(c_spot, p_survive)) if c_spot > 0 else 0
+        c_eff.append(max(1, c_demand + survived))
+    return c_eff
+
+
+@dataclass
+class AgingSRTFAMCSGReport:
+    """Aging SRTF × AMCSG compound backtest — run 2026-06-24.
+
+    2x2 factorial under GSF spot-fleet economics:
+      FIFO + fixed-c=4:         do-nothing baseline
+      FIFO + AMCSG gate=12.5%:  capacity-only gain (canonical baseline)
+      aging_srtf + fixed-c=4:   queue-only gain
+      aging_srtf + AMCSG:       compound candidate (HEADLINE)
+
+    Headline: aging_srtf_amcsg goodput/$ vs fifo_amcsg goodput/$ (same capacity).
+    Five-Failure gate: aging_srtf_amcsg vs OSOTSS canonical gp/$ per trace.
+    SLA safety gate: aging_srtf_amcsg_n_sla_safe >= fifo_amcsg_n_sla_safe.
+    """
+
+    trace: str
+    total_requests: int
+    fixed_c: int
+    target_rho: float
+    sla_s: float
+    tick_seconds: float
+    aging_alpha: float
+
+    amcsg_gate_pct: float
+    amcsg_c_mean: float
+    amcsg_c_min: int
+    amcsg_c_max: int
+    amcsg_n_ticks: int
+
+    spot_fraction: float
+    p_interrupt_hourly: float
+    zfhc_threshold: int
+    rng_seed: int
+
+    cost_fixed_c: float
+    cost_amcsg: float
+
+    fifo_fixed_goodput_per_dollar: float
+    fifo_amcsg_goodput_per_dollar: float
+    aging_srtf_fixed_goodput_per_dollar: float
+    aging_srtf_amcsg_goodput_per_dollar: float
+
+    fifo_fixed_n_sla_safe: int
+    fifo_amcsg_n_sla_safe: int
+    aging_srtf_fixed_n_sla_safe: int
+    aging_srtf_amcsg_n_sla_safe: int
+
+    fifo_fixed_p99_s: float
+    fifo_amcsg_p99_s: float
+    aging_srtf_fixed_p99_s: float
+    aging_srtf_amcsg_p99_s: float
+
+    fifo_fixed_completion_rate: float
+    fifo_amcsg_completion_rate: float
+    aging_srtf_fixed_completion_rate: float
+    aging_srtf_amcsg_completion_rate: float
+
+    fifo_amcsg_vs_fifo_fixed_pct: float
+    aging_srtf_fixed_vs_fifo_fixed_pct: float
+    aging_srtf_amcsg_vs_fifo_fixed_pct: float
+    aging_srtf_amcsg_vs_fifo_amcsg_pct: float   # HEADLINE
+
+    amcsg_aging_srtf_sla_safe_delta: int   # aging_srtf_amcsg - fifo_amcsg
+
+    osotss_canonical_goodput_per_dollar: float
+    aging_srtf_amcsg_vs_osotss_canonical_pct: float
+
+    production_claim: bool = False
+    five_failure_rule_integration: bool = True
+
+    def to_dict(self) -> dict:
+        def _r(v, n: int = 2):
+            return round(v, n) if isinstance(v, float) else v
+
+        return {
+            "trace": self.trace,
+            "total_requests": self.total_requests,
+            "fixed_c": self.fixed_c,
+            "target_rho": _r(self.target_rho, 3),
+            "sla_s": _r(self.sla_s, 1),
+            "tick_seconds": _r(self.tick_seconds, 1),
+            "aging_alpha": _r(self.aging_alpha, 4),
+            "amcsg_gate_pct": _r(self.amcsg_gate_pct, 1),
+            "amcsg_c_mean": _r(self.amcsg_c_mean, 3),
+            "amcsg_c_min": self.amcsg_c_min,
+            "amcsg_c_max": self.amcsg_c_max,
+            "amcsg_n_ticks": self.amcsg_n_ticks,
+            "spot_fraction": _r(self.spot_fraction, 2),
+            "p_interrupt_hourly": _r(self.p_interrupt_hourly, 2),
+            "zfhc_threshold": self.zfhc_threshold,
+            "rng_seed": self.rng_seed,
+            "cost_fixed_c": _r(self.cost_fixed_c, 6),
+            "cost_amcsg": _r(self.cost_amcsg, 6),
+            "fifo_fixed_goodput_per_dollar": _r(self.fifo_fixed_goodput_per_dollar),
+            "fifo_amcsg_goodput_per_dollar": _r(self.fifo_amcsg_goodput_per_dollar),
+            "aging_srtf_fixed_goodput_per_dollar": _r(self.aging_srtf_fixed_goodput_per_dollar),
+            "aging_srtf_amcsg_goodput_per_dollar": _r(self.aging_srtf_amcsg_goodput_per_dollar),
+            "fifo_fixed_n_sla_safe": self.fifo_fixed_n_sla_safe,
+            "fifo_amcsg_n_sla_safe": self.fifo_amcsg_n_sla_safe,
+            "aging_srtf_fixed_n_sla_safe": self.aging_srtf_fixed_n_sla_safe,
+            "aging_srtf_amcsg_n_sla_safe": self.aging_srtf_amcsg_n_sla_safe,
+            "fifo_fixed_p99_s": _r(self.fifo_fixed_p99_s, 3),
+            "fifo_amcsg_p99_s": _r(self.fifo_amcsg_p99_s, 3),
+            "aging_srtf_fixed_p99_s": _r(self.aging_srtf_fixed_p99_s, 3),
+            "aging_srtf_amcsg_p99_s": _r(self.aging_srtf_amcsg_p99_s, 3),
+            "fifo_fixed_completion_rate": _r(self.fifo_fixed_completion_rate, 4),
+            "fifo_amcsg_completion_rate": _r(self.fifo_amcsg_completion_rate, 4),
+            "aging_srtf_fixed_completion_rate": _r(self.aging_srtf_fixed_completion_rate, 4),
+            "aging_srtf_amcsg_completion_rate": _r(self.aging_srtf_amcsg_completion_rate, 4),
+            "fifo_amcsg_vs_fifo_fixed_pct": _r(self.fifo_amcsg_vs_fifo_fixed_pct),
+            "aging_srtf_fixed_vs_fifo_fixed_pct": _r(self.aging_srtf_fixed_vs_fifo_fixed_pct),
+            "aging_srtf_amcsg_vs_fifo_fixed_pct": _r(self.aging_srtf_amcsg_vs_fifo_fixed_pct),
+            "aging_srtf_amcsg_vs_fifo_amcsg_pct": _r(self.aging_srtf_amcsg_vs_fifo_amcsg_pct),
+            "amcsg_aging_srtf_sla_safe_delta": self.amcsg_aging_srtf_sla_safe_delta,
+            "osotss_canonical_goodput_per_dollar": _r(self.osotss_canonical_goodput_per_dollar),
+            "aging_srtf_amcsg_vs_osotss_canonical_pct": _r(
+                self.aging_srtf_amcsg_vs_osotss_canonical_pct
+            ),
+            "production_claim": self.production_claim,
+            "five_failure_rule_integration": self.five_failure_rule_integration,
+        }
+
+
+def _run_aging_srtf_amcsg_compound_backtest(
+    raw: list,
+    trace_name: str,
+    fixed_c: int,
+    target_rho: float,
+    sla_s: float,
+    prior_window: int,
+    tick_seconds: float,
+    spot_price_usd_hr: float,
+    p_interrupt_hourly: float,
+    seed: int,
+    aging_alpha: float,
+    osotss_canonical_goodput_per_dollar: float,
+    zfhc_threshold: int = 8,
+    amcsg_gate: float = _AGING_SRTF_AMCSG_GATE,
+    spot_fraction: float = 0.95,
+) -> "AgingSRTFAMCSGReport":
+    """Shared 4-condition aging SRTF × AMCSG compound backtest logic."""
+    warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
+    live_preds, _ = make_live_prior_predictions(raw, window=prior_window)
+
+    def _build_live() -> list:
+        return [
+            _Request(
+                idx=i,
+                arrival_s=arr / warp,
+                actual_tokens=tok,
+                predicted_tokens=live_preds[i],
+                service_s=_service_time_s(tok),
+            )
+            for i, (arr, tok) in enumerate(raw)
+        ]
+
+    # AMCSG capacity schedule (gate=12.5%, best-safe validated)
+    c_amcsg = _compute_mcs_c_schedule(
+        raw, tick_seconds, warp, mcs_gate=amcsg_gate, sla_s=sla_s
+    )
+    n_ticks = len(c_amcsg)
+
+    # Pre-apply GSF spot interruptions. Same seed used for conditions that
+    # share a c_schedule so FIFO vs aging_srtf see identical effective capacity.
+    c_fixed_eff = _apply_gsf_spot_interruptions(
+        [fixed_c] * n_ticks, spot_fraction, zfhc_threshold,
+        p_interrupt_hourly, tick_seconds, seed,
+    )
+    c_amcsg_eff = _apply_gsf_spot_interruptions(
+        c_amcsg, spot_fraction, zfhc_threshold,
+        p_interrupt_hourly, tick_seconds, seed,
+    )
+
+    # GSF spot fleet costs (deterministic from schedule — same formula as AMCSG)
+    cost_fixed = _gsf_spot_fleet_cost(
+        [fixed_c] * n_ticks, spot_fraction, zfhc_threshold,
+        spot_price_usd_hr, GPU_HOUR_USD, tick_seconds,
+    )
+    cost_amcsg = _gsf_spot_fleet_cost(
+        c_amcsg, spot_fraction, zfhc_threshold,
+        spot_price_usd_hr, GPU_HOUR_USD, tick_seconds,
+    )
+
+    def _pct(base: float, new: float) -> float:
+        return (new - base) / base * 100.0 if base > 0 else 0.0
+
+    def _n_safe(reqs: list, resp: dict) -> int:
+        return sum(1 for r in reqs if r.idx in resp and resp[r.idx] <= sla_s)
+
+    def _compl(reqs: list, resp: dict) -> float:
+        return len(resp) / max(len(reqs), 1)
+
+    # Cell 1: FIFO + fixed-c
+    ff_reqs = _build_live()
+    ff_sim, ff_resp, _ = _simulate_fifo_variable_c(ff_reqs, c_fixed_eff, tick_seconds)
+    gp_ff = _sla_safe_goodput(ff_reqs, ff_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # Cell 2: FIFO + AMCSG (should reproduce canonical fifo_amcsg ~150,630/168,270)
+    fa_reqs = _build_live()
+    fa_sim, fa_resp, _ = _simulate_fifo_variable_c(fa_reqs, c_amcsg_eff, tick_seconds)
+    gp_fa = _sla_safe_goodput(fa_reqs, fa_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    # Cell 3: aging_srtf + fixed-c (queue-only gain)
+    af_reqs = _build_live()
+    af_sim, af_resp, _ = _simulate_aging_srtf_variable_c(
+        af_reqs, c_fixed_eff, aging_alpha, tick_seconds
+    )
+    gp_af = _sla_safe_goodput(af_reqs, af_resp, sla_s) / max(cost_fixed, 1e-9)
+
+    # Cell 4: aging_srtf + AMCSG (the compound candidate — HEADLINE)
+    aa_reqs = _build_live()
+    aa_sim, aa_resp, _ = _simulate_aging_srtf_variable_c(
+        aa_reqs, c_amcsg_eff, aging_alpha, tick_seconds
+    )
+    gp_aa = _sla_safe_goodput(aa_reqs, aa_resp, sla_s) / max(cost_amcsg, 1e-9)
+
+    n_safe_fa = _n_safe(fa_reqs, fa_resp)
+    n_safe_aa = _n_safe(aa_reqs, aa_resp)
+
+    return AgingSRTFAMCSGReport(
+        trace=trace_name,
+        total_requests=len(raw),
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        tick_seconds=tick_seconds,
+        aging_alpha=aging_alpha,
+        amcsg_gate_pct=amcsg_gate,
+        amcsg_c_mean=statistics.mean(c_amcsg),
+        amcsg_c_min=min(c_amcsg),
+        amcsg_c_max=max(c_amcsg),
+        amcsg_n_ticks=n_ticks,
+        spot_fraction=spot_fraction,
+        p_interrupt_hourly=p_interrupt_hourly,
+        zfhc_threshold=zfhc_threshold,
+        rng_seed=seed,
+        cost_fixed_c=cost_fixed,
+        cost_amcsg=cost_amcsg,
+        fifo_fixed_goodput_per_dollar=gp_ff,
+        fifo_amcsg_goodput_per_dollar=gp_fa,
+        aging_srtf_fixed_goodput_per_dollar=gp_af,
+        aging_srtf_amcsg_goodput_per_dollar=gp_aa,
+        fifo_fixed_n_sla_safe=_n_safe(ff_reqs, ff_resp),
+        fifo_amcsg_n_sla_safe=n_safe_fa,
+        aging_srtf_fixed_n_sla_safe=_n_safe(af_reqs, af_resp),
+        aging_srtf_amcsg_n_sla_safe=n_safe_aa,
+        fifo_fixed_p99_s=ff_sim.get("p99_response_s", 0.0),
+        fifo_amcsg_p99_s=fa_sim.get("p99_response_s", 0.0),
+        aging_srtf_fixed_p99_s=af_sim.get("p99_response_s", 0.0),
+        aging_srtf_amcsg_p99_s=aa_sim.get("p99_response_s", 0.0),
+        fifo_fixed_completion_rate=_compl(ff_reqs, ff_resp),
+        fifo_amcsg_completion_rate=_compl(fa_reqs, fa_resp),
+        aging_srtf_fixed_completion_rate=_compl(af_reqs, af_resp),
+        aging_srtf_amcsg_completion_rate=_compl(aa_reqs, aa_resp),
+        fifo_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_fa),
+        aging_srtf_fixed_vs_fifo_fixed_pct=_pct(gp_ff, gp_af),
+        aging_srtf_amcsg_vs_fifo_fixed_pct=_pct(gp_ff, gp_aa),
+        aging_srtf_amcsg_vs_fifo_amcsg_pct=_pct(gp_fa, gp_aa),
+        amcsg_aging_srtf_sla_safe_delta=n_safe_aa - n_safe_fa,
+        osotss_canonical_goodput_per_dollar=osotss_canonical_goodput_per_dollar,
+        aging_srtf_amcsg_vs_osotss_canonical_pct=_pct(
+            osotss_canonical_goodput_per_dollar, gp_aa
+        ),
+    )
+
+
+def run_aging_srtf_amcsg_azure_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    azure_fixture: str = DEFAULT_AZURE_FIXTURE,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    aging_alpha: float = _AGING_SRTF_COMPOUND_ALPHA,
+    amcsg_gate: float = _AGING_SRTF_AMCSG_GATE,
+) -> "AgingSRTFAMCSGReport":
+    """Aging SRTF × AMCSG compound backtest on Azure LLM 2024 — run 2026-06-24.
+
+    Integration experiment under Five-Failure Rule. Tests whether the existing
+    non-preemptive aging SRTF discipline (simulate_queue discipline=aging_srtf)
+    compounds POSITIVELY with the AMCSG optimal variable-c capacity schedule.
+
+    Prior joint compound backtest (2026-06-24) found preemptive conformal SRPT
+    NEGATIVE at variable-c (−1.5% at AMCSG, −4.0% at OSOTSS). Root cause:
+    preemption overhead × capacity reduction. Hypothesis: non-preemptive aging
+    SRTF avoids the overhead by never interrupting running requests.
+
+    Cost: GSF spot fleet (95% spot, $0.80/hr, 10%/hr interrupt, seed=42).
+    Strongest fair baseline: FIFO + AMCSG gate=12.5% (canonical ~150,630 gp/$).
+    Candidate: aging_srtf + AMCSG gate=12.5% (same capacity, better dispatch).
+    Five-Failure Rule clears if aging_srtf_amcsg > OSOTSS canonical (159,578).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880 for Azure).
+        sla_s:              E2E SLA budget (10s).
+        prior_window:       Sliding-window for running-median live prior.
+        azure_fixture:      Azure LLM 2024 fixture CSV path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        aging_alpha:        Aging decay constant for aging SRTF (default 0.05).
+        amcsg_gate:         AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        AgingSRTFAMCSGReport with 4-cell 2x2 KPIs.
+    """
+    raw = load_serving_requests(azure_fixture, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 Azure requests")
+    return _run_aging_srtf_amcsg_compound_backtest(
+        raw=raw,
+        trace_name="azure_llm_2024_aging_srtf_amcsg",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        aging_alpha=aging_alpha,
+        osotss_canonical_goodput_per_dollar=159_578.0,
+        zfhc_threshold=zfhc_threshold,
+        amcsg_gate=amcsg_gate,
+    )
+
+
+def run_aging_srtf_amcsg_burstgpt_backtest(
+    fixed_c: int = 4,
+    target_rho: float = 0.85,
+    job_limit: int = 5880,
+    sla_s: float = DEFAULT_BURSTGPT_SLA_S,
+    prior_window: int = LIVE_PRIOR_WINDOW,
+    jsonl_path: str = DEFAULT_BURSTGPT_HF_JSONL,
+    tick_seconds: float = 60.0,
+    spot_price_usd_hr: float = 0.80,
+    p_interrupt_hourly: float = 0.10,
+    seed: int = 42,
+    zfhc_threshold: int = 8,
+    aging_alpha: float = _AGING_SRTF_COMPOUND_ALPHA,
+    amcsg_gate: float = _AGING_SRTF_AMCSG_GATE,
+) -> "AgingSRTFAMCSGReport":
+    """Aging SRTF × AMCSG compound backtest on BurstGPT HF — run 2026-06-24.
+
+    Cross-validates the Azure aging SRTF × AMCSG compound on BurstGPT.
+    Same 4-condition design; SLA budget is 30s (BurstGPT default).
+    OSOTSS canonical reference: 178,109 gp/$ (BurstGPT).
+
+    Args:
+        fixed_c:            Replica count for time-warp calibration (default 4).
+        target_rho:         Target per-server utilization (default 0.85).
+        job_limit:          Request cap (5880).
+        sla_s:              E2E SLA budget (30s).
+        prior_window:       Sliding-window for running-median live prior.
+        jsonl_path:         BurstGPT HF JSONL fixture path.
+        tick_seconds:       MCS tick duration (60s).
+        spot_price_usd_hr:  Spot instance price ($/GPU-hr).
+        p_interrupt_hourly: Hourly spot interruption probability.
+        seed:               RNG seed (42).
+        zfhc_threshold:     All-spot threshold (8).
+        aging_alpha:        Aging decay constant for aging SRTF (default 0.05).
+        amcsg_gate:         AMCSG Erlang-C gate % (default 12.5%, best-safe).
+
+    Returns:
+        AgingSRTFAMCSGReport with 4-cell 2x2 KPIs.
+    """
+    raw = load_burstgpt_serving_requests_jsonl(jsonl_path, limit=job_limit)
+    if len(raw) < 2:
+        raise ValueError("need at least 2 BurstGPT requests")
+    return _run_aging_srtf_amcsg_compound_backtest(
+        raw=raw,
+        trace_name="burstgpt_hf_aging_srtf_amcsg",
+        fixed_c=fixed_c,
+        target_rho=target_rho,
+        sla_s=sla_s,
+        prior_window=prior_window,
+        tick_seconds=tick_seconds,
+        spot_price_usd_hr=spot_price_usd_hr,
+        p_interrupt_hourly=p_interrupt_hourly,
+        seed=seed,
+        aging_alpha=aging_alpha,
+        osotss_canonical_goodput_per_dollar=178_109.0,
+        zfhc_threshold=zfhc_threshold,
+        amcsg_gate=amcsg_gate,
     )

@@ -20,7 +20,7 @@ from __future__ import annotations
 import heapq
 import math
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from .base import OptimizationPolicy
@@ -558,6 +558,12 @@ def compute_online_sotss_schedule(
     max_iters: int = REPLICA_MAX_ORACLE_ITERS,
     baseline_n_sla_safe: Optional[int] = None,
     ewma_alpha: float = REPLICA_OSOTSS_EWMA_ALPHA,
+    ewma_mode: str = "fixed",
+    burst_threshold: float = 1.5,
+    burst_alpha: float = 0.5,
+    burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
+    borderline_margin_s: float = 0.0,
 ) -> tuple[list[int], int, int, int, int]:
     """Online SOTSS: SOTSS oracle loop with causal EWMA service-time predictions.
 
@@ -575,15 +581,26 @@ def compute_online_sotss_schedule(
     service times, so reported goodput/$ reflects real-world performance.
 
     Args:
-        raw:                  ``(arrival_s_unwarped, output_tokens)`` tuples.
-        tick_seconds:         Tick duration in warped seconds.
-        warp:                 Time-warp scalar.
-        sla_s:                E2E SLA budget in seconds.
-        safe_gate:            Ceiling gate (%) — AMCSG best-safe schedule.
-        aggressive_gate:      Starting gate (%) — minimum stable c.
-        max_iters:            Hard iteration cap.
-        baseline_n_sla_safe:  Safety floor override.
-        ewma_alpha:           EWMA decay for per-tick mean prediction (default 0.1).
+        raw:                     ``(arrival_s_unwarped, output_tokens)`` tuples.
+        tick_seconds:            Tick duration in warped seconds.
+        warp:                    Time-warp scalar.
+        sla_s:                   E2E SLA budget in seconds.
+        safe_gate:               Ceiling gate (%) — AMCSG best-safe schedule.
+        aggressive_gate:         Starting gate (%) — minimum stable c.
+        max_iters:               Hard iteration cap.
+        baseline_n_sla_safe:     Safety floor override.
+        ewma_alpha:              EWMA decay for per-tick mean prediction (default 0.1).
+        interrupt_safety_margin: Extra SLA-safe requests the oracle must achieve above
+            ``baseline_n_sla_safe`` before converging.  Compensates for the
+            stochastic/deterministic mismatch: the oracle uses deterministic FIFO
+            (no spot interruptions) while the evaluation uses stochastic Binomial
+            interruptions.  Default 0 preserves byte-identical behavior.
+        borderline_margin_s:     After primary convergence (violators=[]), add capacity
+            to ticks containing requests whose deterministic response time is within
+            this margin of the SLA limit.  These are the ticks most vulnerable to
+            stochastic spot interruptions reducing effective capacity.  Uses actual
+            service-time pairs (correct SLA guarantee).  Default 0.0 disables the
+            Oracle Soft-SLA Continuation phase (byte-identical to pre-OSSC behavior).
 
     Returns:
         ``(c_schedule, n_iters, initial_violations, n_ticks_cheaper,
@@ -611,11 +628,23 @@ def compute_online_sotss_schedule(
     # predicted_svc_per_tick[k] = EWMA prediction before observing tick k
     ewma_val = global_mean_svc
     predicted_svc_per_tick: list[float] = []
+    burst_cooldown_remaining = 0
     for bucket in tick_svcs:
-        predicted_svc_per_tick.append(ewma_val)  # emit BEFORE updating
+        predicted_svc_per_tick.append(ewma_val)  # emit BEFORE updating (causal)
         if bucket:
             tick_mean = statistics.mean(bucket)
-            ewma_val = ewma_alpha * tick_mean + (1.0 - ewma_alpha) * ewma_val
+            if ewma_mode == "adaptive":
+                # Boost alpha when actual load spikes above threshold × current EWMA
+                # to track burst patterns faster. Purely causal: decision made after
+                # observing tick_mean but before the next prediction.
+                if tick_mean > burst_threshold * ewma_val:
+                    burst_cooldown_remaining = burst_cooldown_ticks
+                alpha_t = burst_alpha if burst_cooldown_remaining > 0 else ewma_alpha
+                if burst_cooldown_remaining > 0:
+                    burst_cooldown_remaining -= 1
+            else:
+                alpha_t = ewma_alpha
+            ewma_val = alpha_t * tick_mean + (1.0 - alpha_t) * ewma_val
 
     predicted_pairs: list[tuple[float, float]] = []
     for arr_w, tok in warped:
@@ -651,7 +680,10 @@ def compute_online_sotss_schedule(
 
         n_iters = iteration + 1
 
-        if n_sla_safe >= baseline_n_sla_safe:
+        # Convergence target includes interrupt_safety_margin to account for the
+        # stochastic/deterministic mismatch: the oracle runs deterministic FIFO
+        # while the final evaluation uses stochastic spot interruptions.
+        if n_sla_safe >= baseline_n_sla_safe + interrupt_safety_margin:
             break
 
         # Violation identification uses predicted service times → causal/production-safe
@@ -678,6 +710,33 @@ def compute_online_sotss_schedule(
 
         if not incremented:
             break
+
+    # Oracle Soft-SLA Continuation (OSSC): after primary convergence
+    # (violators=[]), add capacity to ticks with borderline response times.
+    # Uses actual service-time pairs so the guarantee is preserved.
+    if borderline_margin_s > 0.0:
+        remaining_iters = max_iters - n_iters
+        for _ in range(remaining_iters):
+            resp_bl = _oracle_fifo_response_times(actual_pairs, c_sched, tick_seconds)
+            borderline = [
+                i for i in range(len(actual_pairs))
+                if i in resp_bl and sla_s - borderline_margin_s < resp_bl[i] <= sla_s
+            ]
+            if not borderline:
+                break
+            tick_counts_bl: dict[int, int] = {}
+            for i in borderline:
+                t_idx = min(int(actual_pairs[i][0] / tick_seconds), n_ticks - 1)
+                tick_counts_bl[t_idx] = tick_counts_bl.get(t_idx, 0) + 1
+            incremented_bl = False
+            for tk in sorted(tick_counts_bl, key=lambda k: tick_counts_bl[k], reverse=True):
+                if c_sched[tk] < c_ceil[tk]:
+                    c_sched[tk] += 1
+                    incremented_bl = True
+                    break
+            if not incremented_bl:
+                break
+            n_iters += 1
 
     n_ticks_cheaper = sum(1 for i in range(n_ticks) if c_sched[i] < c_ceil[i])
     return c_sched, n_iters, initial_violations or 0, n_ticks_cheaper, baseline_n_sla_safe
@@ -743,9 +802,13 @@ class ReplicaScalingConfig:
     """Configuration for :class:`ReplicaScalingPolicy`."""
 
     mode: str = "sotss_min"
-    """Provisioning algorithm: ``"amcsg"`` (Erlang-C gate sweep),
-    ``"sotss_min"`` (SOTSS oracle from minimum stable c), or
-    ``"online_sotss"`` (causal EWMA prediction — production-deployable)."""
+    """Provisioning algorithm:
+    ``"amcsg"`` (Erlang-C gate sweep — oracle: actual tick-t arrivals + tokens),
+    ``"sotss_min"`` (SOTSS oracle from minimum stable c — oracle),
+    ``"online_sotss"`` (causal EWMA *service-time* prediction, but still uses
+    actual tick-t arrival counts — **arrival-oracle**, not fully deployable), or
+    ``"forecasted_mcs"`` (fully deployable: forecasts BOTH next-tick arrivals AND
+    service time from data ≤ t-1; see ``aurelius/benchmarks/forecasted_mcs.py``)."""
 
     tick_seconds: float = 60.0
     """Tick duration in warped seconds."""
@@ -783,6 +846,63 @@ class ReplicaScalingConfig:
     ewma_alpha: float = REPLICA_OSOTSS_EWMA_ALPHA
     """EWMA decay for Online SOTSS causal service-time prediction (default 0.1)."""
 
+    ewma_mode: str = "fixed"
+    """EWMA tracking mode: ``"fixed"`` (constant alpha) or ``"adaptive"`` (burst-
+    sensitive alpha boost when actual tick load > ``burst_threshold`` × EWMA)."""
+
+    burst_threshold: float = 1.5
+    """Load ratio above which adaptive EWMA boosts alpha (``ewma_mode="adaptive"``)."""
+
+    burst_alpha: float = 0.5
+    """Elevated EWMA alpha used during burst cooldown (``ewma_mode="adaptive"``)."""
+
+    burst_cooldown_ticks: int = 2
+    """Ticks the boosted alpha persists after a burst is detected."""
+
+    interrupt_safety_margin: int = 0
+    """Extra SLA-safe requests the oracle must reach above ``baseline_n_sla_safe``
+    before converging.  Compensates for the stochastic/deterministic mismatch:
+    the oracle uses deterministic FIFO (no spot interruptions) while the GSF
+    evaluation includes Binomial interruptions.  Set to the expected
+    interruption-induced SLA misses for the target trace and spot fraction
+    (e.g. 15–25 for BurstGPT at p_interrupt=10%/hr, spot_fraction=0.95).
+    Default 0 preserves byte-identical behavior with the pre-margin OSOTSS."""
+
+    borderline_margin_s: float = 0.0
+    """Oracle Soft-SLA Continuation (OSSC) margin in seconds.  After primary
+    convergence (violators=[]), add capacity to ticks whose requests have
+    deterministic response times within this margin of the SLA limit.  These
+    ticks are most vulnerable to stochastic spot interruptions.  Uses actual
+    service-time pairs (correct SLA guarantee).  Default 0.0 disables OSSC
+    (byte-identical to pre-OSSC behavior)."""
+
+    baseline_n_sla_safe: Optional[int] = None
+    """Safety-floor override for the ``online_sotss`` oracle loop.  When set, the
+    oracle converges once predicted n_sla_safe ≥ this value; when ``None`` the
+    oracle computes its own floor from a deterministic FIFO simulation (which
+    differs from the stochastic AMCSG baseline used by the validated backtest).
+    Set to ``amcsg_n_sla_safe`` from the AMCSG stochastic GSF evaluation to
+    reproduce the validated OSOTSS result through the canonical path."""
+
+    # ---- forecasted_mcs mode (fully deployable; forecasts arrivals + service) ----
+    forecast_method: str = "ewma"
+    """``forecasted_mcs`` sub-method: ``"ewma"``, ``"quantile"``, or ``"lag1"``."""
+
+    forecast_ewma_alpha: float = 0.5
+    """EWMA smoothing for the forecasted_mcs arrival/service forecast."""
+
+    forecast_count_window: int = 8
+    """Rolling window for the forecasted_mcs quantile / safety-buffer."""
+
+    forecast_quantile: float = 0.90
+    """Rolling arrival quantile for ``forecast_method="quantile"``."""
+
+    forecast_safety_k: float = 0.0
+    """One-sided arrival safety buffer (units of recent count std)."""
+
+    forecast_warmup_c: int = 4
+    """Cold-start capacity for the first forecasted_mcs tick (no history)."""
+
 
 @dataclass
 class ReplicaScalingResult:
@@ -812,6 +932,11 @@ class ReplicaScalingResult:
     baseline_n_sla_safe: int
     """Safety floor used by oracle (0 for ``amcsg`` mode)."""
 
+    initial_violations: int = 0
+    """Initial FIFO-violation count before the oracle started iterating.
+    Non-zero for oracle modes (``sotss_min``, ``sotss_gsf``, ``online_sotss``);
+    0 for ``amcsg`` mode."""
+
 
 # ---------------------------------------------------------------------------
 # Policy class
@@ -831,11 +956,20 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                              that achieves +6.29% goodput/$ vs AMCSG on Azure.
         ``"sotss_gsf"``    — SOTSS-GSF stochastic oracle; uses spot interruptions
                              in the oracle loop (oracle-class, not production-safe).
-        ``"online_sotss"`` — Production-deployable SOTSS: causal EWMA service-time
-                             predictions replace oracle actual token counts.
+        ``"online_sotss"`` — SOTSS with causal EWMA service-time predictions.
+                             NOTE: still sizes from actual tick-t arrival counts
+                             (``compute_mcs_c_schedule``) and uses actual arrival
+                             times in the violation sim — i.e. an **arrival-oracle**,
+                             not fully deployable. Fixes future-tokens, not
+                             future-arrivals.
+        ``"forecasted_mcs"`` — Fully deployable: forecasts BOTH next-tick arrivals
+                             AND service time from data <= t-1 (no tick-t actuals).
+                             Delegates to ``aurelius.benchmarks.forecasted_mcs``.
+                             ``forecast_method`` selects ewma / quantile / lag1.
 
-    Extraction pattern follows Phase 2 (serving_queue.py): identical algorithm,
-    constants and tie-breaks; NOT a research change.
+    Modes other than ``forecasted_mcs`` are the extracted benchmark algorithms
+    (identical constants/tie-breaks; NOT a research change). ``forecasted_mcs`` is
+    the only mode that uses no future information — see ``research/MCS_AUDIT.md``.
     """
 
     name = "replica_scaling"
@@ -889,7 +1023,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
             )
 
         if cfg.mode == "sotss_min":
-            c_sched, n_iters, _, n_ticks_cheaper, baseline_n_sla_safe = (
+            c_sched, n_iters, init_viols, n_ticks_cheaper, baseline_n_sla_safe = (
                 compute_sotss_min_schedule(
                     raw, cfg.tick_seconds, w,
                     sla_s=cfg.sla_s,
@@ -908,6 +1042,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                 oracle_iters=n_iters,
                 n_ticks_cheaper=n_ticks_cheaper,
                 baseline_n_sla_safe=baseline_n_sla_safe,
+                initial_violations=init_viols,
             )
 
         if cfg.mode == "sotss_gsf":
@@ -937,14 +1072,21 @@ class ReplicaScalingPolicy(OptimizationPolicy):
             )
 
         if cfg.mode == "online_sotss":
-            c_sched, n_iters, _, n_ticks_cheaper, baseline_n_sla_safe = (
+            c_sched, n_iters, init_viols, n_ticks_cheaper, baseline_n_sla_safe = (
                 compute_online_sotss_schedule(
                     raw, cfg.tick_seconds, w,
                     sla_s=cfg.sla_s,
                     safe_gate=cfg.safe_gate_pct,
                     aggressive_gate=cfg.aggressive_gate_pct,
                     max_iters=cfg.max_oracle_iters,
+                    baseline_n_sla_safe=cfg.baseline_n_sla_safe,
                     ewma_alpha=cfg.ewma_alpha,
+                    ewma_mode=cfg.ewma_mode,
+                    burst_threshold=cfg.burst_threshold,
+                    burst_alpha=cfg.burst_alpha,
+                    burst_cooldown_ticks=cfg.burst_cooldown_ticks,
+                    interrupt_safety_margin=cfg.interrupt_safety_margin,
+                    borderline_margin_s=cfg.borderline_margin_s,
                 )
             )
             c_mean = statistics.mean(c_sched) if c_sched else 0.0
@@ -957,11 +1099,56 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                 oracle_iters=n_iters,
                 n_ticks_cheaper=n_ticks_cheaper,
                 baseline_n_sla_safe=baseline_n_sla_safe,
+                initial_violations=init_viols,
+            )
+
+        if cfg.mode == "forecasted_mcs":
+            # Fully deployable: forecasts BOTH next-tick arrivals AND service time
+            # from data <= t-1. Lazy import breaks the optimizer<->benchmark cycle
+            # (forecasted_mcs reuses the benchmark's Erlang-C/service physics).
+            if cfg.forecast_method not in ("ewma", "quantile", "lag1"):
+                raise ValueError(
+                    f"ReplicaScalingPolicy: unknown forecast_method "
+                    f"{cfg.forecast_method!r}. Deployable methods: "
+                    "'ewma', 'quantile', 'lag1'. (The oracle is not deployable.)"
+                )
+            from aurelius.benchmarks.forecasted_mcs import (
+                forecast_mcs_c_schedule,
+                reactive_lag1_c_schedule,
+            )
+
+            if cfg.forecast_method == "lag1":
+                c_sched = reactive_lag1_c_schedule(
+                    raw, cfg.tick_seconds, w,
+                    mcs_gate=cfg.safe_gate_pct, sla_s=cfg.sla_s,
+                    warmup_c=cfg.forecast_warmup_c,
+                )
+            else:
+                c_sched, _diag = forecast_mcs_c_schedule(
+                    raw, cfg.tick_seconds, w,
+                    method=cfg.forecast_method,
+                    mcs_gate=cfg.safe_gate_pct, sla_s=cfg.sla_s,
+                    ewma_alpha=cfg.forecast_ewma_alpha,
+                    count_window=cfg.forecast_count_window,
+                    quantile=cfg.forecast_quantile,
+                    safety_k=cfg.forecast_safety_k,
+                    warmup_c=cfg.forecast_warmup_c,
+                )
+            c_mean = statistics.mean(c_sched) if c_sched else 0.0
+            return ReplicaScalingResult(
+                mode="forecasted_mcs",
+                c_schedule=c_sched,
+                c_mean=c_mean,
+                n_ticks=len(c_sched),
+                warp=w,
+                oracle_iters=0,
+                n_ticks_cheaper=0,
+                baseline_n_sla_safe=0,
             )
 
         raise ValueError(
-            f"ReplicaScalingPolicy: unknown mode {cfg.mode!r}. "
-            "Valid modes: 'amcsg', 'sotss_min', 'sotss_gsf', 'online_sotss'."
+            f"ReplicaScalingPolicy: unknown mode {cfg.mode!r}. Valid modes: "
+            "'amcsg', 'sotss_min', 'sotss_gsf', 'online_sotss', 'forecasted_mcs'."
         )
 
 

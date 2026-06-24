@@ -48,6 +48,7 @@ from __future__ import annotations
 import math
 import os
 import random
+
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
@@ -61,14 +62,12 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     TTFT_BASE_S,
     PreemptionOverheadEntry,
     PreemptionOverheadReport,
-    _Request,
     _interpolate_breakeven,
+    _Request,
     _retention_at_overhead,
     _run_preemption_overhead_on_trace,
     _service_time_s,
     calibrate_time_warp,
-    load_burstgpt_serving_requests,
-    load_serving_requests,
     run_burstgpt_hf_preemption_overhead_backtest,
     run_burstgpt_preemption_overhead_backtest,
     run_preemption_overhead_sensitivity_backtest,

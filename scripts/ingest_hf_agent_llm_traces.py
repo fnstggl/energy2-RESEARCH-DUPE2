@@ -153,7 +153,7 @@ class _Heartbeat:
             self.last_log = now
 
 
-class _PerDatasetTimeout(Exception):
+class _PerDatasetTimeout(Exception):  # noqa: N818
     pass
 
 

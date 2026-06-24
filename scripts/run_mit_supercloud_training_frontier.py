@@ -47,18 +47,15 @@ import json
 import math
 import os
 import sys
-from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aurelius.frontier import (  # noqa: E402
     PHILLY_POLICY_CANDIDATES,
     TrainingControllerConfig,
-    TrainingFrontierAction,
     TrainingFrontierCandidate,
     TrainingFrontierPoint,
     TrainingSafetyConfig,
-    TrainingSafetyStatus,
     choose_training_frontier_target,
     classify_training_frontier_point,
 )

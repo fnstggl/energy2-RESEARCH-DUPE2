@@ -45,8 +45,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .discovery import (
-    HFAPIClient,
     USER_AGENT,
+    HFAPIClient,
     parse_hf_metadata,
     safe_dataset_dirname,
 )
@@ -373,11 +373,11 @@ class IngestionResult:
     unknown_columns: list
 
 
-class IngestionBoundsExceeded(RuntimeError):
+class IngestionBoundsExceeded(RuntimeError):  # noqa: N818
     """Raised when the bounded-download cap is breached."""
 
 
-class IngestionUnknownColumns(ValueError):
+class IngestionUnknownColumns(ValueError):  # noqa: N818
     """Raised when the parquet has columns not present in RAW_TO_NORMALIZED
     for the chosen trace_type and ``allow_unknown_columns=False``."""
 

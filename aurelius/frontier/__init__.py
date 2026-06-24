@@ -29,6 +29,16 @@ Directional simulator/backtest evidence only — not production savings
 safe rho per workload.
 """
 
+from .admission import (
+    ADMISSION_ACTIONS,
+    ADMISSION_ADMIT,
+    ADMISSION_DEFER,
+    ADMISSION_REJECT,
+    AdmissionDecision,
+    AdmissionGateConfig,
+    evaluate_admission,
+    evaluate_admission_batch,
+)
 from .controller import (
     FrontierControllerConfig,
     choose_safe_utilization_target,
@@ -49,6 +59,14 @@ from .dynamic_confidence import (
     apply_confidence_update,
     update_confidence,
 )
+from .dynamic_controller import (
+    DynamicControllerConfig,
+    choose_dynamic_rho,
+)
+from .dynamic_estimator import (
+    DynamicEstimatorConfig,
+    estimate_dynamic_frontier,
+)
 from .dynamic_evaluation import (
     DynamicFrontierCalibrationRecord,
     DynamicFrontierObservedOutcome,
@@ -59,14 +77,6 @@ from .dynamic_evaluation import (
     compute_frontier_calibration_summary,
     records_from_json,
     records_to_json,
-)
-from .dynamic_controller import (
-    DynamicControllerConfig,
-    choose_dynamic_rho,
-)
-from .dynamic_estimator import (
-    DynamicEstimatorConfig,
-    estimate_dynamic_frontier,
 )
 from .dynamic_models import (
     DYNAMIC_ACTIONS,
@@ -79,9 +89,17 @@ from .dynamic_shadow import (
     DynamicFrontierOutcome,
     DynamicFrontierShadowLog,
     compare_prediction_to_observed,
+)
+from .dynamic_shadow import (
     read_outcomes as read_dynamic_outcomes,
+)
+from .dynamic_shadow import (
     read_shadow_log as read_dynamic_shadow_log,
+)
+from .dynamic_shadow import (
     write_outcome as write_dynamic_outcome,
+)
+from .dynamic_shadow import (
     write_shadow_log_entry as write_dynamic_shadow_log_entry,
 )
 from .dynamic_telemetry import (
@@ -92,20 +110,6 @@ from .dynamic_telemetry import (
     telemetry_tick_from_inference_service_state,
     telemetry_tick_with_provenance_from_inference_service_state,
     validate_dynamic_window,
-)
-from .telemetry_provenance import (
-    FieldOrigin,
-    FieldProvenance,
-    TickProvenance,
-    TimeoutFallback,
-    TimeoutFallbackResult,
-    derive_sla_violation_pct,
-    make_derived,
-    make_missing,
-    make_proxy,
-    make_real,
-    make_simulated,
-    resolve_timeout_pct,
 )
 from .estimator import (
     ANTICIPATORY,
@@ -133,16 +137,6 @@ from .models import (
     SafetyStatus,
     WorkloadFrontierProfile,
 )
-from .admission import (
-    ADMISSION_ACTIONS,
-    ADMISSION_ADMIT,
-    ADMISSION_DEFER,
-    ADMISSION_REJECT,
-    AdmissionDecision,
-    AdmissionGateConfig,
-    evaluate_admission,
-    evaluate_admission_batch,
-)
 from .risk import (
     RiskConfig,
     RiskEstimate,
@@ -160,6 +154,20 @@ from .shadow import (
     FrontierShadowLog,
     read_shadow_log,
     write_shadow_log_entry,
+)
+from .telemetry_provenance import (
+    FieldOrigin,
+    FieldProvenance,
+    TickProvenance,
+    TimeoutFallback,
+    TimeoutFallbackResult,
+    derive_sla_violation_pct,
+    make_derived,
+    make_missing,
+    make_proxy,
+    make_real,
+    make_simulated,
+    resolve_timeout_pct,
 )
 from .training_alibaba_gpu import (
     ALIBABA_POLICY_CANDIDATES,

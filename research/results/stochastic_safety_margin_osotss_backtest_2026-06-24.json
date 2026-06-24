@@ -1,0 +1,74 @@
+{
+  "run_date": "2026-06-24",
+  "experiment": "stochastic_safety_margin_osotss",
+  "verdict": "NEGATIVE_RESULT",
+  "hypothesis": "interrupt_safety_margin closes BurstGPT 15-request SLA gap by forcing oracle to over-provision",
+  "hypothesis_status": "FALSIFIED",
+  "falsification_reason": "oracle secondary break (violators=[]) fires at n_sla_safe=5849 before margin-adjusted convergence threshold is tested",
+  "five_failure_counter": "4/5",
+  "margin_sweep": [0, 10, 15, 20, 25, 30],
+  "azure_llm_2024": {
+    "amcsg_goodput_per_dollar": 150630.0,
+    "amcsg_n_sla_safe": 5823,
+    "results": [
+      {"margin": 0,  "goodput_per_dollar": 159578.0, "n_sla_safe": 5823, "n_iters": 35, "vs_amcsg_pct": 5.94, "vs_baseline_pct": 0.0},
+      {"margin": 10, "goodput_per_dollar": 159578.0, "n_sla_safe": 5823, "n_iters": 35, "vs_amcsg_pct": 5.94, "vs_baseline_pct": 0.0},
+      {"margin": 15, "goodput_per_dollar": 159578.0, "n_sla_safe": 5823, "n_iters": 35, "vs_amcsg_pct": 5.94, "vs_baseline_pct": 0.0},
+      {"margin": 20, "goodput_per_dollar": 159578.0, "n_sla_safe": 5823, "n_iters": 35, "vs_amcsg_pct": 5.94, "vs_baseline_pct": 0.0},
+      {"margin": 25, "goodput_per_dollar": 159578.0, "n_sla_safe": 5823, "n_iters": 35, "vs_amcsg_pct": 5.94, "vs_baseline_pct": 0.0},
+      {"margin": 30, "goodput_per_dollar": 159578.0, "n_sla_safe": 5823, "n_iters": 35, "vs_amcsg_pct": 5.94, "vs_baseline_pct": 0.0}
+    ]
+  },
+  "burstgpt_hf": {
+    "amcsg_goodput_per_dollar": 168270.0,
+    "amcsg_n_sla_safe": 5864,
+    "results": [
+      {"margin": 0,  "goodput_per_dollar": 178109.0, "n_sla_safe": 5849, "n_iters": 11, "sla_vs_amcsg": -15, "vs_amcsg_pct": 5.85, "vs_baseline_pct": 0.0},
+      {"margin": 10, "goodput_per_dollar": 178109.0, "n_sla_safe": 5849, "n_iters": 11, "sla_vs_amcsg": -15, "vs_amcsg_pct": 5.85, "vs_baseline_pct": 0.0},
+      {"margin": 15, "goodput_per_dollar": 178109.0, "n_sla_safe": 5849, "n_iters": 11, "sla_vs_amcsg": -15, "vs_amcsg_pct": 5.85, "vs_baseline_pct": 0.0},
+      {"margin": 20, "goodput_per_dollar": 178109.0, "n_sla_safe": 5849, "n_iters": 11, "sla_vs_amcsg": -15, "vs_amcsg_pct": 5.85, "vs_baseline_pct": 0.0},
+      {"margin": 25, "goodput_per_dollar": 178109.0, "n_sla_safe": 5849, "n_iters": 11, "sla_vs_amcsg": -15, "vs_amcsg_pct": 5.85, "vs_baseline_pct": 0.0},
+      {"margin": 30, "goodput_per_dollar": 178109.0, "n_sla_safe": 5849, "n_iters": 11, "sla_vs_amcsg": -15, "vs_amcsg_pct": 5.85, "vs_baseline_pct": 0.0}
+    ]
+  },
+  "current_frontier": {
+    "azure_llm_2024": {
+      "goodput_per_dollar": 159578.0,
+      "n_sla_safe": 5823,
+      "vs_amcsg_pct": 5.94
+    },
+    "burstgpt_hf": {
+      "goodput_per_dollar": 178109.0,
+      "n_sla_safe": 5849,
+      "vs_amcsg_pct": 5.85,
+      "sla_gap_vs_amcsg": -15
+    }
+  },
+  "root_cause": {
+    "summary": "oracle secondary break (violators=[]) fires before margin-adjusted convergence threshold",
+    "oracle_burstgpt_ceiling": 5849,
+    "amcsg_stochastic_target": 5864,
+    "gap": 15,
+    "mechanism": "Oracle increments c_sched until violators=[] in deterministic FIFO or c_sched[tk]>=c_ceil[tk]. On BurstGPT, violators=[] fires at n_sla_safe=5849, before the margin-adjusted threshold 5864+margin is tested.",
+    "architectural_fix_options": [
+      "Continue iterating beyond no-violations state (add borderline-tick signal)",
+      "Per-tick stochastic c floor from interruption model",
+      "Less aggressive starting gate (e.g. gate=25% instead of gate=100%)"
+    ]
+  },
+  "implementation": {
+    "files_modified": [
+      "aurelius/optimizer/policies/replica_scaling.py",
+      "aurelius/benchmarks/srtf_serving_backtest.py"
+    ],
+    "files_added": [
+      "aurelius/benchmarks/stochastic_safety_margin_backtest.py",
+      "tests/test_stochastic_safety_margin_backtest.py"
+    ],
+    "parameter_chain": "ReplicaScalingConfig.interrupt_safety_margin -> ReplicaScalingPolicy.optimize() -> compute_online_sotss_schedule -> convergence check",
+    "default_preserved": true,
+    "byte_identical_at_margin_zero": true
+  },
+  "test_file": "tests/test_stochastic_safety_margin_backtest.py",
+  "result_md": "research/results/stochastic_safety_margin_osotss_backtest_2026-06-24.md"
+}

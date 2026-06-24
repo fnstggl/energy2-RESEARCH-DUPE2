@@ -35,11 +35,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Iterable, Optional
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -520,7 +519,7 @@ def _write_md(path: str, payload: dict) -> None:
       f"{cfg['safety_timeout_pct']}% AND queue p99 ≤ "
       f"{cfg['safety_queue_p99_ms']} ms")
     A(f"- **Rolling windows:** {cfg['window_minutes']} min")
-    A(f"- **No future leakage** — each decision sees t' ≤ t only.\n")
+    A("- **No future leakage** — each decision sees t' ≤ t only.\n")
 
     src = payload["source"]
     A("## 2. Source\n")

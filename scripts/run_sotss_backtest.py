@@ -111,7 +111,7 @@ def run_all() -> dict:
     if azure.sotss_north_star_500_achieved:
         margin = azure.sotss_goodput_per_dollar - AZURE_NS_500
         cost_red = (azure.amcsg_cost - azure.sotss_cost) / azure.amcsg_cost * 100.0
-        print(f"\n  NORTH-STAR +500% ACHIEVED on Azure!")
+        print("\n  NORTH-STAR +500% ACHIEVED on Azure!")
         print(f"  Margin above north-star: +{margin:,.0f} goodput/$")
         print(f"  Cost reduction vs AMCSG: {cost_red:.2f}%")
         print(f"  Oracle efficiency:       {azure.sotss_n_iters} iters, "

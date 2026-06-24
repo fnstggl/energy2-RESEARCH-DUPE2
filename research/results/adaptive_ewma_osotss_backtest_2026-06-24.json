@@ -1,0 +1,100 @@
+{
+  "run_date": "2026-06-24",
+  "run_id": "adaptive_ewma_osotss_2026-06-24",
+  "hypothesis": "Adaptive EWMA alpha (burst-sensitive boost) closes the 15-request BurstGPT SLA gap in Online SOTSS without regressing Azure goodput/$",
+  "verdict": "NEGATIVE RESULT — no hyperparameter configuration produces a frontier improvement on both traces simultaneously",
+  "five_failure_counter": "3/5",
+
+  "algorithm": {
+    "name": "Adaptive EWMA Online SOTSS",
+    "base": "compute_online_sotss_schedule with ewma_mode='adaptive'",
+    "canonical_path": "AureliusOptimizer(policy='replica_scaling') with ReplicaScalingConfig(mode='online_sotss', ewma_mode='adaptive')",
+    "mechanism": "Boost EWMA alpha from 0.1 to burst_alpha when tick_mean > burst_threshold * ewma_val; hold for burst_cooldown_ticks ticks",
+    "causal": true,
+    "oracle_free": true
+  },
+
+  "same_conditions_checklist": {
+    "same_trace": true,
+    "same_sla_definition": true,
+    "same_cost_denominator": true,
+    "same_gpu_hour_accounting": true,
+    "same_physics_model": true,
+    "same_arrival_process": true,
+    "same_capacity_model": true,
+    "same_pricing_model": true,
+    "same_telemetry_class": "past observations only (causal)",
+    "same_decision_time_information": true,
+    "same_evaluation_method": "GSF spot-fleet simulation, seed=42",
+    "baseline": "OSOTSS fixed alpha=0.1 (current best deployable)"
+  },
+
+  "azure_llm_2024": {
+    "sla_s": 10.0,
+    "total_requests": 5880,
+    "seed": 42,
+    "fixed_osotss_goodput_per_dollar": 159578,
+    "fixed_osotss_n_sla_safe": 5823,
+    "adaptive_osotss_goodput_per_dollar_best": 159578,
+    "adaptive_osotss_n_sla_safe_best": 5823,
+    "improvement_pct": 0.0,
+    "amcsg_goodput_per_dollar": 150630,
+    "amcsg_n_sla_safe": 5823,
+    "note": "Adaptive EWMA never triggers on Azure LLM 2024 at any tested threshold — smooth workload keeps tick_mean < 2.0 * ewma_val universally"
+  },
+
+  "burstgpt_hf": {
+    "sla_s": 30.0,
+    "total_requests": 5880,
+    "seed": 42,
+    "fixed_osotss_goodput_per_dollar": 178109,
+    "fixed_osotss_n_sla_safe": 5849,
+    "amcsg_goodput_per_dollar": 168270,
+    "amcsg_n_sla_safe": 5864,
+    "burstgpt_15_request_gap": {
+      "fixed_vs_amcsg_n_sla_safe": -15,
+      "after_adaptive_ewma_best_config": {
+        "threshold": 2.0,
+        "burst_alpha": 0.5,
+        "cooldown_ticks": 1,
+        "goodput_per_dollar": 178109,
+        "n_sla_safe": 5849,
+        "improvement_pct": 0.0,
+        "note": "threshold=2.0 never triggers on BurstGPT trace"
+      },
+      "after_adaptive_ewma_aggressive_config": {
+        "threshold": 1.5,
+        "burst_alpha": 0.5,
+        "cooldown_ticks": 2,
+        "goodput_per_dollar": 174838,
+        "n_sla_safe": 5853,
+        "improvement_pct": -1.84,
+        "note": "threshold=1.5 triggers, recovers 4/15 requests, but over-provisions — goodput/$ regresses"
+      }
+    }
+  },
+
+  "hyperparameter_sweep": [
+    {"threshold": 1.5, "burst_alpha": 0.15, "cooldown": 1, "burstgpt_gp": 177415, "burstgpt_n": 5851, "azure_gp": 159578, "azure_n": 5823},
+    {"threshold": 1.5, "burst_alpha": 0.20, "cooldown": 1, "burstgpt_gp": 176853, "burstgpt_n": 5851, "azure_gp": 159578, "azure_n": 5823},
+    {"threshold": 1.5, "burst_alpha": 0.25, "cooldown": 1, "burstgpt_gp": 176295, "burstgpt_n": 5851, "azure_gp": 159578, "azure_n": 5823},
+    {"threshold": 2.0, "burst_alpha": 0.20, "cooldown": 1, "burstgpt_gp": 178109, "burstgpt_n": 5849, "azure_gp": 159578, "azure_n": 5823, "note": "identical to fixed"},
+    {"threshold": 2.0, "burst_alpha": 0.30, "cooldown": 1, "burstgpt_gp": 178109, "burstgpt_n": 5849, "azure_gp": 159578, "azure_n": 5823, "note": "identical to fixed"},
+    {"threshold": 2.0, "burst_alpha": 0.50, "cooldown": 1, "burstgpt_gp": 178109, "burstgpt_n": 5849, "azure_gp": 159578, "azure_n": 5823, "note": "identical to fixed"},
+    {"threshold": 3.0, "burst_alpha": 0.30, "cooldown": 1, "burstgpt_gp": 178109, "burstgpt_n": 5849, "azure_gp": 159578, "azure_n": 5823, "note": "identical to fixed"},
+    {"threshold": 3.0, "burst_alpha": 0.50, "cooldown": 1, "burstgpt_gp": 178109, "burstgpt_n": 5849, "azure_gp": 159578, "azure_n": 5823, "note": "identical to fixed"},
+    {"threshold": 1.5, "burst_alpha": 0.15, "cooldown": 0, "burstgpt_gp": 178109, "burstgpt_n": 5849, "azure_gp": 159578, "azure_n": 5823, "note": "cooldown=0 means no effect"},
+    {"threshold": 2.0, "burst_alpha": 0.20, "cooldown": 0, "burstgpt_gp": 178109, "burstgpt_n": 5849, "azure_gp": 159578, "azure_n": 5823, "note": "identical to fixed"}
+  ],
+
+  "root_cause_analysis": {
+    "revised_diagnosis": "The BurstGPT 15-request gap is a stochastic-vs-deterministic simulation mismatch, not an EWMA prediction error",
+    "mechanism": "The oracle's convergence check uses deterministic FIFO response times (no spot interruptions). The stochastic GSF evaluation includes Binomial interruptions (p_survive=0.9982/tick) that occasionally reduce effective capacity on heavy-load ticks, exposing borderline requests. EWMA predictions guide the oracle to the right ticks, but cannot compensate for the stochastic interruption buffer needed.",
+    "why_adaptive_helps_partially": "Adaptive EWMA overestimates service time on burst ticks → oracle adds MORE servers → covers some stochastic-interrupt buffer. But this is pure over-provisioning: adds servers to more ticks than needed → cost rises → goodput/$ falls.",
+    "original_hypothesis_status": "FALSIFIED. The gap is NOT caused by oracle fixing wrong ticks due to EWMA underestimation. Adaptive EWMA correctly identifies burst ticks but cannot improve the stochastic/deterministic mismatch without over-provisioning."
+  },
+
+  "frontier_improvement": false,
+  "tests": "tests/test_adaptive_ewma_backtest.py (8 tests, all passing)",
+  "implementation": "aurelius/benchmarks/adaptive_ewma_backtest.py, aurelius/optimizer/policies/replica_scaling.py (ewma_mode, burst_threshold, burst_alpha, burst_cooldown_ticks)"
+}

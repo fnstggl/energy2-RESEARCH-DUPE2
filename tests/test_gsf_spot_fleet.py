@@ -5,21 +5,20 @@ GSFFractionEntry, GSFReport, run_gsf_azure_backtest, run_gsf_burstgpt_backtest.
 
 All tests use the existing Azure LLM 2024 fixture and BurstGPT HF fixture.
 """
-import math
 import pytest
+
 from aurelius.benchmarks.srtf_serving_backtest import (
-    _gsf_spot_replicas,
-    _gsf_spot_fleet_cost,
-    _gsf_expected_interruptions,
-    _simulate_fifo_gsf_spot_fleet,
+    _GSF_FRACTIONS,
+    GPU_HOUR_USD,
     GSFFractionEntry,
     GSFReport,
+    _gsf_expected_interruptions,
+    _gsf_spot_fleet_cost,
+    _gsf_spot_replicas,
+    _simulate_fifo_gsf_spot_fleet,
     run_gsf_azure_backtest,
     run_gsf_burstgpt_backtest,
-    GPU_HOUR_USD,
-    _GSF_FRACTIONS,
 )
-
 
 # ---------------------------------------------------------------------------
 # Class 1: _gsf_spot_replicas — formula correctness
