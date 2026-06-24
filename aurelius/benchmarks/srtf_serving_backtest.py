@@ -12781,6 +12781,7 @@ def _online_sotss_cost_schedule(
     burst_threshold: float = 1.5,
     burst_alpha: float = 0.5,
     burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
 ) -> tuple:
     """Online SOTSS schedule — delegates to canonical ReplicaScalingPolicy.
 
@@ -12800,6 +12801,7 @@ def _online_sotss_cost_schedule(
         burst_threshold=burst_threshold,
         burst_alpha=burst_alpha,
         burst_cooldown_ticks=burst_cooldown_ticks,
+        interrupt_safety_margin=interrupt_safety_margin,
     )
 
 
@@ -12913,6 +12915,7 @@ def _run_online_sotss_backtest(
     burst_threshold: float = 1.5,
     burst_alpha: float = 0.5,
     burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
 ) -> "OnlineSOTSSReport":
     """Shared Online SOTSS backtest logic for both Azure and BurstGPT traces."""
     warp = calibrate_time_warp(raw, servers=fixed_c, target_rho=target_rho)
@@ -12971,6 +12974,7 @@ def _run_online_sotss_backtest(
             burst_threshold=burst_threshold,
             burst_alpha=burst_alpha,
             burst_cooldown_ticks=burst_cooldown_ticks,
+            interrupt_safety_margin=interrupt_safety_margin,
         )
     )
 
@@ -13050,6 +13054,7 @@ def run_online_sotss_azure_backtest(
     burst_threshold: float = 1.5,
     burst_alpha: float = 0.5,
     burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
 ) -> "OnlineSOTSSReport":
     """Online SOTSS backtest on Azure LLM 2024 — run 2026-06-23.
 
@@ -13108,6 +13113,7 @@ def run_online_sotss_azure_backtest(
         burst_threshold=burst_threshold,
         burst_alpha=burst_alpha,
         burst_cooldown_ticks=burst_cooldown_ticks,
+        interrupt_safety_margin=interrupt_safety_margin,
     )
 
 
@@ -13131,6 +13137,7 @@ def run_online_sotss_burstgpt_backtest(
     burst_threshold: float = 1.5,
     burst_alpha: float = 0.5,
     burst_cooldown_ticks: int = 2,
+    interrupt_safety_margin: int = 0,
 ) -> "OnlineSOTSSReport":
     """Online SOTSS backtest on BurstGPT HF — run 2026-06-23.
 
@@ -13183,4 +13190,5 @@ def run_online_sotss_burstgpt_backtest(
         burst_threshold=burst_threshold,
         burst_alpha=burst_alpha,
         burst_cooldown_ticks=burst_cooldown_ticks,
+        interrupt_safety_margin=interrupt_safety_margin,
     )

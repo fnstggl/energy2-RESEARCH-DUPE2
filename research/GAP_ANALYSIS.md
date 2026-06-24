@@ -8,6 +8,110 @@
 
 ---
 
+## Run 2026-06-24 — Stochastic Safety Margin OSOTSS (NEGATIVE RESULT — mechanism misdiagnosed)
+
+### Q1. What currently limits Aurelius most?
+
+**Structural oracle-ceiling on BurstGPT.** The oracle's secondary termination condition (`violators=[]`
+in deterministic FIFO) fires at n_sla_safe=5849, which is 15 below the AMCSG stochastic target (5864).
+Adding `interrupt_safety_margin` to the convergence threshold cannot overcome this because the loop exits
+via the secondary break before the primary convergence check is evaluated.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+1. **Oracle borderline-tick continuation** — allow the oracle to add capacity to ticks with response
+   times within ε of the SLA limit (e.g., within 1s of 30s), even after all hard violations are resolved.
+   This would let the oracle buffer borderline ticks against stochastic interruptions without future-token
+   access. Requires a new "close to SLA" signal in the oracle loop.
+2. **ShareGPT/LMSYS cross-validation** — third/fourth public trace to validate OSOTSS generalization.
+3. **Transformer service-time predictor** — replace EWMA; closes OSOTSS-vs-SOTSS-MIN gap on Azure.
+
+### Q3. Which forecasts are weakest?
+
+1. **Oracle ceiling diagnosis** — the original hypothesis (safety margin would force oracle to over-provision)
+   was falsified. The oracle's natural ceiling is set by "no deterministic FIFO violations" not by a
+   convergence threshold.
+2. **Stochastic/deterministic gap root cause** — confirmed: AMCSG's higher fixed-c schedule provides more
+   capacity than OSOTSS's optimized minimum-violation schedule, which is lean but not stochastic-robust.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **Hard "no violators" oracle exit** — oracle cannot buffer borderline ticks; only fixes hard violations.
+   A soft "close-to-SLA" signal would allow proactive over-provisioning on vulnerable ticks.
+2. **Aggressive starting gate (100%)** — minimum stable c leaves borderline ticks exposed; could use a
+   slightly higher floor without losing most of the cost savings.
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Same as previous runs: traces with bursty arrivals (BurstGPT). The BurstGPT 15-request gap is now
+confirmed to be structural (oracle ceiling at 5849 in deterministic FIFO), not addressable by
+convergence-threshold adjustments.
+
+### Q6. Which research direction appears strongest?
+
+**Oracle borderline-tick continuation** — modify the oracle loop to continue adding capacity to
+ticks whose deterministic-FIFO response times are within ε of the SLA (e.g., 28–30s on BurstGPT
+SLA=30s), even after `violators=[]`. These are the ticks most vulnerable to stochastic interruptions.
+This is causal (uses only actual service times already simulated in the convergence check) and
+doesn't require future-token access.
+
+**WARNING: Five-Failure counter is 4/5. One more negative run triggers the architectural focus rule.**
+
+### Q7. What is the shortest path to another +1% gain?
+
+**Oracle soft-SLA continuation.** Add a second pass after `violators=[]`: identify ticks where
+any request's deterministic-FIFO response time is in (sla_s - ε, sla_s] (borderline ticks) and
+increment c on those ticks up to c_ceil. This buffers the stochastic interruption window without
+over-provisioning every tick.
+
+### Q8. What is the current north-star status?
+
+Azure: goodput/$ north-star achieved (159,578 >> 151,248 threshold). BurstGPT: goodput/$ north-star
+achieved (178,109 >> 121,680 threshold). BurstGPT n_sla_safe remains 15 below AMCSG (known structural
+limitation — oracle ceiling at 5849).
+
+### Q9. What would need to be true to maintain north-star?
+
+Same as run 2026-06-23. North-star is already achieved on both traces.
+
+### Q10. Which assumptions might be wrong?
+
+1. **Safety margin fixes the convergence threshold problem.** FALSIFIED by this run. The problem is the
+   secondary `violators=[]` break, not the convergence threshold value.
+2. **EWMA prediction accuracy is the bottleneck.** FALSIFIED by adaptive EWMA run (2026-06-24).
+3. **Oracle ceiling at 5849 is hard.** May be addressable by oracle soft-SLA continuation — not yet tested.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Oracle secondary-break exits before margin test** — confirmed structural limitation on BurstGPT.
+2. **Two public traces** — Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+Same as previous runs: ShareGPT, LMSYS Chatbot Arena.
+
+### Q13. What should be attempted next?
+
+**⚠️ FIVE-FAILURE WARNING: Counter is 4/5. If the next run is also negative, the architectural focus
+rule activates: stop adding modules; focus only on integration, replay validation, and simplification.**
+
+Priority 1 (before architectural focus triggers):
+1. **Oracle soft-SLA continuation** — allow oracle to continue adding capacity to borderline ticks
+   (response time within ε of SLA) even after `violators=[]`. Directly targets the confirmed structural
+   mechanism. Causal and production-deployable.
+
+Priority 2 (if Five-Failure rule activates):
+1. **Architecture simplification** — review all wired-through params for dead-code cleanup
+2. **Integration validation** — verify full AureliusOptimizer path with all new parameters
+3. **ShareGPT/LMSYS replay** — cross-validation on third public trace
+
+**Five-Failure Rule counter: 4 of 5 consecutive non-frontier runs.**
+
+Results: `research/results/stochastic_safety_margin_osotss_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_stochastic_safety_margin_backtest.py` (10 tests)
+
+---
+
 ## Run 2026-06-24 — Adaptive EWMA Online SOTSS (NEGATIVE RESULT — hypothesis falsified)
 
 ### Q1. What currently limits Aurelius most?
