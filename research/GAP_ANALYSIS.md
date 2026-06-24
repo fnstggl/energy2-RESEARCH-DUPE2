@@ -8,6 +8,32 @@
 
 ---
 
+## Run 2026-06-24 — Frontier Research Audit (NO FRONTIER ADVANCE — FINDINGS RECORDED)
+
+> Frontier-driven research (decisions, not pricing). No code/benchmark/eval
+> changed. Full analysis: `research/results/frontier_research_audit_2026-06-24.md`.
+
+- **Legitimate decision frontier = FIFO + OSOTSS** (provisioning), `serving_queue`
+  **off** (it is −4.0%/−6.4% under variable-c — structural preemption starvation).
+- **Frontier governance / honesty correction:** the headline "159,578 / +533% vs
+  SLA-oracle" uses the **GSF spot-fleet cost model** — decomposition shows the
+  provisioning *decision* contributes **29%** of the gain over SLA-oracle and
+  **spot pricing 71%** (×2.50 cost-denominator). Per the GPU-cluster product rule,
+  the spot component is **NOT AURELIUS VALUE**. The legitimate decision frontier is
+  **+153% (Azure) / +183% (BurstGPT) vs SLA-oracle on provisioned cost**.
+- **Decision levers exhausted:** 7 consecutive runs without advance (Five-Failure
+  5/5 + 2 null compositions); causal-provisioning gap structurally limited; ordering
+  negative under variable-c; ML priors null (running-stats ceiling).
+- **Largest bottleneck = DATA/signal, not algorithms.** The public traces express
+  only provisioning + ordering (both at ceiling). Placement / cache-affinity /
+  admission need model-identity / KV-cache / GPU-heterogeneity signals the canonical
+  traces lack. 3 papers (Mooncake, MOBO routing, model-affinity prewarm) all map to
+  AO components but are **blocked by trace signal**.
+- **Recommendation:** (1) headline the decision frontier on provisioned cost vs
+  SLA-oracle, report spot separately as pricing; (2) `serving_queue` off when
+  `replica_scaling` active; (3) ingest a richer public trace to unlock the next
+  legitimate decision frontier.
+
 ## Run 2026-06-24 — Dead Frontier Code Deprecation (ARCHITECTURE SIMPLIFICATION — Phase 5, Five-Failure Rule compliant)
 
 ### Q1. What currently limits Aurelius most?

@@ -911,6 +911,39 @@ Proposed convergence and a phased, benchmark-gated migration are in
 
 ## 7. Experiment History
 
+### Frontier Research Audit 2026-06-24 — NO FRONTIER ADVANCE (FINDINGS RECORDED)
+
+Frontier-driven research (decisions, not pricing). No code changed. Full report:
+`research/results/frontier_research_audit_2026-06-24.md`.
+- Legitimate decision frontier = **FIFO + OSOTSS** (`serving_queue` off — negative
+  under variable-c). On provisioned cost: **+153% (Azure) / +183% (BurstGPT) vs
+  SLA-oracle**.
+- Honesty correction: the "159,578 / +533%" headline is **71% spot pricing** (×2.50
+  cost denominator) and only **29% provisioning decision** → spot is **NOT AURELIUS
+  VALUE** per the GPU-cluster product rule.
+- Decision levers exhausted (7-run no-advance streak); largest bottleneck is
+  **data/signal** (placement/cache/admission need model-id / KV-cache /
+  heterogeneity the public traces lack). Recommend a richer public trace.
+
+### Phase 5 — Canonical Integration Master Plan (PLANNING — NO CODE CHANGED)
+
+Planning/architecture run. Produced the authoritative integration roadmap:
+`research/CANONICAL_INTEGRATION_MASTER_PLAN.md`,
+`NON_CANONICAL_SYSTEM_INVENTORY.md`,
+`OPTIMIZER_INTEGRATION_DEPENDENCY_GRAPH.md`,
+`NEXT_PHASE_IMPLEMENTATION_PROMPT.md`.
+- Current AO state: `{energy, serving_queue, replica_scaling}` implemented;
+  `placement`/`admission` stubs (shadow scorer harmful / gate neutral).
+- Dominant un-routed lever = **spot/preemptible cost denominator** (GSF records:
+  Azure +492% / BurstGPT +727% vs SLA-oracle), benchmark-local in
+  `srtf_serving_backtest.py`.
+- **Highest-value next phase = Phase 5.1**: extract the spot-fleet **cost model**
+  into a canonical ObjectiveLayer interface (parity extraction, 0% drift). Then
+  GSF spot policy → ReplicaScaling, BacktestEngine routing, consolidate duplicate
+  provisioning, **unified ReplayLayer** (enabling) → honest combination search →
+  ConstraintLayer. Placement/admission stay shadow; dead frontier families
+  deprecated. No optimization claim.
+
 ### Canonical Optimizer Phases 1–3 — Unification Routing (STRUCTURAL — NO BEHAVIOR CHANGE)
 
 Architecture-unification parity steps (not optimization runs); see
