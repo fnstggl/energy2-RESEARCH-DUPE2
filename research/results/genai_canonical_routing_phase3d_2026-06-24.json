@@ -1,0 +1,73 @@
+{
+  "run_date": "2026-06-24",
+  "phase": "3d",
+  "classification": "architecture_convergence",
+  "five_failure_rule_active": true,
+  "five_failure_rule_count": "6/5",
+  "kpi_delta_pct": 0.0,
+  "new_policy": "genai_serving",
+  "policy_class": "GenAIServingPolicy",
+  "module": "aurelius/optimizer/policies/genai_serving.py",
+  "constants": {
+    "GENAI_MIN_REPLICAS": 1,
+    "GENAI_SLA_LATENCY_MULT": 2.0,
+    "GENAI_SLA_LATENCY_ABS_S": 30.0,
+    "GENAI_TARGET_RHO_SLA": 0.65,
+    "GENAI_TARGET_RHO_UTIL": 0.85,
+    "GENAI_EWMA_ALPHA": 0.5
+  },
+  "parity": {
+    "replica_counts_bit_identical": true,
+    "constraint_aware_timeout_pct": 0.0,
+    "all_policies_run": true,
+    "new_tests": 6,
+    "new_tests_passing": 6,
+    "existing_ablation_tests": 7,
+    "existing_ablation_tests_passing": 7
+  },
+  "fixture_kpis": {
+    "trace": "tests/fixtures/alibaba_genai_sample",
+    "n_requests": 60,
+    "tick_seconds": 3600.0,
+    "policies": {
+      "constraint_aware": {
+        "goodput_per_dollar": 3.3333,
+        "timeout_rate_pct": 0.0
+      },
+      "sla_aware": {
+        "goodput_per_dollar": 2.4583,
+        "timeout_rate_pct": 1.206
+      },
+      "queue_aware": {
+        "goodput_per_dollar": 3.2222,
+        "timeout_rate_pct": 2.373
+      }
+    }
+  },
+  "full_trace_kpi_pr71": {
+    "trace": "Alibaba GenAI 2026",
+    "constraint_aware_vs_sla_aware_pct": 38.2,
+    "constraint_aware_vs_no_affinity_pct": 38.2,
+    "unchanged_by_this_pr": true
+  },
+  "files_changed": [
+    "aurelius/optimizer/policies/genai_serving.py",
+    "aurelius/optimizer/policies/__init__.py",
+    "aurelius/traces/genai_backtest.py",
+    "tests/test_genai_canonical_routing_parity.py"
+  ],
+  "files_unchanged": [
+    "aurelius/optimizer/aurelius_optimizer.py",
+    "aurelius/traces/genai_ablation.py",
+    "aurelius/benchmarks/economics.py",
+    "aurelius/simulation/cluster/serving.py"
+  ],
+  "implemented_policies_after": [
+    "energy",
+    "serving_queue",
+    "replica_scaling",
+    "genai_serving"
+  ],
+  "circular_import_free": true,
+  "benchmark_definitions_changed": false
+}

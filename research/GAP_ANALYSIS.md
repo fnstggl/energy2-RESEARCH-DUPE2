@@ -5605,3 +5605,67 @@ integration of the existing GenAI benchmark, not new data.
 
 Results: `research/results/alibaba_genai_third_trace_2026-06-24.{md,json}`
 Tests: `tests/test_osotss_canonical_routing_parity.py` (38 tests: 38 passed)
+
+---
+
+## Run 2026-06-24 (Phase 3d — GenAI Canonical Routing)
+
+**Action:** Phase 3d architecture convergence. Routed genai_backtest.py `constraint_aware`
+policy through `AureliusOptimizer(policy="genai_serving")`. Moved physics ownership to
+`aurelius/optimizer/policies/genai_serving.py` (canonical owner). 0% KPI drift.
+
+**Five-Failure Rule:** ACTIVE (6/5). This is integration work (explicitly allowed).
+
+**Changes:**
+- NEW: `aurelius/optimizer/policies/genai_serving.py` — canonical physics owner for GenAI
+  multi-model serving: `genai_effective_service_s`, `genai_eval_tick_timeout`,
+  `genai_size_for_sla`, `genai_size_for_target`, constants, `GenAIServingPolicy`,
+  `GenAIServingResult`.
+- UPDATED: `aurelius/optimizer/policies/__init__.py` — `POLICY_REGISTRY["genai_serving"]`
+  and `IMPLEMENTED_POLICIES` now include `"genai_serving"`.
+- UPDATED: `aurelius/traces/genai_backtest.py` — local physics stubs delegate to canonical
+  owners; `constraint_aware` branch pre-computes via `_GENAI_OPTIMIZER.optimize(ticks, cold)`.
+- NEW: `tests/test_genai_canonical_routing_parity.py` — 6 parity tests (6/6 pass).
+
+**Parity:** Replica counts bit-identical on the committed fixture. All 13 genai tests pass.
+
+### Q1. What gap was closed?
+
+`genai_backtest.py` was the last major benchmark not routed through `AureliusOptimizer`.
+Phase 3d closes this gap. All four workload classes now route through the canonical facade:
+energy (`energy`), LLM serving (`serving_queue`), replica scaling (`replica_scaling`),
+GenAI multi-model (`genai_serving`).
+
+### Q2. What is the current AureliusOptimizer integration status?
+
+| Policy | Status | Benchmark |
+|--------|--------|-----------|
+| `energy` | Implemented (Phase 1a) | canonical_backtests, gpu_routing_backtest, etc. |
+| `serving_queue` | Implemented (Phase 2) | srtf_serving_backtest abs-conformal shim |
+| `replica_scaling` | Implemented (Phase 3b/3c) | AMCSG, SOTSS-MIN, OSOTSS |
+| `genai_serving` | **Implemented (Phase 3d)** | genai_backtest constraint_aware |
+| `placement` | Stub | — |
+| `admission` | Stub | — |
+
+### Q3. What is the current north-star status?
+
+Unchanged. LLM serving: Azure 159,578 gp/$ (OSOTSS +5.94%), BurstGPT 178,109 gp/$ (OSOTSS +5.85%).
+GenAI: constraint_aware now canonical via `AureliusOptimizer(policy="genai_serving")`.
+No KPI regression introduced.
+
+### Q4. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (6/5). Allowed actions: integration, validation, diagnosis, architecture simplification.**
+
+Under Five-Failure Rule, remaining allowed work:
+1. **Phase 1b — replay loop unification:** Collapse 4 replay loops into one engine.
+   High-value architecture convergence. Not started.
+2. **Phase 4 — frontier → constraint promotion:** Promote frontier BASE/DYNAMIC to
+   hard ρ-ceiling constraint. High-value; gives the frontier work a consumer.
+3. **DCGM duplicate removal:** `connectors/dcgm.py` vs `ingestion/dcgm_provider.py` —
+   confirmed dead duplicate, safe to deprecate one (zero KPI impact).
+4. **Do NOT attempt new queue discipline, prediction, or serving variants** —
+   all are prediction-limited; no validated path to further gains under Five-Failure Rule.
+
+Results: `research/results/genai_canonical_routing_phase3d_2026-06-24.{md,json}`
+Tests: `tests/test_genai_canonical_routing_parity.py` (6 tests: 6 passed)
