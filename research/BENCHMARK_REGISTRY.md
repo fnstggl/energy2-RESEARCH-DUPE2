@@ -146,6 +146,17 @@ North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
 Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 2/3].
 Results: `research/results/sotss_gate_sweep_2026-06-23.md`, `research/results/online_sotss_backtest_2026-06-23.md`.
 
+**NULL RESULT — Joint OSOTSS x Abs-Conformal SRPT Compound Backtest [run 2026-06-24]:**
+Integration experiment (Five-Failure Rule): 6-condition 2x3 factorial {FIFO, conformal} x {fixed-c, AMCSG, OSOTSS},
+provisioned GPU-hour cost model. Hypothesis: OSOTSS under-provisions (−5.6% vs AMCSG) → deeper queues → positive conformal compound.
+REFUTED. Conformal SRPT has NEGATIVE interaction with variable-c: conformal+OSOTSS < FIFO+OSOTSS on both traces.
+Azure: FIFO+OSOTSS=63,831 gp/$ (best) > conformal+OSOTSS=61,262 (−4.0%). BurstGPT: FIFO+OSOTSS=71,244 > conformal+OSOTSS=66,667 (−6.4%).
+n_sla_safe: conformal reduces SLA-safe count vs FIFO under variable-c (Azure −74, BurstGPT −120 at OSOTSS).
+Architecture insight: serving_queue and replica_scaling policies are NOT additively composable via preemptive ordering.
+No leaderboard update. Frontier unchanged.
+Results: `research/results/joint_osotss_conformal_backtest_2026-06-24.{md,json}`.
+Tests: `tests/test_joint_osotss_abs_conformal_backtest.py` (29 tests, all passing).
+
 **NEUTRAL/NEGATIVE RESULT — Forecasted MCS Spot Fleet [run 2026-06-24]:**
 First apples-to-apples evaluation of `forecasted_mcs` (fully deployable; uses data ≤ t-1) under the
 GSF spot-fleet cost model. Two sub-modes (lag1, ewma) evaluated vs AMCSG on both traces.
