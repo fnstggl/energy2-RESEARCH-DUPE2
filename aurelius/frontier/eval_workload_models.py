@@ -35,9 +35,8 @@ Simulator / public-trace evidence only — **NOT production savings**
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Optional
-
 
 # ---------------------------------------------------------------------------
 # Categorical enums.

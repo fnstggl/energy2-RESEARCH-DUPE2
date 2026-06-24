@@ -36,23 +36,17 @@ import os
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
+    DECOUPLED_HYBRID_ALPHA_DEFAULT,
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
-    DEFAULT_BURSTGPT_SLA_S,
-    DEFAULT_SLA_S,
-    DECOUPLED_HYBRID_ALPHA_DEFAULT,
     DecoupledHybridReport,
     _Request,
     _run_decoupled_hybrid_backtest_on_trace,
-    _simulate_decoupled_hybrid,
     _sla_safe_goodput_per_dollar,
-    calibrate_time_warp,
-    load_serving_requests,
     run_burstgpt_decoupled_hybrid_backtest,
     run_decoupled_hybrid_backtest,
     simulate_queue,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

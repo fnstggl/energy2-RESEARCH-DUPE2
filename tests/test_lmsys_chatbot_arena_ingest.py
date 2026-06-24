@@ -32,7 +32,6 @@ from aurelius.traces import lmsys_chatbot_arena  # noqa: E402
 from aurelius.traces.eval_schema import EvalWorkloadSchemaError  # noqa: E402
 from aurelius.traces.lmsys_chatbot_arena import LMSYSGatedAccessError  # noqa: E402
 
-
 # ---- 1. Gated refusal ----
 
 def test_download_gated_raises_without_token(tmp_path, monkeypatch):

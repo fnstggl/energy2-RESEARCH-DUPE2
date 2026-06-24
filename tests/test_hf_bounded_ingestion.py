@@ -22,7 +22,6 @@ from aurelius.traces.hf_corpus.schemas import (  # noqa: E402
     HFCorpusSchemaError,
 )
 
-
 # A small handful of synthetic latency-benchmark rows that match the
 # AgentPerfBench trace_replay shape (no real proprietary data).
 _LATENCY_ROWS = [
@@ -233,7 +232,7 @@ def test_summary_json_has_required_fields(tmp_path):
 
 
 def test_fixture_file_written_when_requested(tmp_path):
-    result = ingestion.ingest_from_records(
+    ingestion.ingest_from_records(
         repo_root=str(tmp_path),
         dataset_id="test/with-fixture",
         source_url="u",

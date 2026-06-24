@@ -133,7 +133,7 @@ def run_all() -> dict:
 
     if azure_sweep.best_entry and azure_sweep.best_entry.north_star_500_achieved:
         margin = azure_sweep.best_entry.goodput_per_dollar - AZURE_NS_500
-        print(f"\n  FRONTIER IMPROVEMENT: SOTSS-MIN on Azure!")
+        print("\n  FRONTIER IMPROVEMENT: SOTSS-MIN on Azure!")
         print(f"  Margin above north-star: +{margin:,.0f} goodput/$")
         print(f"  c_mean reduction: {min_report.amcsg_c_mean:.3f} → {min_report.sotss_c_mean:.3f} "
               f"({(min_report.sotss_c_mean - min_report.amcsg_c_mean) / min_report.amcsg_c_mean * 100:+.2f}%)")

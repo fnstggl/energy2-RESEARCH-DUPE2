@@ -24,7 +24,6 @@ Invariants tested:
 from __future__ import annotations
 
 import os
-import statistics
 
 import pytest
 
@@ -85,8 +84,8 @@ def test_c_schedule_min_one(azure_raw):
 # 3. Variable-c FIFO completes all requests with sufficient c
 def test_fifo_variable_c_completions():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _simulate_fifo_variable_c,
         _Request,
+        _simulate_fifo_variable_c,
     )
     reqs = [
         _Request(idx=i, arrival_s=float(i), actual_tokens=50,
@@ -101,8 +100,8 @@ def test_fifo_variable_c_completions():
 # 4. Variable-c abs-conformal completes all requests with sufficient c
 def test_abs_conformal_variable_c_completions():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _simulate_abs_conformal_variable_c,
         _Request,
+        _simulate_abs_conformal_variable_c,
     )
     from aurelius.optimizer.policies.serving_queue import AbsoluteErrorConformalCalibrator
     reqs = [
@@ -119,8 +118,8 @@ def test_abs_conformal_variable_c_completions():
 # 5. Variable-c FIFO response times non-negative
 def test_fifo_variable_c_response_nonneg():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _simulate_fifo_variable_c,
         _Request,
+        _simulate_fifo_variable_c,
     )
     reqs = [
         _Request(idx=i, arrival_s=float(i) * 0.5, actual_tokens=30,
@@ -135,8 +134,8 @@ def test_fifo_variable_c_response_nonneg():
 # 6. Variable-c abs-conformal response times non-negative
 def test_abs_conformal_variable_c_response_nonneg():
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _simulate_abs_conformal_variable_c,
         _Request,
+        _simulate_abs_conformal_variable_c,
     )
     from aurelius.optimizer.policies.serving_queue import AbsoluteErrorConformalCalibrator
     reqs = [

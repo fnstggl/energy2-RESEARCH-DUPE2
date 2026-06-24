@@ -143,8 +143,11 @@ North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
 **Current SLA-safe frontier (production-deployable)**: OSOTSS 159,578 goodput/$ (Azure, +5.94% vs AMCSG).
 **Current oracle frontier**: SOTSS-MIN 160,107 (Azure, +6.29% vs AMCSG); oracle-only (offline capacity planner).
 **BurstGPT SLA-safe frontier**: AMCSG 168,270 (n_sla_safe=5864 ✓); OSOTSS borderline (n_sla_safe=5849).
-Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 2/3].
-Results: `research/results/sotss_gate_sweep_2026-06-23.md`, `research/results/online_sotss_backtest_2026-06-23.md`.
+Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 3 complete, 2026-06-24].
+All four modes (`amcsg`, `sotss_min`, `online_sotss`, `forecasted_mcs`) now route through the canonical optimizer facade.
+`online_sotss` routing confirmed bit-identical: Azure 159,578.2 gp/$ (+5.94%), BurstGPT 178,109.0 (+5.85%) — KPI change 0.00%.
+Results: `research/results/sotss_gate_sweep_2026-06-23.md`, `research/results/online_sotss_backtest_2026-06-23.md`,
+`research/results/osotss_canonical_routing_parity_2026-06-24.md`.
 
 **NULL RESULT — Joint OSOTSS x Abs-Conformal SRPT Compound Backtest [run 2026-06-24]:**
 Integration experiment (Five-Failure Rule): 6-condition 2x3 factorial {FIFO, conformal} x {fixed-c, AMCSG, OSOTSS},

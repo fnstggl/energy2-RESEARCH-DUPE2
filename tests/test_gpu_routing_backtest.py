@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -45,8 +45,7 @@ from aurelius.benchmarks.gpu_routing_backtest import (
     augment_jobs_with_sla_class,
     build_synthetic_prior,
 )
-from aurelius.models import Job, WORKLOAD_DEFAULT_SLA_CLASS
-
+from aurelius.models import WORKLOAD_DEFAULT_SLA_CLASS, Job
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -77,7 +76,7 @@ def _make_job(
     )
 
 
-def _make_schedule(job_id: str, region: str, runtime_hours: float = 1.0) -> "ScheduleDecision":
+def _make_schedule(job_id: str, region: str, runtime_hours: float = 1.0) -> "ScheduleDecision":  # noqa: F821
     from aurelius.models import ScheduleDecision
     t0 = datetime(2026, 2, 1, 0, 0, tzinfo=_UTC)
     return ScheduleDecision(

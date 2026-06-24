@@ -35,27 +35,22 @@ Invariant assertions tested:
 from __future__ import annotations
 
 import os
+
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
     ALPHA_SWEEP_DEFAULT,
     DEFAULT_AZURE_FIXTURE,
     DEFAULT_BURSTGPT_FIXTURE,
-    DEFAULT_BURSTGPT_SLA_S,
     DEFAULT_SLA_S,
     AlphaSweepEntry,
     AlphaSweepReport,
-    _Request,
     _compute_flip_point_s,
+    _Request,
     _run_alpha_sweep_on_trace,
     _service_time_s,
-    calibrate_time_warp,
-    load_burstgpt_serving_requests,
-    load_serving_requests,
     run_burstgpt_alpha_sweep,
     run_decoupled_hybrid_alpha_sweep,
-    simulate_queue,
-    _sla_safe_goodput_per_dollar,
 )
 
 _FIXTURE_EXISTS = os.path.exists(DEFAULT_AZURE_FIXTURE)

@@ -28,7 +28,6 @@ from aurelius.optimizer.policies.replica_scaling import (
     compute_online_sotss_schedule,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic trace helpers
 # ---------------------------------------------------------------------------
@@ -109,7 +108,6 @@ def test_higher_margin_more_iterations_or_same():
     to margin=0 when the baseline is tight.  We verify n_iters is non-decreasing
     on a trace where the oracle actually has to iterate."""
     raw = _heavy_trace(300)
-    prev_iters = -1
     for margin in [0, 10, 25]:
         _, n_iters, _, _, _ = compute_online_sotss_schedule(
             raw,
@@ -120,7 +118,6 @@ def test_higher_margin_more_iterations_or_same():
         )
         assert n_iters >= 0
         # Not strictly monotone per run (stochastic oracle), but must be non-negative
-        prev_iters = n_iters
 
 
 # ---------------------------------------------------------------------------

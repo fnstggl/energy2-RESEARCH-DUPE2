@@ -127,7 +127,7 @@ def test_audit_script_exposes_analysis_tier_targets():
     )
 
 
-def test_every_analysis_target_enforces_50_to_100_MiB_budget():
+def test_every_analysis_target_enforces_50_to_100_MiB_budget():  # noqa: N802
     import audit_cara_swissai_telemetry as a
     for t in a.ANALYSIS_TIER_TARGETS:
         mb = t["max_download_bytes"] / (1024 * 1024)

@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import math
 import os
-import statistics
 
 import pytest
 
@@ -46,7 +45,6 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     CONFORMAL_ALPHA_MAX,
     CONFORMAL_WARMUP,
     DEFAULT_BURSTGPT_HF_JSONL,
-    DEFAULT_BURSTGPT_SLA_S,
     PER_CLASS_WARMUP_MIN,
     PerClassConformalCalibrator,
     PerClassConformalReport,
@@ -55,7 +53,6 @@ from aurelius.benchmarks.srtf_serving_backtest import (
     _simulate_decoupled_hybrid_per_class_conformal,
     _sla_safe_goodput_per_dollar,
     calibrate_time_warp,
-    load_burstgpt_serving_requests_jsonl_with_features,
     run_burstgpt_per_class_conformal_backtest,
     simulate_queue,
 )
@@ -366,7 +363,7 @@ class TestTwoModelSyntheticHypothesis:
     ) -> tuple[list, list, list, float]:
         """Build oracle + ml-predicted requests for two-model comparison."""
         import random
-        rng = random.Random(seed)
+        random.Random(seed)
 
         # accurate_model: 100 tokens, perfect prediction.
         accurate = [(float(i * 2), 100) for i in range(n_accurate)]

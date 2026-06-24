@@ -51,7 +51,8 @@ def azure_raw():
 @pytest.fixture
 def c_schedule_200(azure_raw):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        calibrate_time_warp, _joint_mcs_c_schedule,
+        _joint_mcs_c_schedule,
+        calibrate_time_warp,
     )
     warp = calibrate_time_warp(azure_raw, servers=4, target_rho=0.85)
     return _joint_mcs_c_schedule(azure_raw, tick_seconds=60.0, warp=warp)
@@ -79,7 +80,8 @@ def spot_report(azure_raw):
 # 1. spot_fraction=0 cost equals all-on-demand
 def test_spot_fleet_cost_zero_fraction(c_schedule_200):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _spot_fleet_cost, GPU_HOUR_USD,
+        GPU_HOUR_USD,
+        _spot_fleet_cost,
     )
     cost_zero = _spot_fleet_cost(c_schedule_200, 0.0, 0.80, GPU_HOUR_USD, 60.0)
     cost_ondemand = _spot_fleet_cost(c_schedule_200, 0.0, GPU_HOUR_USD, GPU_HOUR_USD, 60.0)
@@ -89,7 +91,8 @@ def test_spot_fleet_cost_zero_fraction(c_schedule_200):
 # 2. Cost decreases as spot_fraction increases (spot cheaper than on-demand)
 def test_spot_fleet_cost_decreases_with_fraction(c_schedule_200):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _spot_fleet_cost, GPU_HOUR_USD,
+        GPU_HOUR_USD,
+        _spot_fleet_cost,
     )
     cost_30 = _spot_fleet_cost(c_schedule_200, 0.30, 0.80, GPU_HOUR_USD, 60.0)
     cost_60 = _spot_fleet_cost(c_schedule_200, 0.60, 0.80, GPU_HOUR_USD, 60.0)
@@ -100,7 +103,8 @@ def test_spot_fleet_cost_decreases_with_fraction(c_schedule_200):
 # 3. Cost is always positive
 def test_spot_fleet_cost_positive(c_schedule_200):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        _spot_fleet_cost, GPU_HOUR_USD,
+        GPU_HOUR_USD,
+        _spot_fleet_cost,
     )
     cost = _spot_fleet_cost(c_schedule_200, 0.70, 0.80, GPU_HOUR_USD, 60.0)
     assert cost > 0.0
@@ -128,9 +132,14 @@ def test_expected_interruptions_increase_with_p_int(c_schedule_200):
 # 6. spot_fraction=0 simulation matches variable_c simulation
 def test_spot_zero_fraction_matches_variable_c(azure_raw):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        calibrate_time_warp, make_live_prior_predictions,
-        _joint_mcs_c_schedule, _simulate_fifo_variable_c,
-        _simulate_fifo_spot_fleet, _Request, _service_time_s, LIVE_PRIOR_WINDOW,
+        LIVE_PRIOR_WINDOW,
+        _joint_mcs_c_schedule,
+        _Request,
+        _service_time_s,
+        _simulate_fifo_spot_fleet,
+        _simulate_fifo_variable_c,
+        calibrate_time_warp,
+        make_live_prior_predictions,
     )
     warp = calibrate_time_warp(azure_raw, servers=4, target_rho=0.85)
     live_preds, _ = make_live_prior_predictions(azure_raw, window=LIVE_PRIOR_WINDOW)
@@ -141,7 +150,8 @@ def test_spot_zero_fraction_matches_variable_c(azure_raw):
                          predicted_tokens=live_preds[i], service_s=_service_time_s(tok))
                 for i, (arr, tok) in enumerate(azure_raw)]
 
-    reqs_vc = build(); reqs_sf = build()
+    reqs_vc = build()
+    reqs_sf = build()
     _, resp_vc, _ = _simulate_fifo_variable_c(reqs_vc, c_sched, 60.0)
     _, resp_sf, _ = _simulate_fifo_spot_fleet(reqs_sf, c_sched, 0.0, 0.10, 60.0, 42)
     assert len(resp_vc) == len(resp_sf)
@@ -150,9 +160,13 @@ def test_spot_zero_fraction_matches_variable_c(azure_raw):
 # 7. Spot fleet response times are non-negative
 def test_spot_fleet_response_nonneg(azure_raw):
     from aurelius.benchmarks.srtf_serving_backtest import (
-        calibrate_time_warp, make_live_prior_predictions,
-        _joint_mcs_c_schedule, _simulate_fifo_spot_fleet,
-        _Request, _service_time_s, LIVE_PRIOR_WINDOW,
+        LIVE_PRIOR_WINDOW,
+        _joint_mcs_c_schedule,
+        _Request,
+        _service_time_s,
+        _simulate_fifo_spot_fleet,
+        calibrate_time_warp,
+        make_live_prior_predictions,
     )
     warp = calibrate_time_warp(azure_raw, servers=4, target_rho=0.85)
     live_preds, _ = make_live_prior_predictions(azure_raw, window=LIVE_PRIOR_WINDOW)

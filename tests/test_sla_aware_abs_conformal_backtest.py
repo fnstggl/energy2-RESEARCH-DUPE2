@@ -27,14 +27,11 @@ import tempfile
 import pytest
 
 from aurelius.benchmarks.srtf_serving_backtest import (
-    CONFORMAL_ABS_TARGET_P90_TOKENS,
     DEFAULT_BURSTGPT_SLA_S,
-    DEFAULT_SLA_S,
     SLAAwareAbsConformalReport,
     run_sla_aware_abs_conformal_azure_backtest,
     run_sla_aware_abs_conformal_burstgpt_backtest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixture helpers

@@ -33,12 +33,10 @@ from __future__ import annotations
 
 import json
 import os
-import re
 
 import pytest
 
 from aurelius.frontier import (
-    ALL_TRAINING_VETOES,
     PHILLY_POLICY_CANDIDATES,
     TrainingControllerConfig,
     TrainingFrontierAction,
@@ -49,13 +47,11 @@ from aurelius.frontier import (
     TrainingRealExecutionDisabledError,
     TrainingSafetyConfig,
     TrainingSafetyStatus,
-    TrainingWorkloadProfile,
     choose_training_frontier_target,
     classify_training_frontier_point,
     estimate_alibaba_gpu_training_frontier,
     estimate_philly_training_frontier,
     execute_training_frontier_decision,
-    is_training_frontier_point_safe,
     load_alibaba_gpu_summary,
     load_philly_summary,
     read_training_shadow_log,
@@ -527,10 +523,10 @@ def test_design_doc_states_required_caveats():
 def test_philly_and_alibaba_trace_modules_importable():
     """Importing the canonical trace modules must not raise; the
     training frontier does not touch them."""
-    import aurelius.traces.philly  # noqa: F401
     import aurelius.traces.alibaba_gpu  # noqa: F401
-    import aurelius.traces.gpu_scheduling  # noqa: F401
     import aurelius.traces.gpu_packing  # noqa: F401
+    import aurelius.traces.gpu_scheduling  # noqa: F401
+    import aurelius.traces.philly  # noqa: F401
 
 
 # ===========================================================================

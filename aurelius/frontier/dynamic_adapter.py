@@ -34,7 +34,6 @@ from .models import (
     FrontierAction,
     FrontierDecision,
     FrontierPoint,
-    SafetyStatus,
 )
 
 

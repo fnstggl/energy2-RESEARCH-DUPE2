@@ -39,7 +39,7 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aurelius.traces import azure_llm, burstgpt  # noqa: E402
-from aurelius.traces.backtest import run_backtest, _MCS_TIMEOUT_GATE, _SHU_TARGET_RHO  # noqa: E402
+from aurelius.traces.backtest import _MCS_TIMEOUT_GATE, _SHU_TARGET_RHO, run_backtest  # noqa: E402
 from aurelius.traces.schema import time_rescale  # noqa: E402
 
 BURSTGPT_RAW = "data/external/burstgpt/raw/BurstGPT_1.csv"
@@ -135,7 +135,7 @@ def main(argv=None) -> int:
         hf_path = BURSTGPT_HF_JSONL
         print(f"[mcs] BurstGPT HF JSONL {len(hf_reqs):,} reqs ({hf_path})")
     else:
-        print(f"[mcs] BurstGPT HF JSONL not found; skipping HF section")
+        print("[mcs] BurstGPT HF JSONL not found; skipping HF section")
 
     bgpt_scales = [int(s) for s in args.burstgpt_scales.split(",")]
     azure_scales = [int(s) for s in args.azure_scales.split(",")]

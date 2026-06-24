@@ -40,7 +40,6 @@ from aurelius.constraints.frontier_integration import (  # noqa: E402
     CONSTRAINT_AWARE_DEFAULT_RHO,
     FrontierIntegrationConfig,
     FrontierIntegrationCounters,
-    select_constraint_aware_rho,
 )
 from aurelius.frontier import SafetyStatus  # noqa: E402
 
