@@ -1,0 +1,59 @@
+{
+  "run_date": "2026-06-24",
+  "algorithm": "Oracle Soft-SLA Continuation (OSSC) OSOTSS",
+  "hypothesis": "After primary oracle convergence (violators=[]), add capacity to ticks with borderline response times (within borderline_margin_s of SLA). These ticks are most vulnerable to stochastic spot interruptions.",
+  "research_motivation": "OSOTSS misses AMCSG by 15 requests on BurstGPT (n_sla_safe=5849 vs 5864). Root cause: oracle terminates at violators=[] but 15 borderline requests fail under stochastic spot interruptions. SSM run (PR #62) confirmed interrupt_safety_margin is ineffective (secondary violators=[] break fires before primary convergence check). OSSC adds a post-convergence phase specifically targeting borderline-tick capacity.",
+  "same_conditions": {
+    "trace": "same (Azure LLM 2024 5880 req, BurstGPT HF 5880 req)",
+    "sla": "same (Azure=10s, BurstGPT=30s)",
+    "cost_denominator": "same (spot fleet USD)",
+    "gpu_hour_accounting": "same",
+    "physics": "same (GSF stochastic Binomial, p_survive=0.9982/tick)",
+    "arrival_process": "same (actual tick arrivals)",
+    "capacity_model": "same (FIFO M/G/c, EWMA predictions)",
+    "pricing_model": "same ($0.80/hr spot, GPU_HOUR_USD on-demand)",
+    "telemetry_class": "same (causal EWMA, past observations only)",
+    "decision_time_info": "same (no oracle token access in planning)",
+    "evaluation_method": "same (GSF simulation seed=42)",
+    "baseline": "OSOTSS borderline_margin_s=0.0 (byte-identical to pre-OSSC)",
+    "second_baseline": "AMCSG gate=12.5%"
+  },
+  "five_failure_counter": "5/5 — ARCHITECTURAL FOCUS RULE TRIGGERED",
+  "verdict": "NEGATIVE_RESULT",
+  "azure_sweep": [
+    {"borderline_margin_s": 0.0, "goodput_per_dollar": 159578, "n_sla_safe": 5823, "vs_amcsg_pct": 5.94, "vs_osotss_baseline_pct": 0.00, "c_mean": 4.21, "n_iters": 35},
+    {"borderline_margin_s": 0.5, "goodput_per_dollar": 158532, "n_sla_safe": 5823, "vs_amcsg_pct": 5.25, "vs_osotss_baseline_pct": -0.66, "c_mean": 4.24, "n_iters": 37},
+    {"borderline_margin_s": 1.0, "goodput_per_dollar": 157499, "n_sla_safe": 5823, "vs_amcsg_pct": 4.56, "vs_osotss_baseline_pct": -1.30, "c_mean": 4.26, "n_iters": 39},
+    {"borderline_margin_s": 2.0, "goodput_per_dollar": 153988, "n_sla_safe": 5823, "vs_amcsg_pct": 2.23, "vs_osotss_baseline_pct": -3.50, "c_mean": 4.36, "n_iters": 46},
+    {"borderline_margin_s": 3.0, "goodput_per_dollar": 152531, "n_sla_safe": 5823, "vs_amcsg_pct": 1.26, "vs_osotss_baseline_pct": -4.42, "c_mean": 4.40, "n_iters": 49},
+    {"borderline_margin_s": 5.0, "goodput_per_dollar": 151101, "n_sla_safe": 5823, "vs_amcsg_pct": 0.31, "vs_osotss_baseline_pct": -5.31, "c_mean": 4.44, "n_iters": 52}
+  ],
+  "burstgpt_sweep": [
+    {"borderline_margin_s": 0.0, "goodput_per_dollar": 178109, "n_sla_safe": 5849, "sla_safe_vs_amcsg": -15, "vs_amcsg_pct": 5.85, "vs_osotss_baseline_pct": 0.00, "c_mean": 4.07, "n_iters": 11},
+    {"borderline_margin_s": 0.5, "goodput_per_dollar": 177825, "n_sla_safe": 5849, "sla_safe_vs_amcsg": -15, "vs_amcsg_pct": 5.68, "vs_osotss_baseline_pct": -0.16, "c_mean": 4.08, "n_iters": 12},
+    {"borderline_margin_s": 1.0, "goodput_per_dollar": 177697, "n_sla_safe": 5851, "sla_safe_vs_amcsg": -13, "vs_amcsg_pct": 5.60, "vs_osotss_baseline_pct": -0.23, "c_mean": 4.08, "n_iters": 13},
+    {"borderline_margin_s": 2.0, "goodput_per_dollar": 176459, "n_sla_safe": 5853, "sla_safe_vs_amcsg": -11, "vs_amcsg_pct": 4.87, "vs_osotss_baseline_pct": -0.93, "c_mean": 4.12, "n_iters": 18},
+    {"borderline_margin_s": 3.0, "goodput_per_dollar": 176181, "n_sla_safe": 5853, "sla_safe_vs_amcsg": -11, "vs_amcsg_pct": 4.70, "vs_osotss_baseline_pct": -1.08, "c_mean": 4.12, "n_iters": 19},
+    {"borderline_margin_s": 5.0, "goodput_per_dollar": 175753, "n_sla_safe": 5861, "sla_safe_vs_amcsg": -3, "vs_amcsg_pct": 4.45, "vs_osotss_baseline_pct": -1.32, "c_mean": 4.14, "n_iters": 22}
+  ],
+  "key_findings": [
+    "OSSC narrows BurstGPT gap from -15 to -3 requests at margin=5.0s, but never fully closes it",
+    "Every positive margin reduces Azure goodput/$ monotonically (-0.66% at 0.5s, -5.31% at 5.0s)",
+    "All margins maintain Azure n_sla_safe=5823 (no SLA regression on Azure)",
+    "BurstGPT n_sla_safe improves by at most +12 requests (5849→5861 at 5.0s), still -3 vs AMCSG",
+    "No margin achieves both: goodput/$>=baseline AND n_sla_safe>=AMCSG on both traces",
+    "Root cause: borderline ticks accumulate extra capacity cost that hurts goodput/$ more than the SLA improvement helps"
+  ],
+  "root_cause": "OSSC adds capacity to borderline ticks (response time in (SLA-margin, SLA]) after primary convergence. These capacity additions are real costs that reduce goodput/$. On BurstGPT, the 15 missing requests span ticks where stochastic interruptions reduce c_effective, and adding +1 deterministic capacity to those ticks does not fully compensate because some borderline requests span multiple ticks and the SLA gap is driven by capacity reduction, not response time proximity.",
+  "infrastructure_retained": "borderline_margin_s=0.0 default is byte-identical to pre-OSSC behavior",
+  "five_failure_rule": "TRIGGERED. 5 consecutive non-frontier-improvement runs: C1PGS (run 1), SOTSS-GSF (run 2), Adaptive EWMA (run 3), Stochastic Safety Margin (run 4), OSSC/Borderline (run 5). Focus rule: stop adding modules; focus exclusively on integrating existing modules, replay validation, benchmark realism, bottleneck diagnosis, architecture simplification.",
+  "amcsg_reference": {"azure_goodput_per_dollar": 150630, "azure_n_sla_safe": 5823, "burstgpt_goodput_per_dollar": 168270, "burstgpt_n_sla_safe": 5864},
+  "osotss_baseline": {"azure_goodput_per_dollar": 159578, "azure_n_sla_safe": 5823, "burstgpt_goodput_per_dollar": 178109, "burstgpt_n_sla_safe": 5849},
+  "files": {
+    "benchmark": "aurelius/benchmarks/borderline_osotss_backtest.py",
+    "tests": "tests/test_borderline_osotss_backtest.py",
+    "core_impl": "aurelius/optimizer/policies/replica_scaling.py compute_online_sotss_schedule(borderline_margin_s)",
+    "config": "aurelius/optimizer/policies/replica_scaling.py ReplicaScalingConfig.borderline_margin_s",
+    "backtest_runners": "aurelius/benchmarks/srtf_serving_backtest.py run_online_sotss_{azure,burstgpt}_backtest(borderline_margin_s)"
+  }
+}
