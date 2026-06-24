@@ -146,6 +146,20 @@ North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
 Architecture: provisioning decisions governed by `AureliusOptimizer(policy="replica_scaling")` [Phase 2/3].
 Results: `research/results/sotss_gate_sweep_2026-06-23.md`, `research/results/online_sotss_backtest_2026-06-23.md`.
 
+**NEGATIVE RESULT — OSSC/Borderline (post-convergence borderline-tick continuation) [run 2026-06-24]:**
+OSSC adds capacity after primary convergence to ticks with response times within `borderline_margin_s`
+of the SLA limit. Sweep: {0.5, 1.0, 2.0, 3.0, 5.0}s. BurstGPT gap narrows -15→-3 at 5.0s margin
+(5849→5861 vs AMCSG 5864), but never closes. Azure: monotone goodput/$ regression (-0.66% at 0.5s,
+-5.31% at 5.0s) at n_sla_safe=5823 throughout. Five-Failure counter: **5/5 — ARCHITECTURAL FOCUS RULE TRIGGERED.**
+Results: `research/results/borderline_osotss_backtest_2026-06-24.{md,json}`.
+Tests: `tests/test_borderline_osotss_backtest.py` (10 tests, all passing).
+
+**NEGATIVE RESULT — Stochastic Safety Margin (interrupt_safety_margin sweep) [run 2026-06-24]:**
+Added `interrupt_safety_margin` to oracle convergence target. Zero effect on both traces — secondary
+`violators=[]` break fires before primary convergence check is evaluated. Five-Failure counter: 4/5.
+Results: `research/results/stochastic_safety_margin_osotss_backtest_2026-06-24.{md,json}`.
+Tests: `tests/test_stochastic_safety_margin_backtest.py` (10 tests, all passing).
+
 **NULL RESULT — SOTSS-GSF (stochastic oracle, gate=100%) [run 2026-06-23]:**
 Identical to SOTSS-MIN on Azure (160,107 goodput/$); unsafe on BurstGPT at gate=100% (178,462,
 n_sla_safe=5860 < baseline=5864). Root cause: p_survive per 60s tick ≈ 99.82% at 10%/hr interruption

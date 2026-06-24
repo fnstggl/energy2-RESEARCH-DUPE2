@@ -8,6 +8,102 @@
 
 ---
 
+## Run 2026-06-24 — Oracle Soft-SLA Continuation (OSSC) OSOTSS (NEGATIVE RESULT — Five-Failure Rule TRIGGERED)
+
+### Q1. What currently limits Aurelius most?
+
+**Structural stochastic gap on BurstGPT.** The OSOTSS oracle is deterministic-FIFO-optimal:
+it eliminates all deterministic FIFO violations, but 3–15 requests fail under stochastic spot
+interruptions. No deterministic post-convergence phase can fully close this gap because the residual
+failures arise from Binomial(c_spot, 0.9982) capacity shortfalls, not from deterministic SLA violations.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+1. **Full stochastic oracle** — run the actual Binomial interruption simulation inside the oracle loop,
+   not a separate post-convergence deterministic phase. This would directly optimize for stochastic n_sla_safe
+   rather than deterministic n_sla_safe. However, stochastic oracles are expensive and non-convergent.
+2. **ShareGPT/LMSYS cross-validation** — validate OSOTSS generalization on a third public trace.
+3. **Architecture integration** — wire energy + serving + replica policy into a single AureliusOptimizer
+   chain for end-to-end evaluation.
+
+### Q3. Which forecasts are weakest?
+
+1. **BurstGPT gap diagnoses** — four consecutive hypotheses (C1PGS, SOTSS-GSF, Adaptive EWMA, SSM, OSSC)
+   all failed to close the gap. Each was architecturally different but empirically equivalent.
+2. **Oracle borderline tightening** — OSSC made progress (gap -15 → -3) but didn't converge. The 3
+   remaining failures at 5.0s margin are beyond deterministic-oracle reach.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+1. **BurstGPT borderline ticks** — n_sla_safe=5861 (best OSSC) vs AMCSG 5864. A structural
+   3-request gap remains at maximum tested margin.
+2. **Azure goodput/$ vs BurstGPT SLA tradeoff** — any approach that adds capacity to fix BurstGPT
+   costs Azure goodput/$ at the same time (confirmed by OSSC sweep).
+
+### Q5. Which workloads benefit least from OSOTSS?
+
+Bursty traces (BurstGPT) show structural stochastic limitations. The gap is now well-characterized:
+5849–5861 range (deterministic post-convergence ceiling). Closing the last 3–15 requests requires
+stochastic oracle computation.
+
+### Q6. Which research direction appears strongest?
+
+**Architecture integration and replay validation** — the Five-Failure Rule is now active.
+The strongest next step is an end-to-end integration audit:
+- Verify AureliusOptimizer(policy="replica_scaling") path with ReplicaScalingConfig.borderline_margin_s
+- Cross-validate OSOTSS on ShareGPT or LMSYS trace
+- Audit the BurstGPT stochastic gap root cause with a controlled stochastic oracle experiment
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under the Five-Failure architectural focus rule, new module development is suspended.
+The shortest path is validation: confirm OSOTSS (159,578 goodput/$, +5.94%) holds on a third
+public trace. If it generalizes, that is a publishable frontier result.
+
+### Q8. What is the current north-star status?
+
+Azure: goodput/$ north-star achieved (159,578 >> 151,248 threshold). BurstGPT: goodput/$ north-star
+achieved (178,109 >> 121,680 threshold). BurstGPT n_sla_safe: best OSSC = 5861 (-3 vs AMCSG 5864).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star is already achieved on both traces on goodput/$. Maintaining it requires no regressions.
+
+### Q10. Which assumptions might be wrong?
+
+1. **AMCSG achieves 5864 stochastically by accident** — AMCSG's fixed higher-c provides global over-provisioning
+   that absorbs stochastic interruptions on borderline ticks. This was confirmed by the structural gap analysis.
+2. **Closing to 5864 is the right target** — BurstGPT n_sla_safe=5861 (-3) may be within noise if the
+   stochastic seed changes. A multi-seed validation would clarify whether the 3-request gap is structural.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Single seed stochastic evaluation** — all results use seed=42. Gap of 3 requests at best OSSC margin
+   may reverse with different seeds. Multi-seed validation is a natural next step.
+2. **Two public traces** — Azure LLM 2024 and BurstGPT HF only.
+
+### Q12. Which public datasets should be added?
+
+**ShareGPT** or **LMSYS Chatbot Arena** — third public trace for OSOTSS cross-validation.
+This is the highest priority under the architectural focus rule.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE. No new modules. Focus on:**
+
+1. **Architecture integration** — end-to-end AureliusOptimizer chain validation
+2. **Replay validation** — OSOTSS on a third public trace (ShareGPT/LMSYS)
+3. **Benchmark realism audit** — multi-seed stochastic evaluation for BurstGPT gap characterization
+4. **Bottleneck diagnosis** — stochastic oracle experiment to characterize the 3-request residual
+5. **Architecture simplification** — review wired-through params, reduce dead code
+
+**Five-Failure Rule counter: 5/5 — ARCHITECTURAL FOCUS RULE ACTIVE.**
+
+Results: `research/results/borderline_osotss_backtest_2026-06-24.{md,json}`
+Tests: `tests/test_borderline_osotss_backtest.py` (10 tests, all passing)
+
+---
+
 ## Run 2026-06-24 — Stochastic Safety Margin OSOTSS (NEGATIVE RESULT — mechanism misdiagnosed)
 
 ### Q1. What currently limits Aurelius most?

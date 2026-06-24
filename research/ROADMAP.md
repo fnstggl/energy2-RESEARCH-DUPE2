@@ -24,6 +24,13 @@ schedulers on the canonical public-trace rollup.
 public-trace and frozen-synthetic benchmarks, 6 wins, 2 safe ties, 0
 unsafe regressions. LLM-serving subset median **+23%**.
 
+**⛔ FIVE-FAILURE RULE TRIGGERED (5/5). Runs: C1PGS → SOTSS-GSF → Adaptive EWMA → Stochastic Safety Margin → OSSC/Borderline. ARCHITECTURAL FOCUS RULE NOW ACTIVE: stop adding new modules; focus on integration, replay validation, benchmark realism, bottleneck diagnosis, architecture simplification.**
+
+**Oracle Soft-SLA Continuation (OSSC) [run 2026-06-24] — NEGATIVE RESULT (narrows BurstGPT gap from -15 to -3 but never closes; Azure regression at every margin):**
+`borderline_margin_s` parameter (∈ {0.5, 1.0, 2.0, 3.0, 5.0}s) added to `compute_online_sotss_schedule` as a post-convergence phase: after primary convergence (violators=[]), add capacity to ticks whose requests have deterministic response time within `borderline_margin_s` of the SLA limit. Hypothesis: these borderline ticks are most vulnerable to stochastic spot interruptions; pre-provisioning them closes the BurstGPT 15-request SLA gap. Empirical result: BurstGPT gap narrows to -3 requests at 5.0s margin (5861 vs 5864 AMCSG) — progress but never closure. Every positive margin regresses Azure goodput/$ (-0.66% at 0.5s, -5.31% at 5.0s) while n_sla_safe stays 5823. No joint frontier: no margin achieves goodput/$≥baseline AND n_sla_safe≥AMCSG on both traces. Root cause: the 3 remaining requests at 5.0s margin are on ticks where Binomial(c_spot, 0.9982) interruptions still reduce c_effective, and +1 deterministic capacity cannot absorb the stochastic loss; some ticks may be at c_ceil. Infrastructure retained (default=0.0 is byte-identical to pre-OSSC). Five-Failure counter: **5/5 — ARCHITECTURAL FOCUS RULE TRIGGERED**.
+Results: `research/results/borderline_osotss_backtest_2026-06-24.{md,json}`.
+Tests: `tests/test_borderline_osotss_backtest.py` (10 tests, all passing).
+
 **Stochastic Safety Margin OSOTSS [run 2026-06-24] — NEGATIVE RESULT (mechanism misdiagnosed; margin ineffective due to oracle secondary-break):**
 `interrupt_safety_margin` parameter (∈ {0,10,15,20,25,30}) added to `compute_online_sotss_schedule` and wired through
 `ReplicaScalingConfig`, `ReplicaScalingPolicy.optimize()`, and all public backtest runners.  Hypothesis: adding margin to

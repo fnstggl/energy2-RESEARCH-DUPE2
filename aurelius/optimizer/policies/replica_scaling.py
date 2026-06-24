@@ -563,6 +563,7 @@ def compute_online_sotss_schedule(
     burst_alpha: float = 0.5,
     burst_cooldown_ticks: int = 2,
     interrupt_safety_margin: int = 0,
+    borderline_margin_s: float = 0.0,
 ) -> tuple[list[int], int, int, int, int]:
     """Online SOTSS: SOTSS oracle loop with causal EWMA service-time predictions.
 
@@ -593,10 +594,13 @@ def compute_online_sotss_schedule(
             ``baseline_n_sla_safe`` before converging.  Compensates for the
             stochastic/deterministic mismatch: the oracle uses deterministic FIFO
             (no spot interruptions) while the evaluation uses stochastic Binomial
-            interruptions.  Setting this to the expected interruption-induced SLA
-            misses (e.g. 15–25 for BurstGPT at p_interrupt=10%/hr) closes the
-            gap without future-token access.  Default 0 preserves byte-identical
-            behavior with the pre-margin OSOTSS.
+            interruptions.  Default 0 preserves byte-identical behavior.
+        borderline_margin_s:     After primary convergence (violators=[]), add capacity
+            to ticks containing requests whose deterministic response time is within
+            this margin of the SLA limit.  These are the ticks most vulnerable to
+            stochastic spot interruptions reducing effective capacity.  Uses actual
+            service-time pairs (correct SLA guarantee).  Default 0.0 disables the
+            Oracle Soft-SLA Continuation phase (byte-identical to pre-OSSC behavior).
 
     Returns:
         ``(c_schedule, n_iters, initial_violations, n_ticks_cheaper,
@@ -706,6 +710,33 @@ def compute_online_sotss_schedule(
 
         if not incremented:
             break
+
+    # Oracle Soft-SLA Continuation (OSSC): after primary convergence
+    # (violators=[]), add capacity to ticks with borderline response times.
+    # Uses actual service-time pairs so the guarantee is preserved.
+    if borderline_margin_s > 0.0:
+        remaining_iters = max_iters - n_iters
+        for _ in range(remaining_iters):
+            resp_bl = _oracle_fifo_response_times(actual_pairs, c_sched, tick_seconds)
+            borderline = [
+                i for i in range(len(actual_pairs))
+                if i in resp_bl and sla_s - borderline_margin_s < resp_bl[i] <= sla_s
+            ]
+            if not borderline:
+                break
+            tick_counts_bl: dict[int, int] = {}
+            for i in borderline:
+                t_idx = min(int(actual_pairs[i][0] / tick_seconds), n_ticks - 1)
+                tick_counts_bl[t_idx] = tick_counts_bl.get(t_idx, 0) + 1
+            incremented_bl = False
+            for tk in sorted(tick_counts_bl, key=lambda k: tick_counts_bl[k], reverse=True):
+                if c_sched[tk] < c_ceil[tk]:
+                    c_sched[tk] += 1
+                    incremented_bl = True
+                    break
+            if not incremented_bl:
+                break
+            n_iters += 1
 
     n_ticks_cheaper = sum(1 for i in range(n_ticks) if c_sched[i] < c_ceil[i])
     return c_sched, n_iters, initial_violations or 0, n_ticks_cheaper, baseline_n_sla_safe
@@ -836,6 +867,14 @@ class ReplicaScalingConfig:
     interruption-induced SLA misses for the target trace and spot fraction
     (e.g. 15–25 for BurstGPT at p_interrupt=10%/hr, spot_fraction=0.95).
     Default 0 preserves byte-identical behavior with the pre-margin OSOTSS."""
+
+    borderline_margin_s: float = 0.0
+    """Oracle Soft-SLA Continuation (OSSC) margin in seconds.  After primary
+    convergence (violators=[]), add capacity to ticks whose requests have
+    deterministic response times within this margin of the SLA limit.  These
+    ticks are most vulnerable to stochastic spot interruptions.  Uses actual
+    service-time pairs (correct SLA guarantee).  Default 0.0 disables OSSC
+    (byte-identical to pre-OSSC behavior)."""
 
     # ---- forecasted_mcs mode (fully deployable; forecasts arrivals + service) ----
     forecast_method: str = "ewma"
@@ -1032,6 +1071,7 @@ class ReplicaScalingPolicy(OptimizationPolicy):
                     burst_alpha=cfg.burst_alpha,
                     burst_cooldown_ticks=cfg.burst_cooldown_ticks,
                     interrupt_safety_margin=cfg.interrupt_safety_margin,
+                    borderline_margin_s=cfg.borderline_margin_s,
                 )
             )
             c_mean = statistics.mean(c_sched) if c_sched else 0.0
