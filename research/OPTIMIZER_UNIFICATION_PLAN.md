@@ -21,7 +21,7 @@
 | **Phase 3b — Route AMCSG + SOTSS-MIN canonical backtest entry points through AureliusOptimizer** | **DONE — 0% KPI drift, initial_violations now propagated in sotss_min** | `_run_amcsg_backtest` + `_run_sotss_backtest` (both AMCSG baseline + oracle) routed through `_REPLICA_SCALING_OPTIMIZER.optimize()`; `ReplicaScalingPolicy.optimize(mode="sotss_min")` captures `init_viols` instead of discarding; 33 new parity tests; `research/results/amcsg_sotss_canonical_routing_parity_2026-06-24.md` |
 | Phase 1b — Unify the 4 replay loops into one engine | Not started | — |
 | Phase 4 — Promote frontier BASE/DYNAMIC → constraint; dedup calibrators | Not started | — |
-| Phase 5 — Deprecate dead/duplicate code | Not started | — |
+| **Phase 5 — Deprecate dead/duplicate code** | **DONE — 2,873 LOC removed, 0% KPI delta, 39 dead tests deleted** | Deleted `aurelius/frontier/eval_workload_{models,estimator,controller,safety}.py` + `batch_inference_{models,estimator,controller,safety}.py` (1,827 LOC); `tests/test_{eval_workload,batch_inference}_frontier.py` (692 LOC, 39 tests); `scripts/run_{eval,batch}_inference_frontier.py` (354 LOC). Zero non-test/non-script consumers confirmed by repo-wide import check. Lint/mypy pass; research docs updated. |
 
 **Phase 3 notes.** Five public benchmark entry points now construct the canonical
 `AureliusOptimizer` instead of the underlying engines: the four energy benchmarks

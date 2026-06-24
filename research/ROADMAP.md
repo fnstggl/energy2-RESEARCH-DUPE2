@@ -26,6 +26,10 @@ unsafe regressions. LLM-serving subset median **+23%**.
 
 **⛔ FIVE-FAILURE RULE TRIGGERED (5/5). Runs: C1PGS → SOTSS-GSF → Adaptive EWMA → Stochastic Safety Margin → OSSC/Borderline. ARCHITECTURAL FOCUS RULE NOW ACTIVE: stop adding new modules; focus on integration, replay validation, benchmark realism, bottleneck diagnosis, architecture simplification.**
 
+**Dead Frontier Code Deprecation [run 2026-06-24] — ARCHITECTURE SIMPLIFICATION (Phase 5 complete, Five-Failure Rule compliant):**
+Deleted all EVAL_WORKLOAD and BATCH_INFERENCE frontier families: `aurelius/frontier/eval_workload_{models,estimator,controller,safety}.py` + `batch_inference_{models,estimator,controller,safety}.py` (8 modules, 1,827 LOC); `tests/test_{eval_workload,batch_inference}_frontier.py` (2 files, 692 LOC, 39 tests); `scripts/run_{eval,batch}_inference_frontier.py` (2 files, 354 LOC). Total: ~2,873 LOC removed. Repo-wide import check confirmed zero non-test/non-script consumers. Lint and mypy pass clean. OPTIMIZER_UNIFICATION_PLAN.md Phase 5 marked DONE. Ends the 5-parallel-frontier-family maintenance tax.
+Results: `research/results/dead_frontier_deprecation_2026-06-24.json`.
+
 **AMCSG + SOTSS-MIN Canonical Routing Parity [run 2026-06-24] — ARCHITECTURE CONVERGENCE (Phase 3b integration, Five-Failure Rule compliant):**
 Routes `_run_amcsg_backtest` gate sweep and `_run_sotss_backtest` (both AMCSG baseline and SOTSS-MIN oracle) through `_REPLICA_SCALING_OPTIMIZER.optimize()` — completing canonical AureliusOptimizer ownership of every primary replica-scaling backtest entry point. Fixes `ReplicaScalingPolicy.optimize(mode="sotss_min")` which previously discarded `initial_violations` (now propagated as `init_viols`). Parity confirmed: AMCSG Azure 150,629.9 gp/$ (vs 150,630 historical), AMCSG BurstGPT 168,270 gp/$, SOTSS-MIN Azure 160,106.6 gp/$ (+6.29% vs AMCSG) — bit-identical to previously validated results. 33 new parity tests; 212 total passing. KPI change: 0.00%.
 Results: `research/results/amcsg_sotss_canonical_routing_parity_2026-06-24.md`.
