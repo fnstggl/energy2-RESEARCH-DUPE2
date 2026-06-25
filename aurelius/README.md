@@ -2,6 +2,20 @@
 
 **Predictive Control Layer for Energy-Constrained Batch Compute Systems**
 
+> ⚠️ **Canonical-scope correction (2026-06-25).** This README documents Aurelius's
+> **Era-1 energy-arbitrage lever** (synthetic-job simulator, energy-cost framing)
+> and is **out of date** with the current product. Aurelius today is a
+> **comprehensive GPU-fleet optimizer for AI-infrastructure operators**: the
+> canonical `aurelius.optimizer.AureliusOptimizer` holds all five decision
+> surfaces (energy scheduling, serving-queue ordering, replica capacity,
+> placement/routing, admission) and orchestrates them via `optimize_fleet()`
+> against the canonical KPI — **SLA-safe goodput per infrastructure dollar**
+> (`docs/RESULTS.md` §1), not energy-cost %. The defensible headline is
+> **+25.75% goodput/$ at −21% GPU-hours vs `sla_aware` on Azure LLM 2024**
+> (directional simulator — not production savings; `docs/RESULTS.md` §3.1 / §8).
+> Energy time-shifting below is one operator-valid workload class, not the whole
+> product. A full README rewrite is tracked as docs Phase D.
+
 Aurelius is a comprehensive simulator + optimizer that proves the economic value of foresight in scheduling batch compute workloads. It answers a fundamental question: *How much money and carbon could we save if we scheduled jobs intelligently based on predicted energy prices?*
 
 ---

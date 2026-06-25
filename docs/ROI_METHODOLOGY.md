@@ -1,17 +1,29 @@
 # Aurelius ROI Methodology
 
-**Version:** 1.0  
-**Date:** 2026-05-23  
-**Status:** VALIDATED — based on real-data leakage-free backtesting
+**Version:** 1.1  
+**Date:** 2026-05-23 (claims-truth correction 2026-06-25)  
+**Status:** DIRECTIONAL SIMULATOR EVIDENCE — leakage-free historical-replay backtest.
+**NOT a production-savings claim** (`docs/RESULTS.md` §8 gate is unmet).
+
+> **Claims-truth note (Phase A, audit 2026-06-25).** This document describes the
+> **energy-arbitrage** lever (one workload class) and reports an *energy-cost
+> reduction* number. The **canonical Aurelius KPI is SLA-safe goodput per
+> infrastructure dollar** (`docs/RESULTS.md` §1), not energy-cost %. Treat the
+> figures below as **directional, simulator/historical-replay observations,
+> requiring live customer-telemetry calibration before any savings is claimed** —
+> they are not "proven" or "validated" production results.
 
 ---
 
 ## Executive Summary
 
 Aurelius reduces AI compute costs by optimizing when and where GPU workloads run
-across energy markets. Validated on real CAISO, PJM, and ERCOT day-ahead electricity
-prices, the system demonstrates a **proven mean savings of 25.0% versus a strong
-current-price-only baseline** using a leakage-free walk-forward backtest.
+across energy markets. In a leakage-free walk-forward backtest on real CAISO, PJM,
+and ERCOT day-ahead electricity prices, the system showed a **directional mean
+energy-cost reduction of ~25% versus a strong current-price-only baseline**
+(historical-replay observation, not a production guarantee). On the canonical
+goodput/$ KPI the comparable energy result is **+11.07% vs `current_price_only`
+at zero deadline misses** (`docs/AURELIUS_PUBLIC_TRACE_BENCHMARK_ROLLUP.md`).
 
 | Workload Type           | Monthly Savings Range | Expected (p50) |
 |-------------------------|-----------------------|----------------|

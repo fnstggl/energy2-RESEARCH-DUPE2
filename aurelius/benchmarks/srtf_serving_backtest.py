@@ -249,16 +249,33 @@ CONFORMAL_ABS_TARGET_P90_TOKENS: float = 500.0
 # ---------------------------------------------------------------------------
 # Economic cost factor from BENCHMARK_REGISTRY (Azure LLM 2024 provisioning,
 # run 2026-06-21-s): +25.75% SLA-safe goodput/$ vs sla_aware, driven by
-# -21.2% GPU-hours through time-of-day / spot pricing / regional routing.
+# -21.2% GPU-hours.
 # Applied as a multiplicative cost-side discount to any queue discipline:
 #   compound_goodput/$ = queue_goodput/$ × ECONOMIC_COST_FACTOR_BENCHMARK_REGISTRY
-# The factor is orthogonal to queue ordering because provisioning-level
-# decisions (which GPU, when, where) are independent of per-request ordering.
-# Source: research/BENCHMARK_REGISTRY.md §1.1 "Azure LLM Inference Dataset 2024"
+#
+# ⚠️ RESEARCH-ONLY / NOT A PRODUCT HEADLINE (Phase A claims-truth, audit 2026-06-25).
+# This is a HARDCODED benchmark-derived constant baked into "compound" results.
+# The +25.75% it encodes is a utilization / target-ρ right-sizing effect
+# (forecasting contributes <0.3%); multiplying it onto a separate queue-ordering
+# goodput/$ is an *analysis device assuming independence*, NOT a measured
+# deployable compound. Do not quote any "compound" number that uses this factor
+# as a product/headline claim. The defensible Azure headline is the standalone
+# +25.75% vs sla_aware at −21.2% GPU-hours (docs/RESULTS.md; not a production
+# savings number until the §8 gate is met). Source: BENCHMARK_REGISTRY.md §1.1.
 ECONOMIC_COST_FACTOR_BENCHMARK_REGISTRY: float = 1.2575  # = 1 + 0.2575
 
 # North-star target for the compound backtest (run -z):
 #   compound_goodput/$ must be ≥ NORTH_STAR_MULTIPLIER × oracle_sla_aware_goodput/$
+#
+# ⚠️ RESEARCH-ONLY THRESHOLD / NOT A PRODUCT CLAIM (Phase A claims-truth, audit 2026-06-25).
+# "4× oracle SLA-aware" is measured against an UNDER-PROVISIONED fixed-c=4
+# SLA-oracle baseline (Azure=25,208 gp/$ with ~2,475 SLA violations, p99 queue
+# ~844 s). A competently-sized fixed sla_aware baseline is ~38,403 (c=7), so any
+# "vs SLA-oracle" gain is inflated ~2× by the weak baseline — and further by the
+# spot-price *denominator* (a ~40–70% procurement discount that helps any policy
+# equally; research/MCS_AUDIT.md). "Crossing" this threshold is NOT a scheduling
+# result and must never be a public/headline goodput/$ claim. See BENCHMARK_REGISTRY.md
+# §2A for the demoted spot-fleet leaderboard and the honest comparable (~+54%/+71%).
 NORTH_STAR_MULTIPLIER: float = 4.0   # +300% vs oracle SLA-aware = 4× oracle SLA-aware
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

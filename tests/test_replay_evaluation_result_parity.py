@@ -23,7 +23,6 @@ from aurelius.optimizer.replay_result import (
     from_srtf_sim_dict,
 )
 
-
 # ---------------------------------------------------------------------------
 # Minimal mock objects (duck-typed — same field names as real objects)
 # ---------------------------------------------------------------------------

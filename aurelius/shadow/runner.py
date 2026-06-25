@@ -36,7 +36,8 @@ import pandas as pd
 from aurelius.backtesting.baselines import current_price_only_policy
 from aurelius.backtesting.engine import _df_to_price_data, _df_to_price_records
 from aurelius.models import Job, OptimizationConfig, ScheduleDecision
-from aurelius.optimization.scheduler import JobScheduler
+from aurelius.optimization.scheduler import JobScheduler  # noqa: F401  (type/back-compat)
+from aurelius.optimizer import AureliusOptimizer
 
 from .models import DecisionRecord, make_run_id
 
@@ -119,7 +120,12 @@ class LiveShadowRunner:
         # extends to decision_time, so practically price-only beyond it).
         self.weather_df = weather_df
         self.forecast_weather_df = forecast_weather_df
-        self.scheduler = JobScheduler(self.config)
+        # Route the energy decision through the canonical AureliusOptimizer
+        # (energy surface) instead of constructing JobScheduler directly. The
+        # facade delegates verbatim, so this is behavior-preserving; `scheduler`
+        # remains available for back-compat readers.
+        self._optimizer = AureliusOptimizer(self.config)
+        self.scheduler = self._optimizer.scheduler
 
         from aurelius.safety.quantile_gate import QuantileGateConfig, QuantileSafetyGate
 
@@ -461,13 +467,13 @@ class LiveShadowRunner:
         carbon_data: dict,
     ) -> list[ScheduleDecision]:
         if self.method in ("greedy", "greedy_migrate"):
-            return self.scheduler.solve(
+            return self._optimizer.optimize(
                 jobs=jobs,
                 price_data=price_data,
                 carbon_data=carbon_data,
                 method="greedy",
             ).schedule
-        return self.scheduler.solve(
+        return self._optimizer.optimize(
             jobs=jobs,
             price_data=price_data,
             carbon_data=carbon_data,

@@ -26,7 +26,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 #: Valid benchmark_id values — one per replay loop.
 BENCHMARK_IDS = (
     "replica_scaling",   # aurelius.traces.backtest

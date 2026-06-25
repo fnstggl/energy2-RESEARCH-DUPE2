@@ -1,5 +1,13 @@
 # Benchmark Methodology
 
+> ⚠️ **Canonical-metric note (2026-06-25).** The "headline metric = % energy-cost
+> reduction vs `current_price_only`" described below is the **Era-1 energy
+> lever's** metric. Aurelius's **canonical KPI is SLA-safe goodput per
+> infrastructure dollar** (`docs/RESULTS.md` §1), and the binding list of
+> defensible vs demoted headline numbers is `docs/RESULTS.md` §3.1. All figures
+> here are **directional simulator / historical-replay** results, not production
+> savings (`docs/RESULTS.md` §8).
+
 This document is the technical validation reference. It describes how Aurelius
 is benchmarked, the controls that keep the results honest, the baselines it is
 measured against, and the limitations of the current validation. It is the
