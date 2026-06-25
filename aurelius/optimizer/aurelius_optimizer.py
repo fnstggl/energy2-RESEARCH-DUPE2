@@ -452,6 +452,19 @@ class AureliusOptimizer:
                         "Pass config=/mode= to select another (oracle modes are "
                         "research-only — research/MCS_AUDIT.md)."
                     )
+            # Quarantine guard: flag research-only / cloud-tenant capacity modes
+            # (spot-fleet + oracle) so the product surface stays on-demand operator
+            # autoscaling only (audit 2026-06-25).
+            from .policies.replica_scaling import RESEARCH_ONLY_MODES
+
+            _eff_mode = getattr(cap.get("config"), "mode", None)
+            if _eff_mode in RESEARCH_ONLY_MODES:
+                notes_list.append(
+                    f"capacity: mode '{_eff_mode}' is RESEARCH-ONLY "
+                    f"({RESEARCH_ONLY_MODES[_eff_mode]}) — NOT the deployable "
+                    "GPU-fleet-operator surface; use 'forecasted_mcs' (on-demand) "
+                    "for production."
+                )
             raw = cap.pop("raw")
             result.capacity = self.scale_replicas(raw, **cap)
             used.append("replica_scaling")
@@ -491,6 +504,35 @@ class AureliusOptimizer:
         result.surfaces_used = tuple(used)
         result.notes = tuple(notes_list)
         return result
+
+    def optimize_joint(
+        self,
+        raw,
+        *,
+        tick_seconds,
+        warp,
+        sla_s,
+        seed: int = 42,
+        trace_id: str = "trace",
+        **kwargs,
+    ):
+        """Joint serving optimization — combination search over composable levers.
+
+        Unlike :meth:`optimize_fleet` (a per-surface fan-out that does NOT combine
+        surfaces), this runs the deployable serving levers — capacity
+        (``forecasted_mcs``), ordering (abs-conformal SRPT), admission (peak-shave
+        flow control) — TOGETHER on one trace through one on-demand evaluation, and
+        measures the **interaction** (does the best combination COMPOUND, or are
+        the levers SUBSTITUTIVE?), scored by the :class:`ObjectiveLayer`. This is
+        the first increment of the unified joint loop (the path to compounding
+        goodput/$); see ``aurelius/optimizer/joint.py``. Returns a ``JointResult``.
+        """
+        from .joint import combination_search
+
+        return combination_search(
+            raw, tick_seconds=tick_seconds, warp=warp, sla_s=sla_s,
+            seed=seed, trace_id=trace_id, **kwargs,
+        )
 
     # ------------------------------------------------------------------
     # Introspection
