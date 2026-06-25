@@ -20,6 +20,14 @@ from .policies import (
     ReplicaScalingPolicy,
     ServingQueuePolicy,
 )
+from .replay_result import (
+    BENCHMARK_IDS,
+    ReplayEvaluationResult,
+    from_backtest_policy_result,
+    from_canonical_policy_metrics,
+    from_genai_policy_result,
+    from_srtf_sim_dict,
+)
 
 __all__ = [
     "AureliusOptimizer",
@@ -31,4 +39,10 @@ __all__ = [
     "AdmissionPolicy",
     "POLICY_REGISTRY",
     "IMPLEMENTED_POLICIES",
+    "ReplayEvaluationResult",
+    "BENCHMARK_IDS",
+    "from_backtest_policy_result",
+    "from_genai_policy_result",
+    "from_canonical_policy_metrics",
+    "from_srtf_sim_dict",
 ]
