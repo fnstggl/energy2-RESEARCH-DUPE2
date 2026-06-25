@@ -69,6 +69,90 @@ Results: `research/results/phase3e_backtest_serving_canonical_routing_2026-06-25
 
 ---
 
+## Run 2026-06-25 — Post-Phase-3e Validation + Research Review (BENCHMARK REALISM AUDIT — Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Replica-scaling near oracle ceiling.** OSOTSS achieves 94.4% of the oracle-safe frontier (159,578 vs 160,107 gp/$ on Azure). BurstGPT 15-request SLA gap is structurally irreducible (stochastic/deterministic mismatch, confirmed deterministic across 5 seeds). Phase 1b replay-loop unification is the largest unresolved ARCHITECTURE blocker — prevents combination search (energy + serving + GenAI compound evaluation).
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Phase 1b combination search. If energy-price-aware replica scaling is possible (scale serving replicas down during high-price periods when SLA allows), joint optimization could exceed OSOTSS. Requires unified replay to evaluate fairly.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT (15-request gap, irreducible). GenAI EWMA alpha=0.5 is a fixed prior that may not be optimal for all traffic patterns — this is the only TUNABLE parameter remaining in existing policies without adding a new module.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Energy scheduling: 161/1000 jobs fall back to home region (no better option found by current greedy). GenAI anticipatory sizing: alpha=0.5 fixed — may under- or over-respond depending on traffic CV. Both are tunable via EXISTING policy parameters.
+
+### Q5. Which workloads benefit least?
+
+BurstGPT on n_sla_safe metric (structural −15 request gap). Energy training-job scheduling on the 161 fallback-home jobs.
+
+### Q6. Which research direction appears strongest?
+
+Phase 1b replay loop unification (architecture, HIGH priority, HIGH complexity). Alternative: GenAI EWMA alpha configurability (LOW risk, potentially +1-5% on GenAI, but risk of trace-specific tuning).
+
+### Q7. What is the shortest path to another +1% gain?
+
+GenAI EWMA alpha sweep. Make `GENAI_EWMA_ALPHA` configurable, sweep [0.1–0.9] on Alibaba GenAI 2026 trace, identify principled alpha based on arrival rate CV. If alpha selection rule generalizes across traces, this is a legitimate frontier improvement.
+
+### Q8. What is the current north-star status?
+
+North-star: +300% vs SLA-aware schedulers on rollup. Current headline: median +9% (mean +19%, weighted +26%). LLM-serving subset: median +23%. Azure +5.94%, BurstGPT +5.85% (OSOTSS). Energy +11.1%. GenAI +38.2%. No regressions from Phase 3e merge (confirmed).
+
+### Q9. What would need to be true to maintain north-star?
+
+All current frontier results are deterministic. No drift risk from architecture convergence (103 tests gate KPI parity). Confirmed stable post Phase 3e merge.
+
+### Q10. Which assumptions might be wrong?
+
+1. GenAI EWMA alpha=0.5 assumes medium traffic volatility — may be wrong for high-CV or low-CV traces. 2. Energy greedy heuristic assumes independent per-job optimization — joint optimization might find better schedules for the 161 fallback-home jobs. 3. Erlang-C (M/M/c) assumption — bursty traffic may deviate from Poisson arrivals.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. BurstGPT: no session IDs → prefix-caching proxy only. 2. Azure LLM 2024: sample only (5,880 rows; full week gated). 3. GenAI: 60-request fixture (1 tick) — too small for multi-tick warm-up testing. 4. Energy: fixed 1,000 synthetic jobs — may not cover all scheduling edge cases.
+
+### Q12. Which public datasets should be added?
+
+Full Alibaba GenAI 2026 dataset (raw) for multi-tick EWMA convergence testing. No new datasets added this run.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE (5/5).**
+
+Priority order:
+1. **Phase 1b replay loop unification** — HIGH complexity, HIGH impact; enables combination search. Requires 0%-delta parity gate for all 4 replay modes.
+2. **GenAI EWMA alpha configurability** — LOW risk; make `GENAI_EWMA_ALPHA` configurable, validate principled selection rule across traces.
+3. **Phase 4 frontier promotion** — MEDIUM complexity; partial evidence (+13% over CA, Azure only).
+
+Results: `research/results/post_phase3e_validation_2026-06-25.{md,json}`
+
+---
+
+## Run 2026-06-25 — Phase 3e Serving Canonical Routing (ARCHITECTURE CONVERGENCE — Phase 3e, Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+(See Phase 3e PR #74 body — merged)
+
+### Q2–Q12. See phase 3e run artifact
+
+`research/results/phase3e_backtest_serving_canonical_routing_2026-06-25.{md,json}`
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 3e complete. Remaining architecture work:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact; requires 0%-delta parity gate for all 4 modes)
+2. **Third trace cross-validation** — OSOTSS on full Alibaba GenAI 2026 (if raw data available)
+3. **Phase 4** — Promote frontier BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: SUF +13% Azure only)
+
+Results: `research/results/phase3e_backtest_serving_canonical_routing_2026-06-25.{md,json}`
+
+---
+
 ## Run 2026-06-25 — GenAI Canonical Routing Phase 3d (ARCHITECTURE CONVERGENCE — Phase 3d, Five-Failure Rule compliant)
 
 ### Q1. What currently limits Aurelius most?
