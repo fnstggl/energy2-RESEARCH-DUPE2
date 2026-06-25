@@ -6000,3 +6000,90 @@ integration of the existing GenAI benchmark, not new data.
 
 Results: `research/results/alibaba_genai_third_trace_2026-06-24.{md,json}`
 Tests: `tests/test_osotss_canonical_routing_parity.py` (38 tests: 38 passed)
+
+---
+
+## Run 2026-06-25 — Post-Phase-1b Research Audit (USEFUL RESEARCH, Five-Failure Rule 6/5 ACTIVE)
+
+### Q1. What is the canonical optimizer path?
+
+`AureliusOptimizer` → `DecisionLayer` → one of:
+- `EnergySchedulingPolicy` (energy benchmark, batch GPU jobs)
+- `ServingQueuePolicy` (SRTF/SRPT serving queue)
+- `ReplicaScalingPolicy` (Azure LLM 2024 / BurstGPT — constraint_aware, SHU, AMCSG, OSOTSS, SOTSS-MIN, forecasted_mcs modes)
+- `GenAIServingPolicy` (Alibaba GenAI — constraint_aware mode)
+
+All primary production policies route through AO. Baseline policies (fifo, sla_aware) call policy functions directly in their respective benchmark files; they are not routed through AO (intentional — baselines are not production policies).
+
+### Q2. Which AureliusOptimizer policy is active?
+
+By benchmark:
+- Energy: `EnergySchedulingPolicy` (constraint_aware mode)
+- Serving: `ServingQueuePolicy` (abs-conformal SRPT mode)
+- Replica scaling: `ReplicaScalingPolicy` (osotss mode for frontier, amcsg for baseline)
+- GenAI: `GenAIServingPolicy` (constraint_aware mode)
+
+### Q3. What is the current frontier leaderboard?
+
+| Domain | Benchmark | Best policy | Best gp/$ | vs strongest SLA-safe baseline |
+|--------|-----------|-------------|-----------|-------------------------------|
+| Replica scaling | Azure LLM 2024 | OSOTSS | 159,578 | +5.94% vs AMCSG |
+| Replica scaling | BurstGPT HF | OSOTSS | 178,109 | +5.85% vs AMCSG |
+| Energy | Canonical batch | constraint_aware | 0.337299 | +11.1% vs current_price_only |
+| GenAI | Alibaba LoRA | constraint_aware | 9.8514 | +38.2% vs constraint_aware_no_affinity |
+
+### Q4. What is preventing another +25%?
+
+**Serving domain at ceiling.** OSOTSS = 99.67% of oracle on Azure. BurstGPT gap
+(15 requests) is deterministic and structural — from EWMA underestimation on 15
+burst ticks. No known causal fix without predicting burst timing.
+
+**Energy domain near ceiling.** arXiv:2303.17551 (SIGMETRICS 2023) proves O(log T)
+regret bound for pure temporal shifting. Our +11.1% likely captures most achievable
+gain from temporal shifting alone. Additional gains require orthogonal levers: DVFS
+(GreenLLM arXiv:2508.16449), geographic routing (CarbonClipper arXiv:2408.07831),
+or elastic allocation (CarbonFlex arXiv:2505.18357). None have the required telemetry
+in current public benchmarks.
+
+**Queue ordering blocked.** All conformal SRTF variants require token-length prediction,
+which degenerates under running-median prior. No fix available within Five-Failure Rule.
+
+### Q5. What is the strongest post-Five-Failure experiment candidate?
+
+**Conformal Arrival-Rate Bounds for OSOTSS (Priority 1):**
+- Target: BurstGPT 15-request gap (EWMA underestimation on burst ticks)
+- Mechanism: apply abs-conformal calibration to arrival-rate forecasting (not token lengths):
+  `c_t = erlang_c_replicas(λ_ewma_t + q_α × σ_arrivals_t, ...)`
+  where `q_α` is (1-α)-quantile of rolling abs-conformal arrival-rate residuals
+- Uses: existing conformal machinery (no new module)
+- Information: past arrival rates only (causal, no oracle)
+- Fair baseline: OSOTSS (same traces, same SLA, same cost model)
+- Risk: may over-provision on non-burst ticks, partially offsetting burst SLA gains
+- Papers: arXiv:2503.07545 (historical-variance margin), arXiv:2508.14544 (adaptive conformal α)
+
+### Q6. What theoretical ceilings have been established?
+
+1. **Replica scaling (Azure):** OSOTSS at 99.67% of oracle. Remaining gap (0.33%) is
+   structural from 1-tick EWMA mismatch — not fixable without oracle.
+
+2. **Energy batch scheduling:** O(log T) regret bound (arXiv:2303.17551) means no online
+   algorithm can do much better than constraint_aware at temporal shifting alone.
+   Further gains require DVFS, spatial routing, or elastic allocation.
+
+3. **Serving queue ordering:** All preemptive SRTF variants have negative interaction with
+   variable-c provisioning (confirmed in joint OSOTSS × Abs-Conformal SRPT null result).
+
+### Q7. Which papers are blocked by Five-Failure Rule?
+
+1. arXiv:2508.14544 — conformal arrival-rate bounds (new OSOTSS behavior)
+2. arXiv:2503.07545 — historical-variance margin (new OSOTSS behavior)
+Both are Priority 1 when Five-Failure Rule lifts.
+
+### Q8. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (6/5). No new optimizer experiments.**
+
+Allowed: Phase 1b-A merge (human review required for PR #81), Phase 1b-C after 1b-A.
+Next experiment when rule lifts: Conformal Arrival-Rate OSOTSS (see Q5).
+
+Results: `research/results/research_audit_post1b_2026-06-25.{md,json}`
