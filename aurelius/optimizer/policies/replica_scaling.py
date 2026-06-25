@@ -1370,6 +1370,7 @@ def compute_frontier_rho_schedule(
     *,
     window: int = 10,
     default_rho: float = 0.65,
+    max_prefill_savings: float = _BT_MAX_PREFILL_SAVINGS,
 ) -> list:
     """Causal per-tick rho schedule via rolling-window frontier safety estimation.
 
@@ -1383,11 +1384,17 @@ def compute_frontier_rho_schedule(
     frontier estimator module without adding a new optimizer path.
 
     Args:
-        ticks:       Sequence of ArrivalTick-like objects (duck-typed).
-        tick_hours:  Tick duration in hours (used by the anticipatory sizer).
-        window:      Rolling window size in ticks (default 10).
-        default_rho: Rho used during cold-start and as safety fallback
-                     (default 0.65 — same as the fixed constraint_aware rho).
+        ticks:              Sequence of ArrivalTick-like objects (duck-typed).
+        tick_hours:         Tick duration in hours (used by the anticipatory sizer).
+        window:             Rolling window size in ticks (default 10).
+        default_rho:        Rho used during cold-start and as safety fallback
+                            (default 0.65 — same as the fixed constraint_aware rho).
+        max_prefill_savings: Cap on prefill cache savings (default 0.25 — matches
+                            constraint_aware). The mean per-window value of
+                            max_prefill_savings * t.reuse_fraction is passed to
+                            FrontierEstimatorConfig so the SLA evaluation uses actual
+                            KV-cache reuse telemetry rather than the estimator default
+                            of 0.0.
 
     Returns:
         list[float] — per-tick rho target, one per tick.
@@ -1407,10 +1414,7 @@ def compute_frontier_rho_schedule(
         min_rho=0.45,
         max_rho=0.95,
     )
-    est_cfg = FrontierEstimatorConfig(
-        mode="anticipatory",
-        tick_seconds=tick_hours * 3600.0,
-    )
+    tick_seconds = tick_hours * 3600.0
     safety = SafetyConfig()  # max_timeout_pct=10.0, max_queue_p99_ms=2000.0
 
     rho_schedule: list = []
@@ -1419,6 +1423,20 @@ def compute_frontier_rho_schedule(
             rho_schedule.append(default_rho)
         else:
             tel_window = ticks_list[k - window : k]
+            if not tel_window:
+                rho_schedule.append(default_rho)
+                continue
+            # Use actual mean prefill savings from the causal window so the
+            # estimator's SLA evaluation uses real KV-cache reuse telemetry.
+            mean_prefill = sum(
+                max_prefill_savings * getattr(t, "reuse_fraction", 0.0)
+                for t in tel_window
+            ) / len(tel_window)
+            est_cfg = FrontierEstimatorConfig(
+                mode="anticipatory",
+                tick_seconds=tick_seconds,
+                prefill_savings=mean_prefill,
+            )
             points = estimate_frontier(
                 profile,
                 tel_window,
