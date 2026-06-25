@@ -8,6 +8,73 @@
 
 ---
 
+## Run 2026-06-25 — Research Audit + Phase 1b Planning (REPORT ONLY — Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Three structural barriers, all confirmed irreducible without new modules:**
+1. BurstGPT 15-request n_sla_safe gap: stochastic/deterministic mismatch in oracle loop (5 fix approaches exhausted)
+2. Azure OSOTSS-to-oracle gap (0.33%): 1-tick EWMA service-time mismatch, needs oracle or new predictor
+3. forecasted_mcs deployability gap (-12.5% BurstGPT vs AMCSG even with lag1): burst onset not predictable from lag-1 counts
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+**Phase 1b replay loop unification.** Step 1b-C (energy-aware replica scaling on serving traces) is the highest-expected-value experiment once Phase 1b-A/B are complete. Energy timing decisions on the serving domain have never been tested.
+
+### Q3. Which forecasts are weakest?
+
+Forecasted_mcs arrival prediction on BurstGPT (lag1 = -12.5% vs AMCSG). burst onset timing is the fundamental limitation — no causal method can predict a burst from the tick before it starts.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+The energy domain has not been cross-validated against the serving domain. The energy policy improves cost (+11.1%) but runs in isolation from replica-scaling decisions. Phase 1b-C would test whether time-of-day energy pricing can improve the serving benchmark cost denominator.
+
+### Q5. Which workloads benefit least?
+
+Bursty traces (BurstGPT) on n_sla_safe metric — 15-request gap is confirmed structural.
+
+### Q6. Which research direction appears strongest?
+
+**Phase 1b-B** (unified evaluation result dataclass, 50-100 LOC) → **Phase 1b-A** (serving+replica-scaling unification) → **Phase 1b-C** (energy overlay on serving traces). No external research paper is applicable without new modules.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Phase 1b-C: energy-aware replica scaling. If energy prices vary enough on the Azure LLM 2024 timestamps (real 2024 data), time-shifted scale-up/down could reduce the cost denominator by ~1-3% without affecting goodput.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: OSOTSS +5.94% vs AMCSG. BurstGPT: +5.85% goodput/$ (n_sla_safe gap structural). Energy: +11.1% vs current_price_only. 175 parity tests confirm all results reproducible.
+
+### Q9. What would need to be true to maintain north-star?
+
+All results deterministic (confirmed: std=0 across seeds for AMCSG/OSOTSS). No regressions detected.
+
+### Q10. Which assumptions might be wrong?
+
+Phase 1b-C assumption: Azure LLM 2024 timestamps map cleanly to hourly grid electricity prices. If the trace timestamps are anonymized or shifted, energy overlay may not be meaningful. Need to verify timestamp structure before implementing 1b-C.
+
+### Q11. Which benchmark weaknesses exist?
+
+Phase 4 frontier rho adaptation still unvalidated at production scale (fixture load < threshold for multi-replica regime). Full Azure 2024 dataset (44M requests, 9 days) is available but requires a separate ingestion path.
+
+### Q12. Which public datasets should be added?
+
+The full Azure LLM 2024 dataset (44M requests) is the primary gap. It would validate Phase 4 at production load. The DATASET_REGISTRY should document the full vs fixture distinction.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Three research papers reviewed (SageServe, OServe, PecSched) — all NOT APPLICABLE without new modules.
+
+Priority order:
+1. **Phase 1b-B**: unified `ReplayEvaluationResult` dataclass (50-100 LOC, 0% KPI drift, enables future combination)
+2. **Phase 1b-A**: serving+replica-scaling loop unification (medium complexity)  
+3. **Phase 1b-C**: energy overlay on serving traces (high value, requires verifying Azure timestamp structure)
+4. **Full Azure 2024 dataset ingestion**: enables Phase 4 production-scale validation
+
+Results: `research/results/research_audit_phase1b_planning_2026-06-25.md`
+
+---
+
 ## Run 2026-06-25 — Phase 4: Causal Frontier Rho Adaptation (NULL RESULT on fixtures; implementation retained)
 
 ### Q1. What currently limits Aurelius most?
