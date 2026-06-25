@@ -8,6 +8,67 @@
 
 ---
 
+## Run 2026-06-25 — Phase 4: Causal Frontier Rho Adaptation (NULL RESULT on fixtures; implementation retained)
+
+### Q1. What currently limits Aurelius most?
+
+**Fixture load floor.** At fixture scale (BurstGPT 51 req / 55 ticks, Azure LLM 2024 5880 req / 1560 ticks), all rho values from 0.45–0.95 map to MIN_REPLICAS=1 on most ticks. The adaptive rho path cannot demonstrate savings when the floor dominates. The full Azure 2024 dataset (estimated ~100k+ requests over 7 days) would have higher-load ticks where rho=0.65 maps to c=2 and rho=0.95 maps to c=1, making the effect visible.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+**Phase 1b replay unification** remains the highest-leverage path — enables combination search (energy-aware replica scaling × serving optimization). Phase 4's adaptive rho approach is sound but needs production-scale traces to demonstrate the effect.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT (15-request structural gap). The causal frontier estimator uses `anticipatory` mode with α=0.5, which provides the same EWMA quality as `constraint_aware`.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+The Phase 4 implementation is correct but untestable on fixtures. The adaptive rho loop selects rho=0.95 for 45/55 BurstGPT ticks after warm-up — this is a real frontier recommendation, but the MIN_REPLICAS floor means it has no effect on the schedule.
+
+### Q5. Which workloads benefit least?
+
+Low-load fixture data. Any trace where `_bt_size_for_target(rate, output_mean, throughput, 0.95)` returns the same value as `rho=0.65` will show zero adaptive rho benefit.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Phase 4 implemented (null result on fixtures). Remaining: Phase 1b replay loop unification (highest complexity/impact), or running Phase 4 on full Azure 2024 dataset if it becomes available.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Full Azure 2024 dataset: Phase 4 adaptive rho would likely show a measurable gain on ticks where current load maps to c=2+ replicas. Expected: +1–3% goodput/$ on medium-load windows where frontier recommends rho=0.75–0.85.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: +5.94% (OSOTSS). BurstGPT: +5.85% (OSOTSS), -15 req SLA gap structural. Phase 4 adds no new goodput/$ on fixtures.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All results deterministic.
+
+### Q10. Which assumptions might be wrong?
+
+The frontier estimator uses `prefill_savings=0.0` (conservative — omits cache savings when estimating rho safety). The actual `constraint_aware` path uses `prefill_savings = max_prefill_savings * reuse_fraction`. This makes the frontier's timeout estimate slightly pessimistic (safe direction), but means the estimator might recommend rho=0.65 when rho=0.75 would actually be safe with cache savings. This conservative bias is intentional.
+
+### Q11. Which benchmark weaknesses exist?
+
+Phase 4 cannot be fully validated without a load level that crosses integer replica thresholds at different rho values. The 60-request Alibaba GenAI fixture (1 tick) is similarly too small.
+
+### Q12. Which public datasets should be added?
+
+Full Azure LLM 2024 dataset — primary blocker for validating Phase 4. Full Alibaba GenAI 2026 dataset — secondary.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 4 implemented (null result on fixtures). Architecture options remaining:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact)
+2. **Full Azure 2024 dataset** — would enable proper Phase 4 validation (adaptive rho effect visible at production scale)
+3. **Phase 4 window tuning** — test window={5, 10, 20} on production data; currently fixed at W=10
+
+Results: `research/results/phase4_frontier_rho_results.json`
+
+---
+
 ## Run 2026-06-25 — Backtest Serving Canonical Routing Phase 3e (ARCHITECTURE CONVERGENCE — Phase 3e, Five-Failure Rule compliant)
 
 ### Q1. What currently limits Aurelius most?

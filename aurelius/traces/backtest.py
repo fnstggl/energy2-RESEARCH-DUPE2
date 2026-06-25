@@ -334,7 +334,8 @@ def _run_policy(
     frontier_service_state=None,
     frontier_counters=None,
 ) -> PolicyResult:
-    cache_aware = policy in ("constraint_aware", "cache_affinity_baseline",
+    cache_aware = policy in ("constraint_aware", "constraint_aware_adaptive",
+                              "cache_affinity_baseline",
                               "safe_high_utilization", "min_cost_safe")
     fixed = policy in ("fifo", "cache_affinity_baseline")
 
@@ -376,11 +377,17 @@ def _run_policy(
         if frontier_counters is not None:
             frontier_counters.record(result)
 
-    # Phase 3e: pre-compute CA/SHU schedule via AureliusOptimizer(policy="replica_scaling")
+    # Phase 3e/4: pre-compute CA/SHU schedule via AureliusOptimizer(policy="replica_scaling")
     # before the evaluation loop so the loop only dispatches the pre-baked replica count.
+    # constraint_aware_adaptive (Phase 4) uses mode="constraint_aware" with a causal
+    # rolling-window rho from the frontier estimator (adaptive_frontier_window=10).
     _ca_shu_schedule: list[int] = []
-    if policy in ("constraint_aware", "safe_high_utilization"):
-        _rs_cfg = _RSConfig(mode=policy, ca_target_rho=ca_target_rho)
+    if policy in ("constraint_aware", "safe_high_utilization", "constraint_aware_adaptive"):
+        if policy == "constraint_aware_adaptive":
+            _rs_cfg = _RSConfig(mode="constraint_aware", ca_target_rho=ca_target_rho,
+                                adaptive_frontier_window=10)
+        else:
+            _rs_cfg = _RSConfig(mode=policy, ca_target_rho=ca_target_rho)
         _sched = _SERVING_OPTIMIZER.policy.optimize_from_ticks(
             list(ticks), tick_hours=tick_hours, config=_rs_cfg
         )
@@ -404,7 +411,6 @@ def _run_policy(
         prefill_savings = (
             MAX_PREFILL_SAVINGS * t.reuse_fraction if cache_aware else 0.0
         )
-        throughput = _tick_throughput_tokps(t)
 
         if fixed:
             replicas = fixed_replicas
@@ -423,8 +429,9 @@ def _run_policy(
             # decode budget.
             src = prev_tick if prev_tick is not None else t
             replicas = _queue_aware_size(src, tick_hours, threshold_ms=500.0)
-        elif policy in ("constraint_aware", "safe_high_utilization"):
-            # Route through AureliusOptimizer(policy="replica_scaling") — Phase 3e.
+        elif policy in ("constraint_aware", "safe_high_utilization",
+                        "constraint_aware_adaptive"):
+            # Route through AureliusOptimizer(policy="replica_scaling") — Phase 3e/4.
             # Schedule was pre-computed above; evaluate_tick runs unchanged for KPI.
             replicas = _ca_shu_schedule[i] if i < len(_ca_shu_schedule) else MIN_REPLICAS
         elif policy == "min_cost_safe":
