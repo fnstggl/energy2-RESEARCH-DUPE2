@@ -8,13 +8,24 @@ and orchestrates them against the one objective in ``docs/RESULTS.md`` §1:
     **SLA-safe goodput per infrastructure dollar.**
 
     AureliusOptimizer
-    └── DecisionLayer (all surfaces live; selected by workload/decision context)
-        ├── EnergySchedulingPolicy   — when / where / how-fast (batch on price traces)
-        ├── ServingQueuePolicy       — request ordering / preemption (SRPT+conformal)
-        ├── ReplicaScalingPolicy     — per-tick replica capacity (deployable MCS)
-        ├── PlacementPolicy          — GPU/region model placement & routing
-        └── AdmissionPolicy          — flow-control admission (ADMIT/DEFER/REJECT)
-    └── serving_orchestration        — live-service recommendations (ConstraintAwareEngine)
+    ├── ForecastLayer    (.forecast)    — causal capacity forecast + honest taxonomy
+    ├── ConstraintLayer  (.constraints) — binding-constraint + SLA gate (ConstraintAwareEngine)
+    ├── ObjectiveLayer   (.objective)   — SLA-safe goodput/$ as a first-class scorer
+    ├── DecisionLayer    (the policies, selected by workload/decision context)
+    │   ├── EnergySchedulingPolicy — when / where / how-fast (batch on price traces)
+    │   ├── ServingQueuePolicy     — request ordering / preemption (SRPT+conformal)
+    │   ├── ReplicaScalingPolicy   — per-tick replica capacity (deployable MCS)
+    │   ├── GenAIServingPolicy     — multi-model GenAI constraint_aware sizing
+    │   ├── PlacementPolicy        — GPU/region model placement & routing
+    │   └── AdmissionPolicy        — flow-control admission (ADMIT/DEFER/REJECT)
+    ├── ReplayLayer      (.replay)      — normalize loop results (ReplayEvaluationResult)
+    └── EvaluationLayer  (.evaluation)  — frozen KPI math + fair-baseline selection
+
+    plus serving_orchestration / recommend_live — live ConstraintAwareEngine surface.
+
+Layers 1-3 and 5-6 are thin wrappers over existing implementations (no rewrite);
+see ``aurelius/optimizer/layers.py``. Only the DecisionLayer was first-class
+before; the rest were scattered (audit 2026-06-25).
 
 Two entry points:
 
@@ -59,6 +70,13 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ..optimization.scheduler import JobScheduler, SchedulerResult
+from .layers import (
+    ConstraintLayer,
+    EvaluationLayer,
+    ForecastLayer,
+    ObjectiveLayer,
+    ReplayLayer,
+)
 from .policies import (
     POLICY_REGISTRY,
     EnergySchedulingPolicy,
@@ -100,6 +118,7 @@ class FleetOptimizationResult:
     capacity: Optional[object] = None
     serving_order: Optional[object] = None
     genai: Optional[object] = None
+    live: Optional[object] = None
     surfaces_used: tuple = ()
     objective: str = CANONICAL_OBJECTIVE
     notes: tuple = ()
@@ -115,6 +134,21 @@ class AureliusOptimizer:
 
     #: The decision-layer policy active by default for :meth:`optimize`.
     DEFAULT_POLICY: str = "energy"
+
+    #: Honest enumeration of EVERY controllable optimization surface the canonical
+    #: optimizer drives today (audit 2026-06-25). The six registered policies plus
+    #: the live-cluster orchestration engine (binding-constraint SPREAD / REROUTE /
+    #: MIGRATE / SCALE — reachable via ``recommend_live`` / ``optimize_fleet(live=)``
+    #: but a different decision shape from the per-tick policies, so it is NOT in
+    #: ``POLICY_REGISTRY``). Demand-forecast anticipation and SRPT preemption are
+    #: FOLDED INTO ``genai_serving``/``replica_scaling`` and ``serving_queue``
+    #: respectively — not separate surfaces. Physical-plane surfaces (thermal
+    #: power-cap, topology-for-collectives, batch/KV) are NOT productized: they
+    #: lack public telemetry to benchmark honestly (the 12 pilot-only signals).
+    DECISION_SURFACES: tuple = (
+        "energy", "serving_queue", "replica_scaling", "genai_serving",
+        "placement", "admission", "live_orchestration",
+    )
 
     def __init__(
         self,
@@ -155,6 +189,13 @@ class AureliusOptimizer:
         # under its own name so it is reused, never rebuilt).
         self._surfaces: dict[str, OptimizationPolicy] = {}
         self._constraint_engine = None  # lazily built ConstraintAwareEngine
+        # First-class optimization layers (lazily built thin wrappers over the
+        # existing scattered implementations — see aurelius/optimizer/layers.py).
+        self._objective_layer = None
+        self._constraint_layer = None
+        self._forecast_layer = None
+        self._replay_layer = None
+        self._evaluation_layer = None
 
         if policy == EnergySchedulingPolicy.name:
             if scheduler is not None:
@@ -289,6 +330,49 @@ class AureliusOptimizer:
         return self.serving_orchestration.run(state, sla_registry)
 
     # ------------------------------------------------------------------
+    # First-class optimization layers (the target layered architecture)
+    # ------------------------------------------------------------------
+    # ForecastLayer · ConstraintLayer · ObjectiveLayer · DecisionLayer (policies)
+    # · ReplayLayer · EvaluationLayer. Each is a thin wrapper over the existing
+    # implementation; see aurelius/optimizer/layers.py for honest scope notes.
+
+    @property
+    def objective(self) -> ObjectiveLayer:
+        """ObjectiveLayer — SLA-safe goodput/$ as a first-class scorer (``economics``)."""
+        if self._objective_layer is None:
+            self._objective_layer = ObjectiveLayer()
+        return self._objective_layer
+
+    @property
+    def constraints(self) -> ConstraintLayer:
+        """ConstraintLayer — binding-constraint classification + SLA gate (``ConstraintAwareEngine``)."""
+        if self._constraint_layer is None:
+            # Reuse the same ConstraintAwareEngine the live path already holds.
+            self._constraint_layer = ConstraintLayer(engine=self.serving_orchestration)
+        return self._constraint_layer
+
+    @property
+    def forecast(self) -> ForecastLayer:
+        """ForecastLayer — the one causal-in-decision forecaster + honest taxonomy."""
+        if self._forecast_layer is None:
+            self._forecast_layer = ForecastLayer()
+        return self._forecast_layer
+
+    @property
+    def replay(self) -> ReplayLayer:
+        """ReplayLayer — normalize any loop result to ``ReplayEvaluationResult``."""
+        if self._replay_layer is None:
+            self._replay_layer = ReplayLayer()
+        return self._replay_layer
+
+    @property
+    def evaluation(self) -> EvaluationLayer:
+        """EvaluationLayer — frozen KPI math + fair-baseline selection (``per_workload``)."""
+        if self._evaluation_layer is None:
+            self._evaluation_layer = EvaluationLayer()
+        return self._evaluation_layer
+
+    # ------------------------------------------------------------------
     # Comprehensive interface
     # ------------------------------------------------------------------
 
@@ -302,6 +386,7 @@ class AureliusOptimizer:
         capacity: Optional[dict] = None,
         serving: Optional[dict] = None,
         genai: Optional[dict] = None,
+        live: Optional[dict] = None,
         notes=(),
     ) -> FleetOptimizationResult:
         """Comprehensive fleet optimization across every supplied surface.
@@ -320,6 +405,7 @@ class AureliusOptimizer:
             capacity:  ``{"raw", "warp"?, "config"?, "mode"?}``
             serving:   ``{"requests", "servers", "summarize", ...}``  (advisory)
             genai:     ``{"ticks", "cold", "tick_hours"?}``  (multi-model sizing)
+            live:      ``{"state", "sla_registry"?}``  (live-cluster orchestration)
 
         Returns:
             :class:`FleetOptimizationResult` with each surface's decision +
@@ -388,6 +474,19 @@ class AureliusOptimizer:
             cold = g.pop("cold")
             result.genai = self.serve_genai(ticks, cold, **g)
             used.append("genai_serving")
+
+        if live is not None:
+            # The live-cluster orchestration surface (binding-constraint
+            # SPREAD / REROUTE / MIGRATE / SCALE recommendations via the
+            # ConstraintAwareEngine). Recommendation-only; never mutates.
+            lv = dict(live)
+            state = lv.pop("state")
+            result.live = self.recommend_live(state, **lv)
+            used.append("live_orchestration")
+            notes_list.append(
+                "live_orchestration: ConstraintAwareEngine recommendations are "
+                "recommendation-only (never mutates a cluster)."
+            )
 
         result.surfaces_used = tuple(used)
         result.notes = tuple(notes_list)
