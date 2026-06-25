@@ -1,7 +1,11 @@
 # Aurelius Optimizer Unification Plan
 
-> **Status:** PLAN (mostly). One bootstrap step has been executed — see
-> **Execution Status** below. This is the phased, reversible migration path
+> **Status:** PARTIALLY EXECUTED (updated 2026-06-25). Phases 1a / 2 / 3 / 3b / 5
+> plus the **Phase B comprehensive-optimizer consolidation** are done — the
+> canonical optimizer now holds all five surfaces and orchestrates them via
+> `optimize_fleet()`. The replay-loop unification (Phase 1b) and the
+> constraint/forecast promotions (Phase 4) remain. See **Execution Status** below.
+> This is the phased, reversible migration path
 > implied by `CANONICAL_AURELIUS_OPTIMIZER.md`. Each phase is independently
 > shippable behind a flag, is benchmark-gated, and has an explicit rollback.
 > **Hard constraints for every phase:** do not change benchmark definitions, do
@@ -19,6 +23,7 @@
 | **Phase 2 — Extract the serving (abs-conformal SRPT) discipline behind the policy interface** | **DONE — parity extraction, 0% serving + energy KPI drift** | `aurelius/optimizer/policies/serving_queue.py`, `tests/test_canonical_serving_policy_phase2.py` (9 pass) + `test_abs_conformal_backtest.py` (17 re-export), `research/results/canonical_optimizer_phase2_serving_policy_parity_2026-06-22.md` |
 | **Phase 3 — Route public benchmark entry points through AureliusOptimizer** | **DONE — 5 entry points routed, 0% energy + serving KPI drift** | `canonical_backtests` / `gpu_routing_backtest` / `srtf_backtest` / `srtf_contention_backtest` + serving shim; `tests/test_canonical_optimizer_phase3_routing.py` (11) + `test_canonical_energy_backtest.py` (17 golden); `research/results/canonical_optimizer_phase3_benchmark_routing_parity_2026-06-22.md` |
 | **Phase 3b — Route AMCSG + SOTSS-MIN canonical backtest entry points through AureliusOptimizer** | **DONE — 0% KPI drift, initial_violations now propagated in sotss_min** | `_run_amcsg_backtest` + `_run_sotss_backtest` (both AMCSG baseline + oracle) routed through `_REPLICA_SCALING_OPTIMIZER.optimize()`; `ReplicaScalingPolicy.optimize(mode="sotss_min")` captures `init_viols` instead of discarding; 33 new parity tests; `research/results/amcsg_sotss_canonical_routing_parity_2026-06-24.md` |
+| **Phase B — Comprehensive optimizer consolidation** (all 5 surfaces under one facade; `placement`←residency, `admission`←frontier gate; `optimize_fleet()`; `serving_orchestration`←ConstraintAwareEngine; route the 3 energy facade-bypass sites) | **DONE — 0% energy KPI drift; parity wirings, no new optimization logic** | `aurelius/optimizer/aurelius_optimizer.py`, `policies/__init__.py`; `tests/test_comprehensive_optimizer.py` (8) + `test_canonical_optimizer_parity.py` (updated) |
 | Phase 1b — Unify the 4 replay loops into one engine | Not started | — |
 | Phase 4 — Promote frontier BASE/DYNAMIC → constraint; dedup calibrators | Not started | — |
 | **Phase 5 — Deprecate dead/duplicate code** | **DONE — 2,873 LOC removed, 0% KPI delta, 39 dead tests deleted** | Deleted `aurelius/frontier/eval_workload_{models,estimator,controller,safety}.py` + `batch_inference_{models,estimator,controller,safety}.py` (1,827 LOC); `tests/test_{eval_workload,batch_inference}_frontier.py` (692 LOC, 39 tests); `scripts/run_{eval,batch}_inference_frontier.py` (354 LOC). Zero non-test/non-script consumers confirmed by repo-wide import check. Lint/mypy pass; research docs updated. |

@@ -138,6 +138,38 @@ must not be used as the headline.
 > Do not claim a win unless `constraint_aware` beats the strongest relevant
 > baseline for the scenario / workload class. Matching FIFO is **not** a win.
 
+### 3.1 Defensible public headlines vs demoted numbers (Phase A, 2026-06-25)
+
+This is the binding list of what may and may **not** be quoted publicly. It
+supersedes any larger number elsewhere in the repo.
+
+**Defensible (directional simulator — pair with the "requires live calibration"
+caveat from §8):**
+
+| Headline | Trace | Baseline (fair) |
+|---|---|---|
+| **+25.75% SLA-safe goodput/$ at −21.2% GPU-hours** | Azure LLM 2024 (44.1M req) | reactive `sla_aware` |
+| **+11.07% goodput/$ at 0 deadline misses** | canonical energy (real CAISO/PJM/ERCOT) | `current_price_only` |
+| **median ~+9% / mean ~+19% goodput/$**, 0 unsafe regressions | 8-trace public rollup | strongest realistic safe per class |
+
+**DEMOTED — research-only / never a public or headline claim:**
+
+- **All spot-fleet "vs SLA-oracle" percentages (+304.7% … +778.2%)**
+  (`BENCHMARK_REGISTRY.md §2A`). Inflated by an under-provisioned *fixed c=4*
+  baseline (~2×), a spot-price *denominator* discount (~×2.5, cloud-tenant
+  arbitrage), and a capacity oracle. Honest comparable ≈ +54%/+71%
+  (`research/MCS_AUDIT.md`). GPU-hours *increase* here — never cite a GPU-hours
+  reduction from this family.
+- **Any "vs FIFO" serving multiplier (e.g. +313% / +557%).** FIFO is the §3
+  sanity baseline, not buyer-facing; the fair comparator is `sla_aware`.
+- **The "+876% compound" number** and any result multiplied by the hardcoded
+  `ECONOMIC_COST_FACTOR_BENCHMARK_REGISTRY = 1.2575` (an independence-assuming
+  analysis device, not a measured deployable compound).
+- **Oracle-class provisioners** (AMCSG / SOTSS-MIN / SOTSS-GSF) and their deltas
+  as deployable claims — only `online_sotss` (causal) and `forecasted_mcs` are
+  deployable; the canonical `AureliusOptimizer.optimize_fleet` defaults capacity
+  to `forecasted_mcs`.
+
 ---
 
 ## 4. Workload-type reporting

@@ -1,11 +1,19 @@
 # The Canonical Aurelius Optimizer (Proposed Architecture)
 
-> **Status:** PROPOSAL / DESIGN ONLY. Nothing here is implemented or merged. It
-> is the target architecture that the audit (`OPTIMIZER_ARCHITECTURE_AUDIT.md`)
-> argues Aurelius should converge toward, and the basis for the phased migration
-> in `OPTIMIZER_UNIFICATION_PLAN.md`. The energy core remains "do not modify"
-> (`docs/ENERGY_SYSTEM_MAP.md §8`, pinned by `tests/test_energy_core_preservation.py`)
-> until a migration phase explicitly and reversibly says otherwise.
+> **Status:** PARTIALLY IMPLEMENTED (updated 2026-06-25, Phase B). The
+> **Decision Layer is live**: `aurelius/optimizer/AureliusOptimizer` is a
+> comprehensive fleet optimizer holding all five decision-layer surfaces
+> (`energy`, `serving_queue`, `replica_scaling`, `placement`, `admission` — all
+> in `IMPLEMENTED_POLICIES`) with a unified `optimize_fleet()` orchestration and a
+> `serving_orchestration` accessor for the live `ConstraintAwareEngine`. Placement
+> and admission are parity wirings of the existing `residency/` and
+> `frontier/admission.py` surfaces. **Still target-only:** the single unified
+> **Replay Layer** (4 loops not yet collapsed — Phase 1b), the **Forecast contract**
+> and **Constraint Layer** promotion (Phase 4), and honest cross-surface
+> combination (energy × serving are disjoint workloads today). The energy core
+> remains "do not modify" (`docs/ENERGY_SYSTEM_MAP.md §8`, pinned by
+> `tests/test_energy_core_preservation.py`); the comprehensive optimizer wraps it
+> behavior-preservingly (0% KPI drift).
 
 ---
 

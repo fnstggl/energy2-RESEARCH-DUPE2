@@ -115,13 +115,39 @@
 | `alibaba_genai_ablation` | ablation | Full-trace ablation for model-affinity signal |
 | `alibaba_genai_residency_decision` | residency | n=60 per-request (diagnostic only) |
 
-### 2A. Spot Fleet Provisioning Leaderboard (FIFO+MCS base, spot/on-demand mix)
+### 2A. Spot Fleet Provisioning Leaderboard — ⚠️ RESEARCH-ONLY / NON-DEPLOYABLE / NOT A HEADLINE
+
+> **Phase A claims-truth demotion (audit 2026-06-25). The "vs SLA-oracle"
+> percentages below (+304.7% … +778.2%) are NOT product truth and must never be
+> used publicly or as a headline goodput/$ claim.** Three compounding inflators,
+> each documented in `research/MCS_AUDIT.md` and traced in the 2026-06-25 audit:
+> 1. **Weak baseline (~2×).** "SLA-oracle" is an under-provisioned *fixed c=4*
+>    sla_aware scheduler (Azure=25,208 gp/$ with ~2,475 SLA violations, p99 queue
+>    ~844 s). A competently-sized fixed sla_aware baseline is ~38,403 (c=7) /
+>    ~34,534 (c=8). Comparing to c=4 roughly doubles every percentage.
+> 2. **Spot-price denominator (~×2.5).** The gain is a ~40–70% spot-vs-on-demand
+>    *procurement* discount applied to the cost denominator — it helps any policy
+>    equally and is **cloud-tenant arbitrage**, not a GPU-fleet scheduling result.
+>    (`spot_fleet_mcs_backtest_2026-06-23.md`: "the north-star gap is closed
+>    entirely by the cost denominator.")
+> 3. **Capacity oracle.** AMCSG / SOTSS-MIN / SOTSS-GSF size c[t] from tick-t
+>    *actual* arrivals+tokens ("SOTSS" = Oracle). Only `online_sotss` (causal
+>    EWMA) and `forecasted_mcs` are deployable.
+>
+> **Honest comparable** (MCS_AUDIT.md): ~+54%/+71%, not +300%/+497%. **The only
+> deployable, apples-to-apples deltas here are intra-leaderboard** (e.g. OSOTSS
+> +5.94% vs the AMCSG *oracle* baseline) — small, and measured against an oracle.
+> **GPU-hours INCREASE** in this family (4.8→5.4 h), so do not cite a GPU-hours
+> reduction from it. The defensible public headlines live in §1 (rollup median
+> ~+9%; Azure +25.75% vs sla_aware at −21.2% GPU-h; energy +11.07% vs
+> current_price_only) — never here.
 
 Separate from rollup — decisions now governed by `AureliusOptimizer(policy="replica_scaling")`
 following Phase 2/3 architecture convergence [run 2026-06-23].
-Metric: SLA-safe goodput/$ = completed_requests / total_spot_fleet_cost_usd.
-SLA-oracle baselines: Azure=25,208, BurstGPT=20,280 goodput/$.
-North-star threshold (4× oracle): Azure=100,832, BurstGPT=81,120.
+Metric: SLA-safe goodput/$ = completed_requests / total_spot_fleet_cost_usd
+(spot-fleet denominator — see inflator #2 above).
+SLA-oracle baselines (under-provisioned fixed c=4 — see inflator #1): Azure=25,208, BurstGPT=20,280 goodput/$.
+North-star threshold (4× the weak oracle — research-only, not a product target): Azure=100,832, BurstGPT=81,120.
 +500% north-star threshold: Azure=151,248, BurstGPT=121,680.
 
 | Policy | Azure goodput/$ | vs oracle | BurstGPT goodput/$ | vs oracle | Date |

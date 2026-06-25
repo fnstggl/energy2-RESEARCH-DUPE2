@@ -355,16 +355,21 @@ class EnergyArbitrageAdapter:
         Uses ONLY the engine's public API. The returned candidates are the
         engine's decisions verbatim — the adapter does not alter them here.
         """
-        scheduler = self._scheduler
-        if scheduler is None:
-            # Lazy import keeps this module dependency-light and avoids any
-            # import-time coupling to the energy core.
-            from ..optimization.scheduler import JobScheduler
-            scheduler = JobScheduler(self._config or OptimizationConfig())
+        # Route through the canonical AureliusOptimizer (energy surface) instead
+        # of constructing JobScheduler directly. The facade delegates verbatim to
+        # JobScheduler.solve / create_baseline_schedule, so this is behavior-
+        # preserving; it removes the last energy-path bypass of the canonical
+        # optimizer. Lazy import avoids import-time coupling to the energy core.
+        from ..optimizer import AureliusOptimizer
+
+        if self._scheduler is not None:
+            optimizer = AureliusOptimizer(scheduler=self._scheduler)
+        else:
+            optimizer = AureliusOptimizer(self._config or OptimizationConfig())
         carbon_data = carbon_data or {r: {} for r in da_price_data}
 
-        baseline = scheduler.create_baseline_schedule(jobs)
-        result = scheduler.solve(jobs, da_price_data, carbon_data, method=method)
+        baseline = optimizer.create_baseline_schedule(jobs)
+        result = optimizer.optimize(jobs, da_price_data, carbon_data, method=method)
         return self.candidates_from_schedules(
             jobs=jobs,
             baseline_schedule=baseline,

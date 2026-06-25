@@ -44,7 +44,7 @@ def _normalize_constraint_name(s: str) -> str:
 
 def cmd_constraint_report(args) -> None:
     """Run the classifier and engine on a scenario or snapshot, print report."""
-    from aurelius.constraints import ConstraintAwareEngine
+    from aurelius.optimizer import AureliusOptimizer
     from aurelius.reporting.constraint_report import (
         format_assessment_text,
         format_engine_result_json,
@@ -52,8 +52,9 @@ def cmd_constraint_report(args) -> None:
     )
 
     state = _load_state(args)
-    engine = ConstraintAwareEngine()
-    result = engine.run(state)
+    # Route the live-service recommendation through the canonical optimizer's
+    # serving-orchestration surface (ConstraintAwareEngine), recommendation-only.
+    result = AureliusOptimizer().recommend_live(state)
 
     fmt = getattr(args, "format", "text")
     if fmt == "json":
@@ -72,7 +73,7 @@ def cmd_constraint_report(args) -> None:
 
 def cmd_simulate_constraint_scenario(args) -> None:
     """Run a named scenario and show baseline vs Aurelius comparison table."""
-    from aurelius.constraints import ConstraintAwareEngine
+    from aurelius.optimizer import AureliusOptimizer
     from aurelius.reporting.constraint_report import format_scenario_comparison_table
     from aurelius.simulation.cluster import ClusterSimulator, list_scenarios, load_scenario
 
@@ -100,10 +101,12 @@ def cmd_simulate_constraint_scenario(args) -> None:
     sim = ClusterSimulator(scenario.config, seed=seed)
     ticks = sim.run(steps=steps)
 
-    engine = ConstraintAwareEngine()
+    # Route the live-service recommendations through the canonical optimizer
+    # (its serving_orchestration surface caches one ConstraintAwareEngine).
+    optimizer = AureliusOptimizer()
     engine_results = []
     for tick in ticks:
-        er = engine.run(tick.cluster_state)
+        er = optimizer.recommend_live(tick.cluster_state)
         engine_results.append(er)
 
     tick_metrics = [t.metrics for t in ticks]

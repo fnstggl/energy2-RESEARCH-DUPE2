@@ -13,7 +13,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from ..models import Job, OptimizationConfig, ScheduleDecision, SimulationResult
-from ..optimization.scheduler import JobScheduler
+from ..optimization.scheduler import JobScheduler  # noqa: F401  (type/back-compat)
+from ..optimizer import AureliusOptimizer
 from .metrics import MetricsCalculator, ScheduleMetrics
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,12 @@ class ScenarioComparator:
             config: Optimization configuration
         """
         self.config = config or OptimizationConfig()
-        self.scheduler = JobScheduler(config)
+        # Route the optimized schedule through the canonical AureliusOptimizer
+        # (energy surface) instead of constructing JobScheduler directly. The
+        # facade delegates verbatim, so this is behavior-preserving; `scheduler`
+        # remains available for back-compat readers.
+        self._optimizer = AureliusOptimizer(config)
+        self.scheduler = self._optimizer.scheduler
         self.metrics = MetricsCalculator()
 
     def create_fifo_schedule(
@@ -182,8 +188,9 @@ class ScenarioComparator:
         fifo_schedule = self.create_fifo_schedule(jobs)
         peak_blind_schedule = self.create_peak_blind_schedule(jobs)
 
-        # Generate optimized schedule
-        opt_result = self.scheduler.solve(
+        # Generate optimized schedule (routed through the canonical optimizer;
+        # the energy surface forwards positional risk_data to JobScheduler.solve).
+        opt_result = self._optimizer.optimize(
             jobs, price_data, carbon_data, risk_data,
             method=optimization_method,
         )

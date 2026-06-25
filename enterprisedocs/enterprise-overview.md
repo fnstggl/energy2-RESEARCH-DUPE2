@@ -1,5 +1,17 @@
 # Enterprise Overview
 
+> ⚠️ **Canonical-metric note (2026-06-25).** This overview describes the
+> **energy-arbitrage** workload class and reports *energy-cost reduction*
+> (25.0% / 22.8% vs `current_price_only`). Those are **directional
+> historical-replay observations, not production guarantees**, and energy-cost %
+> is **not** Aurelius's canonical KPI. The canonical product is a comprehensive
+> GPU-fleet optimizer whose objective is **SLA-safe goodput per infrastructure
+> dollar** (`docs/RESULTS.md` §1); the strongest defensible headline is
+> **+25.75% goodput/$ at −21% GPU-hours vs a fair `sla_aware` scheduler on the
+> Azure LLM 2024 trace** (simulator — requires live customer-telemetry
+> calibration before any savings claim; `docs/RESULTS.md` §3.1/§8). Energy
+> time-shifting remains one operator-valid lever within that product.
+
 ## The problem
 
 GPU compute is the dominant variable cost in AI infrastructure, and the energy

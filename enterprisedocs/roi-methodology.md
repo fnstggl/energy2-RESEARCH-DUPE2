@@ -1,5 +1,12 @@
 # ROI Methodology
 
+> ⚠️ **Canonical-metric note (2026-06-25).** The cost-reduction figures here are
+> the **Era-1 energy lever** (directional historical-replay; not production
+> guarantees). Aurelius's canonical KPI is **SLA-safe goodput per infrastructure
+> dollar** (`docs/RESULTS.md` §1); see §3.1 there for the binding defensible-vs-
+> demoted headline list and §8 for the production-claim gate (unmet by any result
+> today).
+
 This document explains how Aurelius estimates cost reduction for a specific
 customer, and — equally important — what those estimates do and do not mean. It
 is written to be defensible in front of finance and procurement review. The

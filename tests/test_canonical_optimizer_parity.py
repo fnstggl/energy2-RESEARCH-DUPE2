@@ -11,8 +11,9 @@ This pins the Phase 1 contract of the canonical-optimizer unification
   * it reproduces the scheduler step that drives the canonical energy benchmark
     (=> 0% KPI drift, since the benchmark KPI is a deterministic function of the
     schedule), and
-  * NO serving/SRTF, placement, admission, or replica-scaling code is wired in
-    (those policies raise ``NotImplementedError``).
+  * the energy ``optimize`` path is unchanged by the Phase B comprehensive
+    consolidation (all five surfaces are now implemented, but selecting
+    ``policy="energy"`` and calling ``optimize`` is byte-identical to before).
 """
 
 from __future__ import annotations
@@ -196,19 +197,30 @@ def test_wrapper_matches_canonical_benchmark_scheduler_step():
 
 
 # --------------------------------------------------------------------------
-# 5. Serving/SRTF + the other policies are NOT wired in (Phase 1 guard)
+# 5. All five decision surfaces are implemented (Phase B comprehensive guard)
 # --------------------------------------------------------------------------
 
-# serving_queue and replica_scaling are implemented as of Phase 2; the
-# remaining seams still raise.
+# Phase B: placement (residency) and admission (frontier gate) are now wired in
+# as parity wirings of existing, tested surfaces — they no longer raise.
 @pytest.mark.parametrize(
-    "policy", ["placement", "admission"]
+    "policy", ["energy", "serving_queue", "replica_scaling", "placement", "admission"]
 )
-def test_unimplemented_policies_raise_on_use(policy):
-    assert policy in POLICY_REGISTRY  # the seam exists...
+def test_all_surfaces_implemented(policy):
+    from aurelius.optimizer.policies import IMPLEMENTED_POLICIES
+
+    assert policy in POLICY_REGISTRY
+    assert policy in IMPLEMENTED_POLICIES
     opt = AureliusOptimizer(policy=policy)
-    with pytest.raises(NotImplementedError):
-        opt.optimize([], {}, {})  # ...but using it fails loudly
+    # The seam constructs and is reachable; none of the five is an unbuilt stub.
+    assert opt.policy is not None
+
+
+def test_admission_surface_delegates_without_error():
+    # Admission gate is shadow-mode by default (enabled=False -> always ADMIT);
+    # reachable via the canonical optimizer with no NotImplementedError.
+    opt = AureliusOptimizer(policy="admission")
+    decision = opt.optimize(sla_class="llm_batch_inference", window=[])
+    assert decision.action == "ADMIT"
 
 
 def test_unknown_policy_rejected():
