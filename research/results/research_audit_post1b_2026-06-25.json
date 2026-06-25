@@ -1,0 +1,133 @@
+{
+  "run_name": "research_audit_post1b_2026-06-25",
+  "run_date": "2026-06-25",
+  "classification": "USEFUL RESEARCH — Five-Failure Rule compliant",
+  "five_failure_rule": {
+    "status": "ACTIVE",
+    "counter": "6/5",
+    "actions_taken": ["replay_validation", "bottleneck_diagnosis", "research_discovery"]
+  },
+  "pr_hygiene": {
+    "prs_inspected": [
+      {
+        "number": 81,
+        "title": "arch: Phase 1b-A — ReplayHarness unified dispatch layer",
+        "classification": "safe infrastructure / architecture unification",
+        "action": "NOT MERGED",
+        "reason": "architecture-unification requires human review; mergeable_state: unstable"
+      },
+      {
+        "number": 70,
+        "title": "benchmark realism audit / null result",
+        "classification": "research artifact",
+        "action": "LEFT OPEN",
+        "reason": "base branch is claude/happy-pascal-pvp0fd (non-main)"
+      },
+      {
+        "number": 54,
+        "title": "Phases 4+5 research docs",
+        "classification": "research artifact",
+        "action": "LEFT OPEN",
+        "reason": "mergeable_state: dirty, main has moved"
+      }
+    ]
+  },
+  "canonical_replays": {
+    "energy_constraint_aware": {
+      "goodput_per_dollar": 0.337299,
+      "vs_current_price_only_pct": "+11.1%",
+      "status": "confirmed"
+    },
+    "amcsg_azure": {
+      "goodput_per_dollar": 150630,
+      "status": "confirmed"
+    },
+    "amcsg_burstgpt": {
+      "goodput_per_dollar": 168270,
+      "status": "confirmed"
+    },
+    "parity_tests": {
+      "total_passing": 186,
+      "kpi_drift_pct": 0.0,
+      "status": "confirmed"
+    }
+  },
+  "papers_reviewed": [
+    {
+      "arxiv": "2303.17551",
+      "title": "The Online Pause and Resume Problem: Optimal Algorithms and Carbon-Aware Load Shifting",
+      "venue": "SIGMETRICS 2023",
+      "verdict": "THEORETICAL FOUNDATION",
+      "key_finding": "O(log T) regret bound for pure temporal shifting — our +11.1% likely near achievable limit",
+      "applicable": false,
+      "reason": "defines ceiling, no implementation needed"
+    },
+    {
+      "arxiv": "2508.16449",
+      "title": "GreenLLM: SLO-Aware Dynamic Frequency Scaling for Energy-Efficient LLM Serving",
+      "venue": "2025 preprint",
+      "verdict": "NOT APPLICABLE",
+      "key_finding": "34% energy reduction via DVFS, orthogonal to temporal shifting",
+      "applicable": false,
+      "reason": "requires per-GPU power telemetry not in public benchmarks"
+    },
+    {
+      "arxiv": "2408.07831",
+      "title": "CarbonClipper — ST-CLIP: Spatiotemporal Online Allocation with Deadline Constraints",
+      "venue": "SIGMETRICS 2025",
+      "verdict": "NOT APPLICABLE",
+      "applicable": false,
+      "reason": "requires multi-datacenter spatial dimension not in current Aurelius model"
+    },
+    {
+      "arxiv": "2508.14544",
+      "title": "Adaptively Robust LLM Inference (conformal adaptive alpha)",
+      "venue": "2025 preprint",
+      "verdict": "PARTIALLY APPLICABLE",
+      "applicable": true,
+      "priority": "HIGH",
+      "application": "conformal arrival-rate bounds for OSOTSS (different from prior token-length use)",
+      "five_failure_blocked": true
+    },
+    {
+      "arxiv": "2503.07545",
+      "title": "Queueing + Predictions for LLMs",
+      "venue": "March 2025",
+      "verdict": "PARTIALLY APPLICABLE",
+      "applicable": true,
+      "priority": "HIGH",
+      "application": "historical-variance margin for arrival-rate uncertainty in replica scaling",
+      "five_failure_blocked": true,
+      "note": "prior review was for token-length SRTF (null); this review is for arrival-rate replica scaling (different domain)"
+    }
+  ],
+  "post_five_failure_experiments": [
+    {
+      "priority": 1,
+      "name": "Conformal Arrival-Rate Bounds for OSOTSS",
+      "target_benchmark": "BurstGPT HF (15-request gap)",
+      "mechanism": "abs-conformal upper bound on arrival rate, provision for q_alpha * sigma_arrivals above EWMA",
+      "decision_changed": "replica count per tick (OSOTSS mode in ReplicaScalingPolicy)",
+      "uses_existing_modules": true,
+      "new_telemetry_required": false,
+      "oracle_required": false,
+      "expected_kpi_mechanism": "closes BurstGPT 15-request gap by catching burst ticks with upper-bound provisioning",
+      "risk": "over-provisioning on non-burst ticks may increase cost"
+    },
+    {
+      "priority": 2,
+      "name": "GreenLLM DVFS Integration",
+      "target_benchmark": "energy canonical (beyond temporal shifting)",
+      "mechanism": "dynamic GPU frequency scaling during batch job execution",
+      "prerequisite": "per-GPU power telemetry (not in current public benchmarks)",
+      "five_failure_blocked": true,
+      "blocked_by": "new module + missing telemetry"
+    }
+  ],
+  "architecture_status": {
+    "pr_81_phase_1b_a": "PR OPEN — needs human review",
+    "phase_1b_c": "NOT STARTED",
+    "total_parity_tests": 186,
+    "canonical_policies_in_ao": "all (6/6 declared, 4/6 fully implemented)"
+  }
+}
