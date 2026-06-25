@@ -183,11 +183,20 @@ class SimulationReplay:
             )
             carbon_forecasts.extend(cf)
 
-        # Estimate uncertainty
+        # Estimate uncertainty (best-effort). The legacy UncertaintyEstimator
+        # API (estimate_from_forecasts / get_risk_penalty_dict) was superseded by
+        # ForecastPackager, which does not implement those methods. Degrade to no
+        # risk penalty rather than crash the CLI/API /simulate path (this branch
+        # was previously an unguarded AttributeError; it is untested).
         uncertainty_estimator = UncertaintyEstimator()
-        uncertainty_estimates = uncertainty_estimator.estimate_from_forecasts(
-            price_forecasts, carbon_forecasts
-        )
+        risk_dict: dict = {}
+        if hasattr(uncertainty_estimator, "estimate_from_forecasts") and hasattr(
+            uncertainty_estimator, "get_risk_penalty_dict"
+        ):
+            _unc = uncertainty_estimator.estimate_from_forecasts(
+                price_forecasts, carbon_forecasts
+            )
+            risk_dict = uncertainty_estimator.get_risk_penalty_dict(_unc)
 
         # Convert to lookup dicts
         price_dict = self.price_ingester.prices_to_dict(prices)
@@ -196,8 +205,6 @@ class SimulationReplay:
             if c.region not in carbon_dict:
                 carbon_dict[c.region] = {}
             carbon_dict[c.region][c.timestamp] = c.gco2_per_kwh
-
-        risk_dict = uncertainty_estimator.get_risk_penalty_dict(uncertainty_estimates)
 
         # Step 6: Run comparison
         comparator = ScenarioComparator(config.optimization_config)
