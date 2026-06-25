@@ -8,6 +8,67 @@
 
 ---
 
+## Run 2026-06-25 — GenAI Canonical Routing Phase 3d (ARCHITECTURE CONVERGENCE — Phase 3d, Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Architecture divergence in GenAI benchmark**: `genai_backtest._run_policy` owned the `constraint_aware` EWMA anticipatory + model-affinity sizing logic inline, bypassing `AureliusOptimizer`. Physics helpers (`_effective_service_s`, `_size_for_sla`, `_size_for_target`) were local to the monolith. Additionally, PR #72 had two CI failures: stale `affinity_prewarm_share_pct=62.1` (correct: 61.7 from source data) and ruff alphabetical import order violation (genai_serving import placed after replica_scaling).
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Unchanged from previous runs. Architecture integration does not affect KPIs.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT HF (15-request structural gap vs AMCSG, confirmed deterministic by multi-seed audit).
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+GenAI `constraint_aware` now fully routed through canonical optimizer. Remaining gap: per-tick capacity decisions on 15 BurstGPT burst ticks (structural; Five-Failure Rule prohibits new modules to address this).
+
+### Q5. Which workloads benefit least?
+
+Unchanged. Bursty traces (BurstGPT) on n_sla_safe metric.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Phase 3d complete. Remaining allowed architecture work: Phase 1b replay loop unification (collapse 4 independent replay loops into 1 engine; high complexity, high impact).
+
+### Q7. What is the shortest path to another +1% gain?
+
+No new KPI gain from this run (0% delta by design). Phase 1b replay loop unification would unblock combination search (energy + GenAI + replica_scaling compound).
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: goodput/$ achieved (+5.94% via OSOTSS). BurstGPT: goodput/$ achieved (+5.85%). BurstGPT n_sla_safe gap: −15 requests (structural, deterministic). GenAI: constraint_aware 9.84 gp/$ (+89.46% vs sla_aware) — bit-identical, unchanged.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All current frontier results are deterministic; no drift risk.
+
+### Q10. Which assumptions might be wrong?
+
+Unchanged. The EWMA alpha=0.5 for GenAI anticipatory sizing is a fixed prior; if actual production arrival variance differs substantially from the Alibaba GenAI 2026 fixture, the replica count guidance may over- or under-provision. No oracle information used (causal EWMA only).
+
+### Q11. Which benchmark weaknesses exist?
+
+Unchanged. GenAI benchmark uses a 60-request fixture (1 tick) — too small for multi-tick EWMA convergence testing. Full Alibaba GenAI 2026 dataset would provide more tick diversity.
+
+### Q12. Which public datasets should be added?
+
+Full Alibaba GenAI 2026 dataset (raw) — would enable multi-tick EWMA warm-up validation and cross-validation of constraint_aware vs sla_aware on realistic multi-hour traces.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 3d complete. Remaining architecture work:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact; requires 0%-delta parity gate for all 4 modes)
+2. **Third trace cross-validation** — OSOTSS on full Alibaba GenAI 2026 (if raw data available)
+3. **Phase 4** — Promote frontier BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: SUF +13% Azure only)
+
+Results: `research/results/genai_canonical_routing_phase3d_2026-06-25.{md,json}`
+
+---
+
 ## Run 2026-06-24 — Dead Frontier Code Deprecation (ARCHITECTURE SIMPLIFICATION — Phase 5, Five-Failure Rule compliant)
 
 ### Q1. What currently limits Aurelius most?

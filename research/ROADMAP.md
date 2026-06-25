@@ -26,6 +26,11 @@ unsafe regressions. LLM-serving subset median **+23%**.
 
 **⛔ FIVE-FAILURE RULE TRIGGERED (5/5). Runs: C1PGS → SOTSS-GSF → Adaptive EWMA → Stochastic Safety Margin → OSSC/Borderline. ARCHITECTURAL FOCUS RULE NOW ACTIVE: stop adding new modules; focus on integration, replay validation, benchmark realism, bottleneck diagnosis, architecture simplification.**
 
+**GenAI Canonical Routing Phase 3d [run 2026-06-25] — ARCHITECTURE CONVERGENCE (Phase 3d complete, Five-Failure Rule compliant):**
+Extracts `constraint_aware` GenAI replica-sizing decision (EWMA anticipatory + model-affinity cold-start routing) from `genai_backtest._run_policy` monolith into `GenAIServingPolicy` class, routed through `AureliusOptimizer(policy="genai_serving")`. Physics helpers (`genai_effective_service_s`, `genai_eval_tick_timeout`, `genai_size_for_sla`, `genai_size_for_target`) now live in `aurelius/optimizer/policies/genai_serving.py` as canonical owner; `genai_backtest.py` imports back (benchmark → policy, one direction). Bit-identical parity confirmed on fixture (0 ticks differing). Fixes PR #72 CI failures: (1) stale `affinity_prewarm_share_pct` 62.1→61.7; (2) ruff alphabetical import order (g < r). `IMPLEMENTED_POLICIES` now covers 4 of 6 declared policies. KPI change: 0.00%.
+Results: `research/results/genai_canonical_routing_phase3d_2026-06-25.{md,json}`.
+Tests: `tests/test_genai_canonical_routing_parity.py` (6 new tests, all pass); 83 total passing.
+
 **Dead Frontier Code Deprecation [run 2026-06-24] — ARCHITECTURE SIMPLIFICATION (Phase 5 complete, Five-Failure Rule compliant):**
 Deleted all EVAL_WORKLOAD and BATCH_INFERENCE frontier families: `aurelius/frontier/eval_workload_{models,estimator,controller,safety}.py` + `batch_inference_{models,estimator,controller,safety}.py` (8 modules, 1,827 LOC); `tests/test_{eval_workload,batch_inference}_frontier.py` (2 files, 692 LOC, 39 tests); `scripts/run_{eval,batch}_inference_frontier.py` (2 files, 354 LOC). Total: ~2,873 LOC removed. Repo-wide import check confirmed zero non-test/non-script consumers. Lint and mypy pass clean. OPTIMIZER_UNIFICATION_PLAN.md Phase 5 marked DONE. Ends the 5-parallel-frontier-family maintenance tax.
 Results: `research/results/dead_frontier_deprecation_2026-06-24.json`.
