@@ -1,0 +1,274 @@
+{
+  "benchmark": "phase3e_backtest_serving_canonical_routing",
+  "classification": "ARCHITECTURE_CONVERGENCE",
+  "datasets": {
+    "azure_llm_2024_sample": {
+      "n_requests": 5880,
+      "scales": [
+        {
+          "constraint_aware": {
+            "gpd": 12511.33,
+            "gpu_hours": 26.0,
+            "timeout_pct": 2.0005
+          },
+          "fifo": {
+            "gpd": 12511.33,
+            "gpu_hours": 26.0,
+            "timeout_pct": 2.0005
+          },
+          "min_cost_safe": {
+            "gpd": 12511.33,
+            "gpu_hours": 26.0,
+            "timeout_pct": 2.0005
+          },
+          "n_requests": 5880,
+          "n_ticks": 1560,
+          "safe_high_utilization": {
+            "gpd": 12511.33,
+            "gpu_hours": 26.0,
+            "timeout_pct": 2.0005
+          },
+          "scale": 1,
+          "shu_vs_ca_pct": 0.0,
+          "sla_aware": {
+            "gpd": 12511.33,
+            "gpu_hours": 26.0,
+            "timeout_pct": 2.0005
+          }
+        },
+        {
+          "constraint_aware": {
+            "gpd": 604601.1,
+            "gpu_hours": 0.5333,
+            "timeout_pct": 3.3168
+          },
+          "fifo": {
+            "gpd": 604601.1,
+            "gpu_hours": 0.5333,
+            "timeout_pct": 3.3168
+          },
+          "min_cost_safe": {
+            "gpd": 604601.1,
+            "gpu_hours": 0.5333,
+            "timeout_pct": 3.3168
+          },
+          "n_requests": 5880,
+          "n_ticks": 32,
+          "safe_high_utilization": {
+            "gpd": 604601.1,
+            "gpu_hours": 0.5333,
+            "timeout_pct": 3.3168
+          },
+          "scale": 50,
+          "shu_vs_ca_pct": 0.0,
+          "sla_aware": {
+            "gpd": 604601.1,
+            "gpu_hours": 0.5333,
+            "timeout_pct": 3.3168
+          }
+        },
+        {
+          "constraint_aware": {
+            "gpd": 1601102.94,
+            "gpu_hours": 0.2,
+            "timeout_pct": 3.984
+          },
+          "fifo": {
+            "gpd": 1272253.68,
+            "gpu_hours": 0.1333,
+            "timeout_pct": 26.7634
+          },
+          "min_cost_safe": {
+            "gpd": 1738187.17,
+            "gpu_hours": 0.1833,
+            "timeout_pct": 4.4494
+          },
+          "n_requests": 5880,
+          "n_ticks": 8,
+          "safe_high_utilization": {
+            "gpd": 1738187.17,
+            "gpu_hours": 0.1833,
+            "timeout_pct": 4.4494
+          },
+          "scale": 200,
+          "shu_vs_ca_pct": 8.562,
+          "sla_aware": {
+            "gpd": 1370073.53,
+            "gpu_hours": 0.2333,
+            "timeout_pct": 4.147
+          }
+        },
+        {
+          "constraint_aware": {
+            "gpd": 1747577.54,
+            "gpu_hours": 0.1833,
+            "timeout_pct": 3.9358
+          },
+          "fifo": {
+            "gpd": 1087985.29,
+            "gpu_hours": 0.1333,
+            "timeout_pct": 29.5456
+          },
+          "min_cost_safe": {
+            "gpd": 2657445.38,
+            "gpu_hours": 0.1167,
+            "timeout_pct": 7.0498
+          },
+          "n_requests": 5880,
+          "n_ticks": 4,
+          "safe_high_utilization": {
+            "gpd": 2133669.93,
+            "gpu_hours": 0.15,
+            "timeout_pct": 4.0356
+          },
+          "scale": 500,
+          "shu_vs_ca_pct": 22.093,
+          "sla_aware": {
+            "gpd": 730036.76,
+            "gpu_hours": 0.2,
+            "timeout_pct": 29.2679
+          }
+        }
+      ]
+    },
+    "burstgpt_sample": {
+      "n_requests": 51,
+      "scales": [
+        {
+          "constraint_aware": {
+            "gpd": 8691.77,
+            "gpu_hours": 0.9167,
+            "timeout_pct": 4.2147
+          },
+          "fifo": {
+            "gpd": 8689.29,
+            "gpu_hours": 0.9167,
+            "timeout_pct": 4.2541
+          },
+          "min_cost_safe": {
+            "gpd": 8691.77,
+            "gpu_hours": 0.9167,
+            "timeout_pct": 4.2147
+          },
+          "n_requests": 51,
+          "n_ticks": 55,
+          "safe_high_utilization": {
+            "gpd": 8691.77,
+            "gpu_hours": 0.9167,
+            "timeout_pct": 4.2147
+          },
+          "scale": 1,
+          "shu_vs_ca_pct": 0.0,
+          "sla_aware": {
+            "gpd": 8689.29,
+            "gpu_hours": 0.9167,
+            "timeout_pct": 4.2541
+          }
+        },
+        {
+          "constraint_aware": {
+            "gpd": 214755.3,
+            "gpu_hours": 0.0333,
+            "timeout_pct": 4.6971
+          },
+          "fifo": {
+            "gpd": 214669.39,
+            "gpu_hours": 0.0333,
+            "timeout_pct": 4.7397
+          },
+          "min_cost_safe": {
+            "gpd": 214755.3,
+            "gpu_hours": 0.0333,
+            "timeout_pct": 4.6971
+          },
+          "n_requests": 51,
+          "n_ticks": 2,
+          "safe_high_utilization": {
+            "gpd": 214755.3,
+            "gpu_hours": 0.0333,
+            "timeout_pct": 4.6971
+          },
+          "scale": 50,
+          "shu_vs_ca_pct": 0.0,
+          "sla_aware": {
+            "gpd": 214669.39,
+            "gpu_hours": 0.0333,
+            "timeout_pct": 4.7397
+          }
+        },
+        {
+          "constraint_aware": {
+            "gpd": 448129.05,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7254
+          },
+          "fifo": {
+            "gpd": 447924.18,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7687
+          },
+          "min_cost_safe": {
+            "gpd": 448129.05,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7254
+          },
+          "n_requests": 51,
+          "n_ticks": 1,
+          "safe_high_utilization": {
+            "gpd": 448129.05,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7254
+          },
+          "scale": 200,
+          "shu_vs_ca_pct": 0.0,
+          "sla_aware": {
+            "gpd": 447924.18,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7687
+          }
+        },
+        {
+          "constraint_aware": {
+            "gpd": 448129.05,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7254
+          },
+          "fifo": {
+            "gpd": 447924.18,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7687
+          },
+          "min_cost_safe": {
+            "gpd": 448129.05,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7254
+          },
+          "n_requests": 51,
+          "n_ticks": 1,
+          "safe_high_utilization": {
+            "gpd": 448129.05,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7254
+          },
+          "scale": 500,
+          "shu_vs_ca_pct": 0.0,
+          "sla_aware": {
+            "gpd": 447924.18,
+            "gpu_hours": 0.0167,
+            "timeout_pct": 4.7687
+          }
+        }
+      ]
+    }
+  },
+  "description": "Phase 3e: Routes constraint_aware and safe_high_utilization policies from aurelius/traces/backtest.py through AureliusOptimizer(policy=replica_scaling) via ReplicaScalingPolicy.optimize_from_ticks(). Physics extracted to compute_constraint_aware_schedule() and compute_shu_schedule() in aurelius/optimizer/policies/replica_scaling.py. Bit-identical parity confirmed on Azure and BurstGPT fixtures. MCS anchor unchanged (2657445).",
+  "five_failure_rule_compliant": true,
+  "generated": "2026-06-25",
+  "kpi_drift": "0.00%",
+  "parity_verification": {
+    "mcs_anchor": "PASS \u2014 min_cost_safe Azure 500x = 2657445 (unchanged)",
+    "optimizer_interface": "PASS \u2014 AureliusOptimizer(policy=replica_scaling).policy.optimize_from_ticks() routes correctly",
+    "physics_layer": "PASS \u2014 _bt_timeout_rate_pct bit-identical to evaluate_tick().timeout_rate_pct (140 tick-replica pairs)",
+    "schedule_layer": "PASS \u2014 compute_constraint_aware_schedule / compute_shu_schedule bit-identical to original _run_policy loop (Azure 50x: 32 ticks, BurstGPT: 51 ticks)"
+  }
+}

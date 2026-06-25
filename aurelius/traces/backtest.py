@@ -36,10 +36,19 @@ from aurelius.benchmarks.economics import (
     InfrastructureCostConfig,
     compute_economic_kpi,
 )
+from aurelius.optimizer import AureliusOptimizer as _AureliusOptimizer
+from aurelius.optimizer.policies.replica_scaling import (
+    ReplicaScalingConfig as _RSConfig,
+)
 from aurelius.simulation.cluster import serving
 
 from .replay import ArrivalTick, requests_to_arrival_ticks
 from .schema import NormalizedLLMRequest
+
+# Canonical optimizer for routing constraint_aware / safe_high_utilization
+# serving decisions through AureliusOptimizer(policy="replica_scaling").
+# Created once at module load to avoid per-call constructor overhead.
+_SERVING_OPTIMIZER: _AureliusOptimizer = _AureliusOptimizer(policy="replica_scaling")
 
 # ---------------------------------------------------------------------------
 # Documented serving-capacity priors (public benchmark only; identical across
@@ -367,6 +376,16 @@ def _run_policy(
         if frontier_counters is not None:
             frontier_counters.record(result)
 
+    # Phase 3e: pre-compute CA/SHU schedule via AureliusOptimizer(policy="replica_scaling")
+    # before the evaluation loop so the loop only dispatches the pre-baked replica count.
+    _ca_shu_schedule: list[int] = []
+    if policy in ("constraint_aware", "safe_high_utilization"):
+        _rs_cfg = _RSConfig(mode=policy, ca_target_rho=ca_target_rho)
+        _sched = _SERVING_OPTIMIZER.policy.optimize_from_ticks(
+            list(ticks), tick_hours=tick_hours, config=_rs_cfg
+        )
+        _ca_shu_schedule = _sched.c_schedule
+
     evals: list[TickEval] = []
     prev_replicas: Optional[int] = None
     ewma_rate = 0.0
@@ -374,7 +393,7 @@ def _run_policy(
     ewma_alpha = 0.5
     prev_tick: Optional[ArrivalTick] = None
 
-    for t in ticks:
+    for i, t in enumerate(ticks):
         # update smoothing on the load actually observed this tick
         if t.request_count > 0:
             ewma_rate = (ewma_alpha * t.arrival_rate_rps
@@ -404,31 +423,10 @@ def _run_policy(
             # decode budget.
             src = prev_tick if prev_tick is not None else t
             replicas = _queue_aware_size(src, tick_hours, threshold_ms=500.0)
-        elif policy == "constraint_aware":
-            # Aurelius: anticipate with EWMA (max of current + smoothed peak),
-            # size to a safe target, exploit cache prefill savings (fewer
-            # replicas meet SLA), and damp churn with hysteresis.
-            plan_rate = max(t.arrival_rate_rps, ewma_rate)
-            plan_out = max(t.output_tokens_mean, ewma_out) if t.request_count else ewma_out
-            base = _size_for_target(plan_rate, max(1.0, plan_out), throughput,
-                                    target_rho=ca_target_rho)
-            # cache savings let us serve the same load with fewer replicas: probe
-            # downward while SLA stays safe.
-            replicas = _constraint_trim(t, base, prefill_savings, tick_hours,
-                                        prev_replicas)
-        elif policy == "safe_high_utilization":
-            # Higher-utilization anticipatory policy. Uses the same EWMA-anticipatory
-            # logic as constraint_aware but at rho=0.75 (vs CA's 0.65). Validated by
-            # run_azure_2024_safe_utilization_frontier.py: anticipatory@0.75 achieves
-            # +13% over CA with 9.465% aggregate timeout (SAFE < 10% gate).
-            # No hysteresis (neutral per frontier factor-ladder; scale-event cost=0).
-            plan_rate = max(t.arrival_rate_rps, ewma_rate)
-            plan_out = max(t.output_tokens_mean, ewma_out) if t.request_count else ewma_out
-            base = _size_for_target(plan_rate, max(1.0, plan_out), throughput,
-                                    target_rho=_SHU_TARGET_RHO)
-            replicas = _constraint_trim(t, base, prefill_savings, tick_hours,
-                                        prev_replicas=None,  # no hysteresis
-                                        timeout_tol=_SHU_TIMEOUT_TOL)
+        elif policy in ("constraint_aware", "safe_high_utilization"):
+            # Route through AureliusOptimizer(policy="replica_scaling") — Phase 3e.
+            # Schedule was pre-computed above; evaluate_tick runs unchanged for KPI.
+            replicas = _ca_shu_schedule[i] if i < len(_ca_shu_schedule) else MIN_REPLICAS
         elif policy == "min_cost_safe":
             # Per-tick minimum-replica oracle. Searches upward from MIN_REPLICAS
             # for the smallest fleet where per-tick timeout_rate < _MCS_TIMEOUT_GATE.

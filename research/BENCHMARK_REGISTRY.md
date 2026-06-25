@@ -65,9 +65,8 @@
 - **Attribution:** 61.7% model-affinity/prewarming, 38.3% anticipatory sizing
 - **Excluded comparison:** +86.9% vs `sla_aware` — EXCLUDED: `sla_aware` has
   6.214% SLA violations and is not a valid SLA-safe baseline
-- **Integration status:** Standalone (`genai_backtest.py`); not yet routed through
-  `AureliusOptimizer`. Path to canonical integration documented in
-  `research/results/alibaba_genai_third_trace_2026-06-24.md`
+- **Integration status:** Routed through `AureliusOptimizer(policy="genai_serving")` — Phase 3d.
+  See `research/results/genai_canonical_routing_phase3d_2026-06-25.md`
 - **Notes:** Multi-model-class trace with LoRA adapter prewarming. Cold-start
   dominates cost: 2.79s (with affinity) vs 22.85s (without). Richest signal
   for model-affinity / cold-start experiments.

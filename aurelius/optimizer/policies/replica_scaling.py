@@ -884,6 +884,11 @@ class ReplicaScalingConfig:
     Set to ``amcsg_n_sla_safe`` from the AMCSG stochastic GSF evaluation to
     reproduce the validated OSOTSS result through the canonical path."""
 
+    # ---- Phase 3e: backtest serving modes (constraint_aware / safe_high_utilization) ----
+    ca_target_rho: float = 0.65
+    """Target per-server utilisation for constraint_aware mode (default 0.65).
+    Ignored for all other modes."""
+
     # ---- forecasted_mcs mode (fully deployable; forecasts arrivals + service) ----
     forecast_method: str = "ewma"
     """``forecasted_mcs`` sub-method: ``"ewma"``, ``"quantile"``, or ``"lag1"``."""
@@ -1148,8 +1153,323 @@ class ReplicaScalingPolicy(OptimizationPolicy):
 
         raise ValueError(
             f"ReplicaScalingPolicy: unknown mode {cfg.mode!r}. Valid modes: "
-            "'amcsg', 'sotss_min', 'sotss_gsf', 'online_sotss', 'forecasted_mcs'."
+            "'amcsg', 'sotss_min', 'sotss_gsf', 'online_sotss', 'forecasted_mcs', "
+            "'constraint_aware', 'safe_high_utilization'."
         )
+
+    def optimize_from_ticks(
+        self,
+        ticks,
+        *,
+        tick_hours: float,
+        config: Optional[ReplicaScalingConfig] = None,
+    ) -> ReplicaScalingResult:
+        """Compute per-tick replica count for CA or SHU backtest serving modes.
+
+        Phase 3e entry point: accepts ArrivalTick-like objects (duck-typed)
+        rather than raw ``(arrival_s, output_tokens)`` pairs.  Supports
+        ``mode="constraint_aware"`` and ``mode="safe_high_utilization"``.
+
+        Args:
+            ticks:      Sequence of tick aggregates exposing arrival_rate_rps,
+                        output_tokens_mean, prompt_tokens_mean, request_count,
+                        reuse_fraction, and optionally model_mix.
+            tick_hours: Tick duration in hours.
+            config:     ReplicaScalingConfig with mode set to
+                        ``"constraint_aware"`` or ``"safe_high_utilization"``.
+                        Uses constructor default when None.
+
+        Returns:
+            ReplicaScalingResult with c_schedule set to per-tick replica counts.
+        """
+        cfg = config if config is not None else self._default_config
+
+        if cfg.mode == "constraint_aware":
+            c_sched = compute_constraint_aware_schedule(
+                ticks, tick_hours, ca_target_rho=cfg.ca_target_rho
+            )
+        elif cfg.mode == "safe_high_utilization":
+            c_sched = compute_shu_schedule(ticks, tick_hours)
+        else:
+            raise ValueError(
+                f"ReplicaScalingPolicy.optimize_from_ticks: unsupported mode "
+                f"{cfg.mode!r}. Supported: 'constraint_aware', 'safe_high_utilization'."
+            )
+
+        c_mean = statistics.mean(c_sched) if c_sched else 0.0
+        return ReplicaScalingResult(
+            mode=cfg.mode,
+            c_schedule=c_sched,
+            c_mean=c_mean,
+            n_ticks=len(c_sched),
+            warp=1.0,
+            oracle_iters=0,
+            n_ticks_cheaper=0,
+            baseline_n_sla_safe=0,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3e: BurstGPT/Azure backtest serving physics — CA and SHU modes
+# Extracted verbatim from aurelius/traces/backtest.py to enable canonical
+# routing through AureliusOptimizer(policy="replica_scaling").
+# Constants and formulas are byte-identical to backtest.py originals.
+# ---------------------------------------------------------------------------
+
+# Documented benchmark priors — identical to backtest.py originals.
+_BT_BASE_TTFT_MS: float = 150.0
+_BT_BASE_TPOT_MS: float = 20.0
+_BT_TTFT_SLO_MS: float = 2000.0
+_BT_TPOT_SLO_MS: float = 50.0
+_BT_MIN_REPLICAS: int = 1
+_BT_MAX_PREFILL_SAVINGS: float = 0.25
+_BT_SHU_TARGET_RHO: float = 0.75
+_BT_SHU_TIMEOUT_TOL: float = 0.0
+_BT_EWMA_ALPHA: float = 0.5
+_BT_FALLBACK_TOKENS_PER_S: float = 2500.0
+_BT_MODEL_TOKENS_PER_S: dict = {"ChatGPT": 3400.0, "GPT-4": 1700.0}
+
+
+def _bt_tick_throughput_tokps(model_mix, request_count: int) -> float:
+    """Request-fraction-weighted per-replica token throughput — identical to backtest.py."""
+    if not model_mix or request_count == 0:
+        return _BT_FALLBACK_TOKENS_PER_S
+    total = sum(model_mix.values())
+    return sum(
+        (cnt / total) * _BT_MODEL_TOKENS_PER_S.get(m, _BT_FALLBACK_TOKENS_PER_S)
+        for m, cnt in model_mix.items()
+    )
+
+
+def _bt_size_for_target(
+    arrival_rate: float,
+    output_mean: float,
+    throughput: float,
+    target_rho: float,
+) -> int:
+    """Replicas needed to keep utilization at/below target_rho — identical to backtest.py."""
+    mu_full = throughput / max(1.0, output_mean)
+    if mu_full <= 0 or arrival_rate <= 0:
+        return _BT_MIN_REPLICAS
+    return max(_BT_MIN_REPLICAS, int(math.ceil(arrival_rate / (mu_full * target_rho))))
+
+
+def _bt_timeout_rate_pct(
+    arrival_rate_rps: float,
+    output_tokens_mean: float,
+    prompt_tokens_mean: float,
+    throughput_tokps: float,
+    replicas: int,
+    prefill_savings: float,
+) -> float:
+    """Compute timeout_rate_pct for backtest serving physics (lazy serving import).
+
+    Replicates the timeout_rate_pct branch of evaluate_tick() in backtest.py
+    byte-identically.  Only used by _bt_constraint_trim; omits KPI fields that
+    do not affect the trim decision (gpu_hours, energy_cost, queue percentiles).
+    """
+    from aurelius.simulation.cluster import serving  # lazy — avoids heavy import
+
+    replicas = max(_BT_MIN_REPLICAS, int(replicas))
+    output_mean = max(1.0, output_tokens_mean)
+    prompt_mean = max(0.0, prompt_tokens_mean)
+    arrival_rate = arrival_rate_rps
+    throughput = throughput_tokps
+
+    base_service_s = (_BT_BASE_TTFT_MS + _BT_BASE_TPOT_MS * output_mean) / 1000.0
+    active_seqs = max(0.0, arrival_rate * base_service_s)
+
+    batch_eff = serving.batching_efficiency(active_seqs, replicas)
+    mu_per = max(1e-9, (throughput / max(1.0, output_mean)) * batch_eff)
+    rho = arrival_rate / (replicas * mu_per) if replicas > 0 else 1.0
+
+    mean_wait_s = serving.erlang_c_wait_s(arrival_rate, mu_per, replicas)
+    if not math.isfinite(mean_wait_s):
+        mean_wait_s = 60.0
+    mean_wait_s = min(60.0, mean_wait_s * serving.saturation_amplifier(rho))
+    mean_wait_ms = mean_wait_s * 1000.0
+
+    _p95_mult, p99_mult = serving.tail_multipliers(rho)
+
+    active_per_replica = active_seqs / replicas  # replicas >= 1 guaranteed above
+    eff_prompt = prompt_mean * (1.0 - prefill_savings)
+    ttft_compute = serving.ttft_ms(0.0, eff_prompt, active_per_replica, 0.0, 1.0)
+    ttft_p50 = mean_wait_ms + ttft_compute
+    ttft_p99 = ttft_p50 * p99_mult
+
+    tpot_p50 = serving.tpot_ms(_BT_BASE_TPOT_MS, active_per_replica, 1.0)
+    tpot_p99 = tpot_p50 * 4.0
+
+    latency_p99 = ttft_p99 + tpot_p99 * output_mean
+    sla_ms = _BT_TTFT_SLO_MS + output_mean * _BT_TPOT_SLO_MS
+    if latency_p99 > sla_ms:
+        return min(50.0, (latency_p99 - sla_ms) / sla_ms * 10.0)
+    return 0.0
+
+
+def _bt_constraint_trim(
+    arrival_rate_rps: float,
+    output_tokens_mean: float,
+    prompt_tokens_mean: float,
+    throughput_tokps: float,
+    base: int,
+    prefill_savings: float,
+    prev_replicas: Optional[int],
+    timeout_tol: float = 0.0,
+) -> int:
+    """Trim replicas below base while timeout_rate <= timeout_tol% — identical to backtest.py.
+
+    tick_hours is omitted because timeout_rate_pct does not depend on it.
+    """
+    chosen = base
+    for r in range(base, _BT_MIN_REPLICAS - 1, -1):
+        trate = _bt_timeout_rate_pct(
+            arrival_rate_rps, output_tokens_mean, prompt_tokens_mean,
+            throughput_tokps, r, prefill_savings,
+        )
+        if trate <= timeout_tol:
+            chosen = r
+        else:
+            break
+    if prev_replicas is not None and abs(chosen - prev_replicas) == 1:
+        trate_prev = _bt_timeout_rate_pct(
+            arrival_rate_rps, output_tokens_mean, prompt_tokens_mean,
+            throughput_tokps, prev_replicas, prefill_savings,
+        )
+        if trate_prev <= timeout_tol:
+            chosen = prev_replicas
+    return max(_BT_MIN_REPLICAS, chosen)
+
+
+def compute_constraint_aware_schedule(
+    ticks,
+    tick_hours: float,
+    *,
+    ca_target_rho: float = 0.65,
+    ewma_alpha: float = _BT_EWMA_ALPHA,
+    max_prefill_savings: float = _BT_MAX_PREFILL_SAVINGS,
+) -> list:
+    """Per-tick replica counts for the constraint_aware policy.
+
+    Extracted verbatim from the constraint_aware branch of
+    _run_policy() in aurelius/traces/backtest.py.  Algorithm:
+      EWMA-anticipatory sizing (max of current + smoothed peak),
+      size to target_rho=0.65, exploit cache prefill savings,
+      damp churn with hysteresis (prev_replicas).
+
+    Args:
+        ticks:              Sequence of ArrivalTick-like objects (duck-typed).
+                            Must expose arrival_rate_rps, output_tokens_mean,
+                            prompt_tokens_mean, request_count, reuse_fraction,
+                            and optionally model_mix (dict).
+        tick_hours:         Tick duration in hours (passed through but not
+                            used by timeout physics; kept for interface parity).
+        ca_target_rho:      Target per-server utilisation (default 0.65).
+        ewma_alpha:         EWMA smoothing factor (default 0.5).
+        max_prefill_savings: Cache prefill savings cap (default 0.25).
+
+    Returns:
+        list[int] — per-tick replica counts, one per tick.
+    """
+    c_schedule: list = []
+    ewma_rate: float = 0.0
+    ewma_out: float = 0.0
+    prev_replicas: Optional[int] = None
+
+    for t in ticks:
+        if t.request_count > 0:
+            ewma_rate = (
+                ewma_alpha * t.arrival_rate_rps + (1.0 - ewma_alpha) * ewma_rate
+                if ewma_rate else t.arrival_rate_rps
+            )
+            ewma_out = (
+                ewma_alpha * t.output_tokens_mean + (1.0 - ewma_alpha) * ewma_out
+                if ewma_out else t.output_tokens_mean
+            )
+
+        prefill_savings = max_prefill_savings * t.reuse_fraction
+        throughput = _bt_tick_throughput_tokps(
+            getattr(t, "model_mix", None), t.request_count
+        )
+        plan_rate = max(t.arrival_rate_rps, ewma_rate)
+        plan_out = max(t.output_tokens_mean, ewma_out) if t.request_count else ewma_out
+        base = _bt_size_for_target(plan_rate, max(1.0, plan_out), throughput, ca_target_rho)
+        replicas = _bt_constraint_trim(
+            t.arrival_rate_rps,
+            t.output_tokens_mean,
+            getattr(t, "prompt_tokens_mean", 0.0),
+            throughput,
+            base,
+            prefill_savings,
+            prev_replicas,
+            timeout_tol=0.0,
+        )
+        c_schedule.append(replicas)
+        prev_replicas = replicas
+
+    return c_schedule
+
+
+def compute_shu_schedule(
+    ticks,
+    tick_hours: float,
+    *,
+    ewma_alpha: float = _BT_EWMA_ALPHA,
+    max_prefill_savings: float = _BT_MAX_PREFILL_SAVINGS,
+) -> list:
+    """Per-tick replica counts for the safe_high_utilization policy.
+
+    Extracted verbatim from the safe_high_utilization branch of
+    _run_policy() in aurelius/traces/backtest.py.  Algorithm:
+      EWMA-anticipatory sizing at rho=0.75 (higher utilisation than CA),
+      exploit cache prefill savings, no hysteresis (prev_replicas=None).
+
+    Args:
+        ticks:              Sequence of ArrivalTick-like objects (duck-typed).
+        tick_hours:         Tick duration in hours (interface parity).
+        ewma_alpha:         EWMA smoothing factor (default 0.5).
+        max_prefill_savings: Cache prefill savings cap (default 0.25).
+
+    Returns:
+        list[int] — per-tick replica counts, one per tick.
+    """
+    c_schedule: list = []
+    ewma_rate: float = 0.0
+    ewma_out: float = 0.0
+
+    for t in ticks:
+        if t.request_count > 0:
+            ewma_rate = (
+                ewma_alpha * t.arrival_rate_rps + (1.0 - ewma_alpha) * ewma_rate
+                if ewma_rate else t.arrival_rate_rps
+            )
+            ewma_out = (
+                ewma_alpha * t.output_tokens_mean + (1.0 - ewma_alpha) * ewma_out
+                if ewma_out else t.output_tokens_mean
+            )
+
+        prefill_savings = max_prefill_savings * t.reuse_fraction
+        throughput = _bt_tick_throughput_tokps(
+            getattr(t, "model_mix", None), t.request_count
+        )
+        plan_rate = max(t.arrival_rate_rps, ewma_rate)
+        plan_out = max(t.output_tokens_mean, ewma_out) if t.request_count else ewma_out
+        base = _bt_size_for_target(
+            plan_rate, max(1.0, plan_out), throughput, _BT_SHU_TARGET_RHO
+        )
+        replicas = _bt_constraint_trim(
+            t.arrival_rate_rps,
+            t.output_tokens_mean,
+            getattr(t, "prompt_tokens_mean", 0.0),
+            throughput,
+            base,
+            prefill_savings,
+            None,  # no hysteresis for SHU
+            timeout_tol=_BT_SHU_TIMEOUT_TOL,
+        )
+        c_schedule.append(replicas)
+
+    return c_schedule
 
 
 __all__ = [
@@ -1169,6 +1489,15 @@ __all__ = [
     "compute_sotss_gsf_schedule",
     "compute_online_sotss_schedule",
     "compute_c1pgs_spot_replicas",
+    "compute_constraint_aware_schedule",
+    "compute_shu_schedule",
+    "_bt_timeout_rate_pct",
+    "_bt_constraint_trim",
+    "_bt_size_for_target",
+    "_BT_SHU_TARGET_RHO",
+    "_BT_SHU_TIMEOUT_TOL",
+    "_BT_EWMA_ALPHA",
+    "_BT_MAX_PREFILL_SAVINGS",
     "ReplicaScalingConfig",
     "ReplicaScalingResult",
     "ReplicaScalingPolicy",
