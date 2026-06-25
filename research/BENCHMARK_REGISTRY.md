@@ -56,12 +56,20 @@
 - **ID:** `alibaba_genai_2026`
 - **Source:** Alibaba (academic release)
 - **Link:** https://github.com/alibaba/AlibabaSystemTraces (GenTD26)
-- **Workload type:** llm_serving (stable diffusion + LLM mixed)
-- **Size:** 26,392 requests
+- **Workload type:** stable_diffusion_lora_serving (image generation, multi-model-class)
+- **Size:** 26,392 requests · 553 ticks @ 60s
 - **Artifact:** `data/external/alibaba_genai/processed/`
-- **Aurelius headline:** +89.46% vs `sla_aware` (model-affinity driven).
-- **Notes:** Strongest trace for model-affinity / prewarm effect. Has
-  `model_load_latency`, GPU duty-cycle, queue size — richest signal.
+- **SLA:** `2.0 × exec_time_seconds + 30.0s` · GPU price: $3.00/hr · target_rho=0.65
+- **Aurelius headline (SLA-safe):** +38.2% gp/$ and −27.6% GPU-hours
+  (`constraint_aware` vs `constraint_aware_no_affinity`, both 0.000% timeout)
+- **Attribution:** 61.7% model-affinity/prewarming, 38.3% anticipatory sizing
+- **Excluded comparison:** +86.9% vs `sla_aware` — EXCLUDED: `sla_aware` has
+  6.214% SLA violations and is not a valid SLA-safe baseline
+- **Integration status:** Routed through `AureliusOptimizer(policy="genai_serving")` — Phase 3d.
+  See `research/results/genai_canonical_routing_phase3d_2026-06-25.md`
+- **Notes:** Multi-model-class trace with LoRA adapter prewarming. Cold-start
+  dominates cost: 2.79s (with affinity) vs 22.85s (without). Richest signal
+  for model-affinity / cold-start experiments.
 
 ### 1.5 Alibaba Cluster Trace GPU v2023
 - **ID:** `alibaba_gpu_v2023`

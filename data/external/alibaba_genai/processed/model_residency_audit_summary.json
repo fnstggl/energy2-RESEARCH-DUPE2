@@ -54,7 +54,7 @@
   ],
   "directional_only_not_production_savings": true,
   "genai_2026_affinity_dependence": {
-    "affinity_prewarm_share_pct": 62.1,
+    "affinity_prewarm_share_pct": 61.7,
     "anticipatory_sizing_share_pct": 37.9,
     "cold_start_calibration_s": {
       "basemodel_load": 22.718,

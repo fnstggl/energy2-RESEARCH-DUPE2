@@ -100,11 +100,27 @@ def _ctx():
 
 def test_single_instance_exposes_all_surfaces():
     opt = AureliusOptimizer()
-    for name in ("energy", "serving_queue", "replica_scaling", "placement",
-                 "admission"):
+    for name in ("energy", "serving_queue", "replica_scaling", "genai_serving",
+                 "placement", "admission"):
         assert opt.surface(name) is not None
     # cached (same object returned twice)
     assert opt.surface("placement") is opt.surface("placement")
+
+
+def test_optimize_fleet_genai_surface():
+    from types import SimpleNamespace
+
+    ticks = [
+        SimpleNamespace(n=0, arrival_rate=0.0, mean_exec_s=0.0,
+                        distinct_models=0, lora_frac=0.0, controlnet_frac=0.0),
+        SimpleNamespace(n=10, arrival_rate=5.0, mean_exec_s=2.0,
+                        distinct_models=3, lora_frac=0.4, controlnet_frac=0.1),
+    ]
+    cold = {"basemodel_load": 10.0, "lora_load": 2.0, "controlnet_load": 4.0}
+    res = AureliusOptimizer().optimize_fleet(
+        workload_class="genai_serving", genai={"ticks": ticks, "cold": cold})
+    assert "genai_serving" in res.surfaces_used
+    assert len(res.genai.replica_counts) == 2
 
 
 # --------------------------------------------------------------------------

@@ -1,12 +1,14 @@
 """Canonical Aurelius optimization policies (decision-layer seam).
 
-All five decision-layer surfaces of the comprehensive ``AureliusOptimizer`` are
+All six decision-layer surfaces of the comprehensive ``AureliusOptimizer`` are
 now implemented and owned here — the canonical optimizer is no longer a single
-energy delegate, it is a multi-surface fleet optimizer (Phase B consolidation):
+energy delegate, it is a multi-surface fleet optimizer (Phase B consolidation
+over the Phase 1/2/3/3d extractions):
 
     EnergySchedulingPolicy   — thin delegate to JobScheduler (when/where/how-fast)
-    ServingQueuePolicy       — extracted abs-conformal SRPT request ordering
-    ReplicaScalingPolicy     — extracted AMCSG/SOTSS + deployable forecasted_mcs
+    ServingQueuePolicy       — extracted abs-conformal SRPT request ordering (Phase 2)
+    ReplicaScalingPolicy     — extracted AMCSG/SOTSS + deployable forecasted_mcs (Phase 2/3)
+    GenAIServingPolicy       — extracted multi-model GenAI constraint_aware sizing (Phase 3d)
     PlacementPolicy          — delegates to the residency decision engine (routing)
     AdmissionPolicy          — delegates to the frontier admission gate (flow control)
 
@@ -23,6 +25,20 @@ from typing import Optional
 
 from ...optimization.scheduler import JobScheduler, SchedulerResult
 from .base import OptimizationPolicy
+from .genai_serving import (
+    GENAI_EWMA_ALPHA,
+    GENAI_MIN_REPLICAS,
+    GENAI_SLA_LATENCY_ABS_S,
+    GENAI_SLA_LATENCY_MULT,
+    GENAI_TARGET_RHO_SLA,
+    GENAI_TARGET_RHO_UTIL,
+    GenAIServingPolicy,
+    GenAIServingResult,
+    genai_effective_service_s,
+    genai_eval_tick_timeout,
+    genai_size_for_sla,
+    genai_size_for_target,
+)
 from .replica_scaling import (
     REPLICA_AGGRESSIVE_GATE,
     REPLICA_MAX_ORACLE_ITERS,
@@ -33,7 +49,10 @@ from .replica_scaling import (
     ReplicaScalingPolicy,
     ReplicaScalingResult,
     compute_c1pgs_spot_replicas,
+    compute_constraint_aware_schedule,
+    compute_frontier_rho_schedule,
     compute_mcs_c_schedule,
+    compute_shu_schedule,
     compute_sotss_min_schedule,
 )
 from .serving_queue import (
@@ -183,18 +202,21 @@ POLICY_REGISTRY: dict[str, type[OptimizationPolicy]] = {
     EnergySchedulingPolicy.name: EnergySchedulingPolicy,
     ServingQueuePolicy.name: ServingQueuePolicy,
     ReplicaScalingPolicy.name: ReplicaScalingPolicy,
+    GenAIServingPolicy.name: GenAIServingPolicy,
     PlacementPolicy.name: PlacementPolicy,
     AdmissionPolicy.name: AdmissionPolicy,
 }
 
-#: Policies that are actually implemented. All five decision-layer surfaces are
-#: now live (Phase B): the canonical optimizer covers energy scheduling, serving
-#: ordering, replica capacity, placement/routing, and admission control.
+#: Policies that are actually implemented. All six decision-layer surfaces are
+#: now live (Phase B over Phase 1/2/3/3d): the canonical optimizer covers energy
+#: scheduling, serving ordering, replica capacity, GenAI multi-model sizing,
+#: placement/routing, and admission control.
 IMPLEMENTED_POLICIES: frozenset[str] = frozenset(
     {
         EnergySchedulingPolicy.name,
         ServingQueuePolicy.name,
         ReplicaScalingPolicy.name,
+        GenAIServingPolicy.name,
         PlacementPolicy.name,
         AdmissionPolicy.name,
     }
@@ -205,6 +227,8 @@ __all__ = [
     "EnergySchedulingPolicy",
     "ServingQueuePolicy",
     "ReplicaScalingPolicy",
+    "GenAIServingPolicy",
+    "GenAIServingResult",
     "PlacementPolicy",
     "AdmissionPolicy",
     "AbsoluteErrorConformalCalibrator",
@@ -214,6 +238,9 @@ __all__ = [
     "CONFORMAL_WINDOW",
     "CONFORMAL_ABS_TARGET_P90_TOKENS",
     "compute_c1pgs_spot_replicas",
+    "compute_frontier_rho_schedule",
+    "compute_constraint_aware_schedule",
+    "compute_shu_schedule",
     "compute_mcs_c_schedule",
     "compute_sotss_min_schedule",
     "ReplicaScalingConfig",
@@ -223,6 +250,16 @@ __all__ = [
     "REPLICA_SAFE_GATE",
     "REPLICA_AGGRESSIVE_GATE",
     "REPLICA_MAX_ORACLE_ITERS",
+    "genai_effective_service_s",
+    "genai_eval_tick_timeout",
+    "genai_size_for_sla",
+    "genai_size_for_target",
+    "GENAI_MIN_REPLICAS",
+    "GENAI_SLA_LATENCY_MULT",
+    "GENAI_SLA_LATENCY_ABS_S",
+    "GENAI_TARGET_RHO_SLA",
+    "GENAI_TARGET_RHO_UTIL",
+    "GENAI_EWMA_ALPHA",
     "POLICY_REGISTRY",
     "IMPLEMENTED_POLICIES",
 ]

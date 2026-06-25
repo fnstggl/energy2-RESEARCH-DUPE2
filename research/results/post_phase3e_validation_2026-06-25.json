@@ -1,0 +1,147 @@
+{
+  "run_name": "post_phase3e_validation_2026-06-25",
+  "date": "2026-06-25",
+  "classification": "BENCHMARK_REALISM_AUDIT",
+  "five_failure_rule_status": "ACTIVE_5_5",
+  "five_failure_rule_compliant": true,
+  "pr_hygiene": {
+    "pr_74": {
+      "title": "Phase 3e: Route constraint_aware/SHU through AureliusOptimizer (0% KPI drift)",
+      "classification": "SAFE_INFRASTRUCTURE",
+      "action": "MERGED",
+      "merge_sha": "49877c7",
+      "kpi_drift": 0.0,
+      "tests": 103
+    },
+    "pr_70": {
+      "title": "research: benchmark realism audit + research review — null result, Five-Failure Rule compliant",
+      "classification": "RESEARCH_ARTIFACT",
+      "action": "LEFT_OPEN",
+      "reason": "Base branch is non-main (claude/happy-pascal-pvp0fd); cannot merge to main"
+    },
+    "pr_54": {
+      "title": "Phases 4 + 5 — Canonical Frontier Discovery & Integration Master Plan",
+      "classification": "RESEARCH_ARTIFACT",
+      "action": "LEFT_OPEN",
+      "reason": "Documentation-only, stale base (main has moved), says 'recommend leaving open for review'"
+    }
+  },
+  "canonical_replays": {
+    "amcsg_azure": {
+      "result": 150630,
+      "vs_historical": 150630,
+      "match": true,
+      "status": "CONFIRMED"
+    },
+    "amcsg_burstgpt": {
+      "result": 168270,
+      "vs_historical": 168270,
+      "match": true,
+      "status": "CONFIRMED"
+    },
+    "sotss_azure_gate20": {
+      "result": 153013,
+      "vs_historical": 153013,
+      "match": true,
+      "status": "CONFIRMED"
+    },
+    "sotss_burstgpt_gate20": {
+      "result": 169030,
+      "match": true,
+      "status": "CONFIRMED"
+    },
+    "energy_canonical_wrapped": {
+      "result": 0.337299,
+      "vs_current_price_only": 0.303676,
+      "pct_improvement": 11.1,
+      "deadline_misses": 0,
+      "status": "CONFIRMED"
+    },
+    "burstgpt_fixture": {
+      "constraint_aware_gp_per_dollar": 8691.77,
+      "status": "CONFIRMED"
+    }
+  },
+  "architecture_status": {
+    "tests_passing": 103,
+    "policies_in_aurelius_optimizer": [
+      "energy",
+      "serving_queue",
+      "replica_scaling",
+      "genai_serving",
+      "constraint_aware_via_replica_scaling",
+      "safe_high_utilization_via_replica_scaling"
+    ],
+    "phase_status": {
+      "phase_1a": "DONE",
+      "phase_2": "DONE",
+      "phase_3_all_subphases": "DONE",
+      "phase_5": "DONE",
+      "phase_1b": "NOT_STARTED",
+      "phase_4": "NOT_STARTED"
+    }
+  },
+  "research_review": {
+    "papers_reviewed": 3,
+    "papers": [
+      {
+        "title": "DynamoLLM (HPCA 2025)",
+        "problem": "Dynamic resource allocation for LLM inference",
+        "objective": "Minimize cost while meeting latency SLAs",
+        "algorithm": "Offline GPU efficiency profiling + online greedy allocation",
+        "assumption_mismatch": "Profiled efficiency curve = trace-specific prior; Erlang-C is already assumption-free theoretical model",
+        "verdict": "NOT_APPLICABLE",
+        "reason": "Erlang-C already theoretically sound; profiled curve would be a calculated prior"
+      },
+      {
+        "title": "Llumnix (OSDI 2024)",
+        "problem": "Live migration of LLM requests across serving instances",
+        "objective": "Reduce tail latency, improve resource utilization",
+        "algorithm": "Monitor queue lengths; migrate to less-loaded instances",
+        "assumption_mismatch": "Requires NEW migration policy module",
+        "verdict": "NOT_APPLICABLE",
+        "reason": "Five-Failure Rule prohibits new modules"
+      },
+      {
+        "title": "Preble (NSDI 2024)",
+        "problem": "Prefix caching for LLM serving",
+        "objective": "Maximize KV cache hit rate",
+        "algorithm": "Track prefix hashes; route to replicas with matching cached prefixes",
+        "assumption_mismatch": "BurstGPT has no session IDs; cache savings already capped at MAX_PREFILL_SAVINGS=0.25 in benchmark",
+        "verdict": "NOT_APPLICABLE",
+        "reason": "Already approximated by cache_affinity_baseline; no additional gain without session data"
+      }
+    ],
+    "summary": "All three reviewed papers address problems already covered by existing Aurelius policies or require new modules prohibited by the Five-Failure Rule. No new implementation warranted."
+  },
+  "bottleneck_analysis": {
+    "question": "What is currently preventing Aurelius from achieving another real +25% against the strongest fair baseline?",
+    "answer": "The replica-scaling domain (Azure/BurstGPT serving) is at 94.4% of oracle ceiling (OSOTSS +5.94% vs AMCSG vs oracle +6.29%). The BurstGPT 15-request SLA gap is structurally irreducible (stochastic/deterministic mismatch at minimum-capacity ticks, confirmed by multi-seed audit). The next +25% must come from a different workload/decision domain or from Phase 1b combination search.",
+    "domains_near_ceiling": ["replica_scaling"],
+    "domains_with_headroom": ["energy_canonical", "genai_serving"],
+    "blocking_factor": "Phase 1b replay loop unification required to enable combination search across workload types"
+  },
+  "next_actions": [
+    {
+      "priority": 1,
+      "action": "Phase 1b: Unified replay loop",
+      "description": "Collapse energy + serving + genai replay loops into one engine to enable combination search",
+      "complexity": "HIGH",
+      "expected_gain": "Enables energy+serving combination; unknown KPI delta"
+    },
+    {
+      "priority": 2,
+      "action": "GenAI EWMA alpha sweep",
+      "description": "Test GenAI policy with configurable EWMA alpha (0.1-0.9) to find principled alpha selection rule",
+      "complexity": "LOW",
+      "expected_gain": "Potentially +1-5% on GenAI KPI; risk of trace-specific tuning"
+    },
+    {
+      "priority": 3,
+      "action": "Phase 4: Frontier promotion",
+      "description": "Promote frontier BASE/DYNAMIC to hard rho-ceiling constraint in AureliusOptimizer",
+      "complexity": "MEDIUM",
+      "expected_gain": "+13% over CA on Azure (analysis-only evidence)"
+    }
+  ]
+}

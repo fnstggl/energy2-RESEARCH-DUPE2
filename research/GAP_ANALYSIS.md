@@ -8,6 +8,401 @@
 
 ---
 
+## Run 2026-06-25 — Phase 1b-B: Unified ReplayEvaluationResult (ARCHITECTURE CONVERGENCE)
+
+### Q1. What currently limits Aurelius most?
+
+**Cross-loop comparison gap (now reduced).** The four replay loops (replica_scaling, serving_queue, genai_serving, energy) had no shared result schema, making it impossible to compare or combine results from different loops without manual field mapping. Phase 1b-B introduces `ReplayEvaluationResult` to close this gap.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Phase 1b (full replay loop unification) enabling combination search — Phase 1b-B is the first structural step. After 1b-A and 1b-C, combination experiments (energy-aware replica scaling × serving optimization) become feasible.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT (15-request structural gap). Not addressed in this run.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Unchanged. No optimizer decision changed in this run.
+
+### Q5. Which workloads benefit least?
+
+Unchanged. Low-load fixtures where all rho values map to MIN_REPLICAS=1.
+
+### Q6. Which research direction appears strongest?
+
+Phase 1b-A (serving+replica-scaling loop unification) is now unblocked by Phase 1b-B's shared schema. Combined loops enable honest combination policy search.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Phase 1b-A: unify srtf_serving_backtest + backtest.py into a shared replay harness, then run the energy-aware replica scaling × serving queue combination experiment. Estimated LOC: 100-200 LOC refactor + 30-50 LOC combination policy.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: +5.94% (OSOTSS). BurstGPT: +5.85% (OSOTSS). Phase 1b-B adds no new goodput/$.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All results deterministic.
+
+### Q10. Which assumptions might be wrong?
+
+The cross-loop cost basis assumption: `sla_safe_goodput_per_dollar` has different denominators across loops (provisioned GPU-hours vs busy GPU-hours). `ReplayEvaluationResult` documents this in `metadata["cost_basis"]` but does not normalize it. A future normalization layer would be needed for honest cross-loop comparisons.
+
+### Q11. Which benchmark weaknesses exist?
+
+Phase 1b-B's `from_srtf_sim_dict` does not populate `kpi_sla_compliant_goodput`, `kpi_gpu_hours`, or `kpi_total_cost` (0.0 defaults) because the SRTF sim dict doesn't store these. A future enhancement to the SRTF result type could compute and store them.
+
+### Q12. Which public datasets should be added?
+
+Unchanged. Full Azure 2024 dataset for Phase 4 validation.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 1b-B complete. Next options:
+1. **Phase 1b-A** — serving+replica-scaling loop unification (medium complexity, enables combination search)
+2. **Phase 1b-C** — energy overlay on serving traces (high complexity, first cross-domain combination test)
+3. **Full Azure 2024 dataset** — Phase 4 adaptive rho validation
+
+Results: `research/results/phase1b_b_replay_evaluation_result_2026-06-25.md`
+
+---
+
+## Run 2026-06-25 — Research Audit + Phase 1b Planning (REPORT ONLY — Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Three structural barriers, all confirmed irreducible without new modules:**
+1. BurstGPT 15-request n_sla_safe gap: stochastic/deterministic mismatch in oracle loop (5 fix approaches exhausted)
+2. Azure OSOTSS-to-oracle gap (0.33%): 1-tick EWMA service-time mismatch, needs oracle or new predictor
+3. forecasted_mcs deployability gap (-12.5% BurstGPT vs AMCSG even with lag1): burst onset not predictable from lag-1 counts
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+**Phase 1b replay loop unification.** Step 1b-C (energy-aware replica scaling on serving traces) is the highest-expected-value experiment once Phase 1b-A/B are complete. Energy timing decisions on the serving domain have never been tested.
+
+### Q3. Which forecasts are weakest?
+
+Forecasted_mcs arrival prediction on BurstGPT (lag1 = -12.5% vs AMCSG). burst onset timing is the fundamental limitation — no causal method can predict a burst from the tick before it starts.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+The energy domain has not been cross-validated against the serving domain. The energy policy improves cost (+11.1%) but runs in isolation from replica-scaling decisions. Phase 1b-C would test whether time-of-day energy pricing can improve the serving benchmark cost denominator.
+
+### Q5. Which workloads benefit least?
+
+Bursty traces (BurstGPT) on n_sla_safe metric — 15-request gap is confirmed structural.
+
+### Q6. Which research direction appears strongest?
+
+**Phase 1b-B** (unified evaluation result dataclass, 50-100 LOC) → **Phase 1b-A** (serving+replica-scaling unification) → **Phase 1b-C** (energy overlay on serving traces). No external research paper is applicable without new modules.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Phase 1b-C: energy-aware replica scaling. If energy prices vary enough on the Azure LLM 2024 timestamps (real 2024 data), time-shifted scale-up/down could reduce the cost denominator by ~1-3% without affecting goodput.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: OSOTSS +5.94% vs AMCSG. BurstGPT: +5.85% goodput/$ (n_sla_safe gap structural). Energy: +11.1% vs current_price_only. 175 parity tests confirm all results reproducible.
+
+### Q9. What would need to be true to maintain north-star?
+
+All results deterministic (confirmed: std=0 across seeds for AMCSG/OSOTSS). No regressions detected.
+
+### Q10. Which assumptions might be wrong?
+
+Phase 1b-C assumption: Azure LLM 2024 timestamps map cleanly to hourly grid electricity prices. If the trace timestamps are anonymized or shifted, energy overlay may not be meaningful. Need to verify timestamp structure before implementing 1b-C.
+
+### Q11. Which benchmark weaknesses exist?
+
+Phase 4 frontier rho adaptation still unvalidated at production scale (fixture load < threshold for multi-replica regime). Full Azure 2024 dataset (44M requests, 9 days) is available but requires a separate ingestion path.
+
+### Q12. Which public datasets should be added?
+
+The full Azure LLM 2024 dataset (44M requests) is the primary gap. It would validate Phase 4 at production load. The DATASET_REGISTRY should document the full vs fixture distinction.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Three research papers reviewed (SageServe, OServe, PecSched) — all NOT APPLICABLE without new modules.
+
+Priority order:
+1. **Phase 1b-B**: unified `ReplayEvaluationResult` dataclass (50-100 LOC, 0% KPI drift, enables future combination) ← DONE
+2. **Phase 1b-A**: serving+replica-scaling loop unification (medium complexity)
+3. **Phase 1b-C**: energy overlay on serving traces (high value, requires verifying Azure timestamp structure)
+4. **Full Azure 2024 dataset ingestion**: enables Phase 4 production-scale validation
+
+Results: `research/results/research_audit_phase1b_planning_2026-06-25.md`
+
+---
+
+## Run 2026-06-25 — Phase 4: Causal Frontier Rho Adaptation (NULL RESULT on fixtures; implementation retained)
+
+### Q1. What currently limits Aurelius most?
+
+**Fixture load floor.** At fixture scale (BurstGPT 51 req / 55 ticks, Azure LLM 2024 5880 req / 1560 ticks), all rho values from 0.45–0.95 map to MIN_REPLICAS=1 on most ticks. The adaptive rho path cannot demonstrate savings when the floor dominates. The full Azure 2024 dataset (estimated ~100k+ requests over 7 days) would have higher-load ticks where rho=0.65 maps to c=2 and rho=0.95 maps to c=1, making the effect visible.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+**Phase 1b replay unification** remains the highest-leverage path — enables combination search (energy-aware replica scaling × serving optimization). Phase 4's adaptive rho approach is sound but needs production-scale traces to demonstrate the effect.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT (15-request structural gap). The causal frontier estimator uses `anticipatory` mode with α=0.5, which provides the same EWMA quality as `constraint_aware`.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+The Phase 4 implementation is correct but untestable on fixtures. The adaptive rho loop selects rho=0.95 for 45/55 BurstGPT ticks after warm-up — this is a real frontier recommendation, but the MIN_REPLICAS floor means it has no effect on the schedule.
+
+### Q5. Which workloads benefit least?
+
+Low-load fixture data. Any trace where `_bt_size_for_target(rate, output_mean, throughput, 0.95)` returns the same value as `rho=0.65` will show zero adaptive rho benefit.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Phase 4 implemented (null result on fixtures). Remaining: Phase 1b replay loop unification (highest complexity/impact), or running Phase 4 on full Azure 2024 dataset if it becomes available.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Full Azure 2024 dataset: Phase 4 adaptive rho would likely show a measurable gain on ticks where current load maps to c=2+ replicas. Expected: +1–3% goodput/$ on medium-load windows where frontier recommends rho=0.75–0.85.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: +5.94% (OSOTSS). BurstGPT: +5.85% (OSOTSS), -15 req SLA gap structural. Phase 4 adds no new goodput/$ on fixtures.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All results deterministic.
+
+### Q10. Which assumptions might be wrong?
+
+The frontier estimator uses `prefill_savings=0.0` (conservative — omits cache savings when estimating rho safety). The actual `constraint_aware` path uses `prefill_savings = max_prefill_savings * reuse_fraction`. This makes the frontier's timeout estimate slightly pessimistic (safe direction), but means the estimator might recommend rho=0.65 when rho=0.75 would actually be safe with cache savings. This conservative bias is intentional.
+
+### Q11. Which benchmark weaknesses exist?
+
+Phase 4 cannot be fully validated without a load level that crosses integer replica thresholds at different rho values. The 60-request Alibaba GenAI fixture (1 tick) is similarly too small.
+
+### Q12. Which public datasets should be added?
+
+Full Azure LLM 2024 dataset — primary blocker for validating Phase 4. Full Alibaba GenAI 2026 dataset — secondary.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 4 implemented (null result on fixtures). Architecture options remaining:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact)
+2. **Full Azure 2024 dataset** — would enable proper Phase 4 validation (adaptive rho effect visible at production scale)
+3. **Phase 4 window tuning** — test window={5, 10, 20} on production data; currently fixed at W=10
+
+Results: `research/results/phase4_frontier_rho_results.json`
+
+---
+
+## Run 2026-06-25 — Backtest Serving Canonical Routing Phase 3e (ARCHITECTURE CONVERGENCE — Phase 3e, Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Remaining inline sizing logic in `backtest.py`**: `constraint_aware` and `safe_high_utilization` policies owned their EWMA anticipatory sizing loops inline, bypassing `AureliusOptimizer`. Phase 3e extracts these to `ReplicaScalingPolicy.optimize_from_ticks()`, achieving zero inline sizing logic for all production policies.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Unchanged. Architecture integration does not affect KPIs.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT HF (15-request structural gap vs AMCSG, confirmed deterministic).
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+All primary production policies now routed through canonical optimizer. Remaining gap: per-tick capacity decisions on 15 BurstGPT burst ticks (structural; Five-Failure Rule prohibits new modules).
+
+### Q5. Which workloads benefit least?
+
+Unchanged. Bursty traces (BurstGPT) on n_sla_safe metric.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Phase 3e complete. Remaining allowed architecture work: Phase 1b replay loop unification (collapse 4 independent replay loops into 1 engine; high complexity, high impact).
+
+### Q7. What is the shortest path to another +1% gain?
+
+No new KPI gain from this run (0% delta by design). Phase 1b replay loop unification would unblock combination search (energy + GenAI + replica_scaling compound).
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: goodput/$ achieved (+5.94% via OSOTSS). BurstGPT: goodput/$ achieved (+5.85%). BurstGPT n_sla_safe gap: −15 requests (structural, deterministic). GenAI: constraint_aware 9.84 gp/$ (+89.46% vs sla_aware) — bit-identical, unchanged.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All current frontier results are deterministic; no drift risk.
+
+### Q10. Which assumptions might be wrong?
+
+Unchanged. The EWMA alpha=0.5 for CA/SHU anticipatory sizing is a fixed prior. `_BT_*` constants copied from `backtest.py` — must remain in sync if backtest physics changes.
+
+### Q11. Which benchmark weaknesses exist?
+
+Unchanged. GenAI benchmark uses a 60-request fixture (1 tick). Full Alibaba GenAI 2026 dataset would provide more tick diversity.
+
+### Q12. Which public datasets should be added?
+
+Full Alibaba GenAI 2026 dataset (raw) — would enable multi-tick EWMA warm-up validation and cross-validation of constraint_aware vs sla_aware on realistic multi-hour traces.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 3e complete. Remaining architecture work:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact; requires 0%-delta parity gate for all 4 modes)
+2. **Third trace cross-validation** — OSOTSS on full Alibaba GenAI 2026 (if raw data available)
+3. **Phase 4** — Promote frontier BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: SUF +13% Azure only)
+
+Results: `research/results/phase3e_backtest_serving_canonical_routing_2026-06-25.{md,json}`
+
+---
+
+## Run 2026-06-25 — Post-Phase-3e Validation + Research Review (BENCHMARK REALISM AUDIT — Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Replica-scaling near oracle ceiling.** OSOTSS achieves 94.4% of the oracle-safe frontier (159,578 vs 160,107 gp/$ on Azure). BurstGPT 15-request SLA gap is structurally irreducible (stochastic/deterministic mismatch, confirmed deterministic across 5 seeds). Phase 1b replay-loop unification is the largest unresolved ARCHITECTURE blocker — prevents combination search (energy + serving + GenAI compound evaluation).
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Phase 1b combination search. If energy-price-aware replica scaling is possible (scale serving replicas down during high-price periods when SLA allows), joint optimization could exceed OSOTSS. Requires unified replay to evaluate fairly.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT (15-request gap, irreducible). GenAI EWMA alpha=0.5 is a fixed prior that may not be optimal for all traffic patterns — this is the only TUNABLE parameter remaining in existing policies without adding a new module.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Energy scheduling: 161/1000 jobs fall back to home region (no better option found by current greedy). GenAI anticipatory sizing: alpha=0.5 fixed — may under- or over-respond depending on traffic CV. Both are tunable via EXISTING policy parameters.
+
+### Q5. Which workloads benefit least?
+
+BurstGPT on n_sla_safe metric (structural −15 request gap). Energy training-job scheduling on the 161 fallback-home jobs.
+
+### Q6. Which research direction appears strongest?
+
+Phase 1b replay loop unification (architecture, HIGH priority, HIGH complexity). Alternative: GenAI EWMA alpha configurability (LOW risk, potentially +1-5% on GenAI, but risk of trace-specific tuning).
+
+### Q7. What is the shortest path to another +1% gain?
+
+GenAI EWMA alpha sweep. Make `GENAI_EWMA_ALPHA` configurable, sweep [0.1–0.9] on Alibaba GenAI 2026 trace, identify principled alpha based on arrival rate CV. If alpha selection rule generalizes across traces, this is a legitimate frontier improvement.
+
+### Q8. What is the current north-star status?
+
+North-star: +300% vs SLA-aware schedulers on rollup. Current headline: median +9% (mean +19%, weighted +26%). LLM-serving subset: median +23%. Azure +5.94%, BurstGPT +5.85% (OSOTSS). Energy +11.1%. GenAI +38.2%. No regressions from Phase 3e merge (confirmed).
+
+### Q9. What would need to be true to maintain north-star?
+
+All current frontier results are deterministic. No drift risk from architecture convergence (103 tests gate KPI parity). Confirmed stable post Phase 3e merge.
+
+### Q10. Which assumptions might be wrong?
+
+1. GenAI EWMA alpha=0.5 assumes medium traffic volatility — may be wrong for high-CV or low-CV traces. 2. Energy greedy heuristic assumes independent per-job optimization — joint optimization might find better schedules for the 161 fallback-home jobs. 3. Erlang-C (M/M/c) assumption — bursty traffic may deviate from Poisson arrivals.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. BurstGPT: no session IDs → prefix-caching proxy only. 2. Azure LLM 2024: sample only (5,880 rows; full week gated). 3. GenAI: 60-request fixture (1 tick) — too small for multi-tick warm-up testing. 4. Energy: fixed 1,000 synthetic jobs — may not cover all scheduling edge cases.
+
+### Q12. Which public datasets should be added?
+
+Full Alibaba GenAI 2026 dataset (raw) for multi-tick EWMA convergence testing. No new datasets added this run.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE (5/5).**
+
+Priority order:
+1. **Phase 1b replay loop unification** — HIGH complexity, HIGH impact; enables combination search. Requires 0%-delta parity gate for all 4 replay modes.
+2. **GenAI EWMA alpha configurability** — LOW risk; make `GENAI_EWMA_ALPHA` configurable, validate principled selection rule across traces.
+3. **Phase 4 frontier promotion** — MEDIUM complexity; partial evidence (+13% over CA, Azure only).
+
+Results: `research/results/post_phase3e_validation_2026-06-25.{md,json}`
+
+---
+
+## Run 2026-06-25 — Phase 3e Serving Canonical Routing (ARCHITECTURE CONVERGENCE — Phase 3e, Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+(See Phase 3e PR #74 body — merged)
+
+### Q2–Q12. See phase 3e run artifact
+
+`research/results/phase3e_backtest_serving_canonical_routing_2026-06-25.{md,json}`
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 3e complete. Remaining architecture work:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact; requires 0%-delta parity gate for all 4 modes)
+2. **Third trace cross-validation** — OSOTSS on full Alibaba GenAI 2026 (if raw data available)
+3. **Phase 4** — Promote frontier BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: SUF +13% Azure only)
+
+Results: `research/results/phase3e_backtest_serving_canonical_routing_2026-06-25.{md,json}`
+
+---
+
+## Run 2026-06-25 — GenAI Canonical Routing Phase 3d (ARCHITECTURE CONVERGENCE — Phase 3d, Five-Failure Rule compliant)
+
+### Q1. What currently limits Aurelius most?
+
+**Architecture divergence in GenAI benchmark**: `genai_backtest._run_policy` owned the `constraint_aware` EWMA anticipatory + model-affinity sizing logic inline, bypassing `AureliusOptimizer`. Physics helpers (`_effective_service_s`, `_size_for_sla`, `_size_for_target`) were local to the monolith. Additionally, PR #72 had two CI failures: stale `affinity_prewarm_share_pct=62.1` (correct: 61.7 from source data) and ruff alphabetical import order violation (genai_serving import placed after replica_scaling).
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Unchanged from previous runs. Architecture integration does not affect KPIs.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT HF (15-request structural gap vs AMCSG, confirmed deterministic by multi-seed audit).
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+GenAI `constraint_aware` now fully routed through canonical optimizer. Remaining gap: per-tick capacity decisions on 15 BurstGPT burst ticks (structural; Five-Failure Rule prohibits new modules to address this).
+
+### Q5. Which workloads benefit least?
+
+Unchanged. Bursty traces (BurstGPT) on n_sla_safe metric.
+
+### Q6. Which research direction appears strongest?
+
+Five-Failure Rule active. Phase 3d complete. Remaining allowed architecture work: Phase 1b replay loop unification (collapse 4 independent replay loops into 1 engine; high complexity, high impact).
+
+### Q7. What is the shortest path to another +1% gain?
+
+No new KPI gain from this run (0% delta by design). Phase 1b replay loop unification would unblock combination search (energy + GenAI + replica_scaling compound).
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: goodput/$ achieved (+5.94% via OSOTSS). BurstGPT: goodput/$ achieved (+5.85%). BurstGPT n_sla_safe gap: −15 requests (structural, deterministic). GenAI: constraint_aware 9.84 gp/$ (+89.46% vs sla_aware) — bit-identical, unchanged.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All current frontier results are deterministic; no drift risk.
+
+### Q10. Which assumptions might be wrong?
+
+Unchanged. The EWMA alpha=0.5 for GenAI anticipatory sizing is a fixed prior; if actual production arrival variance differs substantially from the Alibaba GenAI 2026 fixture, the replica count guidance may over- or under-provision. No oracle information used (causal EWMA only).
+
+### Q11. Which benchmark weaknesses exist?
+
+Unchanged. GenAI benchmark uses a 60-request fixture (1 tick) — too small for multi-tick EWMA convergence testing. Full Alibaba GenAI 2026 dataset would provide more tick diversity.
+
+### Q12. Which public datasets should be added?
+
+Full Alibaba GenAI 2026 dataset (raw) — would enable multi-tick EWMA warm-up validation and cross-validation of constraint_aware vs sla_aware on realistic multi-hour traces.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 3d complete. Remaining architecture work:
+1. **Phase 1b replay loop unification** — collapse four replay loops into one engine (high complexity, high impact; requires 0%-delta parity gate for all 4 modes)
+2. **Third trace cross-validation** — OSOTSS on full Alibaba GenAI 2026 (if raw data available)
+3. **Phase 4** — Promote frontier BASE/DYNAMIC → ρ-ceiling constraint (partial evidence: SUF +13% Azure only)
+
+Results: `research/results/genai_canonical_routing_phase3d_2026-06-25.{md,json}`
+
+---
+
 ## Run 2026-06-24 — Dead Frontier Code Deprecation (ARCHITECTURE SIMPLIFICATION — Phase 5, Five-Failure Rule compliant)
 
 ### Q1. What currently limits Aurelius most?
@@ -5508,3 +5903,100 @@ None viable for OSOTSS/aging-SRTF replay. All three candidate traces are blocked
 
 Results: `research/results/aging_srtf_amcsg_compound_2026-06-24.{md,json}`
 Tests: `tests/test_aging_srtf_amcsg_compound.py` (24 tests: 23 passed, 1 skipped)
+
+---
+
+## Run 2026-06-24 — Alibaba GenAI Third-Trace Cross-Validation (Benchmark Realism)
+
+**Five-Failure Rule counter: 6/5 (ACTIVE)**
+
+### Q1. What currently limits Aurelius most?
+
+**Five-Failure Rule ACTIVE (6/5).** The binding constraint is prediction degeneracy: the running-median
+prior collapses per-request predictions to near-constant (stdev=8.1 vs actual 93.1). All queue-discipline
+experiments are ceiling-limited at FIFO. The second constraint is the absence of a third production-grade
+trace class for LLM serving.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Per-request token prediction (Trail/ICLR 2025, arXiv:2410.01035) is the highest-EV path, blocked by
+pilot telemetry requirements. Energy-denominator reduction (GreenLLM arXiv:2508.16449: 45% energy via
+SLO-aware DVFS) is a second candidate that doesn't require prediction accuracy.
+
+### Q3. Which forecasts are weakest?
+
+Per-request token length prediction. Running-median window=200 is near-constant and cannot support
+queue-discipline improvements. Cold-start duration is well-calibrated when affinity metadata is available
+(2.79s), but degrades to 22.85s without it.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Queue dispatch order (prediction-limited, blocked). Cold-start / adapter preloading policy (already
+exploited by affinity routing). Energy denominator (GreenLLM DVFS not implemented).
+
+### Q5. Which workloads benefit least from current constraint_aware?
+
+Text-LLM serving (Azure, BurstGPT) shows +5.94–5.85% OSOTSS gains but requires token-prediction accuracy
+for further gains. Both traces are relatively homogeneous (single-model-class). The Alibaba GenAI trace
+(multi-model-class LoRA) shows much larger gains (+38.2%) because the affinity signal is stronger when
+adapter cold-starts are costly.
+
+### Q6. Which research direction appears strongest?
+
+1. Energy-denominator reduction (GreenLLM DVFS, arXiv:2508.16449) — orthogonal to prediction accuracy, no pilot requirement.
+2. Canonical integration of genai_backtest.py through AureliusOptimizer (architecture convergence).
+3. Per-request token prediction via Trail (blocked, requires pilot telemetry).
+
+### Q7. What is the shortest path to another +1% gain?
+
+Under Five-Failure Rule: energy-denominator reduction via DVFS scheduling (if CAISO/energy data available
+in serving benchmark). Alternative: canonical integration of GenAI policy through AureliusOptimizer.
+No new LLM-serving queue-discipline experiments — all prediction-limited.
+
+### Q8. What is the current north-star status?
+
+**Both LLM traces north-star achieved.** Azure: 159,578 gp/$ (OSOTSS). BurstGPT: 178,109 gp/$ (OSOTSS).
+The GenAI ablation adds a third data point (9.8514 gp/$ constraint_aware) on a separate workload type.
+Not directly comparable (different units/scale: LLM uses per-job tokens, GenAI uses exec_time seconds).
+
+### Q9. What would need to be true to maintain north-star?
+
+North-star already achieved on both LLM traces. No regression present. GenAI workload is a separate
+benchmark track — north-star for GenAI is constraint_aware (9.8514 gp/$), not yet routed through
+AureliusOptimizer.
+
+### Q10. Which assumptions might be wrong?
+
+1. **"Affinity effect is universal"** — VERIFIED across two workload classes (LLM + LoRA image gen).
+   Confidence increased.
+2. **"Cold-start is the dominant cost driver"** — CONFIRMED on Alibaba GenAI: 22.85s without affinity
+   vs 2.79s with affinity. 61.7% of the gain is affinity/cold-start.
+3. **"sla_aware is a fair baseline"** — CONFIRMED WRONG. sla_aware fails SLA (6.214% timeout on GenAI
+   trace) and is excluded. Strongest SLA-safe baseline is constraint_aware_no_affinity.
+
+### Q11. Which benchmark weaknesses exist?
+
+1. **Alibaba GenAI cold-start calibration absent:** `cold_start_calibration_s: {}` because pipeline
+   CSV files are not publicly available (empty downloads). Default cold-start values used.
+2. **No per-request latency SLA:** GenAI SLA is `2.0 × exec_time + 30.0s` — a generous proxy.
+3. **genai_backtest.py not canonical:** not routed through AureliusOptimizer; separate simulation.
+
+### Q12. Which public datasets should be added?
+
+No new datasets recommended under Five-Failure Rule. The three committed traces (Azure LLM 2024,
+BurstGPT, Alibaba GenAI 2026) cover the main serving workload classes. Next priority is canonical
+integration of the existing GenAI benchmark, not new data.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE ACTIVE (6/5). Allowed actions: integration, validation, diagnosis, architecture simplification.**
+
+1. **Canonical GenAI integration:** Route genai_backtest.py through `AureliusOptimizer(policy="replica_scaling")`
+   or a new `GenAIServingPolicy`. Requires 0% KPI drift parity gate. Updates OPTIMIZER_UNIFICATION_PLAN.md.
+2. **Energy denominator experiment:** GreenLLM-style DVFS scheduling. Orthogonal to prediction accuracy.
+   Does not require new queue discipline.
+3. **OSOTSS parity test suite:** 38 tests committed, all passing — confirms Phase 3 canonical routing closure.
+4. **Do NOT attempt new queue discipline variants** — all are prediction-limited.
+
+Results: `research/results/alibaba_genai_third_trace_2026-06-24.{md,json}`
+Tests: `tests/test_osotss_canonical_routing_parity.py` (38 tests: 38 passed)

@@ -203,7 +203,9 @@ def test_wrapper_matches_canonical_benchmark_scheduler_step():
 # Phase B: placement (residency) and admission (frontier gate) are now wired in
 # as parity wirings of existing, tested surfaces — they no longer raise.
 @pytest.mark.parametrize(
-    "policy", ["energy", "serving_queue", "replica_scaling", "placement", "admission"]
+    "policy",
+    ["energy", "serving_queue", "replica_scaling", "genai_serving", "placement",
+     "admission"],
 )
 def test_all_surfaces_implemented(policy):
     from aurelius.optimizer.policies import IMPLEMENTED_POLICIES

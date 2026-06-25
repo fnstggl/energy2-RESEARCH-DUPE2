@@ -99,6 +99,7 @@ class FleetOptimizationResult:
     placement: Optional[object] = None
     capacity: Optional[object] = None
     serving_order: Optional[object] = None
+    genai: Optional[object] = None
     surfaces_used: tuple = ()
     objective: str = CANONICAL_OBJECTIVE
     notes: tuple = ()
@@ -245,6 +246,10 @@ class AureliusOptimizer:
         """Serving-queue surface: request ordering / preemption (SRPT+conformal)."""
         return self.surface("serving_queue").optimize(requests, servers, **kwargs)
 
+    def serve_genai(self, ticks, cold, **kwargs):
+        """GenAI serving surface: multi-model constraint_aware replica sizing."""
+        return self.surface("genai_serving").optimize(ticks, cold, **kwargs)
+
     def scale_replicas(self, raw, **kwargs):
         """Replica-capacity surface: per-tick replica count schedule."""
         return self.surface("replica_scaling").optimize(raw, **kwargs)
@@ -296,6 +301,7 @@ class AureliusOptimizer:
         placement: Optional[dict] = None,
         capacity: Optional[dict] = None,
         serving: Optional[dict] = None,
+        genai: Optional[dict] = None,
         notes=(),
     ) -> FleetOptimizationResult:
         """Comprehensive fleet optimization across every supplied surface.
@@ -313,6 +319,7 @@ class AureliusOptimizer:
             placement: ``{"request", "locations", "load_profiles"?, ...}``
             capacity:  ``{"raw", "warp"?, "config"?, "mode"?}``
             serving:   ``{"requests", "servers", "summarize", ...}``  (advisory)
+            genai:     ``{"ticks", "cold", "tick_hours"?}``  (multi-model sizing)
 
         Returns:
             :class:`FleetOptimizationResult` with each surface's decision +
@@ -374,6 +381,13 @@ class AureliusOptimizer:
                 "simulator result (advisory, docs/RESULTS.md §8) — not a live-"
                 "runtime guarantee."
             )
+
+        if genai is not None:
+            g = dict(genai)
+            ticks = g.pop("ticks")
+            cold = g.pop("cold")
+            result.genai = self.serve_genai(ticks, cold, **g)
+            used.append("genai_serving")
 
         result.surfaces_used = tuple(used)
         result.notes = tuple(notes_list)

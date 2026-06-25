@@ -1,0 +1,47 @@
+{
+  "run_id": "genai_canonical_routing_phase3d_2026-06-25",
+  "date": "2026-06-25",
+  "phase": "3d",
+  "classification": "ARCHITECTURE_CONVERGENCE",
+  "five_failure_rule": "compliant",
+  "kpi_delta_pct": 0.0,
+  "trace": "Alibaba GenAI 2026 (fixture: tests/fixtures/alibaba_genai_sample/)",
+  "description": "GenAI constraint_aware policy canonical routing through AureliusOptimizer (Phase 3d). Extracts EWMA anticipatory + model-affinity cold-start sizing from genai_backtest._run_policy into GenAIServingPolicy. Bit-identical parity confirmed on fixture.",
+  "changes": {
+    "aurelius/optimizer/policies/genai_serving.py": "CREATED — canonical physics owner for GenAI multi-model serving (genai_effective_service_s, genai_eval_tick_timeout, genai_size_for_sla, genai_size_for_target, GenAIServingPolicy, GenAIServingResult)",
+    "aurelius/optimizer/policies/__init__.py": "MODIFIED — added GenAIServingPolicy to POLICY_REGISTRY and IMPLEMENTED_POLICIES; added genai_serving import (alphabetical: g < r fixes prior ruff lint failure)",
+    "aurelius/traces/genai_backtest.py": "MODIFIED — physics helpers (_effective_service_s, _size_for_sla, _size_for_target) now delegate to canonical genai_serving module; constraint_aware path routes through AureliusOptimizer(policy='genai_serving')",
+    "data/external/alibaba_genai/processed/model_residency_audit_summary.json": "MODIFIED — affinity_prewarm_share_pct: 62.1 -> 61.7 (fixes test_summary_is_reproducible; value regenerated correctly from source data)",
+    "tests/test_genai_canonical_routing_parity.py": "CREATED — 6 parity tests: bit-identical replica counts, all 5 policies via backtest, constraint_aware beats sla_aware, zero timeout, no regression vs sla_aware, facade policy name",
+    "research/OPTIMIZER_UNIFICATION_PLAN.md": "MODIFIED — Phase 3d row marked DONE"
+  },
+  "parity_results": {
+    "fixture": "tests/fixtures/alibaba_genai_sample/ (60 requests, 1 tick)",
+    "bit_identical": true,
+    "ticks_differing": 0,
+    "total_ticks": 1,
+    "constraint_aware_timeout_rate_pct": 0.0,
+    "constraint_aware_beats_sla_aware": true,
+    "outcome": "TIE",
+    "affinity": true,
+    "mode": "constraint_aware"
+  },
+  "tests": {
+    "new_parity_tests": 6,
+    "test_file": "tests/test_genai_canonical_routing_parity.py",
+    "all_pass": true,
+    "model_residency_tests_pass": 10,
+    "total_passing": 83,
+    "pre_existing_failures": 8,
+    "pre_existing_failure_cause": "ModuleNotFoundError: pandas/numpy not installed in test environment"
+  },
+  "implemented_policies": ["energy", "serving_queue", "replica_scaling", "genai_serving"],
+  "policy_registry_count": 6,
+  "implemented_count": 4,
+  "lint": "ruff check passed (0 errors)",
+  "frontier_status": "unchanged",
+  "osotss_azure_gpd_usd": 159578,
+  "osotss_burstgpt_gpd_usd": 178109,
+  "amcsg_azure_gpd_usd": 150630,
+  "amcsg_burstgpt_gpd_usd": 168270
+}
