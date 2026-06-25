@@ -1,0 +1,107 @@
+{
+  "run_date": "2026-06-25",
+  "session": 2,
+  "branch": "claude/tender-einstein-uocpg8",
+  "classification": "USEFUL RESEARCH",
+  "five_failure_rule": "ACTIVE",
+  "pr_hygiene": {
+    "merged": [82],
+    "not_merged": {
+      "83": "architecture-unification requires human review",
+      "81": "architecture-unification requires human review",
+      "70": "non-main base branch",
+      "54": "stale base (main has moved)"
+    }
+  },
+  "canonical_benchmarks": {
+    "energy_constraint_aware_vs_cpo_pct": 11.33,
+    "energy_constraint_aware_goodput_per_dollar": 0.325236,
+    "energy_current_price_only_goodput_per_dollar": 0.292131,
+    "amcsg_azure_goodput_per_dollar": 150629.9,
+    "amcsg_burstgpt_goodput_per_dollar": 168269.98,
+    "osotss_azure_goodput_per_dollar": 159578.22,
+    "osotss_azure_vs_amcsg_pct": 5.94,
+    "osotss_burstgpt_goodput_per_dollar": 178108.97,
+    "osotss_burstgpt_vs_amcsg_pct": 5.85,
+    "kpi_drift_pct": 0.0,
+    "parity_tests_pass": 92
+  },
+  "burstgpt_ceiling_analysis": {
+    "amcsg_n_sla_safe": 5864,
+    "osotss_n_sla_safe": 5849,
+    "gap_requests": 15,
+    "gap_pct": 0.256,
+    "osotss_c_mean": 4.071,
+    "amcsg_c_mean": 4.331,
+    "osotss_cost_reduction_pct": 6.0,
+    "conformal_arrivals_ceiling_improvement_pct": 0.26,
+    "combined_ceiling_pct": "0.5-1.0",
+    "finding": "BurstGPT gap is cost-efficiency driven (−6% GPU-hours), not n_sla_safe driven. Conformal arrival-rate would recover at most +0.26% on BurstGPT. Low priority."
+  },
+  "papers_reviewed": [
+    {
+      "title": "Beyond Prediction: Tail-Aware Scheduling for LLM Inference",
+      "source": "arXiv:2606.18431",
+      "venue": "ICML 2026",
+      "verdict": "NOT APPLICABLE",
+      "reason": "Per-request intra-instance scheduler; different decision layer than Aurelius (fleet autoscaler)"
+    },
+    {
+      "title": "Scheduling LLM Inference with Uncertainty-Aware Output Length Predictions (TIE)",
+      "source": "arXiv:2604.00499",
+      "venue": "2026",
+      "verdict": "NOT DIRECTLY APPLICABLE",
+      "reason": "Per-request SJF scheduler; log-t distribution insight could improve Erlang-C service time but requires token distribution telemetry not in Azure trace"
+    },
+    {
+      "title": "Hermes: Efficient Serving of LLM Applications with Probabilistic Demand Modeling",
+      "source": "arXiv:2506.14851",
+      "venue": "ACM TACO 2025",
+      "verdict": "NOT APPLICABLE",
+      "reason": "Multi-step application pipeline serving (PDGraph + Gittins); Aurelius serves single-request workloads"
+    },
+    {
+      "title": "PARD: Proactive Request Dropping for Inference Goodput",
+      "source": "arXiv:2602.08747",
+      "venue": "EuroSys 2026",
+      "verdict": "PRIORITY CANDIDATE — BLOCKED BY FIVE-FAILURE RULE",
+      "reason": "Directly maps to Aurelius's AdmissionPolicy stub; proactive admission control using remaining latency budget; +16-176% goodput on 64-GPU cluster; uses only decision-time telemetry available in Aurelius; requires Five-Failure Rule lift"
+    },
+    {
+      "title": "Large-Scale LLM Inference with Heterogeneous Workloads: Asymptotically Optimal Control",
+      "source": "arXiv:2602.02987",
+      "venue": "2026",
+      "verdict": "THEORETICALLY RELEVANT",
+      "reason": "Asymptotic optimality proof for gate-and-route policies validates Erlang-C structure; full LP implementation requires heterogeneous GPU cluster telemetry not in current benchmarks"
+    }
+  ],
+  "priority_next_experiments": [
+    {
+      "rank": 1,
+      "experiment": "PARD-style admission control",
+      "expected_gain": "+16-176% goodput (PARD paper; Aurelius impact TBD)",
+      "blocked_by": "Five-Failure Rule + human review of PR #83",
+      "telemetry_needed": "per-request remaining latency budget (available from SLA deadline - elapsed_time)"
+    },
+    {
+      "rank": 2,
+      "experiment": "Phase 1b-C energy overlay on serving traces",
+      "expected_gain": "+1-3% serving goodput/$",
+      "blocked_by": "Five-Failure Rule + PR #81 pending",
+      "telemetry_needed": "Azure LLM 2024 timestamps mapped to hourly grid electricity prices"
+    },
+    {
+      "rank": 3,
+      "experiment": "Conformal arrival-rate bounds for OSOTSS",
+      "expected_gain": "+0.3-0.5% on BurstGPT",
+      "blocked_by": "Five-Failure Rule",
+      "telemetry_needed": "rolling arrival-rate residuals (available from trace)"
+    }
+  ],
+  "optimizer_changed": false,
+  "architecture_changed": false,
+  "benchmark_definitions_changed": false,
+  "sla_safety": "unchanged",
+  "gpu_hour_delta": 0,
+  "merge_recommendation": "MERGE"
+}

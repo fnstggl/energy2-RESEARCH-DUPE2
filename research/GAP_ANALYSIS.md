@@ -8,6 +8,67 @@
 
 ---
 
+## Run 2026-06-25 (session 2) — Research Audit: PARD + BurstGPT Ceiling Analysis (USEFUL RESEARCH)
+
+### Q1. What currently limits Aurelius most?
+
+**Five-Failure Rule active + two architecture PRs pending human review.** PRs #81 (Phase 1b-A ReplayHarness) and #83 (Phase B comprehensive optimizer + claims-truth) are both architecture-unification PRs requiring human review. Until at least one is merged, the Phase 1b-C combination experiment and PARD admission control cannot begin. The architecture is otherwise complete.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+**PARD-style proactive admission control** (arXiv:2602.08747, EuroSys 2026). PARD demonstrated +16-176% goodput improvement on a 64-GPU cluster vs state-of-art via proactive request dropping based on remaining latency budget. This maps directly to Aurelius's AdmissionPolicy stub. Expected gain on Aurelius benchmarks is TBD (will require fair replay with PARD algorithm vs OSOTSS baseline, same traces, same SLA, same cost model).
+
+### Q3. Which forecasts are weakest?
+
+**BurstGPT burst-tick arrival-rate EWMA** — ceiling analysis this session quantifies the gap: conformal arrival-rate would recover at most 15 requests (+0.26% n_sla_safe) for +0.3-0.5% additional goodput/$. The gap is smaller than previously assumed because OSOTSS's main gain is utilization-driven (−6% GPU-hours), not n_sla_safe recovery.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+**Admission control** — currently a stub (NotImplementedError). PARD shows this surface has the highest gap-to-close. The reactive drop-on-timeout approach leaves 16-176% goodput on the table vs proactive dropping.
+
+### Q5. Which workloads benefit least?
+
+Low-load fixtures (BurstGPT with only 5880 requests) where rho differences don't cross integer replica thresholds. Phase 4 frontier rho null result confirmed even on full 58K-request BurstGPT HF trace.
+
+### Q6. Which research direction appears strongest?
+
+**PARD proactive admission control** — highest expected gain, directly implements existing AdmissionPolicy stub, uses only decision-time telemetry (remaining latency budget = SLA deadline − elapsed time), backed by EuroSys 2026 evaluation on production cluster.
+
+### Q7. What is the shortest path to another +1% gain?
+
+**PARD + Phase 1b-C**, in that order. PARD is an admission-layer change that could give +16-176% if it adapts well to Aurelius benchmark structure. Phase 1b-C (energy overlay on serving traces) is estimated +1-3%. Both require the Five-Failure Rule to lift (human authorization or rule-reset via successful improvement).
+
+### Q8. What is the current north-star status?
+
+Unchanged and confirmed stable this session. Azure: OSOTSS +5.94% vs AMCSG. BurstGPT: OSOTSS +5.85%. Energy: +11.33% vs current_price_only. 92 parity tests confirm 0% KPI drift.
+
+### Q9. What would need to be true to maintain north-star?
+
+All results deterministic (confirmed). No architecture changes this session. Two architecture-unification PRs pending human review.
+
+### Q10. Which assumptions might be wrong?
+
+**PARD goodput amplifier assumption:** PARD's +16-176% gain on 64-GPU cluster may not translate directly to Aurelius's public-trace benchmarks, which use smaller fixture scales. The gain is workload-intensity-dependent — high-burst traces benefit most from proactive dropping.
+
+### Q11. Which benchmark weaknesses exist?
+
+BurstGPT fixture (5880 requests over ~34 minutes) is too small to show production-scale dynamics. Full BurstGPT HF (58K requests) confirmed null result for Phase 4. A 24-hour trace at production scale (≥65 rps mean) would be needed to validate Phase 4 frontier rho adaptation.
+
+### Q12. Which public datasets should be added?
+
+No new datasets assessed this session. Priority remains: full Azure 2024 dataset (44M requests, 9 days) for Phase 4 production-scale validation. DATASET_REGISTRY unchanged.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Pending human review: PRs #81 (Phase 1b-A), #83 (Phase B). Priority queue for when rule lifts or PRs merge:
+1. **PARD proactive admission control** — highest expected gain, existing AdmissionPolicy stub, decision-time telemetry available
+2. **Phase 1b-C energy overlay on serving traces** — requires PR #81 first; estimated +1-3%
+3. **Conformal arrival-rate** — estimated +0.3-0.5% on BurstGPT; lowest priority of the three
+
+Results: `research/results/research_audit_pard_ceiling_2026-06-25.{md,json}`
+
+---
+
 ## Run 2026-06-25 — Phase 1b-B: Unified ReplayEvaluationResult (ARCHITECTURE CONVERGENCE)
 
 ### Q1. What currently limits Aurelius most?
