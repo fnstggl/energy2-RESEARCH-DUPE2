@@ -8,6 +8,67 @@
 
 ---
 
+## Run 2026-06-25 — Phase 1b-B: Unified ReplayEvaluationResult (ARCHITECTURE CONVERGENCE)
+
+### Q1. What currently limits Aurelius most?
+
+**Cross-loop comparison gap (now reduced).** The four replay loops (replica_scaling, serving_queue, genai_serving, energy) had no shared result schema, making it impossible to compare or combine results from different loops without manual field mapping. Phase 1b-B introduces `ReplayEvaluationResult` to close this gap.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Phase 1b (full replay loop unification) enabling combination search — Phase 1b-B is the first structural step. After 1b-A and 1b-C, combination experiments (energy-aware replica scaling × serving optimization) become feasible.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT (15-request structural gap). Not addressed in this run.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Unchanged. No optimizer decision changed in this run.
+
+### Q5. Which workloads benefit least?
+
+Unchanged. Low-load fixtures where all rho values map to MIN_REPLICAS=1.
+
+### Q6. Which research direction appears strongest?
+
+Phase 1b-A (serving+replica-scaling loop unification) is now unblocked by Phase 1b-B's shared schema. Combined loops enable honest combination policy search.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Phase 1b-A: unify srtf_serving_backtest + backtest.py into a shared replay harness, then run the energy-aware replica scaling × serving queue combination experiment. Estimated LOC: 100-200 LOC refactor + 30-50 LOC combination policy.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: +5.94% (OSOTSS). BurstGPT: +5.85% (OSOTSS). Phase 1b-B adds no new goodput/$.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All results deterministic.
+
+### Q10. Which assumptions might be wrong?
+
+The cross-loop cost basis assumption: `sla_safe_goodput_per_dollar` has different denominators across loops (provisioned GPU-hours vs busy GPU-hours). `ReplayEvaluationResult` documents this in `metadata["cost_basis"]` but does not normalize it. A future normalization layer would be needed for honest cross-loop comparisons.
+
+### Q11. Which benchmark weaknesses exist?
+
+Phase 1b-B's `from_srtf_sim_dict` does not populate `kpi_sla_compliant_goodput`, `kpi_gpu_hours`, or `kpi_total_cost` (0.0 defaults) because the SRTF sim dict doesn't store these. A future enhancement to the SRTF result type could compute and store them.
+
+### Q12. Which public datasets should be added?
+
+Unchanged. Full Azure 2024 dataset for Phase 4 validation.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 1b-B complete. Next options:
+1. **Phase 1b-A** — serving+replica-scaling loop unification (medium complexity, enables combination search)
+2. **Phase 1b-C** — energy overlay on serving traces (high complexity, first cross-domain combination test)
+3. **Full Azure 2024 dataset** — Phase 4 adaptive rho validation
+
+Results: `research/results/phase1b_b_replay_evaluation_result_2026-06-25.md`
+
+---
+
 ## Run 2026-06-25 — Research Audit + Phase 1b Planning (REPORT ONLY — Five-Failure Rule compliant)
 
 ### Q1. What currently limits Aurelius most?
@@ -66,8 +127,8 @@ The full Azure LLM 2024 dataset (44M requests) is the primary gap. It would vali
 **⛔ FIVE-FAILURE RULE STILL ACTIVE.** Three research papers reviewed (SageServe, OServe, PecSched) — all NOT APPLICABLE without new modules.
 
 Priority order:
-1. **Phase 1b-B**: unified `ReplayEvaluationResult` dataclass (50-100 LOC, 0% KPI drift, enables future combination)
-2. **Phase 1b-A**: serving+replica-scaling loop unification (medium complexity)  
+1. **Phase 1b-B**: unified `ReplayEvaluationResult` dataclass (50-100 LOC, 0% KPI drift, enables future combination) ← DONE
+2. **Phase 1b-A**: serving+replica-scaling loop unification (medium complexity)
 3. **Phase 1b-C**: energy overlay on serving traces (high value, requires verifying Azure timestamp structure)
 4. **Full Azure 2024 dataset ingestion**: enables Phase 4 production-scale validation
 
