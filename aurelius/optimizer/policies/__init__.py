@@ -54,7 +54,9 @@ from .replica_scaling import (
     ReplicaScalingPolicy,
     ReplicaScalingResult,
     compute_c1pgs_spot_replicas,
+    compute_constraint_aware_schedule,
     compute_mcs_c_schedule,
+    compute_shu_schedule,
     compute_sotss_min_schedule,
 )
 from .serving_queue import (
@@ -167,6 +169,8 @@ __all__ = [
     "CONFORMAL_WINDOW",
     "CONFORMAL_ABS_TARGET_P90_TOKENS",
     "compute_c1pgs_spot_replicas",
+    "compute_constraint_aware_schedule",
+    "compute_shu_schedule",
     "compute_mcs_c_schedule",
     "compute_sotss_min_schedule",
     "ReplicaScalingConfig",
