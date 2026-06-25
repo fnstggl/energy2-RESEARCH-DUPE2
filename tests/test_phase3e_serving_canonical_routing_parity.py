@@ -19,7 +19,6 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aurelius.optimizer import AureliusOptimizer
 from aurelius.optimizer.policies.replica_scaling import (
     ReplicaScalingConfig,
     _bt_timeout_rate_pct,
@@ -28,11 +27,10 @@ from aurelius.optimizer.policies.replica_scaling import (
 )
 from aurelius.traces import azure_llm, burstgpt
 from aurelius.traces.backtest import (
-    MAX_PREFILL_SAVINGS,
-    MIN_REPLICAS,
+    _SERVING_OPTIMIZER,
     _SHU_TARGET_RHO,
     _SHU_TIMEOUT_TOL,
-    _SERVING_OPTIMIZER,
+    MAX_PREFILL_SAVINGS,
     _constraint_trim,
     _size_for_target,
     _tick_throughput_tokps,

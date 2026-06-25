@@ -411,7 +411,6 @@ def _run_policy(
         prefill_savings = (
             MAX_PREFILL_SAVINGS * t.reuse_fraction if cache_aware else 0.0
         )
-        throughput = _tick_throughput_tokps(t)
 
         if fixed:
             replicas = fixed_replicas
