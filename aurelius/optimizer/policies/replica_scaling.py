@@ -889,6 +889,15 @@ class ReplicaScalingConfig:
     """Target per-server utilisation for constraint_aware mode (default 0.65).
     Ignored for all other modes."""
 
+    adaptive_frontier_window: Optional[int] = None
+    """Phase 4: causal rolling-window rho adaptation via frontier estimation.
+    When set to an integer W, enables per-tick rho selection: for tick k < W,
+    uses ca_target_rho; for tick k >= W, calls estimate_frontier over the past
+    W ticks and picks the highest SAFE rho, falling back to ca_target_rho on
+    INSUFFICIENT_TELEMETRY.  ``None`` (default) disables adaptation and
+    preserves byte-identical constraint_aware behavior.  Only applies to
+    ``mode="constraint_aware"``."""
+
     # ---- forecasted_mcs mode (fully deployable; forecasts arrivals + service) ----
     forecast_method: str = "ewma"
     """``forecasted_mcs`` sub-method: ``"ewma"``, ``"quantile"``, or ``"lag1"``."""
@@ -1185,9 +1194,23 @@ class ReplicaScalingPolicy(OptimizationPolicy):
         cfg = config if config is not None else self._default_config
 
         if cfg.mode == "constraint_aware":
-            c_sched = compute_constraint_aware_schedule(
-                ticks, tick_hours, ca_target_rho=cfg.ca_target_rho
-            )
+            if cfg.adaptive_frontier_window is not None:
+                ticks_list = list(ticks)
+                rho_sched = compute_frontier_rho_schedule(
+                    ticks_list,
+                    tick_hours,
+                    window=cfg.adaptive_frontier_window,
+                    default_rho=cfg.ca_target_rho,
+                )
+                c_sched = compute_constraint_aware_schedule(
+                    ticks_list, tick_hours,
+                    ca_target_rho=cfg.ca_target_rho,
+                    rho_schedule=rho_sched,
+                )
+            else:
+                c_sched = compute_constraint_aware_schedule(
+                    ticks, tick_hours, ca_target_rho=cfg.ca_target_rho
+                )
         elif cfg.mode == "safe_high_utilization":
             c_sched = compute_shu_schedule(ticks, tick_hours)
         else:
@@ -1341,6 +1364,74 @@ def _bt_constraint_trim(
     return max(_BT_MIN_REPLICAS, chosen)
 
 
+def compute_frontier_rho_schedule(
+    ticks,
+    tick_hours: float,
+    *,
+    window: int = 10,
+    default_rho: float = 0.65,
+) -> list:
+    """Causal per-tick rho schedule via rolling-window frontier safety estimation.
+
+    For tick k < window, uses default_rho (cold-start — no history yet).
+    For tick k >= window, estimates the frontier over past ticks [k-window, k)
+    and selects the highest SAFE rho; falls back to default_rho when no SAFE
+    point exists (INSUFFICIENT_TELEMETRY or all UNSAFE).
+
+    Strictly causal: only past-tick telemetry feeds the estimator; no future
+    information is used. Five-Failure-Rule compliant — integrates the existing
+    frontier estimator module without adding a new optimizer path.
+
+    Args:
+        ticks:       Sequence of ArrivalTick-like objects (duck-typed).
+        tick_hours:  Tick duration in hours (used by the anticipatory sizer).
+        window:      Rolling window size in ticks (default 10).
+        default_rho: Rho used during cold-start and as safety fallback
+                     (default 0.65 — same as the fixed constraint_aware rho).
+
+    Returns:
+        list[float] — per-tick rho target, one per tick.
+    """
+    # Lazy imports — avoids module-load-time circular import via backtest.py.
+    from aurelius.frontier.estimator import FrontierEstimatorConfig, estimate_frontier
+    from aurelius.frontier.models import SafetyStatus, WorkloadFrontierProfile
+    from aurelius.frontier.safety import SafetyConfig
+
+    ticks_list = list(ticks)
+    n = len(ticks_list)
+
+    profile = WorkloadFrontierProfile(
+        workload_id="constraint_aware_adaptive",
+        workload_type="llm_serving",
+        telemetry_confidence="medium",
+        min_rho=0.45,
+        max_rho=0.95,
+    )
+    est_cfg = FrontierEstimatorConfig(
+        mode="anticipatory",
+        tick_seconds=tick_hours * 3600.0,
+    )
+    safety = SafetyConfig()  # max_timeout_pct=10.0, max_queue_p99_ms=2000.0
+
+    rho_schedule: list = []
+    for k in range(n):
+        if k < window:
+            rho_schedule.append(default_rho)
+        else:
+            tel_window = ticks_list[k - window : k]
+            points = estimate_frontier(
+                profile,
+                tel_window,
+                predictor_config=est_cfg,
+                safety_config=safety,
+            )
+            safe_points = [p for p in points if p.safety_status == SafetyStatus.SAFE]
+            best_rho = max(p.rho_target for p in safe_points) if safe_points else default_rho
+            rho_schedule.append(best_rho)
+
+    return rho_schedule
+
+
 def compute_constraint_aware_schedule(
     ticks,
     tick_hours: float,
@@ -1348,13 +1439,14 @@ def compute_constraint_aware_schedule(
     ca_target_rho: float = 0.65,
     ewma_alpha: float = _BT_EWMA_ALPHA,
     max_prefill_savings: float = _BT_MAX_PREFILL_SAVINGS,
+    rho_schedule: Optional[list] = None,
 ) -> list:
     """Per-tick replica counts for the constraint_aware policy.
 
     Extracted verbatim from the constraint_aware branch of
     _run_policy() in aurelius/traces/backtest.py.  Algorithm:
       EWMA-anticipatory sizing (max of current + smoothed peak),
-      size to target_rho=0.65, exploit cache prefill savings,
+      size to target_rho, exploit cache prefill savings,
       damp churn with hysteresis (prev_replicas).
 
     Args:
@@ -1365,8 +1457,15 @@ def compute_constraint_aware_schedule(
         tick_hours:         Tick duration in hours (passed through but not
                             used by timeout physics; kept for interface parity).
         ca_target_rho:      Target per-server utilisation (default 0.65).
+                            Used as the rho for every tick unless rho_schedule
+                            overrides per-tick rho.
         ewma_alpha:         EWMA smoothing factor (default 0.5).
         max_prefill_savings: Cache prefill savings cap (default 0.25).
+        rho_schedule:       Optional per-tick rho override list (one float per
+                            tick).  When provided, rho_schedule[i] replaces
+                            ca_target_rho for tick i.  ``None`` (default)
+                            preserves byte-identical behavior with the fixed
+                            ca_target_rho path.
 
     Returns:
         list[int] — per-tick replica counts, one per tick.
@@ -1376,7 +1475,7 @@ def compute_constraint_aware_schedule(
     ewma_out: float = 0.0
     prev_replicas: Optional[int] = None
 
-    for t in ticks:
+    for i, t in enumerate(ticks):
         if t.request_count > 0:
             ewma_rate = (
                 ewma_alpha * t.arrival_rate_rps + (1.0 - ewma_alpha) * ewma_rate
@@ -1387,13 +1486,15 @@ def compute_constraint_aware_schedule(
                 if ewma_out else t.output_tokens_mean
             )
 
+        target_rho = rho_schedule[i] if rho_schedule is not None else ca_target_rho
+
         prefill_savings = max_prefill_savings * t.reuse_fraction
         throughput = _bt_tick_throughput_tokps(
             getattr(t, "model_mix", None), t.request_count
         )
         plan_rate = max(t.arrival_rate_rps, ewma_rate)
         plan_out = max(t.output_tokens_mean, ewma_out) if t.request_count else ewma_out
-        base = _bt_size_for_target(plan_rate, max(1.0, plan_out), throughput, ca_target_rho)
+        base = _bt_size_for_target(plan_rate, max(1.0, plan_out), throughput, target_rho)
         replicas = _bt_constraint_trim(
             t.arrival_rate_rps,
             t.output_tokens_mean,
@@ -1489,6 +1590,7 @@ __all__ = [
     "compute_sotss_gsf_schedule",
     "compute_online_sotss_schedule",
     "compute_c1pgs_spot_replicas",
+    "compute_frontier_rho_schedule",
     "compute_constraint_aware_schedule",
     "compute_shu_schedule",
     "_bt_timeout_rate_pct",
