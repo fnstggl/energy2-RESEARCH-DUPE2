@@ -6,7 +6,7 @@
 
 ## Provenance
 
-- **Source:** `csv:data/external/burstgpt/raw/BurstGPT_1.csv`
+- **Source:** `csv:tests/fixtures/burstgpt_sample.csv`
 - **Exact file:** BurstGPT_1.csv (https://github.com/HPMLL/BurstGPT/tree/main/data)
 - BurstGPT is a **public LLM-serving trace, not customer telemetry**.
 - The published `BurstGPT_1.csv` has **no Session ID and no Elapsed-time column**; the cache-affinity key is a model-level prefix-locality **proxy**, not a measured KV cache hit rate.
@@ -14,15 +14,15 @@
 
 ## Trace summary
 
-- Requests replayed: **17,689**  ·  ticks: **34**  ·  tick size: **60s**
-- Time range: 5s → 2005s (0.56 h)
+- Requests replayed: **51**  ·  ticks: **55**  ·  tick size: **60s**
+- Time range: 5s → 3298s (0.91 h)
 - Failure rate: 0.0000%
-- Model distribution: {'ChatGPT': 11841, 'GPT-4': 5848}
-- Log-type distribution: {'API log': 309, 'Conversation log': 17380}
-- Prompt tokens p50/p95/p99: 499 / 1862 / 2389
-- Output tokens p50/p95/p99: 236 / 634 / 934
-- RPS/min mean/p95/max: 8.6711 / 17.5167 / 20.7500
-- Cache-affinity proxy: 2 distinct keys, reuse rate 99.99%
+- Model distribution: {'ChatGPT': 36, 'GPT-4': 15}
+- Log-type distribution: {'API log': 17, 'Conversation log': 34}
+- Prompt tokens p50/p95/p99: 488 / 1437 / 1574
+- Output tokens p50/p95/p99: 344 / 647 / 1656
+- RPS/min mean/p95/max: 0.0155 / 0.0500 / 0.2333
+- Cache-affinity proxy: 2 distinct keys, reuse rate 96.08%
 
 ## Primary KPI — SLA-safe goodput per infrastructure dollar
 
@@ -30,11 +30,13 @@ Per `docs/RESULTS.md` §1. SLA is a filter on the goodput numerator (`tokens × 
 
 | policy | goodput/$ | SLA-compliant tokens | total infra $ | lat p95 (ms) | lat p99 (ms) | queue p95 (ms) | timeout % | migration/reroute | cache proxy |
 |---|---|---|---|---|---|---|---|---|---|
-| fifo | 1,583,907.21 | 4,268,975 | 2.70 | 13,771.19 | 28,559.78 | 1,455.96 | 8.919 | 0 | no |
-| sla_aware | 1,278,784.21 | 3,834,081 | 3.00 | 50,457.42 | 120,264.89 | 25,886.86 | 12.952 | 23 | no |
-| constraint_aware | 1,615,693.90 | 4,438,537 | 2.75 | 11,478.01 | 23,002.17 | 109.25 | 5.096 | 17 | yes |
-| queue_aware | 1,396,838.15 | 3,444,143 | 2.47 | 83,011.50 | 201,416.36 | 47,558.54 | 17.122 | 19 | no |
-| cache_affinity_baseline | 1,587,558.86 | 4,278,817 | 2.70 | 13,625.89 | 28,239.33 | 1,455.96 | 8.709 | 0 | yes |
+| fifo | 8,689.29 | 17,508 | 2.01 | 14,636.62 | 29,126.67 | 10.91 | 4.254 | 0 | no |
+| sla_aware | 8,689.29 | 17,508 | 2.01 | 14,636.62 | 29,126.67 | 10.91 | 4.254 | 0 | no |
+| constraint_aware | 8,691.77 | 17,513 | 2.01 | 14,586.21 | 29,059.26 | 10.91 | 4.215 | 0 | yes |
+| queue_aware | 8,689.29 | 17,508 | 2.01 | 14,636.62 | 29,126.67 | 10.91 | 4.254 | 0 | no |
+| cache_affinity_baseline | 8,691.77 | 17,513 | 2.01 | 14,586.21 | 29,059.26 | 10.91 | 4.215 | 0 | yes |
+| safe_high_utilization | 8,691.77 | 17,513 | 2.01 | 14,586.21 | 29,059.26 | 10.91 | 4.215 | 0 | yes |
+| min_cost_safe | 8,691.77 | 17,513 | 2.01 | 14,586.21 | 29,059.26 | 10.91 | 4.215 | 0 | yes |
 
 ## Policies compared
 
@@ -48,9 +50,8 @@ All policies share the **same** serving physics (`aurelius/simulation/cluster/se
 
 ## Outcome — constraint_aware vs headline (`docs/RESULTS.md` §6)
 
-- **Outcome:** `ALPHA_WIN`  ·  margin vs sla_aware: **+26.35%** on goodput/$
-- **Safety evidence:** p99<=0.5x_queue_aware, timeout<=0.5x_queue_aware
-- **Sanity check vs FIFO (do-nothing):** constraint_aware beats static FIFO (+2.01%). FIFO is the sanity baseline, not the buyer-facing benchmark (`docs/RESULTS.md` §3).
+- **Outcome:** `TIE`  ·  margin vs sla_aware: **+0.03%** on goodput/$
+- **Sanity check vs FIFO (do-nothing):** constraint_aware beats static FIFO (+0.03%). FIFO is the sanity baseline, not the buyer-facing benchmark (`docs/RESULTS.md` §3).
 
 ## Load-regime sensitivity (same burst shape, replayed at several loads)
 
@@ -58,20 +59,20 @@ BurstGPT's absolute arrival rate is low; the canonical run scales it to a busy i
 
 | load × | fifo | sla_aware | constraint_aware | queue_aware | cache_affinity | CA vs sla_aware | CA beats fifo? |
 |---|---|---|---|---|---|---|---|
-| 0.33× | 1,089,325 | 953,723 | 1,025,834 | 966,415 | 1,091,286 | +7.56% | no |
-| 0.5× | 1,423,830 | 1,127,740 | 1,312,249 | 1,036,520 | 1,427,190 | +16.36% | no |
-| 1× | 1,583,907 | 1,278,784 | 1,615,694 | 1,396,838 | 1,587,559 | +26.35% | yes |
-| 2× | 1,664,009 | 889,861 | 2,031,056 | 954,976 | 1,668,092 | +128.24% | yes |
-| 3× | 2,167,072 | 1,553,649 | 2,021,686 | 1,547,649 | 2,173,155 | +30.13% | no |
+| 0.33× | 2,991 | 2,991 | 2,992 | 2,991 | 2,992 | +0.04% | yes |
+| 0.5× | 4,475 | 4,475 | 4,476 | 4,475 | 4,476 | +0.03% | yes |
+| 1× | 8,689 | 8,689 | 8,692 | 8,689 | 8,692 | +0.03% | yes |
+| 2× | 16,643 | 16,643 | 16,650 | 16,643 | 16,650 | +0.04% | yes |
+| 3× | 24,128 | 24,128 | 24,135 | 24,128 | 24,135 | +0.03% | yes |
 
 Reading: constraint_aware beats the **realistic reactive autoscaler (`sla_aware`, the headline baseline)** across the swept load levels. It beats even static `fifo` once bursts regularly saturate capacity; under mild burst-load a static `fifo` sized for the mean is cheaper (an honest caveat, not hidden).
 
 ### What improved / what did not
 
-- Goodput/$ vs sla_aware: Δ +336909.70 (+26.35%).
-- Infra $ vs sla_aware: 2.75 vs 3.00.
-- Latency p99 vs sla_aware: 23,002.17 vs 120,264.89 ms.
-- Migration/reroute (scale events): 17 vs 23.
+- Goodput/$ vs sla_aware: Δ +2.48 (+0.03%).
+- Infra $ vs sla_aware: 2.01 vs 2.01.
+- Latency p99 vs sla_aware: 29,059.26 vs 29,126.67 ms.
+- Migration/reroute (scale events): 0 vs 0.
 
 ## Honest limits
 
