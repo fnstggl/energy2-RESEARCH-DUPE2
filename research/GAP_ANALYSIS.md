@@ -8,6 +8,66 @@
 
 ---
 
+## Run 2026-06-25 — Phase 1b-A: ReplayHarness Unified Entry Point (ARCHITECTURE CONVERGENCE)
+
+### Q1. What currently limits Aurelius most?
+
+**Cross-loop dispatch gap (now closed).** Before Phase 1b-A, each replay loop required a separate entry point and API. Phase 1b-A provides `ReplayHarness.run()` as the single dispatch layer, routing all four benchmark IDs through `ReplayEvaluationResult`.
+
+### Q2. What theoretically offers the largest gain beyond OSOTSS?
+
+Phase 1b-C (energy overlay on serving traces) is now the highest-priority remaining Phase 1b step. It would allow testing energy-aware replica scaling on serving traces — the first cross-domain combination that hasn't been ruled out by the negative serving_queue × replica_scaling interaction.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged. EWMA burst-tick under-estimation on BurstGPT (15-request structural gap). Not addressed in this run.
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+Unchanged. No optimizer decision changed in this run. The bottleneck is now at the combination search level: energy × replica_scaling on serving traces has not been tested.
+
+### Q5. Which workloads benefit least?
+
+Unchanged. Low-load fixtures where all rho values map to MIN_REPLICAS=1.
+
+### Q6. Which research direction appears strongest?
+
+Phase 1b-C (energy overlay on serving traces) — now unblocked by Phase 1b-A's dispatch layer. Could enable an honest energy-aware replica scaling combination test on Azure LLM 2024 timestamps.
+
+### Q7. What is the shortest path to another +1% gain?
+
+Phase 1b-C: overlay ERCOT energy prices on Azure LLM 2024 timestamps, modify cost denominator, test energy-aware scale-up timing decisions. Estimated LOC: 150-250 LOC (energy price ingestion + cost model modification + combination policy).
+
+### Q8. What is the current north-star status?
+
+Unchanged. Azure: +5.94% (OSOTSS). BurstGPT: +5.85% (OSOTSS). Phase 1b-A adds no new goodput/$.
+
+### Q9. What would need to be true to maintain north-star?
+
+Unchanged. All results deterministic, parity confirmed.
+
+### Q10. Which assumptions might be wrong?
+
+The cost-basis assumption across loops: Phase 1b-B documented that `sla_safe_goodput_per_dollar` has different denominators across loops. Phase 1b-A preserves this in `ReplayHarness` (benchmark-id routing is documented); normalization would require Phase 1b-C's cost model unification.
+
+### Q11. Which benchmark weaknesses exist?
+
+The `energy` backend in `ReplayHarness` passes `n_ticks=0` because `CanonicalBacktestSummary` doesn't expose a tick count. A future enhancement could add `n_ticks` to the energy summary.
+
+### Q12. Which public datasets should be added?
+
+Unchanged. Full Azure 2024 dataset for Phase 4 validation. ERCOT energy price data for Phase 1b-C.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Phase 1b-A complete. Next options:
+1. **Phase 1b-C** — energy overlay on serving traces (high complexity, first cross-domain combination test, potentially enabling KPI gain)
+2. **Full Azure 2024 dataset** — Phase 4 adaptive rho validation at production-scale load
+
+Results: `research/results/phase1b_a_replay_harness_2026-06-25.md`
+
+---
+
 ## Run 2026-06-25 — Phase 1b-B: Unified ReplayEvaluationResult (ARCHITECTURE CONVERGENCE)
 
 ### Q1. What currently limits Aurelius most?

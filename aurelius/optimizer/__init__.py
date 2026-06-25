@@ -20,6 +20,7 @@ from .policies import (
     ReplicaScalingPolicy,
     ServingQueuePolicy,
 )
+from .replay_harness import ReplayHarness, ReplayHarnessConfig, ReplayHarnessError
 from .replay_result import (
     BENCHMARK_IDS,
     ReplayEvaluationResult,
@@ -45,4 +46,8 @@ __all__ = [
     "from_genai_policy_result",
     "from_canonical_policy_metrics",
     "from_srtf_sim_dict",
+    # Phase 1b-A: unified replay harness
+    "ReplayHarness",
+    "ReplayHarnessConfig",
+    "ReplayHarnessError",
 ]
