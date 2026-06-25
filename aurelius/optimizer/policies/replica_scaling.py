@@ -47,6 +47,41 @@ REPLICA_MAX_ORACLE_ITERS: int = 500
 # ---------------------------------------------------------------------------
 REPLICA_OSOTSS_EWMA_ALPHA: float = 0.1
 
+# ---------------------------------------------------------------------------
+# ICP / deployability classification of capacity modes (audit 2026-06-25).
+#
+# The capacity DECISION — how many ON-DEMAND replicas to run per serving queue —
+# is a GPU-FLEET-OPERATOR lever (you autoscale your OWN fleet). But several modes
+# here are NOT for the operator ICP and are kept RESEARCH-ONLY:
+#   * the SPOT-fleet machinery (GSF / ZFHC / AFMS, ``spot_fraction``, the
+#     interruption model) is CLOUD-TENANT arbitrage — buying discounted
+#     preemptible instances on someone else's cloud, NOT an operator decision
+#     (``research/MCS_AUDIT.md``); and
+#   * the ORACLE modes peek at tick-t actual tokens / arrivals.
+# Only ``forecasted_mcs`` (on-demand; forecasts arrivals + service from data
+# ≤ t-1) is a DEPLOYABLE operator capacity policy — it is the ``optimize_fleet``
+# capacity default. NB: even forecasted_mcs is ≈0% over a reactive autoscaler on
+# Azure (Phase C) — capacity sizing is not where Aurelius's value is; do not
+# invest here. The ``c=4`` fixed schedule is a demoted STRAWMAN, never a baseline.
+# ---------------------------------------------------------------------------
+DEPLOYABLE_MODES: frozenset = frozenset({"forecasted_mcs"})
+RESEARCH_ONLY_MODES: dict = {
+    "amcsg": "oracle (tick-t actual arrivals + tokens)",
+    "sotss_min": "oracle (actual tokens)",
+    "sotss_gsf": "oracle + SPOT-fleet (cloud-tenant arbitrage, out of ICP)",
+    "online_sotss": "arrival-oracle (actual tick-t arrival counts)",
+}
+
+
+def is_deployable_mode(mode: str) -> bool:
+    """True only for on-demand, operator-deployable capacity modes.
+
+    The single deployable mode is ``forecasted_mcs``. The oracle and spot-fleet
+    modes are research-only (see ``RESEARCH_ONLY_MODES`` for the reason each is
+    excluded from the GPU-fleet-operator product surface).
+    """
+    return mode in DEPLOYABLE_MODES
+
 
 def _replica_service_time_s(output_tokens: int) -> float:
     """Service time for a request with the given number of output tokens."""
@@ -1598,6 +1633,9 @@ __all__ = [
     "REPLICA_AGGRESSIVE_GATE",
     "REPLICA_MAX_ORACLE_ITERS",
     "REPLICA_OSOTSS_EWMA_ALPHA",
+    "DEPLOYABLE_MODES",
+    "RESEARCH_ONLY_MODES",
+    "is_deployable_mode",
     "_replica_service_time_s",
     "_replica_calibrate_warp",
     "_replica_erlang_c_sla_timeout_pct",

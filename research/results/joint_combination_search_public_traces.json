@@ -1,0 +1,280 @@
+{
+  "azure_llm_2024": {
+    "trace_id": "azure_llm_2024",
+    "seed": 42,
+    "trace_hash": "c23d19679c3ecdc5",
+    "sla_s": 10.0,
+    "tick_seconds": 60.0,
+    "warp": 21.95190126,
+    "denominator": "on_demand",
+    "gpu_hour_usd": 2.0,
+    "cells": [
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": false,
+        "levers_on": [],
+        "label": "base",
+        "goodput_per_dollar": 59096.6972,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 5821,
+        "sla_violations": 59
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": true,
+        "levers_on": [
+          "A"
+        ],
+        "label": "A",
+        "goodput_per_dollar": 25875.7798,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 3298,
+        "sla_violations": 2582
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": false,
+        "levers_on": [
+          "O"
+        ],
+        "label": "O",
+        "goodput_per_dollar": 57338.8991,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 5770,
+        "sla_violations": 110
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": true,
+        "levers_on": [
+          "O",
+          "A"
+        ],
+        "label": "O+A",
+        "goodput_per_dollar": 27475.1376,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 3597,
+        "sla_violations": 2283
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "fifo",
+        "admission": false,
+        "levers_on": [
+          "C"
+        ],
+        "label": "C",
+        "goodput_per_dollar": 59096.6972,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 5821,
+        "sla_violations": 59
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "fifo",
+        "admission": true,
+        "levers_on": [
+          "C",
+          "A"
+        ],
+        "label": "C+A",
+        "goodput_per_dollar": 26292.0183,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 3405,
+        "sla_violations": 2475
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "abs_conformal",
+        "admission": false,
+        "levers_on": [
+          "C",
+          "O"
+        ],
+        "label": "C+O",
+        "goodput_per_dollar": 57139.1743,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 5764,
+        "sla_violations": 116
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "abs_conformal",
+        "admission": true,
+        "levers_on": [
+          "C",
+          "O",
+          "A"
+        ],
+        "label": "C+O+A",
+        "goodput_per_dollar": 27453.945,
+        "cost_usd": 10.9,
+        "gpu_hours": 5.45,
+        "n_sla_safe": 3616,
+        "sla_violations": 2264
+      }
+    ],
+    "base_gpd": 59096.6972,
+    "best_single": {
+      "label": "C",
+      "goodput_per_dollar": 59096.6972
+    },
+    "best_overall": {
+      "label": "base",
+      "goodput_per_dollar": 59096.6972
+    },
+    "compounding": false,
+    "interaction": "substitutive",
+    "notes": []
+  },
+  "burstgpt": {
+    "trace_id": "burstgpt",
+    "seed": 42,
+    "trace_hash": "461a948f1b9683d7",
+    "sla_s": 10.0,
+    "tick_seconds": 60.0,
+    "warp": 29.857329529,
+    "denominator": "on_demand",
+    "gpu_hour_usd": 2.0,
+    "cells": [
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": false,
+        "levers_on": [],
+        "label": "base",
+        "goodput_per_dollar": 22584.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 31,
+        "sla_violations": 20
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": true,
+        "levers_on": [
+          "A"
+        ],
+        "label": "A",
+        "goodput_per_dollar": 22584.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 31,
+        "sla_violations": 20
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": false,
+        "levers_on": [
+          "O"
+        ],
+        "label": "O",
+        "goodput_per_dollar": 26172.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 36,
+        "sla_violations": 15
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": true,
+        "levers_on": [
+          "O",
+          "A"
+        ],
+        "label": "O+A",
+        "goodput_per_dollar": 26172.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 36,
+        "sla_violations": 15
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "fifo",
+        "admission": false,
+        "levers_on": [
+          "C"
+        ],
+        "label": "C",
+        "goodput_per_dollar": 22584.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 31,
+        "sla_violations": 20
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "fifo",
+        "admission": true,
+        "levers_on": [
+          "C",
+          "A"
+        ],
+        "label": "C+A",
+        "goodput_per_dollar": 22584.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 31,
+        "sla_violations": 20
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "abs_conformal",
+        "admission": false,
+        "levers_on": [
+          "C",
+          "O"
+        ],
+        "label": "C+O",
+        "goodput_per_dollar": 26172.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 36,
+        "sla_violations": 15
+      },
+      {
+        "capacity": "forecasted_mcs",
+        "ordering": "abs_conformal",
+        "admission": true,
+        "levers_on": [
+          "C",
+          "O",
+          "A"
+        ],
+        "label": "C+O+A",
+        "goodput_per_dollar": 26172.0,
+        "cost_usd": 0.3333,
+        "gpu_hours": 0.1667,
+        "n_sla_safe": 36,
+        "sla_violations": 15
+      }
+    ],
+    "base_gpd": 22584.0,
+    "best_single": {
+      "label": "O",
+      "goodput_per_dollar": 26172.0
+    },
+    "best_overall": {
+      "label": "O",
+      "goodput_per_dollar": 26172.0
+    },
+    "compounding": false,
+    "interaction": "neutral",
+    "notes": []
+  }
+}

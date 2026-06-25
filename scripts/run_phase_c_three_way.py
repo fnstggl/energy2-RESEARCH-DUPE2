@@ -17,9 +17,8 @@ from __future__ import annotations
 
 import json
 
-from aurelius.benchmarks.forecasted_mcs import GPU_HOUR_USD, evaluate_c_schedule
+from aurelius.benchmarks.forecasted_mcs import GPU_HOUR_USD
 from aurelius.benchmarks.phase_c import (
-    ROLE_BEST_AURELIUS,
     ROLE_CANDIDATE,
     ROLE_CURRENT_MAIN,
     run_three_way,
@@ -46,16 +45,6 @@ TRACES = [
     ("azure_llm_2024", DEFAULT_AZURE_FIXTURE, load_serving_requests),
     ("burstgpt", DEFAULT_BURSTGPT_FIXTURE, load_burstgpt_serving_requests),
 ]
-
-
-def _fixed_c_reference(raw, warp, c):
-    """Fixed-c static autoscale — the WEAK baseline the prior +54% claim used."""
-    n_ticks = max(1, int((raw[-1][0] / warp) / TICK_S) + 1)
-    return evaluate_c_schedule(
-        raw, [c] * n_ticks, TICK_S, warp, SLA_S,
-        policy=f"fixed_c{c}", uses_future_info=False, deployable=True,
-        classification="deployable_static_baseline",
-    )
 
 
 def main() -> None:
@@ -87,16 +76,11 @@ def main() -> None:
                   f"{a.cost_usd:9.2f} {a.gpu_hours:7.2f} {a.n_sla_safe:9d} "
                   f"{a.sla_violations:5d}")
 
-        # Reference: fixed-c=4 static autoscale (the WEAK baseline prior claims used).
-        fixed = _fixed_c_reference(raw, warp, SERVERS)
-        fixed_gpd = fixed.goodput_per_dollar
-        print(f"{'reference':14s} {'fixed_c4 (weak)':24s} {fixed_gpd:11.2f} "
-              f"{fixed.cost_usd:9.2f} {fixed.gpu_hours:7.2f} {fixed.n_sla_safe:9d} "
-              f"{fixed.sla_violations:5d}")
-
+        # NB: a fixed-c=4 "baseline" is deliberately EXCLUDED — c=4 is a demoted
+        # strawman (under-provisioned, ~4.9k SLA violations) that inflates gains;
+        # the fair baseline is the reactive lag-1 autoscaler (current_main).
         by_role = {a.role: a for a in res.arms}
         cm = by_role[ROLE_CURRENT_MAIN]
-        ba = by_role[ROLE_BEST_AURELIUS]
         cand = by_role[ROLE_CANDIDATE]
         best_dep = max(res.arms, key=lambda a: a.goodput_per_dollar)
         def pct(new_gpd, base_gpd):
@@ -104,12 +88,9 @@ def main() -> None:
         print(f"  best deployable ({best_dep.name}) vs current_main (reactive_lag1, FAIR): "
               f"{pct(best_dep.goodput_per_dollar, cm.goodput_per_dollar):+.2f}% goodput/$  "
               f"(GPU-h {best_dep.gpu_hours:.2f} vs {cm.gpu_hours:.2f})")
-        print(f"  best deployable vs fixed_c4 (WEAK baseline): "
-              f"{pct(best_dep.goodput_per_dollar, fixed_gpd):+.2f}% goodput/$")
         print(f"  candidate vs current_main: "
               f"{pct(cand.goodput_per_dollar, cm.goodput_per_dollar):+.2f}% goodput/$")
         print(f"  deployable winner: {res.deployable_winner}")
-        all_results[trace_id]["fixed_c4_reference"] = fixed.to_dict()
 
     out = "research/results/phase_c_three_way_public_traces.json"
     with open(out, "w") as f:
