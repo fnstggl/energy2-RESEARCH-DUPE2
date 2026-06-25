@@ -534,6 +534,34 @@ class AureliusOptimizer:
             seed=seed, trace_id=trace_id, **kwargs,
         )
 
+    def optimize_joint_closed_loop(
+        self,
+        jobs,
+        *,
+        tick_seconds,
+        sla_s,
+        trace_id: str = "trace",
+        **kwargs,
+    ):
+        """Closed-loop joint optimization — the unified replay engine (Phase 1b-A).
+
+        The true joint *decision loop* that :meth:`optimize_joint` is not: every
+        lever combination runs through ONE discrete-event loop on ONE evolving
+        cluster state (``aurelius/optimizer/unified_replay.py``), so capacity
+        REACTS to the live backlog that ordering+admission produce — one surface's
+        decision mutates the next surface's inputs. Scored by the
+        :class:`ObjectiveLayer`; priced on the on-demand denominator. ``jobs`` is a
+        list of :class:`~aurelius.optimizer.unified_replay.Job` (build them with
+        ``aurelius.datasets.canonical``). Returns a ``UnifiedLatticeResult`` with
+        the measured compounding/substitutive verdict.
+        """
+        from .unified_replay import run_unified_combination
+
+        return run_unified_combination(
+            jobs, tick_seconds=tick_seconds, sla_s=sla_s,
+            trace_id=trace_id, **kwargs,
+        )
+
     # ------------------------------------------------------------------
     # Introspection
     # ------------------------------------------------------------------

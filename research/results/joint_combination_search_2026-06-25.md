@@ -1,5 +1,12 @@
 # Joint Optimization — Combination Search (measured interaction) — 2026-06-25
 
+> **Follow-up (Phase 1b-A):** this is the OPEN-LOOP search (each lever's schedule
+> precomputed offline → levers cannot interact). The CLOSED joint loop now exists
+> (`aurelius/optimizer/unified_replay.py`) and **proves the data thesis below by
+> A/B**: identical optimizer, NEUTRAL on single-class data → **+9.00% COMPOUNDING**
+> on a multi-class trace. See
+> `research/results/unified_replay_compounding_ab_2026-06-25.md`.
+
 > First increment of the unified joint loop (`aurelius/optimizer/joint.py`,
 > `AureliusOptimizer.optimize_joint`). Composes the deployable serving levers on
 > ONE trace through one on-demand evaluation and **measures** whether combining

@@ -1,0 +1,446 @@
+{
+  "config": {
+    "trace": "azure_llm_2024",
+    "job_limit": 5880,
+    "servers": 4,
+    "target_rho": 0.85,
+    "tick_s": 60.0,
+    "sla_s": 10.0,
+    "warp": 21.951901260369368,
+    "be_fraction": 0.4,
+    "be_token_mult": 1.5
+  },
+  "single_class": {
+    "trace_id": "azure_single_class",
+    "jobs_hash": "88d664b47d6dead4",
+    "n_jobs": 5880,
+    "n_latency_critical": 5880,
+    "n_best_effort": 0,
+    "sla_s": 10.0,
+    "tick_seconds": 60.0,
+    "denominator": "on_demand",
+    "cells": [
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": "off",
+        "levers_on": [],
+        "label": "base",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 641725.0,
+        "goodput_per_dollar": 59054.45,
+        "n_total": 5880,
+        "n_sla_safe": 5811,
+        "sla_violations": 69,
+        "n_deferred": 0,
+        "backlog_peak": 12
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": "class_aware",
+        "levers_on": [
+          "A"
+        ],
+        "label": "A",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 641725.0,
+        "goodput_per_dollar": 59054.45,
+        "n_total": 5880,
+        "n_sla_safe": 5811,
+        "sla_violations": 69,
+        "n_deferred": 0,
+        "backlog_peak": 12
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": "off",
+        "levers_on": [
+          "O"
+        ],
+        "label": "O",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 641664.0,
+        "goodput_per_dollar": 59048.83,
+        "n_total": 5880,
+        "n_sla_safe": 5810,
+        "sla_violations": 70,
+        "n_deferred": 0,
+        "backlog_peak": 12
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": "class_aware",
+        "levers_on": [
+          "O",
+          "A"
+        ],
+        "label": "O+A",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 641664.0,
+        "goodput_per_dollar": 59048.83,
+        "n_total": 5880,
+        "n_sla_safe": 5810,
+        "sla_violations": 70,
+        "n_deferred": 0,
+        "backlog_peak": 12
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "fifo",
+        "admission": "off",
+        "levers_on": [
+          "C"
+        ],
+        "label": "C",
+        "n_ticks": 72,
+        "c_mean": 4.7639,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 5.7167,
+        "cost_usd": 11.4333,
+        "sla_safe_goodput": 645466.0,
+        "goodput_per_dollar": 56454.75,
+        "n_total": 5880,
+        "n_sla_safe": 5824,
+        "sla_violations": 56,
+        "n_deferred": 0,
+        "backlog_peak": 13
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "fifo",
+        "admission": "class_aware",
+        "levers_on": [
+          "C",
+          "A"
+        ],
+        "label": "C+A",
+        "n_ticks": 72,
+        "c_mean": 4.7639,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 5.7167,
+        "cost_usd": 11.4333,
+        "sla_safe_goodput": 645466.0,
+        "goodput_per_dollar": 56454.75,
+        "n_total": 5880,
+        "n_sla_safe": 5824,
+        "sla_violations": 56,
+        "n_deferred": 0,
+        "backlog_peak": 13
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "abs_conformal",
+        "admission": "off",
+        "levers_on": [
+          "C",
+          "O"
+        ],
+        "label": "C+O",
+        "n_ticks": 72,
+        "c_mean": 4.7639,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 5.7167,
+        "cost_usd": 11.4333,
+        "sla_safe_goodput": 645466.0,
+        "goodput_per_dollar": 56454.75,
+        "n_total": 5880,
+        "n_sla_safe": 5824,
+        "sla_violations": 56,
+        "n_deferred": 0,
+        "backlog_peak": 13
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "abs_conformal",
+        "admission": "class_aware",
+        "levers_on": [
+          "C",
+          "O",
+          "A"
+        ],
+        "label": "C+O+A",
+        "n_ticks": 72,
+        "c_mean": 4.7639,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 5.7167,
+        "cost_usd": 11.4333,
+        "sla_safe_goodput": 645466.0,
+        "goodput_per_dollar": 56454.75,
+        "n_total": 5880,
+        "n_sla_safe": 5824,
+        "sla_violations": 56,
+        "n_deferred": 0,
+        "backlog_peak": 13
+      }
+    ],
+    "base_gpd": 59054.4479,
+    "best_single": {
+      "label": "A",
+      "goodput_per_dollar": 59054.4479
+    },
+    "best_multi": {
+      "label": "O+A",
+      "goodput_per_dollar": 59048.8344
+    },
+    "best_overall": {
+      "label": "base",
+      "goodput_per_dollar": 59054.4479
+    },
+    "compounding": false,
+    "interaction": "neutral",
+    "notes": [
+      "raw Azure \u2014 single-class control arm"
+    ]
+  },
+  "multi_class": {
+    "trace_id": "azure_multi_class",
+    "jobs_hash": "82a6768ff5f35025",
+    "n_jobs": 8232,
+    "n_latency_critical": 5880,
+    "n_best_effort": 2352,
+    "sla_s": 10.0,
+    "tick_seconds": 60.0,
+    "denominator": "on_demand",
+    "cells": [
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": "off",
+        "levers_on": [],
+        "label": "base",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 749968.0,
+        "goodput_per_dollar": 69015.46,
+        "n_total": 8232,
+        "n_sla_safe": 7179,
+        "sla_violations": 1053,
+        "n_deferred": 0,
+        "backlog_peak": 320
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "fifo",
+        "admission": "class_aware",
+        "levers_on": [
+          "A"
+        ],
+        "label": "A",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 695874.0,
+        "goodput_per_dollar": 64037.48,
+        "n_total": 8232,
+        "n_sla_safe": 6705,
+        "sla_violations": 1527,
+        "n_deferred": 829,
+        "backlog_peak": 356
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": "off",
+        "levers_on": [
+          "O"
+        ],
+        "label": "O",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 750548.0,
+        "goodput_per_dollar": 69068.83,
+        "n_total": 8232,
+        "n_sla_safe": 7190,
+        "sla_violations": 1042,
+        "n_deferred": 829,
+        "backlog_peak": 318
+      },
+      {
+        "capacity": "reactive_lag1",
+        "ordering": "abs_conformal",
+        "admission": "class_aware",
+        "levers_on": [
+          "O",
+          "A"
+        ],
+        "label": "O+A",
+        "n_ticks": 72,
+        "c_mean": 4.5278,
+        "c_min": 1,
+        "c_max": 8,
+        "gpu_hours": 5.4333,
+        "cost_usd": 10.8667,
+        "sla_safe_goodput": 705560.0,
+        "goodput_per_dollar": 64928.83,
+        "n_total": 8232,
+        "n_sla_safe": 6795,
+        "sla_violations": 1437,
+        "n_deferred": 928,
+        "backlog_peak": 328
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "fifo",
+        "admission": "off",
+        "levers_on": [
+          "C"
+        ],
+        "label": "C",
+        "n_ticks": 72,
+        "c_mean": 5.2361,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 6.2833,
+        "cost_usd": 12.5667,
+        "sla_safe_goodput": 925451.0,
+        "goodput_per_dollar": 73643.32,
+        "n_total": 8232,
+        "n_sla_safe": 8168,
+        "sla_violations": 64,
+        "n_deferred": 928,
+        "backlog_peak": 46
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "fifo",
+        "admission": "class_aware",
+        "levers_on": [
+          "C",
+          "A"
+        ],
+        "label": "C+A",
+        "n_ticks": 72,
+        "c_mean": 5.1389,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 6.1667,
+        "cost_usd": 12.3333,
+        "sla_safe_goodput": 925254.0,
+        "goodput_per_dollar": 75020.59,
+        "n_total": 8232,
+        "n_sla_safe": 8168,
+        "sla_violations": 64,
+        "n_deferred": 1060,
+        "backlog_peak": 102
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "abs_conformal",
+        "admission": "off",
+        "levers_on": [
+          "C",
+          "O"
+        ],
+        "label": "C+O",
+        "n_ticks": 72,
+        "c_mean": 5.25,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 6.3,
+        "cost_usd": 12.6,
+        "sla_safe_goodput": 925867.0,
+        "goodput_per_dollar": 73481.51,
+        "n_total": 8232,
+        "n_sla_safe": 8169,
+        "sla_violations": 63,
+        "n_deferred": 1060,
+        "backlog_peak": 46
+      },
+      {
+        "capacity": "backlog_aware",
+        "ordering": "abs_conformal",
+        "admission": "class_aware",
+        "levers_on": [
+          "C",
+          "O",
+          "A"
+        ],
+        "label": "C+O+A",
+        "n_ticks": 72,
+        "c_mean": 5.125,
+        "c_min": 1,
+        "c_max": 9,
+        "gpu_hours": 6.15,
+        "cost_usd": 12.3,
+        "sla_safe_goodput": 925254.0,
+        "goodput_per_dollar": 75223.9,
+        "n_total": 8232,
+        "n_sla_safe": 8168,
+        "sla_violations": 64,
+        "n_deferred": 1060,
+        "backlog_peak": 102
+      }
+    ],
+    "base_gpd": 69015.4601,
+    "best_single": {
+      "label": "C",
+      "goodput_per_dollar": 73643.3156
+    },
+    "best_multi": {
+      "label": "C+O+A",
+      "goodput_per_dollar": 75223.9024
+    },
+    "best_overall": {
+      "label": "C+O+A",
+      "goodput_per_dollar": 75223.9024
+    },
+    "compounding": true,
+    "interaction": "compounding",
+    "notes": [
+      "Azure spine + synthetic best-effort overlay"
+    ]
+  },
+  "manifest": {
+    "spine_dataset": "azure_llm_2024",
+    "n_latency_critical": 5880,
+    "n_best_effort": 2352,
+    "best_effort_fraction": 0.4,
+    "overlay_tier": "SYNTHETIC",
+    "overlay_method": "steady-cadence batch overlay; tokens index-strided-resampled from spine distribution \u00d71.5",
+    "warp": 21.95190126,
+    "n_total": 8232,
+    "notes": [
+      "Overlay is a documented synthetic batch tier, NOT real demand.",
+      "Spine (latency_critical) is the real Azure LLM 2024 trace.",
+      "Purpose: isolate the data variable for the compounding A/B."
+    ]
+  }
+}
