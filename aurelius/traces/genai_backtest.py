@@ -32,9 +32,18 @@ from aurelius.benchmarks.economics import (
     InfrastructureCostConfig,
     compute_economic_kpi,
 )
+from aurelius.optimizer.aurelius_optimizer import AureliusOptimizer
+from aurelius.optimizer.policies.genai_serving import (
+    genai_effective_service_s,
+    genai_size_for_sla,
+    genai_size_for_target,
+)
 from aurelius.simulation.cluster import serving
 
 from .schema import NormalizedGenAIRequest
+
+# Phase 3d: route constraint_aware through the canonical AureliusOptimizer facade.
+_GENAI_OPTIMIZER = AureliusOptimizer(policy="genai_serving")
 
 # Documented priors (identical across policies; override before any claim).
 GPU_HOUR_PRICE = 3.0                 # SD serving GPU ($/hr) — public-list ballpark
@@ -100,21 +109,13 @@ def _aggregate_ticks(requests, tick_seconds: float) -> list[TickAgg]:
 def _effective_service_s(tick: TickAgg, cold: dict, affinity: bool) -> float:
     """Per-request mean service time incl. model cold-start.
 
-    Non-affinity routing thrashes base models (switch rate ≈ 1 with many models);
-    affinity routing amortises one load per distinct model in the tick.
+    Delegates to the canonical physics owner
+    :func:`~aurelius.optimizer.policies.genai_serving.genai_effective_service_s`.
     """
-    if tick.n == 0:
-        return tick.mean_exec_s
-    if affinity:
-        switch_rate = min(1.0, tick.distinct_models / tick.n)
-    else:
-        # many models, load-balanced across replicas → almost always a switch
-        switch_rate = 1.0 if tick.distinct_models > 1 else 0.0
-    cold_s = (switch_rate * cold.get("basemodel_load", 0.0)
-              + tick.lora_frac * (switch_rate if affinity else 1.0) * cold.get("lora_load", 0.0)
-              + tick.controlnet_frac * (switch_rate if affinity else 1.0)
-              * cold.get("controlnet_load", 0.0))
-    return tick.mean_exec_s + cold_s
+    return genai_effective_service_s(
+        tick.mean_exec_s, tick.n, tick.distinct_models,
+        tick.lora_frac, tick.controlnet_frac, cold, affinity,
+    )
 
 
 @dataclass
@@ -174,20 +175,22 @@ def _eval_tick(tick, replicas, cold, affinity):
             "cold_s": service_s - tick.mean_exec_s, "sla": sla}
 
 
-def _size_for_target(tick, cold, affinity, target_rho) -> int:
-    if tick.arrival_rate <= 0:
-        return MIN_REPLICAS
-    service_s = _effective_service_s(tick, cold, affinity)
-    mu = 1.0 / service_s if service_s > 0 else 1.0
-    return max(MIN_REPLICAS, int(math.ceil(tick.arrival_rate / (mu * target_rho))))
+def _size_for_target(tick: TickAgg, cold: dict, affinity: bool, target_rho: float) -> int:
+    """Delegates to the canonical physics owner :func:`genai_size_for_target`."""
+    return genai_size_for_target(
+        tick.n, tick.arrival_rate, tick.mean_exec_s,
+        tick.distinct_models, tick.lora_frac, tick.controlnet_frac,
+        cold, affinity, target_rho,
+    )
 
 
-def _size_for_sla(tick, cold, affinity) -> int:
-    for r in range(MIN_REPLICAS, 4096):
-        ev = _eval_tick(tick, r, cold, affinity)
-        if ev["timeout"] <= 0.0:
-            return r
-    return 4096
+def _size_for_sla(tick: TickAgg, cold: dict, affinity: bool) -> int:
+    """Delegates to the canonical physics owner :func:`genai_size_for_sla`."""
+    return genai_size_for_sla(
+        tick.n, tick.arrival_rate, tick.mean_exec_s,
+        tick.distinct_models, tick.lora_frac, tick.controlnet_frac,
+        cold, affinity,
+    )
 
 
 def _run_policy(policy, ticks, cold, tick_hours) -> PolicyResult:
@@ -214,11 +217,13 @@ def _run_policy(policy, ticks, cold, tick_hours) -> PolicyResult:
     cold_sum = 0.0
     cold_w = 0
     prev_tick = None
-    ewma = 0.0
 
-    for t in ticks:
-        if t.n > 0:
-            ewma = 0.5 * t.arrival_rate + 0.5 * ewma if ewma else t.arrival_rate
+    # Phase 3d: pre-compute constraint_aware replica counts via AureliusOptimizer.
+    _ca_counts: list[int] = []
+    if policy == "constraint_aware":
+        _ca_counts = _GENAI_OPTIMIZER.optimize(ticks, cold).replica_counts
+
+    for i, t in enumerate(ticks):
         if policy == "fifo":
             r = fifo_replicas
         elif policy == "sla_aware":
@@ -230,11 +235,7 @@ def _run_policy(policy, ticks, cold, tick_hours) -> PolicyResult:
         elif policy == "utilization_aware":
             r = _size_for_target(t, cold, False, TARGET_RHO_UTIL) if t.n else MIN_REPLICAS
         elif policy == "constraint_aware":
-            # anticipatory (EWMA peak) + affinity (cold-start amortised)
-            plan = TickAgg(t.tick_index, t.start_s, t.n, max(t.arrival_rate, ewma),
-                           t.mean_exec_s, t.distinct_models, t.lora_frac,
-                           t.controlnet_frac, t.failures)
-            r = _size_for_sla(plan, cold, True) if t.n else MIN_REPLICAS
+            r = _ca_counts[i]
         else:  # pragma: no cover
             raise ValueError(policy)
 

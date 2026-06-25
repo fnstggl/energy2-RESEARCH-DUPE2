@@ -5,14 +5,15 @@
 > Read `docs/RESULTS.md` and `docs/PUBLIC_TRACE_BACKTESTS.md` first.
 
 ## Provenance
-- **Source:** `raw:data/external/alibaba_genai/raw`
+- **Source:** `raw:tests/fixtures/alibaba_genai_sample`
 - **Dataset:** Alibaba `cluster-trace-v2026-GenAI` (GenTD26), a top-down stable-diffusion serving trace. Public dataset, **not customer telemetry**.
+- ⚠️ This run used the committed **fixture**, not the full trace.
 
 ## Schema report — files discovered / used / skipped
 
 - **Layers present:** ['application', 'infrastructure', 'middleware', 'scheduler']
-- **Primary telemetry files used:** 13
-- **Empty files:** none
+- **Primary telemetry files used:** 11
+- **Empty files:** ['pipeline_update_latency_anon.csv']
 - **Skipped (non-telemetry / derived):** none
 
 | file | classification | layer | status |
@@ -22,8 +23,8 @@
 | queue_size_raw_anon.csv | primary | middleware | present |
 | queue_rt_raw_anon.csv | primary | middleware | present |
 | pipeline_inference_data_anon.csv | primary | scheduler | present |
-| pipeline_update_latency_anon.csv | primary | scheduler | present |
-| model_predict_data_anon.csv | primary | scheduler | present |
+| pipeline_update_latency_anon.csv | primary | scheduler | empty |
+| model_predict_data_anon.csv | primary | scheduler | missing |
 | basemodel_update_latency_anon.csv | primary | scheduler | present |
 | controlnet_latency_data_anon.csv | primary | scheduler | present |
 | lora_update_latency_anon.csv | primary | scheduler | present |
@@ -50,11 +51,11 @@ Consequence for the backtest: the request replay is built from the **application
 
 ## Trace summary by layer
 
-- **application:** 26,392 requests, 79 models, lora_frac 0.1652; e2e_latency_s p50/p95/p99 23.0/70.0/106.0; types {'IMG_2_IMG': 2152, 'INPAINTING': 180, 'TXT_2_IMG': 24060}
-- **middleware:** 49,539 samples; gateway waiting_time_s p95/p99 0.451/0.628; queue_depth p95 0.3333333333333333
-- **scheduler/pipeline:** 140,888 events; stage p50 (s) {'pipeline_inference': 15.1, 'pipeline_update': 8.5, 'model_predict': 35.0, 'basemodel_load': 22.7, 'controlnet_load': 3.9, 'lora_load': 4.4}
-- **infrastructure:** 533,720 samples; GPU util% p50/p95 0.0/31.733333333333334; container mem frac p95 0.8773185809453329
-- **cold-start calibration (s, pipeline medians):** {'basemodel_load': 22.7, 'lora_load': 4.4, 'controlnet_load': 3.9}
+- **application:** 60 requests, 6 models, lora_frac 0.2333; e2e_latency_s p50/p95/p99 25.0/53.0/72.0; types {'IMG_2_IMG': 8, 'INPAINTING': 14, 'TXT_2_IMG': 38}
+- **middleware:** 87 samples; gateway waiting_time_s p95/p99 0.392/0.425; queue_depth p95 0.0
+- **scheduler/pipeline:** 156 events; stage p50 (s) {'pipeline_inference': 14.7, 'basemodel_load': 2.8, 'controlnet_load': 4.4, 'lora_load': 3.7}
+- **infrastructure:** 177 samples; GPU util% p50/p95 0.0/0.0; container mem frac p95 0.8701874911785126
+- **cold-start calibration (s, pipeline medians):** {'basemodel_load': 2.8, 'lora_load': 3.7, 'controlnet_load': 4.4}
 
 ## Primary KPI — SLA-safe goodput per infrastructure dollar
 
@@ -62,26 +63,25 @@ Per `docs/RESULTS.md` §1. **goodput_unit = `completed_requests`** (no output-to
 
 | policy | goodput/$ | SLA-compliant req | completed | infra $ | GPU-hrs | e2e p95 (s) | e2e p99 (s) | timeout % | mean cold-start (s) | affinity |
 |---|---|---|---|---|---|---|---|---|---|---|
-| fifo | 1.77 | 26,392 | 26,392 | 14,931 | 4,977 | 53 | 53 | 0.00 | 23.6 | no |
-| sla_aware *(headline)* | 5.19 | 17,794 | 26,392 | 3,426 | 1,142 | 614 | 1,219 | 6.34 | 23.6 | no |
-| queue_aware | 5.25 | 15,815 | 26,392 | 3,015 | 1,005 | 793 | 1,597 | 8.90 | 23.6 | no |
-| utilization_aware | 6.83 | 18,045 | 26,392 | 2,643 | 881 | 239 | 406 | 8.41 | 23.6 | no |
-| constraint_aware **(CA)** | 9.84 | 26,392 | 26,392 | 2,682 | 894 | 45 | 53 | 0.00 | 2.9 | yes |
+| fifo | 3.33 | 60 | 60 | 18 | 6 | 50 | 53 | 0.00 | 5.0 | no |
+| sla_aware *(headline)* | 3.33 | 60 | 60 | 18 | 6 | 50 | 53 | 0.00 | 5.0 | no |
+| queue_aware | 3.33 | 60 | 60 | 18 | 6 | 50 | 53 | 0.00 | 5.0 | no |
+| utilization_aware | 3.33 | 60 | 60 | 18 | 6 | 50 | 53 | 0.00 | 5.0 | no |
+| constraint_aware **(CA)** | 3.33 | 60 | 60 | 18 | 6 | 41 | 44 | 0.00 | 0.8 | yes |
 
 ## Outcome — constraint_aware vs headline (`docs/RESULTS.md` §6)
-- **Outcome:** `ALPHA_WIN` · margin vs `sla_aware`: **+89.46%** on goodput/$
-- **Safety evidence:** e2e_p99<=0.5x_queue_aware, e2e_p99<=0.5x_utilization_aware
+- **Outcome:** `TIE` · margin vs `sla_aware`: **+0.00%** on goodput/$
 
 ## Aurelius-specific findings
 
-1. **Proxy/gateway awareness:** marginal here — gateway waiting time is ~0.451s p95 (tiny vs the 23s base-model cold-start). The gateway is **not** the bottleneck.
-2. **Queue-aware / prewarm / reserve:** **helps decisively.** `constraint_aware` prewarm + model-affinity cuts mean cold-start to 2.9s (vs 23.6s for the baselines), the dominant latency term.
+1. **Proxy/gateway awareness:** marginal here — gateway waiting time is ~0.392s p95 (tiny vs the 3s base-model cold-start). The gateway is **not** the bottleneck.
+2. **Queue-aware / prewarm / reserve:** **helps decisively.** `constraint_aware` prewarm + model-affinity cuts mean cold-start to 0.8s (vs 5.0s for the baselines), the dominant latency term.
 3. **Scheduler/pipeline awareness:** **most impactful addressable lever** — pipeline cold-start (basemodel/LoRA/ControlNet load) is the largest p99 term an optimizer can act on (intrinsic request-size variance is larger but not schedulable); affinity routing that respects warm pools is the key.
-4. **GPU utilization / memory pressure:** GPUs are mostly idle (util p50 0.0%, p95 31.733333333333334%); `utilization_aware` scales replicas down (cheapest GPU-hours) but pays in SLA without affinity. Memory frac p95 0.8773185809453329 bounds how many models can stay warm per container.
-5. **constraint_aware vs sla_aware/queue_aware:** beats the headline (`+89.5%`); it also dominates queue_aware/utilization_aware on SLA-safe goodput here.
-6. **Economic alpha or only safety?** **Both:** lower infra $ (2,682 vs 3,426) AND lower e2e p99 (53s vs 1,219s).
+4. **GPU utilization / memory pressure:** GPUs are mostly idle (util p50 0.0%, p95 0.0%); `utilization_aware` scales replicas down (cheapest GPU-hours) but pays in SLA without affinity. Memory frac p95 0.8701874911785126 bounds how many models can stay warm per container.
+5. **constraint_aware vs sla_aware/queue_aware:** ties the headline (`+0.0%`); it also dominates queue_aware/utilization_aware on SLA-safe goodput here.
+6. **Economic alpha or only safety?** **Both:** lower infra $ (18 vs 18) AND lower e2e p99 (44s vs 53s).
 7. **Losses / limitations:** the application↔infra layers are `no_join` (incompatible time bases, no shared key), so queue_aware/utilization_aware use the **simulated** queue/util, not the real telemetry (which cannot be aligned per-request). The cold-start model is a pipeline-layer **calibration**, not a measured per-request join — a simulator limitation, stated honestly.
-8. **Which layer is most predictive of p99?** Largest single term is **request_exec_variance_s** (contributions (s): {'scheduler_pipeline_cold_start_s': 22.72, 'gateway_queue_wait_s': 0.628, 'request_exec_variance_s': 83.0}). The biggest term — intrinsic request execution-time variance — is **not addressable** by orchestration. Among the **addressable** layers the dominant one is **scheduler_pipeline_cold_start_s** (scheduler/pipeline cold-start ≫ gateway queue), which is exactly the lever `constraint_aware` pulls via affinity/prewarm.
+8. **Which layer is most predictive of p99?** Largest single term is **request_exec_variance_s** (contributions (s): {'scheduler_pipeline_cold_start_s': 2.78, 'gateway_queue_wait_s': 0.425, 'request_exec_variance_s': 47.0}). The biggest term — intrinsic request execution-time variance — is **not addressable** by orchestration. Among the **addressable** layers the dominant one is **scheduler_pipeline_cold_start_s** (scheduler/pipeline cold-start ≫ gateway queue), which is exactly the lever `constraint_aware` pulls via affinity/prewarm.
 
 ## Honest limits
 - Request-level serving replay over proxy physics; metric layers used for calibration only (no per-request request→GPU join exists). GPU price + cold-start magnitudes are documented priors / measured medians, identical across policies. The baselines load-balance **without** model-affinity; `constraint_aware`'s win is specifically the affinity/prewarm lever — a real gap, honestly the point of the dataset.

@@ -6,11 +6,16 @@ strongest validated serving-queue discipline out of the benchmark monolith into
 :mod:`aurelius.optimizer.policies.serving_queue`; Phase 2/3 implements
 ``ReplicaScalingPolicy`` by extracting the per-tick provisioning logic (AMCSG
 MCS gate sweep and SOTSS-MIN oracle loop) into
-:mod:`aurelius.optimizer.policies.replica_scaling`.
+:mod:`aurelius.optimizer.policies.replica_scaling`; Phase 3d implements
+``GenAIServingPolicy`` by extracting the multi-model GenAI constraint_aware
+replica-sizing decision (EWMA anticipatory + model-affinity cold-start routing)
+from the genai_backtest benchmark monolith into
+:mod:`aurelius.optimizer.policies.genai_serving`.
 
     EnergySchedulingPolicy   — implemented (Phase 1): thin delegate to JobScheduler
     ServingQueuePolicy       — implemented (Phase 2): extracted abs-conformal SRPT
     ReplicaScalingPolicy     — implemented (Phase 2/3): extracted AMCSG/SOTSS-MIN
+    GenAIServingPolicy       — implemented (Phase 3d): extracted constraint_aware GenAI
     PlacementPolicy          — NOT implemented (Phase 3)
     AdmissionPolicy          — NOT implemented (Phase 3)
 
@@ -25,6 +30,20 @@ from typing import Optional
 
 from ...optimization.scheduler import JobScheduler, SchedulerResult
 from .base import OptimizationPolicy
+from .genai_serving import (
+    GENAI_EWMA_ALPHA,
+    GENAI_MIN_REPLICAS,
+    GENAI_SLA_LATENCY_ABS_S,
+    GENAI_SLA_LATENCY_MULT,
+    GENAI_TARGET_RHO_SLA,
+    GENAI_TARGET_RHO_UTIL,
+    GenAIServingPolicy,
+    GenAIServingResult,
+    genai_effective_service_s,
+    genai_eval_tick_timeout,
+    genai_size_for_sla,
+    genai_size_for_target,
+)
 from .replica_scaling import (
     REPLICA_AGGRESSIVE_GATE,
     REPLICA_MAX_ORACLE_ITERS,
@@ -117,13 +136,19 @@ POLICY_REGISTRY: dict[str, type[OptimizationPolicy]] = {
     EnergySchedulingPolicy.name: EnergySchedulingPolicy,
     ServingQueuePolicy.name: ServingQueuePolicy,
     ReplicaScalingPolicy.name: ReplicaScalingPolicy,
+    GenAIServingPolicy.name: GenAIServingPolicy,
     PlacementPolicy.name: PlacementPolicy,
     AdmissionPolicy.name: AdmissionPolicy,
 }
 
 #: Policies that are actually implemented in the current phase.
 IMPLEMENTED_POLICIES: frozenset[str] = frozenset(
-    {EnergySchedulingPolicy.name, ServingQueuePolicy.name, ReplicaScalingPolicy.name}
+    {
+        EnergySchedulingPolicy.name,
+        ServingQueuePolicy.name,
+        ReplicaScalingPolicy.name,
+        GenAIServingPolicy.name,
+    }
 )
 
 __all__ = [
@@ -131,6 +156,8 @@ __all__ = [
     "EnergySchedulingPolicy",
     "ServingQueuePolicy",
     "ReplicaScalingPolicy",
+    "GenAIServingPolicy",
+    "GenAIServingResult",
     "PlacementPolicy",
     "AdmissionPolicy",
     "AbsoluteErrorConformalCalibrator",
@@ -149,6 +176,16 @@ __all__ = [
     "REPLICA_SAFE_GATE",
     "REPLICA_AGGRESSIVE_GATE",
     "REPLICA_MAX_ORACLE_ITERS",
+    "genai_effective_service_s",
+    "genai_eval_tick_timeout",
+    "genai_size_for_sla",
+    "genai_size_for_target",
+    "GENAI_MIN_REPLICAS",
+    "GENAI_SLA_LATENCY_MULT",
+    "GENAI_SLA_LATENCY_ABS_S",
+    "GENAI_TARGET_RHO_SLA",
+    "GENAI_TARGET_RHO_UTIL",
+    "GENAI_EWMA_ALPHA",
     "POLICY_REGISTRY",
     "IMPLEMENTED_POLICIES",
 ]
