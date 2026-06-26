@@ -1,0 +1,54 @@
+{
+  "archive": "/tmp/v2026_work/archive.zip",
+  "n_partitions_total": 168,
+  "n_partitions_done": 168,
+  "artifacts": {
+    "rx_gibps": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 5390218,
+      "mean": 0.1291163381125383,
+      "variance": 0.36522646415651805,
+      "min": 2.99138482660055e-06,
+      "max": 922.6863113585005
+    },
+    "rx_hist": {
+      "label": "FULL_TRACE_APPROX",
+      "method": "fixed-bin histogram",
+      "bins": 100,
+      "range": [
+        0.0,
+        5.0
+      ],
+      "p50": 0.025,
+      "p95": 0.5750000000000001,
+      "p99": 1.8250000000000002,
+      "below_range": 0,
+      "above_range": 1093
+    },
+    "tx_gibps": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 5390218,
+      "mean": 0.07207865278721781,
+      "variance": 0.20754416163886735,
+      "min": 6.966488338887e-06,
+      "max": 674.1183503531805
+    },
+    "tx_hist": {
+      "label": "FULL_TRACE_APPROX",
+      "method": "fixed-bin histogram",
+      "bins": 100,
+      "range": [
+        0.0,
+        5.0
+      ],
+      "p50": 0.025,
+      "p95": 0.225,
+      "p99": 0.925,
+      "below_range": 0,
+      "above_range": 876
+    }
+  },
+  "label": "FULL_TRACE_EXACT",
+  "bytes_streamed": 203870478,
+  "complete": true
+}

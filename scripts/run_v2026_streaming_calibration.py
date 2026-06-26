@@ -32,7 +32,8 @@ DEFAULT_PROCESSED = os.environ.get(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("table", choices=["pod_hourly", "server_hourly", "network_hourly"])
+    ap.add_argument("table", choices=["pod_hourly", "server_hourly", "network_hourly",
+                                       "job_execution_summary"])
     ap.add_argument("--max-partitions", type=int, default=None,
                     help="cap partitions this run (resumable; omit for full FULL_TRACE_EXACT)")
     ap.add_argument("--work-dir", default=DEFAULT_WORK)

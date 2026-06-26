@@ -298,6 +298,39 @@ def stream_local_zip(
                          max_partitions=max_partitions)
 
 
+# Archives at/under this many bytes are downloaded WHOLE (one bandwidth-bound
+# curl) then streamed locally — far faster than thousands of per-partition range
+# round-trips. Still bounded disk (must fit the work dir). pod_hourly (351 GB) is
+# above this → always range-streamed.
+PREFETCH_MAX_BYTES = 10 * 1024**3   # 10 GB
+
+
+def stream_archive_prefetched(
+    archive_url: str, build_aggs, fold_table, *,
+    work_dir: str, manifest_path: str, max_partitions: int | None = None,
+) -> StreamResult:
+    """Download the whole archive once (bounded by ``PREFETCH_MAX_BYTES``), then
+    stream it locally. Resumable: if a completed manifest exists the download is
+    skipped. The downloaded zip is removed after processing."""
+    os.makedirs(work_dir, exist_ok=True)
+    size = head_size(archive_url)
+    if size > PREFETCH_MAX_BYTES:
+        raise ValueError(f"{archive_url} is {size:,} B > prefetch cap "
+                         f"{PREFETCH_MAX_BYTES:,}; use stream_archive (range)")
+    local_zip = os.path.join(work_dir, "archive.zip")
+    if not (os.path.exists(local_zip) and os.path.getsize(local_zip) == size):
+        rc = subprocess.run(["curl", "-sS", "--fail", "--max-time", "1800",
+                             "-o", local_zip, archive_url]).returncode
+        if rc != 0 or os.path.getsize(local_zip) != size:
+            raise RuntimeError(f"whole-archive download failed for {archive_url}")
+    try:
+        return stream_local_zip(local_zip, build_aggs, fold_table, work_dir=work_dir,
+                                manifest_path=manifest_path, max_partitions=max_partitions)
+    finally:
+        if os.path.exists(local_zip):
+            os.remove(local_zip)
+
+
 def _stream_parts(
     src_id: str, zf, parts, build_aggs, fold_table, *,
     work_dir: str, manifest_path: str, max_partitions: int | None = None,
@@ -324,20 +357,32 @@ def _stream_parts(
     if max_partitions is not None:
         todo = todo[:max_partitions]
 
+    local = os.path.join(work_dir, "part.parquet")
     for p in todo:
-        local = os.path.join(work_dir, "part.parquet")
-        with zf.open(p) as src, open(local, "wb") as dst:
-            dst.write(src.read())
-        # byte-size verification against the central directory
-        if os.path.getsize(local) != p.file_size:
-            os.remove(local)
-            raise RuntimeError(f"size mismatch on {p.filename}: "
-                               f"{os.path.getsize(local)} != {p.file_size}")
-        pf = pq.ParquetFile(local)
-        for rg in range(pf.num_row_groups):           # row-group iteration: bounded memory
-            fold_table(aggs, pf.read_row_group(rg))
+        # Extract + read with retry — transient proxy/range corruption (a wrong-bytes
+        # 200, a truncated member) is retried (re-fetched), not fatal; the run is also
+        # checkpointed so a hard failure resumes from here next run.
+        for attempt in range(5):
+            try:
+                with zf.open(p) as src, open(local, "wb") as dst:
+                    dst.write(src.read())
+                if os.path.getsize(local) != p.file_size:   # byte-size verification
+                    raise RuntimeError(f"size {os.path.getsize(local)} != {p.file_size}")
+                pf = pq.ParquetFile(local)
+                aggs_part = build_aggs()                     # fold into a scratch first
+                for rg in range(pf.num_row_groups):          # row-group iter: bounded memory
+                    fold_table(aggs_part, pf.read_row_group(rg))
+                break
+            except (zipfile.BadZipFile, RuntimeError, OSError) as e:
+                if attempt == 4:
+                    raise RuntimeError(f"partition {p.filename} failed after retries: {e}")
+                continue
+            finally:
+                if os.path.exists(local):
+                    os.remove(local)                         # cleanup → bounded disk
+        for k, v in aggs_part.items():                       # commit only on success
+            aggs[k].merge(v)
         bytes_streamed += p.file_size
-        os.remove(local)                               # cleanup → bounded disk
         done.add(p.filename)
         _atomic_write_json(manifest_path, {            # failure-safe checkpoint
             "archive": src_id, "processed": sorted(done),
@@ -356,5 +401,6 @@ def _stream_parts(
 __all__ = [
     "OSS_BASE", "ARCHIVES", "HttpRangeFile", "head_size", "list_partitions",
     "ExactStats", "ExactHistogram", "ExactCounter", "StreamResult",
-    "stream_archive", "stream_local_zip",
+    "stream_archive", "stream_local_zip", "stream_archive_prefetched",
+    "PREFETCH_MAX_BYTES",
 ]

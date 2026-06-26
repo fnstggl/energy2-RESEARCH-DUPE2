@@ -144,3 +144,22 @@ def test_full_trace_artifact_present():
     p = os.path.join(os.environ["V2026_PROCESSED_DIR"], "network_hourly_calibration.json")
     d = json.load(open(p))
     assert d["complete"] and d["label"] == FULL_TRACE_EXACT
+
+
+# --- artifact loader (stdlib; consumes the JSON the FleetPlane reads) -------
+
+def test_artifact_loader_reads_and_reports_coverage(tmp_path):
+    import json
+
+    from aurelius.environment.ingestion.v2026_artifacts import coverage, load_all
+    art = {"label": FULL_TRACE_EXACT, "complete": True, "n_partitions_done": 168,
+           "n_partitions_total": 168, "bytes_streamed": 200_000_000,
+           "artifacts": {"rx_gibps": {"label": FULL_TRACE_EXACT, "n": 5, "mean": 0.1}}}
+    with open(tmp_path / "network_hourly_calibration.json", "w") as f:
+        json.dump(art, f)
+    loaded = load_all(str(tmp_path))
+    assert "network_hourly" in loaded
+    cov = coverage(str(tmp_path))
+    assert cov["network_hourly"]["present"] and cov["network_hourly"]["complete"]
+    assert cov["network_hourly"]["label"] == FULL_TRACE_EXACT
+    assert cov["pod_hourly"]["present"] is False     # absent table reported honestly
