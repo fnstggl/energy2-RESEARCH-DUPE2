@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Tiers, best → worst.
+# Source tiers, best → worst.
 FULL_TRACE = "FULL_TRACE"          # the complete available public source, ingested
 SUBSET_TRACE = "SUBSET_TRACE"      # a real but partial slice of the full source
 SAMPLE_FIXTURE = "SAMPLE_FIXTURE"  # a small committed schema-shaped fixture
@@ -18,6 +18,14 @@ MOCK = "MOCK"                      # hand-authored, not from any trace
 BLOCKED = "BLOCKED"                # full source exists but access is blocked here
 
 TIER_ORDER = {FULL_TRACE: 0, SUBSET_TRACE: 1, SAMPLE_FIXTURE: 2, MOCK: 3, BLOCKED: 4}
+
+# Artifact-quality labels for a *computed* statistic (orthogonal to source tier):
+# how exact is this aggregate relative to processing the whole source conventionally?
+FULL_TRACE_EXACT = "FULL_TRACE_EXACT"    # every row processed once; mathematically exact
+FULL_TRACE_APPROX = "FULL_TRACE_APPROX"  # every row processed, but the statistic is a
+#                                          documented approximation (e.g. histogram percentile)
+ARTIFACT_LABELS = (FULL_TRACE_EXACT, FULL_TRACE_APPROX, SUBSET_TRACE,
+                   SAMPLE_FIXTURE, MOCK, BLOCKED)
 
 
 @dataclass(frozen=True)
@@ -51,5 +59,6 @@ class SourceStatus:
 
 __all__ = [
     "FULL_TRACE", "SUBSET_TRACE", "SAMPLE_FIXTURE", "MOCK", "BLOCKED",
+    "FULL_TRACE_EXACT", "FULL_TRACE_APPROX", "ARTIFACT_LABELS",
     "TIER_ORDER", "SourceStatus",
 ]
