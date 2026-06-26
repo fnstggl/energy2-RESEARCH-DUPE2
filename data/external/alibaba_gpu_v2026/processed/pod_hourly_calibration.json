@@ -1,0 +1,238 @@
+{
+  "archive": "https://tre-clusterdata.oss-cn-hangzhou.aliyuncs.com/cluster-trace-gpu-v2026/data/asi_opensource_pod_hourly.zip",
+  "n_partitions_total": 4440,
+  "n_partitions_done": 4440,
+  "artifacts": {
+    "gpu_sm_util": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 391495995,
+      "mean": 27.51738206562743,
+      "variance": 5645.989390579484,
+      "min": 0.0,
+      "max": 2001.470535
+    },
+    "gpu_sm_util_hist": {
+      "label": "FULL_TRACE_APPROX",
+      "method": "fixed-bin histogram",
+      "bins": 100,
+      "range": [
+        0.0,
+        100.0
+      ],
+      "p50": 7.5,
+      "p95": 85.5,
+      "p99": 100.0,
+      "below_range": 0,
+      "above_range": 12106079
+    },
+    "gpu_mem_gib": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 498306983,
+      "mean": 59.09696509074341,
+      "variance": 14923.998672707563,
+      "min": 0.0,
+      "max": 10223.62086808341
+    },
+    "gpu_mem_util": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 6269913759,
+      "mean": 0.19257507195380116,
+      "variance": 0.050744526068795814,
+      "min": -1.8772017196570028,
+      "max": 18.907293314653288
+    },
+    "gpu_mem_util_hist": {
+      "label": "FULL_TRACE_APPROX",
+      "method": "fixed-bin histogram",
+      "bins": 100,
+      "range": [
+        0.0,
+        1.0
+      ],
+      "p50": 0.095,
+      "p95": 0.685,
+      "p99": 0.865,
+      "below_range": 14701423,
+      "above_range": 3097396
+    },
+    "cpu_util": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 6368561850,
+      "mean": 8.628988841172301,
+      "variance": 895.8008735512072,
+      "min": 0.0,
+      "max": 44384.768
+    },
+    "schedule_delay_s": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 5934848418,
+      "mean": 314.13029370735984,
+      "variance": 14133902.820006827,
+      "min": -1.0,
+      "max": 86399.0
+    },
+    "schedule_delay_hist": {
+      "label": "FULL_TRACE_APPROX",
+      "method": "fixed-bin histogram",
+      "bins": 150,
+      "range": [
+        0.0,
+        300.0
+      ],
+      "p50": 1.0,
+      "p95": 271.0,
+      "p99": 300.0,
+      "below_range": 2090232,
+      "above_range": 259632854
+    },
+    "ready_delay_s": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 5934848418,
+      "mean": 347.4115187180843,
+      "variance": 17897057.31436596,
+      "min": -1.0,
+      "max": 86399.0
+    },
+    "gpu_request": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 6570124684,
+      "mean": 0.09978988373945223,
+      "variance": 0.35078827645362487,
+      "min": 0.0,
+      "max": 16.0
+    },
+    "gpu_mem_request": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 6570124684,
+      "mean": 9865389304.273878,
+      "variance": 4.3157692873071096e+21,
+      "min": 0.0,
+      "max": 3292092432384.0
+    },
+    "used_gpu_hours": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 6570124684,
+      "mean": 0.08505988278445625,
+      "variance": 0.2987734060739954,
+      "min": 0.0,
+      "max": 16.0
+    },
+    "server_gpu_count": {
+      "label": "FULL_TRACE_EXACT",
+      "n": 6570124684,
+      "mean": 4.624152456495451,
+      "variance": 21.81772852637083,
+      "min": 1.0,
+      "max": 16.0
+    },
+    "priority_class": {
+      "label": "FULL_TRACE_EXACT",
+      "counts": {
+        "Other": 4976504560,
+        "HP": 1409330984,
+        "LP": 184289140
+      },
+      "fractions": {
+        "Other": 0.7574444625258195,
+        "HP": 0.2145059723801126,
+        "LP": 0.028049565094067856
+      }
+    },
+    "job_type_public": {
+      "label": "FULL_TRACE_EXACT",
+      "counts": {
+        "unknown": 6048114403,
+        "training": 34732928,
+        "online_inference": 319549869,
+        "offline_inference": 160228262,
+        "dev": 6926172,
+        "other": 573050
+      },
+      "fractions": {
+        "unknown": 0.9205478881898187,
+        "training": 0.005286494499044122,
+        "online_inference": 0.04863680437879495,
+        "offline_inference": 0.024387400499445377,
+        "dev": 0.001054191865927152,
+        "other": 8.722056696968462e-05
+      }
+    },
+    "model_type_public": {
+      "label": "FULL_TRACE_EXACT",
+      "counts": {
+        "unknown": 6053210608,
+        "rec": 208436981,
+        "cv": 48313505,
+        "genai": 246344068,
+        "dev": 4804249,
+        "embedding": 9015273
+      },
+      "fractions": {
+        "unknown": 0.9213235515516436,
+        "rec": 0.03172496581497143,
+        "cv": 0.0073535141757136244,
+        "genai": 0.037494580369214804,
+        "dev": 0.000731226457802182,
+        "embedding": 0.0013721616306543749
+      }
+    },
+    "is_genai_request": {
+      "label": "FULL_TRACE_EXACT",
+      "counts": {
+        "False": 6348972255,
+        "True": 221152429
+      },
+      "fractions": {
+        "False": 0.9663396907004573,
+        "True": 0.03366030929954266
+      }
+    },
+    "gpu_spec_public": {
+      "label": "FULL_TRACE_EXACT",
+      "counts": {
+        "A10": 1705490266,
+        "XPU-B": 975787595,
+        "A800": 57423078,
+        "XPU-E": 612337898,
+        "L20": 1114822242,
+        "XPU-D": 103377109,
+        "XPU-C": 449483457,
+        "H20": 784039277,
+        "XPU-A": 404809394,
+        "H800": 94669856,
+        "A100": 251658335,
+        "A30": 8293906,
+        "H20-141GB": 7932271
+      },
+      "fractions": {
+        "A10": 0.25958263321140956,
+        "XPU-B": 0.14851888539897914,
+        "A800": 0.008740028654226373,
+        "XPU-E": 0.09320034663743985,
+        "L20": 0.16968053052552998,
+        "XPU-D": 0.015734421182561534,
+        "XPU-C": 0.06841323089265135,
+        "H20": 0.11933400273351646,
+        "XPU-A": 0.06161365475845816,
+        "H800": 0.014409141462801499,
+        "A100": 0.0383034336643344,
+        "A30": 0.0012623666062529782,
+        "H20-141GB": 0.0012073242718387352
+      }
+    },
+    "state_public": {
+      "label": "FULL_TRACE_EXACT",
+      "counts": {
+        "Unknown": 6557513759,
+        "Standby": 12610925
+      },
+      "fractions": {
+        "Unknown": 0.9980805653459346,
+        "Standby": 0.001919434654065387
+      }
+    }
+  },
+  "label": "FULL_TRACE_EXACT",
+  "bytes_streamed": 351802613287,
+  "complete": true
+}
