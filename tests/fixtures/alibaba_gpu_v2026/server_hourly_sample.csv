@@ -1,0 +1,9 @@
+server_id,cluster_id,asw_id,gpu_spec_public,gpu_count,cpu_capacity_cores,day,hour
+s0,c0,asw_0,H100,8,192,1,0
+s1,c0,asw_0,H100,8,192,1,0
+s2,c0,asw_1,A100,8,128,1,0
+s3,c0,asw_1,A100,8,128,1,0
+s0,c0,asw_0,H100,8,192,1,1
+s1,c0,asw_0,H100,8,192,1,1
+s2,c0,asw_1,A100,8,128,1,1
+s3,c0,asw_1,A100,8,128,1,1
