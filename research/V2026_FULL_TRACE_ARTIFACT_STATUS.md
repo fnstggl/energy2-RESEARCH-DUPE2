@@ -4,7 +4,7 @@ Streamed incrementally from Aliyun OSS with bounded disk (`aurelius/environment/
 
 | table | partitions | rows | streamed | label | categories | artifact |
 |---|---|---|---|---|---|---|
-| pod_hourly | — | — | — | (not run) | — | — |
+| pod_hourly | 30/4440 | 34,830,182 | 1.89 GB | **SUBSET_TRACE** | 19 | `data/external/alibaba_gpu_v2026/processed/pod_hourly_calibration.json` |
 | server_hourly | 4440/4440 | 143,442,792 | 3.08 GB | **FULL_TRACE_EXACT** | 5 | `data/external/alibaba_gpu_v2026/processed/server_hourly_calibration.json` |
 | network_hourly | 168/168 | 5,390,218 | 0.20 GB | **FULL_TRACE_EXACT** | 4 | `data/external/alibaba_gpu_v2026/processed/network_hourly_calibration.json` |
 | job_execution_summary | 1/1 | 40,522,321 | 1.19 GB | **FULL_TRACE_EXACT** | 12 | `data/external/alibaba_gpu_v2026/processed/job_execution_summary_calibration.json` |
