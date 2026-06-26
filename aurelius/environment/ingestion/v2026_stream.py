@@ -357,8 +357,18 @@ def _stream_parts(
     if max_partitions is not None:
         todo = todo[:max_partitions]
 
+    def _checkpoint():
+        _atomic_write_json(manifest_path, {
+            "archive": src_id, "processed": sorted(done),
+            "bytes_streamed": bytes_streamed,
+            "state": {k: v.state() for k, v in aggs.items()}})
+
+    # Checkpoint every N partitions (not every one) — for tables with large counter
+    # state (e.g. server_hourly asw_id: thousands of keys) writing the full state
+    # each partition is O(n^2). A crash loses <= N partitions; resume re-streams them.
+    checkpoint_every = 50
     local = os.path.join(work_dir, "part.parquet")
-    for p in todo:
+    for i, p in enumerate(todo):
         # Extract + read with retry — transient proxy/range corruption (a wrong-bytes
         # 200, a truncated member) is retried (re-fetched), not fatal; the run is also
         # checkpointed so a hard failure resumes from here next run.
@@ -384,11 +394,10 @@ def _stream_parts(
             aggs[k].merge(v)
         bytes_streamed += p.file_size
         done.add(p.filename)
-        _atomic_write_json(manifest_path, {            # failure-safe checkpoint
-            "archive": src_id, "processed": sorted(done),
-            "bytes_streamed": bytes_streamed,
-            "state": {k: v.state() for k, v in aggs.items()}})
+        if (i + 1) % checkpoint_every == 0:            # periodic failure-safe checkpoint
+            _checkpoint()
 
+    _checkpoint()                                      # always checkpoint final state
     n_done = len(done)
     complete = n_done == total
     label = FULL_TRACE_EXACT if complete else SUBSET_TRACE
