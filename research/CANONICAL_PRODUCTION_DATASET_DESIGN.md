@@ -203,8 +203,18 @@ layers whose "anonymized time bases" are incompatible. The canonical dataset
 ## 6. Build sequence (realizable now → needs a pilot)
 
 1. **DONE — multi-class slice.** `augment_with_best_effort()` + the closed loop.
-   Proves the data-vs-optimizer question and unlocks admission/energy compounding.
-   No external download; deterministic; shipped.
+   Proves the data-vs-optimizer *mechanism* question. No external download;
+   deterministic; shipped.
+1b. **DONE — class-ratio calibration from Alibaba (and the correction it forced).**
+   `aurelius/datasets/calibration.py` derives the best-effort fraction from the real
+   Alibaba cluster-trace-gpu-v2023 QoS mix (~20% by count) instead of the arbitrary
+   40% the slice first used. This **corrected the +9.00% headline to neutral/−3%**
+   at the production-grounded ratio — the magnitude was a fraction artifact (see
+   `research/results/canonical_dataset_alibaba_vs_overlay_2026-06-26.md`). Lesson
+   folded back into guardrail §5 #2: even a *labeled* synthetic overlay misleads on
+   *magnitude* unless its parameters are calibrated from real data. Assessed and
+   rejected the Alibaba traces as a replacement *spine* (GPU=training/wrong-decision;
+   GenAI=diffusion + `no_join` layers) — they are a calibration source, not a spine.
 2. **NEXT (download-only, no pilot) — calibration upgrades.** Pull the four real
    public sources and upgrade priors from HEURISTIC to BENCHMARK_DERIVED *with
    caveats*: KV prefix-hit ← Mooncake `hash_ids`; power(util) ← Zeus; thermal α/β
@@ -224,10 +234,11 @@ layers whose "anonymized time bases" are incompatible. The canonical dataset
 ## 7. One-line answer to "should we build it?"
 
 Yes — but as a **layered, per-surface-graded, manifest-stamped assembly**, not a
-merged table. Built that way it makes the capacity/ordering/admission/KV/energy
-cluster **jointly testable at MEDIUM+ fidelity** (which is what the joint loop
-needs and what just produced +9.00% compounding), while keeping thermal/topology
-honestly at "calibratable but not validatable" and autoscaling truth at "needs a
-pilot." Built as a flat merge instead, it would be a monstrous dataset that
-produces confident wrong optimizer decisions — so the guardrails in §5 are not
+merged table, **with every structural parameter calibrated from real data** (the
+class ratio from Alibaba, §6 step 1b — not guessed). Built that way it makes the
+capacity/ordering/admission/KV/energy cluster **jointly testable at MEDIUM+
+fidelity**, while keeping thermal/topology honestly at "calibratable but not
+validatable" and autoscaling truth at "needs a pilot." Built as a flat merge — or
+with guessed parameters (the 40%→neutral correction) — it produces confident wrong
+optimizer decisions, so the guardrails in §5 are not
 optional, they are the design.

@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from aurelius.datasets import (
     CANONICAL_SIGNAL_MATRIX,
+    alibaba_class_mix,
+    assemble_calibrated,
     augment_with_best_effort,
     coverage_by_lever,
     coverage_by_tier,
+    default_alibaba_class_mix,
     realizable_today,
     simulator_or_absent,
     to_jobs,
@@ -77,6 +80,33 @@ def test_signal_matrix_tiers_are_valid_and_audited():
     # and the admission-unlocking workload_class lever is realizable today
     levers = coverage_by_lever()
     assert "admission" in levers
+
+
+def test_alibaba_class_mix_is_real_and_two_weighted():
+    mix = default_alibaba_class_mix()
+    # real production ratio, both weightings present, count-weighted is the anchor
+    assert 0.0 < mix.best_effort_fraction_by_count <= 0.5
+    assert 0.0 <= mix.best_effort_fraction_by_gpu_work <= mix.best_effort_fraction_by_count
+    assert mix.tier == "PROXY"  # real ratio, but from a training (not serving) workload
+    assert "alibaba" in mix.source.lower()
+
+
+def test_calibrated_assembler_grounds_fraction_with_provenance():
+    raw = _raw()
+    jobs, manifest, mix = assemble_calibrated(raw, warp=1.0, weight="count")
+    # best-effort count matches the calibrated fraction (not an arbitrary 0.4)
+    n_be = sum(1 for j in jobs if j.cls == "best_effort")
+    assert round(n_be / len(raw), 2) == round(mix.best_effort_fraction_by_count, 2)
+    # provenance recorded in the manifest
+    assert any("CALIBRATED" in n for n in manifest.notes)
+    assert any("per-record join" in n.lower() for n in manifest.notes)
+
+
+def test_alibaba_mix_handles_empty_pod_list(tmp_path):
+    p = tmp_path / "empty.csv"
+    p.write_text("name,qos,gpu_milli,creation_time,deletion_time\n")
+    mix = alibaba_class_mix(str(p))
+    assert mix.n_jobs == 0 and mix.best_effort_fraction_by_count == 0.0
 
 
 def test_realizable_vs_ceiling_partition():

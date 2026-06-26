@@ -161,6 +161,39 @@ def augment_with_best_effort(
     return jobs, manifest
 
 
+def assemble_calibrated(
+    spine_raw: list,
+    *,
+    warp: float,
+    class_mix=None,
+    weight: str = "count",
+    token_multiplier: float = 1.0,
+) -> tuple:
+    """Assemble the multi-class slice with the best-effort fraction CALIBRATED from
+    a real production class mix (Alibaba GPU qos), not an arbitrary guess.
+
+    ``class_mix`` defaults to :func:`...calibration.default_alibaba_class_mix`.
+    ``weight`` selects which calibrated fraction to use: ``"count"`` (by job count,
+    the stable structural anchor) or ``"gpu_work"`` (by GPU-hours — sample-
+    sensitive). The chosen ratio + its provenance are recorded in the manifest, so
+    the overlay is no longer a free parameter but a measured one (PROXY tier).
+    """
+    from .calibration import default_alibaba_class_mix
+
+    mix = class_mix if class_mix is not None else default_alibaba_class_mix()
+    frac = (mix.best_effort_fraction_by_gpu_work if weight == "gpu_work"
+            else mix.best_effort_fraction_by_count)
+    jobs, manifest = augment_with_best_effort(
+        spine_raw, warp=warp, fraction=frac, token_multiplier=token_multiplier)
+    manifest.notes = manifest.notes + (
+        f"best_effort_fraction CALIBRATED from {mix.source} "
+        f"(by {weight}={frac:.4f}, tier={mix.tier})",
+        "ratio transferred as a distribution, NOT a per-record join (Alibaba is "
+        "training/packing telemetry, a different workload from LLM serving)",
+    )
+    return jobs, manifest, mix
+
+
 def _causal_predicted(trace: list) -> list:
     """Running-median causal token prediction (no token oracle)."""
     import bisect
@@ -178,6 +211,6 @@ def _causal_predicted(trace: list) -> list:
 
 
 __all__ = [
-    "to_jobs", "augment_with_best_effort", "CanonicalManifest",
-    "CLASS_LATENCY", "CLASS_BEST_EFFORT",
+    "to_jobs", "augment_with_best_effort", "assemble_calibrated",
+    "CanonicalManifest", "CLASS_LATENCY", "CLASS_BEST_EFFORT",
 ]
