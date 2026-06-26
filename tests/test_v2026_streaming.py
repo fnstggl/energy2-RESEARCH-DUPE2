@@ -120,6 +120,52 @@ def test_resume_and_checkpoint(tmp_path):
     assert abs(r2.artifacts["rx"]["mean"] - statistics.mean(all_rx)) < 1e-9
 
 
+# --- multiprocessing fold path == exact (row-group folding) ----------------
+
+def test_fold_local_parquet_exact_stats(tmp_path):
+    """The worker fold (`_fold_local_parquet`, used by stream_archive_parallel)
+    folds row-group by row-group and must yield exact n/min/max and mean within
+    float tolerance vs the whole-sequence reference."""
+    from aurelius.environment.ingestion.v2026_stream import _fold_local_parquet
+    rx = [float((i * 13) % 50) * 0.1 for i in range(2000)]
+    t = pa.table({"rx_gibps_avg": rx, "tx_gibps_avg": [v * 0.5 for v in rx]})
+    pf = os.path.join(tmp_path, "p.parquet")
+    pq.write_table(t, pf, row_group_size=512)          # several row groups
+    state = _fold_local_parquet(pf, _net_aggs, _net_fold)
+    d = ExactStats.from_state(state["rx"]).to_dict()
+    assert d["n"] == len(rx)
+    assert d["min"] == min(rx) and d["max"] == max(rx)
+    assert abs(d["mean"] - statistics.mean(rx)) < 1e-9
+
+
+def test_materialize_artifact_from_manifest(tmp_path):
+    """A checkpoint manifest rebuilds an accurate artifact without re-streaming;
+    label is FULL_TRACE_EXACT only when every partition is in, else SUBSET_TRACE."""
+    import json
+
+    from aurelius.environment.ingestion.v2026_calibration import (
+        _network_aggs,
+        materialize_artifact,
+    )
+    aggs = _network_aggs()
+    aggs["rx_gibps"].update([0.1, 0.2, 0.3])
+    man = {"archive": "x", "processed": ["a", "b"], "bytes_streamed": 123,
+           "n_partitions_total": 2, "state": {k: v.state() for k, v in aggs.items()}}
+    p = os.path.join(tmp_path, "network_hourly_manifest.json")
+    with open(p, "w") as f:
+        json.dump(man, f)
+    art = materialize_artifact("network_hourly", p)
+    assert art["complete"] and art["label"] == FULL_TRACE_EXACT
+    assert art["n_partitions_done"] == 2 and art["n_partitions_total"] == 2
+    assert art["artifacts"]["rx_gibps"]["n"] == 3
+    # partial → honest SUBSET_TRACE
+    man["processed"] = ["a"]
+    with open(p, "w") as f:
+        json.dump(man, f)
+    art2 = materialize_artifact("network_hourly", p)
+    assert not art2["complete"] and art2["label"] == SUBSET_TRACE
+
+
 # --- no raw data committed -------------------------------------------------
 
 def test_no_raw_trace_data_committed():

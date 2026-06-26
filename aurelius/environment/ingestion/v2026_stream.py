@@ -360,7 +360,7 @@ def _stream_parts(
     def _checkpoint():
         _atomic_write_json(manifest_path, {
             "archive": src_id, "processed": sorted(done),
-            "bytes_streamed": bytes_streamed,
+            "bytes_streamed": bytes_streamed, "n_partitions_total": total,
             "state": {k: v.state() for k, v in aggs.items()}})
 
     # Checkpoint every N partitions (not every one) — for tables with large counter
@@ -374,8 +374,15 @@ def _stream_parts(
         # checkpointed so a hard failure resumes from here next run.
         for attempt in range(5):
             try:
+                # Copy the member in bounded chunks: each src.read(chunk) is a
+                # separate small range request, so a slow proxy can't blow the
+                # per-read timeout (the failure mode of one giant 80 MB read).
                 with zf.open(p) as src, open(local, "wb") as dst:
-                    dst.write(src.read())
+                    while True:
+                        buf = src.read(8 * 1024 * 1024)
+                        if not buf:
+                            break
+                        dst.write(buf)
                 if os.path.getsize(local) != p.file_size:   # byte-size verification
                     raise RuntimeError(f"size {os.path.getsize(local)} != {p.file_size}")
                 pf = pq.ParquetFile(local)
@@ -407,9 +414,137 @@ def _stream_parts(
         label=label, bytes_streamed=bytes_streamed)
 
 
+def _fold_local_parquet(path: str, build_aggs, fold_table) -> dict:
+    """Fold one local parquet file (row-group by row-group, bounded memory) into a
+    fresh aggregator set and return its serialized state. Pure/standalone (no
+    globals, no network) so it is unit-testable and identical to serial folding."""
+    import pyarrow.parquet as pq
+    pf = pq.ParquetFile(path)
+    ap = build_aggs()
+    for rg in range(pf.num_row_groups):
+        fold_table(ap, pf.read_row_group(rg))
+    return {k: v.state() for k, v in ap.items()}
+
+
+# Per-process state for the multiprocessing pool: each worker opens its OWN
+# HttpRangeFile/ZipFile once (central dir read) and reuses it for every task.
+_MP: dict = {}
+
+
+def _mp_init(archive_url, size, build_aggs, fold_table, work_dir, read_chunk, timeout):
+    _MP.update(
+        zf=zipfile.ZipFile(HttpRangeFile(archive_url, size, timeout=timeout)),
+        byname=None, build=build_aggs, fold=fold_table, work=work_dir,
+        chunk=read_chunk)
+    _MP["byname"] = {i.filename: i for i in _MP["zf"].infolist()}
+
+
+def _mp_download_fold(pname: str):
+    """Worker task: download ONE whole partition (one bandwidth-bound curl) and
+    fold it with the identical exact aggregators → (pname, state, file_size).
+    Download (I/O) + fold (CPU) run together across processes, so oversubscribing
+    workers overlaps the two and breaks the single-thread fold ceiling."""
+    g = _MP
+    p = g["byname"][pname]
+    safe = pname.replace("/", "_").replace("=", "")
+    dest = os.path.join(g["work"], f"mp_{safe}")
+    last = None
+    for attempt in range(5):
+        try:
+            with g["zf"].open(p) as src, open(dest, "wb") as d:
+                while True:
+                    buf = src.read(g["chunk"])
+                    if not buf:
+                        break
+                    d.write(buf)
+            if os.path.getsize(dest) != p.file_size:
+                raise RuntimeError(f"size {os.path.getsize(dest)} != {p.file_size}")
+            state = _fold_local_parquet(dest, g["build"], g["fold"])
+            os.remove(dest)
+            return pname, state, p.file_size
+        except (zipfile.BadZipFile, RuntimeError, OSError) as e:
+            last = e
+            if os.path.exists(dest):
+                os.remove(dest)
+    raise RuntimeError(f"partition {pname} failed after retries: {last}")
+
+
+def stream_archive_parallel(
+    archive_url: str, build_aggs, fold_table, *,
+    work_dir: str, manifest_path: str, workers: int = 8,
+    checkpoint_every: int = 20, max_partitions: int | None = None,
+    read_chunk: int = 128 * 1024 * 1024, timeout: int = 300,
+) -> StreamResult:
+    """Range-stream an archive with a POOL OF WORKER PROCESSES.
+
+    pod_hourly (351 GB) has TWO bottlenecks: per-partition download (fixed best by
+    fetching each whole partition in one curl, not many small chunks) and folding,
+    which is CPU-bound Python — the GIL serialises threads at ~1 partition/12 s. So
+    each worker is a *process* that downloads one whole partition and folds it with
+    the SAME exact aggregators (bit-for-bit identical to serial folding); the main
+    process merges the returned per-partition state (order-independent →
+    FULL_TRACE_EXACT) and checkpoints. Oversubscribe ``workers`` past the core
+    count so I/O downloads overlap CPU folds. Bounded disk (≈ workers partitions in
+    flight); resumable from the manifest.
+    """
+    import multiprocessing as mp
+
+    os.makedirs(work_dir, exist_ok=True)
+    size = head_size(archive_url)
+    main_zf = zipfile.ZipFile(HttpRangeFile(archive_url, size))
+    parts = [i for i in main_zf.infolist() if i.filename.endswith(".parquet")]
+    total = len(parts)
+
+    aggs = build_aggs()
+    done: set = set()
+    bytes_streamed = 0
+    if os.path.exists(manifest_path):
+        m = json.load(open(manifest_path))
+        done = set(m.get("processed", []))
+        bytes_streamed = m.get("bytes_streamed", 0)
+        for name, agg in aggs.items():
+            if name in m.get("state", {}):
+                agg.__dict__.update(type(agg).from_state(m["state"][name]).__dict__)
+
+    todo = [p.filename for p in parts if p.filename not in done]
+    if max_partitions is not None:
+        todo = todo[:max_partitions]
+
+    def _checkpoint():
+        _atomic_write_json(manifest_path, {
+            "archive": archive_url, "processed": sorted(done),
+            "bytes_streamed": bytes_streamed, "n_partitions_total": total,
+            "state": {k: v.state() for k, v in aggs.items()}})
+
+    processed = 0
+    if todo:
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(
+            workers, initializer=_mp_init,
+            initargs=(archive_url, size, build_aggs, fold_table,
+                      work_dir, read_chunk, timeout),
+        ) as pool:
+            for pname, state, fsize in pool.imap_unordered(_mp_download_fold, todo):
+                for k, st in state.items():            # merge exact per-partition state
+                    aggs[k].merge(type(aggs[k]).from_state(st))
+                done.add(pname)
+                bytes_streamed += fsize
+                processed += 1
+                if processed % checkpoint_every == 0:
+                    _checkpoint()
+
+    _checkpoint()
+    n_done = len(done)
+    label = FULL_TRACE_EXACT if n_done == total else SUBSET_TRACE
+    return StreamResult(
+        archive=archive_url, n_partitions_total=total, n_partitions_done=n_done,
+        artifacts={k: v.to_dict() for k, v in aggs.items()},
+        label=label, bytes_streamed=bytes_streamed)
+
+
 __all__ = [
     "OSS_BASE", "ARCHIVES", "HttpRangeFile", "head_size", "list_partitions",
     "ExactStats", "ExactHistogram", "ExactCounter", "StreamResult",
     "stream_archive", "stream_local_zip", "stream_archive_prefetched",
-    "PREFETCH_MAX_BYTES",
+    "stream_archive_parallel", "PREFETCH_MAX_BYTES",
 ]

@@ -22,14 +22,18 @@ Categories (build spec) → table.column (real v2026 schema):
 
 from __future__ import annotations
 
+import json
+
+from ..data_tier import FULL_TRACE_EXACT, SUBSET_TRACE
 from .v2026_stream import (
     ARCHIVES,
     PREFETCH_MAX_BYTES,
     ExactCounter,
     ExactHistogram,
     ExactStats,
+    StreamResult,
     head_size,
-    stream_archive,
+    stream_archive_parallel,
     stream_archive_prefetched,
 )
 
@@ -153,6 +157,7 @@ _WIRING = {
 
 def calibrate_table(
     table: str, *, work_dir: str, manifest_path: str, max_partitions=None,
+    workers: int = 8,
 ):
     """Stream one v2026 archive → exact calibration artifacts. Resumable."""
     if table not in _WIRING:
@@ -160,12 +165,43 @@ def calibrate_table(
     build, fold = _WIRING[table]
     url = ARCHIVES[table]
     # Archives that fit the disk budget: download whole once (fast) then stream
-    # locally. pod_hourly (351 GB) exceeds the cap → range-stream partition-by-
-    # partition. Both paths are exact + resumable + bounded-disk.
-    runner = (stream_archive_prefetched
-              if head_size(url) <= PREFETCH_MAX_BYTES else stream_archive)
-    return runner(url, build, fold, work_dir=work_dir,
-                  manifest_path=manifest_path, max_partitions=max_partitions)
+    # locally. pod_hourly (351 GB) exceeds the cap → parallel range-stream
+    # partition-by-partition (download-bound → a small thread pool fetches
+    # concurrently while the main thread folds). All paths are exact, resumable,
+    # bounded-disk; the merge is order-independent so parallelism stays EXACT.
+    if head_size(url) <= PREFETCH_MAX_BYTES:
+        return stream_archive_prefetched(
+            url, build, fold, work_dir=work_dir,
+            manifest_path=manifest_path, max_partitions=max_partitions)
+    return stream_archive_parallel(
+        url, build, fold, work_dir=work_dir, manifest_path=manifest_path,
+        workers=workers, max_partitions=max_partitions)
 
 
-__all__ = ["calibrate_table"]
+def materialize_artifact(table: str, manifest_path: str, *, n_partitions_total=None):
+    """Rebuild the calibration artifact dict from a checkpoint manifest WITHOUT
+    re-streaming. A full pod_hourly pass is egress-time-bound (hours) and spans
+    container sessions; this lets each session publish an accurate artifact —
+    SUBSET_TRACE while in progress, FULL_TRACE_EXACT once every partition is in —
+    from the committed manifest alone (exact aggregator state, every row counted)."""
+    if table not in _WIRING:
+        raise ValueError(f"no wiring for table {table!r}; have {sorted(_WIRING)}")
+    build, _ = _WIRING[table]
+    with open(manifest_path) as f:
+        m = json.load(f)
+    aggs = build()
+    state = m.get("state", {})
+    for name, agg in aggs.items():
+        if name in state:
+            agg.__dict__.update(type(agg).from_state(state[name]).__dict__)
+    n_done = len(m.get("processed", []))
+    total = m.get("n_partitions_total") or n_partitions_total or n_done
+    label = FULL_TRACE_EXACT if total and n_done == total else SUBSET_TRACE
+    return StreamResult(
+        archive=m.get("archive", ARCHIVES.get(table, "")),
+        n_partitions_total=total, n_partitions_done=n_done,
+        artifacts={k: v.to_dict() for k, v in aggs.items()},
+        label=label, bytes_streamed=m.get("bytes_streamed", 0)).to_dict()
+
+
+__all__ = ["calibrate_table", "materialize_artifact"]

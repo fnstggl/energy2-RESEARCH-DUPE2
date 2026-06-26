@@ -36,6 +36,8 @@ def main() -> None:
                                        "job_execution_summary"])
     ap.add_argument("--max-partitions", type=int, default=None,
                     help="cap partitions this run (resumable; omit for full FULL_TRACE_EXACT)")
+    ap.add_argument("--workers", type=int, default=int(os.environ.get("V2026_WORKERS", "8")),
+                    help="parallel partition fetchers for range-streamed archives (pod_hourly)")
     ap.add_argument("--work-dir", default=DEFAULT_WORK)
     ap.add_argument("--processed-dir", default=DEFAULT_PROCESSED)
     args = ap.parse_args()
@@ -45,10 +47,11 @@ def main() -> None:
     manifest = os.path.join(args.processed_dir, f"{args.table}_manifest.json")
     artifact = os.path.join(args.processed_dir, f"{args.table}_calibration.json")
 
-    print(f"streaming v2026 {args.table} (work={args.work_dir}, resumable) ...")
+    print(f"streaming v2026 {args.table} (work={args.work_dir}, "
+          f"workers={args.workers}, resumable) ...")
     res = calibrate_table(
         args.table, work_dir=args.work_dir, manifest_path=manifest,
-        max_partitions=args.max_partitions)
+        max_partitions=args.max_partitions, workers=args.workers)
     d = res.to_dict()
     with open(artifact, "w") as f:
         json.dump(d, f, indent=2)
