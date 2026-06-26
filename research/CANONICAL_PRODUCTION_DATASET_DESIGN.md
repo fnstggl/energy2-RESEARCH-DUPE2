@@ -65,14 +65,17 @@ This table is generated 1:1 from `CANONICAL_SIGNAL_MATRIX` — query it in code.
 | gpu_fragmentation | placement/packing | **Alibaba gpu (gpu_milli)** | MEASURED | ✅ | real fractional-GPU requests; joined at fleet level, not per-request |
 | inference_autoscaling_truth | capacity | *(absent)* | ABSENT | ❌ | online-inference autoscale/batch/migration truth is paper-only (SageServe, Aegaeon, DynamoLLM) |
 
-**Coverage (from `coverage_by_tier()`):** 19 signals → **8 MEASURED · 6 PROXY · 1
-SYNTHETIC · 3 SIMULATOR-ONLY · 1 ABSENT**. So **15/19 (79%) are obtainable at
-measured/proxy/synthetic fidelity; 4/19 (21%) are a hard ceiling** that no amount
+**Coverage (from `coverage_by_tier()`):** 22 signals → **8 MEASURED · 6 PROXY · 1
+SYNTHETIC · 3 SIMULATOR-ONLY · 4 ABSENT**. So **15/22 (68%) are obtainable at
+measured/proxy/synthetic fidelity; 7/22 (32%) are a hard ceiling** that no amount
 of stitching fixes — they need a self-run telemetry pilot or stay simulator-only.
-(The two added MEASURED signals — real online/offline-inference workload class and
-macro network/topology — come from `cluster-trace-gpu-v2026`; see
-`research/results/alibaba_gpu_v2026_audit_2026-06-26.md`. They calibrate, they do
-not become the token spine — v2026 is hourly pod aggregates, not per-request.)
+(The MEASURED workload-class + macro network/topology signals come from
+`cluster-trace-gpu-v2026` — they *calibrate*, they do not become the token spine
+since v2026 is hourly pod aggregates; see
+`research/results/alibaba_gpu_v2026_audit_2026-06-26.md` and the two-plane
+assembly in `research/CANONICAL_DATASET_ASSEMBLY_ARCHITECTURE.md`. The 4 ABSENT
+include the **decision-intent tier** — user intent, hardware health, operator
+rationale — which is structurally proprietary and is exactly the pilot's job.)
 
 ---
 
