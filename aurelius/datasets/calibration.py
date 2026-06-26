@@ -110,6 +110,60 @@ def alibaba_class_mix(pod_list_path: str) -> ClassMix:
     )
 
 
+# ---------------------------------------------------------------------------
+# cluster-trace-gpu-v2026 (155k-GPU ASI fleet) — the SUPERIOR calibration source
+# ---------------------------------------------------------------------------
+# v2026's pod_hourly table labels real SERVING workload type
+# (online_inference vs offline_inference), which is the on-domain best-effort
+# ratio — strictly better than the v2023 *training*-pod QoS proxy above. See
+# research/results/alibaba_gpu_v2026_audit_2026-06-26.md.
+
+V2026_JOB_TYPE = "job_type_public"
+V2026_ONLINE = "online_inference"      # latency-critical serving
+V2026_OFFLINE = "offline_inference"    # best-effort / batch serving (deferrable)
+V2026_GPU_REQ = "gpu_request"
+
+
+def alibaba_v2026_serving_class_mix(pod_hourly_path: str) -> ClassMix:
+    """Best-effort serving ratio from the v2026 ``asi_opensource_pod_hourly`` table.
+
+    Computes ``offline_inference / (online_inference + offline_inference)`` among
+    **inference** pods (training/dev pods are excluded — they are not serving), by
+    pod-hour COUNT and by GPU-hours (``gpu_request``·1h). This is the correct
+    on-domain serving best-effort fraction — the parameter the compounding
+    magnitude is bound to — grounded in real online/offline labels rather than the
+    v2023 training-pod QoS proxy.
+
+    Requires the real (multi-GB) v2026 pod_hourly CSV; no number is fabricated.
+    """
+    with open(pod_hourly_path, newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    on_n = off_n = 0
+    on_w = off_w = 0.0
+    for r in rows:
+        jt = (r.get(V2026_JOB_TYPE) or "").strip()
+        w = _f(r.get(V2026_GPU_REQ))
+        if jt == V2026_ONLINE:
+            on_n += 1
+            on_w += w
+        elif jt == V2026_OFFLINE:
+            off_n += 1
+            off_w += w
+    n_inf = on_n + off_n
+    w_inf = on_w + off_w
+    return ClassMix(
+        source=f"alibaba_gpu_v2026:{os.path.basename(pod_hourly_path)}",
+        best_effort_fraction_by_count=(off_n / n_inf) if n_inf else 0.0,
+        best_effort_fraction_by_gpu_work=(off_w / w_inf) if w_inf else 0.0,
+        n_jobs=n_inf,
+        tier=TIER_MEASURED,  # real SERVING workload labels (on-domain, not a proxy)
+        note=("offline/(online+offline) inference share from v2026 pod_hourly "
+              "job_type_public — the on-domain serving best-effort ratio; "
+              "hourly pod aggregates, distribution-level (not a per-record join "
+              "to the token spine)"),
+    )
+
+
 # Default in-repo fixture path (sample — substitute the full trace when available).
 _FIXTURE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -135,4 +189,4 @@ def default_alibaba_class_mix() -> ClassMix:
 
 
 __all__ = ["ClassMix", "alibaba_class_mix", "default_alibaba_class_mix",
-           "TIER_MEASURED", "TIER_PROXY"]
+           "alibaba_v2026_serving_class_mix", "TIER_MEASURED", "TIER_PROXY"]
