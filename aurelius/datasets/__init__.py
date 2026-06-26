@@ -14,8 +14,14 @@ Two pieces, both deliberately honest about the gap between "production-like" and
 Companion prose design + risk analysis: ``research/CANONICAL_PRODUCTION_DATASET_DESIGN.md``.
 """
 
+from .calibration import (
+    ClassMix,
+    alibaba_class_mix,
+    default_alibaba_class_mix,
+)
 from .canonical import (
     CanonicalManifest,
+    assemble_calibrated,
     augment_with_best_effort,
     to_jobs,
 )
@@ -31,5 +37,7 @@ from .signal_matrix import (
 __all__ = [
     "CANONICAL_SIGNAL_MATRIX", "CanonicalSignal", "coverage_by_tier",
     "coverage_by_lever", "realizable_today", "simulator_or_absent",
-    "to_jobs", "augment_with_best_effort", "CanonicalManifest",
+    "to_jobs", "augment_with_best_effort", "assemble_calibrated",
+    "CanonicalManifest", "ClassMix", "alibaba_class_mix",
+    "default_alibaba_class_mix",
 ]

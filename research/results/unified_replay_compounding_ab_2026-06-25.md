@@ -1,5 +1,13 @@
 # Unified Replay Engine (Phase 1b-A) — the compounding A/B — 2026-06-25
 
+> **⚠️ CORRECTION (2026-06-26):** the **+9.00%** headline below used an **arbitrary
+> 40% best-effort** overlay. Grounding the class ratio in the real Alibaba QoS mix
+> (~20% by count) collapses it to **neutral/−3%** — the +9% is a lone spike at
+> 0.40, not a robust result. The **mechanism + engine stand**; the **magnitude does
+> not**. See `research/results/canonical_dataset_alibaba_vs_overlay_2026-06-26.md`
+> and `aurelius/datasets/calibration.py`. Read the numbers below as a *mechanism
+> demonstration on a deliberately-favorable mix*, not a savings estimate.
+
 > The closed joint **decision loop** (`aurelius/optimizer/unified_replay.py`,
 > `AureliusOptimizer.optimize_joint_closed_loop`). All serving surfaces act in ONE
 > discrete-event loop on ONE evolving cluster state — capacity REACTS to the live

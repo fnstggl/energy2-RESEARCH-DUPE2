@@ -1,0 +1,689 @@
+{
+  "class_mix": {
+    "source": "alibaba_gpu_v2023:openb_pod_list_sample.csv",
+    "best_effort_fraction_by_count": 0.2,
+    "best_effort_fraction_by_gpu_work": 0.0122,
+    "n_jobs": 40,
+    "tier": "PROXY",
+    "note": "real production QoS ratio (LS/BE/Burstable); transfers as a distribution, not a per-record join; GPU-work share is sample-sensitive and training-not-serving \u2014 treat by-count as the anchor"
+  },
+  "runs": [
+    {
+      "tag": "overlay 40% (the earlier headline)",
+      "best_single_pct": 6.706,
+      "best_multi_pct": 8.996,
+      "interaction": "compounding",
+      "result": {
+        "trace_id": "overlay 40% (the earlier headline)",
+        "jobs_hash": "82a6768ff5f35025",
+        "n_jobs": 8232,
+        "n_latency_critical": 5880,
+        "n_best_effort": 2352,
+        "sla_s": 10.0,
+        "tick_seconds": 60.0,
+        "denominator": "on_demand",
+        "cells": [
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "fifo",
+            "admission": "off",
+            "levers_on": [],
+            "label": "base",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 749968.0,
+            "goodput_per_dollar": 69015.46,
+            "n_total": 8232,
+            "n_sla_safe": 7179,
+            "sla_violations": 1053,
+            "n_deferred": 0,
+            "backlog_peak": 320
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "fifo",
+            "admission": "class_aware",
+            "levers_on": [
+              "A"
+            ],
+            "label": "A",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 695874.0,
+            "goodput_per_dollar": 64037.48,
+            "n_total": 8232,
+            "n_sla_safe": 6705,
+            "sla_violations": 1527,
+            "n_deferred": 829,
+            "backlog_peak": 356
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "abs_conformal",
+            "admission": "off",
+            "levers_on": [
+              "O"
+            ],
+            "label": "O",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 750548.0,
+            "goodput_per_dollar": 69068.83,
+            "n_total": 8232,
+            "n_sla_safe": 7190,
+            "sla_violations": 1042,
+            "n_deferred": 829,
+            "backlog_peak": 318
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "abs_conformal",
+            "admission": "class_aware",
+            "levers_on": [
+              "O",
+              "A"
+            ],
+            "label": "O+A",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 705560.0,
+            "goodput_per_dollar": 64928.83,
+            "n_total": 8232,
+            "n_sla_safe": 6795,
+            "sla_violations": 1437,
+            "n_deferred": 928,
+            "backlog_peak": 328
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "fifo",
+            "admission": "off",
+            "levers_on": [
+              "C"
+            ],
+            "label": "C",
+            "n_ticks": 72,
+            "c_mean": 5.2361,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 6.2833,
+            "cost_usd": 12.5667,
+            "sla_safe_goodput": 925451.0,
+            "goodput_per_dollar": 73643.32,
+            "n_total": 8232,
+            "n_sla_safe": 8168,
+            "sla_violations": 64,
+            "n_deferred": 928,
+            "backlog_peak": 46
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "fifo",
+            "admission": "class_aware",
+            "levers_on": [
+              "C",
+              "A"
+            ],
+            "label": "C+A",
+            "n_ticks": 72,
+            "c_mean": 5.1389,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 6.1667,
+            "cost_usd": 12.3333,
+            "sla_safe_goodput": 925254.0,
+            "goodput_per_dollar": 75020.59,
+            "n_total": 8232,
+            "n_sla_safe": 8168,
+            "sla_violations": 64,
+            "n_deferred": 1060,
+            "backlog_peak": 102
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "abs_conformal",
+            "admission": "off",
+            "levers_on": [
+              "C",
+              "O"
+            ],
+            "label": "C+O",
+            "n_ticks": 72,
+            "c_mean": 5.25,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 6.3,
+            "cost_usd": 12.6,
+            "sla_safe_goodput": 925867.0,
+            "goodput_per_dollar": 73481.51,
+            "n_total": 8232,
+            "n_sla_safe": 8169,
+            "sla_violations": 63,
+            "n_deferred": 1060,
+            "backlog_peak": 46
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "abs_conformal",
+            "admission": "class_aware",
+            "levers_on": [
+              "C",
+              "O",
+              "A"
+            ],
+            "label": "C+O+A",
+            "n_ticks": 72,
+            "c_mean": 5.125,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 6.15,
+            "cost_usd": 12.3,
+            "sla_safe_goodput": 925254.0,
+            "goodput_per_dollar": 75223.9,
+            "n_total": 8232,
+            "n_sla_safe": 8168,
+            "sla_violations": 64,
+            "n_deferred": 1060,
+            "backlog_peak": 102
+          }
+        ],
+        "base_gpd": 69015.4601,
+        "best_single": {
+          "label": "C",
+          "goodput_per_dollar": 73643.3156
+        },
+        "best_multi": {
+          "label": "C+O+A",
+          "goodput_per_dollar": 75223.9024
+        },
+        "best_overall": {
+          "label": "C+O+A",
+          "goodput_per_dollar": 75223.9024
+        },
+        "compounding": true,
+        "interaction": "compounding",
+        "notes": []
+      }
+    },
+    {
+      "tag": "Alibaba-calibrated by COUNT (0.200)",
+      "best_single_pct": -0.063,
+      "best_multi_pct": -2.95,
+      "interaction": "substitutive",
+      "result": {
+        "trace_id": "Alibaba-calibrated by COUNT (0.200)",
+        "jobs_hash": "be54168f521335ca",
+        "n_jobs": 7056,
+        "n_latency_critical": 5880,
+        "n_best_effort": 1176,
+        "sla_s": 10.0,
+        "tick_seconds": 60.0,
+        "denominator": "on_demand",
+        "cells": [
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "fifo",
+            "admission": "off",
+            "levers_on": [],
+            "label": "base",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 825032.0,
+            "goodput_per_dollar": 75923.19,
+            "n_total": 7056,
+            "n_sla_safe": 6954,
+            "sla_violations": 102,
+            "n_deferred": 0,
+            "backlog_peak": 66
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "fifo",
+            "admission": "class_aware",
+            "levers_on": [
+              "A"
+            ],
+            "label": "A",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 800690.0,
+            "goodput_per_dollar": 73683.13,
+            "n_total": 7056,
+            "n_sla_safe": 6900,
+            "sla_violations": 156,
+            "n_deferred": 447,
+            "backlog_peak": 80
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "abs_conformal",
+            "admission": "off",
+            "levers_on": [
+              "O"
+            ],
+            "label": "O",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 824510.0,
+            "goodput_per_dollar": 75875.15,
+            "n_total": 7056,
+            "n_sla_safe": 6949,
+            "sla_violations": 107,
+            "n_deferred": 447,
+            "backlog_peak": 66
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "abs_conformal",
+            "admission": "class_aware",
+            "levers_on": [
+              "O",
+              "A"
+            ],
+            "label": "O+A",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 800690.0,
+            "goodput_per_dollar": 73683.13,
+            "n_total": 7056,
+            "n_sla_safe": 6900,
+            "sla_violations": 156,
+            "n_deferred": 447,
+            "backlog_peak": 80
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "fifo",
+            "admission": "off",
+            "levers_on": [
+              "C"
+            ],
+            "label": "C",
+            "n_ticks": 72,
+            "c_mean": 5.0556,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 6.0667,
+            "cost_usd": 12.1333,
+            "sla_safe_goodput": 847265.0,
+            "goodput_per_dollar": 69829.53,
+            "n_total": 7056,
+            "n_sla_safe": 6994,
+            "sla_violations": 62,
+            "n_deferred": 447,
+            "backlog_peak": 24
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "fifo",
+            "admission": "class_aware",
+            "levers_on": [
+              "C",
+              "A"
+            ],
+            "label": "C+A",
+            "n_ticks": 72,
+            "c_mean": 4.9028,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 5.8833,
+            "cost_usd": 11.7667,
+            "sla_safe_goodput": 845190.0,
+            "goodput_per_dollar": 71829.18,
+            "n_total": 7056,
+            "n_sla_safe": 6989,
+            "sla_violations": 67,
+            "n_deferred": 498,
+            "backlog_peak": 37
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "abs_conformal",
+            "admission": "off",
+            "levers_on": [
+              "C",
+              "O"
+            ],
+            "label": "C+O",
+            "n_ticks": 72,
+            "c_mean": 5.0556,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 6.0667,
+            "cost_usd": 12.1333,
+            "sla_safe_goodput": 847265.0,
+            "goodput_per_dollar": 69829.53,
+            "n_total": 7056,
+            "n_sla_safe": 6994,
+            "sla_violations": 62,
+            "n_deferred": 498,
+            "backlog_peak": 24
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "abs_conformal",
+            "admission": "class_aware",
+            "levers_on": [
+              "C",
+              "O",
+              "A"
+            ],
+            "label": "C+O+A",
+            "n_ticks": 72,
+            "c_mean": 4.9028,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 5.8833,
+            "cost_usd": 11.7667,
+            "sla_safe_goodput": 843919.0,
+            "goodput_per_dollar": 71721.16,
+            "n_total": 7056,
+            "n_sla_safe": 6986,
+            "sla_violations": 70,
+            "n_deferred": 514,
+            "backlog_peak": 53
+          }
+        ],
+        "base_gpd": 75923.1902,
+        "best_single": {
+          "label": "O",
+          "goodput_per_dollar": 75875.1534
+        },
+        "best_multi": {
+          "label": "O+A",
+          "goodput_per_dollar": 73683.1288
+        },
+        "best_overall": {
+          "label": "base",
+          "goodput_per_dollar": 75923.1902
+        },
+        "compounding": false,
+        "interaction": "substitutive",
+        "notes": []
+      }
+    },
+    {
+      "tag": "Alibaba-calibrated by GPU-WORK (0.0122)",
+      "best_single_pct": 0.204,
+      "best_multi_pct": 0.194,
+      "interaction": "neutral",
+      "result": {
+        "trace_id": "Alibaba-calibrated by GPU-WORK (0.0122)",
+        "jobs_hash": "ea2aa378c1c4b00a",
+        "n_jobs": 5952,
+        "n_latency_critical": 5880,
+        "n_best_effort": 72,
+        "sla_s": 10.0,
+        "tick_seconds": 60.0,
+        "denominator": "on_demand",
+        "cells": [
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "fifo",
+            "admission": "off",
+            "levers_on": [],
+            "label": "base",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 652079.0,
+            "goodput_per_dollar": 60007.27,
+            "n_total": 5952,
+            "n_sla_safe": 5880,
+            "sla_violations": 72,
+            "n_deferred": 0,
+            "backlog_peak": 13
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "fifo",
+            "admission": "class_aware",
+            "levers_on": [
+              "A"
+            ],
+            "label": "A",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 653408.0,
+            "goodput_per_dollar": 60129.57,
+            "n_total": 5952,
+            "n_sla_safe": 5883,
+            "sla_violations": 69,
+            "n_deferred": 15,
+            "backlog_peak": 12
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "abs_conformal",
+            "admission": "off",
+            "levers_on": [
+              "O"
+            ],
+            "label": "O",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 651709.0,
+            "goodput_per_dollar": 59973.22,
+            "n_total": 5952,
+            "n_sla_safe": 5878,
+            "sla_violations": 74,
+            "n_deferred": 15,
+            "backlog_peak": 13
+          },
+          {
+            "capacity": "reactive_lag1",
+            "ordering": "abs_conformal",
+            "admission": "class_aware",
+            "levers_on": [
+              "O",
+              "A"
+            ],
+            "label": "O+A",
+            "n_ticks": 72,
+            "c_mean": 4.5278,
+            "c_min": 1,
+            "c_max": 8,
+            "gpu_hours": 5.4333,
+            "cost_usd": 10.8667,
+            "sla_safe_goodput": 653347.0,
+            "goodput_per_dollar": 60123.96,
+            "n_total": 5952,
+            "n_sla_safe": 5882,
+            "sla_violations": 70,
+            "n_deferred": 15,
+            "backlog_peak": 12
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "fifo",
+            "admission": "off",
+            "levers_on": [
+              "C"
+            ],
+            "label": "C",
+            "n_ticks": 72,
+            "c_mean": 4.7778,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 5.7333,
+            "cost_usd": 11.4667,
+            "sla_safe_goodput": 655868.0,
+            "goodput_per_dollar": 57197.79,
+            "n_total": 5952,
+            "n_sla_safe": 5893,
+            "sla_violations": 59,
+            "n_deferred": 15,
+            "backlog_peak": 13
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "fifo",
+            "admission": "class_aware",
+            "levers_on": [
+              "C",
+              "A"
+            ],
+            "label": "C+A",
+            "n_ticks": 72,
+            "c_mean": 4.7639,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 5.7167,
+            "cost_usd": 11.4333,
+            "sla_safe_goodput": 657149.0,
+            "goodput_per_dollar": 57476.59,
+            "n_total": 5952,
+            "n_sla_safe": 5896,
+            "sla_violations": 56,
+            "n_deferred": 15,
+            "backlog_peak": 13
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "abs_conformal",
+            "admission": "off",
+            "levers_on": [
+              "C",
+              "O"
+            ],
+            "label": "C+O",
+            "n_ticks": 72,
+            "c_mean": 4.7778,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 5.7333,
+            "cost_usd": 11.4667,
+            "sla_safe_goodput": 655868.0,
+            "goodput_per_dollar": 57197.79,
+            "n_total": 5952,
+            "n_sla_safe": 5893,
+            "sla_violations": 59,
+            "n_deferred": 15,
+            "backlog_peak": 13
+          },
+          {
+            "capacity": "backlog_aware",
+            "ordering": "abs_conformal",
+            "admission": "class_aware",
+            "levers_on": [
+              "C",
+              "O",
+              "A"
+            ],
+            "label": "C+O+A",
+            "n_ticks": 72,
+            "c_mean": 4.7639,
+            "c_min": 1,
+            "c_max": 9,
+            "gpu_hours": 5.7167,
+            "cost_usd": 11.4333,
+            "sla_safe_goodput": 657149.0,
+            "goodput_per_dollar": 57476.59,
+            "n_total": 5952,
+            "n_sla_safe": 5896,
+            "sla_violations": 56,
+            "n_deferred": 15,
+            "backlog_peak": 13
+          }
+        ],
+        "base_gpd": 60007.2699,
+        "best_single": {
+          "label": "A",
+          "goodput_per_dollar": 60129.5706
+        },
+        "best_multi": {
+          "label": "O+A",
+          "goodput_per_dollar": 60123.9571
+        },
+        "best_overall": {
+          "label": "A",
+          "goodput_per_dollar": 60129.5706
+        },
+        "compounding": false,
+        "interaction": "neutral",
+        "notes": []
+      }
+    }
+  ],
+  "sensitivity_sweep": [
+    {
+      "fraction": 0.05,
+      "best_single_pct": 0.158,
+      "best_multi_pct": 0.15,
+      "interaction": "neutral"
+    },
+    {
+      "fraction": 0.1,
+      "best_single_pct": 0.312,
+      "best_multi_pct": 0.312,
+      "interaction": "neutral"
+    },
+    {
+      "fraction": 0.175,
+      "best_single_pct": 0.273,
+      "best_multi_pct": 0.202,
+      "interaction": "neutral"
+    },
+    {
+      "fraction": 0.2,
+      "best_single_pct": -0.063,
+      "best_multi_pct": -2.95,
+      "interaction": "substitutive"
+    },
+    {
+      "fraction": 0.3,
+      "best_single_pct": -0.233,
+      "best_multi_pct": -2.324,
+      "interaction": "substitutive"
+    },
+    {
+      "fraction": 0.4,
+      "best_single_pct": 6.706,
+      "best_multi_pct": 8.996,
+      "interaction": "compounding"
+    }
+  ]
+}
