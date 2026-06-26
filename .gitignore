@@ -50,6 +50,10 @@ data/external/alibaba_gpu/raw/*.csv
 data/external/alibaba_gpu/processed/alibaba_gpu_normalized.json
 data/external/philly/raw/*
 !data/external/philly/raw/.gitkeep
+data/external/mooncake/raw/*
+!data/external/mooncake/raw/.gitkeep
+data/external/alibaba_gpu_v2026/raw/*
+!data/external/alibaba_gpu_v2026/raw/.gitkeep
 # MIT Supercloud raw archives (~1 TB compressed; downloaded from
 # https://dcc.mit.edu/data, NOT committed). Small processed summary
 # JSON + tiny synthetic fixtures ARE committed.
