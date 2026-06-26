@@ -250,6 +250,35 @@ CANONICAL_SIGNAL_MATRIX: tuple = (
         "We cannot validate the capacity lever against real autoscaler decisions; "
         "only against the Erlang-C/queueing model. A genuine ceiling.",
     ),
+
+    # --- decision-intent tier: structurally proprietary (pilot-only) ------
+    # The operational STATE is observable in public traces; the DECISION INTENT
+    # (who wants what, what's degraded, why an operator acted) is not. v2026's
+    # priority_class is a crude proxy for intent; the rest needs a pilot.
+    CanonicalSignal(
+        "user_intent", "Decision", "admission/scheduling", "—",
+        "(pilot: customer tier/SLA/deadline)", TIER_ABSENT, False,
+        "SLA contracts, willingness-to-wait, deadlines, retry budgets are never "
+        "public; v2026 priority_class (HP/LP) is only a crude proxy",
+        "Major decision variable — which load is truly deferrable / how hard its "
+        "SLA is. Read-only pilot telemetry only.",
+    ),
+    CanonicalSignal(
+        "hardware_health", "Constraint", "placement/thermal", "—",
+        "(pilot: DCGM ECC/throttle/health)", TIER_ABSENT, False,
+        "ECC errors, thermal throttle, fan/memory faults, degraded/predicted-fail "
+        "GPUs are not in any public trace (the thermal blind spot)",
+        "Influences placement/migration; obtainable only from a read-only DCGM/"
+        "Prometheus shadow pilot.",
+    ),
+    CanonicalSignal(
+        "operator_decision_rationale", "Decision", "all", "—",
+        "(pilot: scheduler decision log)", TIER_ABSENT, False,
+        "public traces record WHAT happened (placement, completion) but not WHY "
+        "(migration cause, admission rejection reason, manual overrides)",
+        "The 'why' behind each decision — the supervised signal for imitation/"
+        "counterfactual learning. Pilot-only.",
+    ),
 )
 
 
