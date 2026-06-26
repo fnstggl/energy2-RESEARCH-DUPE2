@@ -105,13 +105,17 @@ CANONICAL_SIGNAL_MATRIX: tuple = (
 
     # --- workload class (the lever that unlocks admission) -----------------
     CanonicalSignal(
-        "workload_class", "Constraint", "admission", "Philly / Alibaba PAI",
-        "workload_type/priority", TIER_PROXY, True,
-        "class label lives on TRAINING jobs, not serving requests — cannot be "
-        "joined to the Azure serving spine; must be mapped, not merged",
-        "latency_critical vs best_effort. THE missing dimension: public serving "
-        "traces are single-class, so admission has nothing legal to defer. "
-        "Synthesizable as a documented overlay (canonical.augment_with_best_effort).",
+        "workload_class", "Constraint", "admission",
+        "Alibaba cluster-trace-gpu-v2026", "pod_hourly.job_type_public",
+        TIER_MEASURED, False,
+        "v2026 gives REAL online_inference vs offline_inference labels (on-domain "
+        "serving best-effort ratio) — hourly pod aggregates, distribution-level, "
+        "not a per-record join to the token spine",
+        "latency_critical vs best_effort. THE missing dimension. The compounding "
+        "magnitude is BOUND to this ratio (2026-06-26 correction). v2026's online/"
+        "offline-inference split is the correct on-domain number; the v2023 QoS "
+        "(LS/BE) used so far is a training-pod PROXY. Use "
+        "calibration.alibaba_v2026_serving_class_mix once the trace is downloaded.",
     ),
     CanonicalSignal(
         "best_effort_overlay", "Decision", "admission/energy", "—",
@@ -201,13 +205,34 @@ CANONICAL_SIGNAL_MATRIX: tuple = (
     # --- utilization / packing (training traces, wrong workload) -----------
     CanonicalSignal(
         "gpu_utilization", "Forecast", "capacity/packing",
-        "Acme (Shanghai AI Lab) / Alibaba PAI", "gpu_utilization",
-        TIER_PROXY, True,
-        "real 15s DCGM utilization exists but for TRAINING jobs; inference "
-        "serving utilization (batching/migration) has NO public ground truth — "
-        "training util cannot be replayed as serving util",
-        "Acme/PAI give a real util DISTRIBUTION to sanity-check the simulator's "
-        "implied utilization; they cannot drive the serving loop directly.",
+        "Alibaba cluster-trace-gpu-v2026", "pod_hourly.avg_gpu_sm_util",
+        TIER_PROXY, False,
+        "v2026 gives real hourly SM-util per pod LABELLED by job_type "
+        "(online/offline inference) — finally inference util, not just training; "
+        "still hourly-aggregate, sanity-check not drive",
+        "v2026 upgrades this over Acme/PAI (which are training-only): real "
+        "online_inference utilization distribution to calibrate the simulator's "
+        "implied util. Hourly aggregates cannot drive the per-request serving loop.",
+    ),
+    CanonicalSignal(
+        "network_traffic", "Constraint", "placement/topology",
+        "Alibaba cluster-trace-gpu-v2026", "network_hourly.rx/tx_gibps_avg",
+        TIER_PROXY, False,
+        "real per-server hourly rx/tx — MACRO traffic only; no per-link congestion/"
+        "incast/PFC-ECN (those stay simulator-only)",
+        "NEW real signal in v2026: macro node-level network utilization, joinable "
+        "to pods by server_id+hour. Upgrades network-load reasoning from absent to "
+        "PROXY; micro-congestion (fabric_congestion) is still simulator-only.",
+    ),
+    CanonicalSignal(
+        "fleet_topology", "Decision", "placement/topology",
+        "Alibaba cluster-trace-gpu-v2026", "server_hourly.asw_id/gpu_spec_public",
+        TIER_MEASURED, False,
+        "real rack/access-switch topology + heterogeneous GPU inventory at "
+        "155k-GPU scale — server-hour granularity",
+        "NEW in v2026: real ASW (rack) topology + GPU-type inventory for "
+        "topology-aware placement / ASW-local packing. The fleet-scheduling "
+        "substrate; a different product surface from token serving.",
     ),
     CanonicalSignal(
         "gpu_fragmentation", "Decision", "placement/packing",

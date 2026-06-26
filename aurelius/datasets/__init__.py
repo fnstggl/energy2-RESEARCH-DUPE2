@@ -17,6 +17,7 @@ Companion prose design + risk analysis: ``research/CANONICAL_PRODUCTION_DATASET_
 from .calibration import (
     ClassMix,
     alibaba_class_mix,
+    alibaba_v2026_serving_class_mix,
     default_alibaba_class_mix,
 )
 from .canonical import (
@@ -39,5 +40,5 @@ __all__ = [
     "coverage_by_lever", "realizable_today", "simulator_or_absent",
     "to_jobs", "augment_with_best_effort", "assemble_calibrated",
     "CanonicalManifest", "ClassMix", "alibaba_class_mix",
-    "default_alibaba_class_mix",
+    "default_alibaba_class_mix", "alibaba_v2026_serving_class_mix",
 ]

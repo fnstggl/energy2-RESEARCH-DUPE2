@@ -7,6 +7,8 @@ consistent and never quietly overstates fidelity.
 
 from __future__ import annotations
 
+import os
+
 from aurelius.datasets import (
     CANONICAL_SIGNAL_MATRIX,
     alibaba_class_mix,
@@ -100,6 +102,20 @@ def test_calibrated_assembler_grounds_fraction_with_provenance():
     # provenance recorded in the manifest
     assert any("CALIBRATED" in n for n in manifest.notes)
     assert any("per-record join" in n.lower() for n in manifest.notes)
+
+
+def test_v2026_serving_class_mix_uses_online_vs_offline_inference():
+    """v2026 grounds the best-effort ratio in REAL online/offline INFERENCE labels
+    (excluding training/dev), tagged MEASURED — the on-domain upgrade over v2023."""
+    from aurelius.datasets import alibaba_v2026_serving_class_mix
+    fx = os.path.join(os.path.dirname(__file__), "fixtures", "alibaba_gpu_v2026",
+                      "pod_hourly_sample.csv")
+    mix = alibaba_v2026_serving_class_mix(fx)
+    # 4 online + 2 offline inference pods; training/dev excluded → n_jobs == 6
+    assert mix.n_jobs == 6
+    assert round(mix.best_effort_fraction_by_count, 2) == round(2 / 6, 2)
+    assert mix.tier == "MEASURED_REAL"  # real serving labels, not a training proxy
+    assert "v2026" in mix.source
 
 
 def test_alibaba_mix_handles_empty_pod_list(tmp_path):
