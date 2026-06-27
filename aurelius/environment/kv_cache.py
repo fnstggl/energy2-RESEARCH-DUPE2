@@ -376,7 +376,91 @@ class KVAwareRouter:
         }
 
 
+def _leading_reuse(cache: StatefulKVCache, hash_ids: list) -> int:
+    """Contiguous leading prefix blocks already resident on a cache (no mutation)."""
+    n = 0
+    for b in hash_ids:
+        if b in cache._lru:
+            n += 1
+        else:
+            break
+    return n
+
+
+ROUTING_POLICIES = ("round_robin", "shortest_queue", "kv_aware")
+
+
+def fleet_kv_routing(requests: list, *, n_servers: int = 4, capacity_blocks: int = 2048,
+                     block_tokens: int = 16, policy: str = "kv_aware",
+                     prefill_savings_frac: float = 0.9, w_queue: float = 0.5,
+                     w_mem: float = 4.0) -> dict:
+    """Replay a prefix-reuse trace (objects with ``.hash_ids``) across ``n_servers``
+    paged LRU caches under one routing ``policy`` and report the **fleet** KV economics.
+
+    Policies — ``round_robin`` (KV-blind), ``shortest_queue`` (KV-blind load balance),
+    ``kv_aware`` (route to the server with the most reusable leading prefix, traded off
+    against queue + memory pressure). **Causal:** routing scores see only blocks admitted
+    by EARLIER requests (live cache state), never the request's own or any future blocks.
+
+    The derived ``service_factor`` is the fleet mean of ``1 − prefill_savings_frac ·
+    (reused_prefix_blocks / request_blocks)`` — the share of service time a routed-hit
+    avoids. Better routing → more prefix reuse → smaller service_factor → more goodput/$.
+    This is the honest channel by which a routing decision changes the serving reward
+    (the Azure serving trace has no per-request prefixes; the reuse dynamic is Mooncake's)."""
+    caches = [StatefulKVCache(capacity_blocks=capacity_blocks, block_tokens=block_tokens)
+              for _ in range(n_servers)]
+    queue = [0] * n_servers
+    routed = [0] * n_servers
+    n = exact_hits = saved_tokens = 0
+    prefix_frac_sum = 0.0
+    for r in requests:
+        hash_ids = getattr(r, "hash_ids", None) or []
+        if not hash_ids:
+            continue
+        n += 1
+        if policy == "round_robin":
+            s = (n - 1) % n_servers
+        elif policy == "shortest_queue":
+            s = min(range(n_servers), key=lambda i: queue[i])
+        else:                                          # kv_aware (default)
+            s = max(range(n_servers), key=lambda i: (
+                _leading_reuse(caches[i], hash_ids) - w_queue * queue[i]
+                - w_mem * caches[i].memory_pressure()))
+        o = caches[s].process(hash_ids)                # commit on the chosen server + measure
+        exact, nb = o["exact_prefix_blocks"], o["n_blocks"]
+        exact_hits += int(exact > 0)
+        prefix_frac_sum += (exact / nb) if nb else 0.0
+        saved_tokens += o["prefill_tokens_saved"]
+        routed[s] += 1
+        queue[s] += 1
+        for i in range(n_servers):                     # drain one unit of queue elsewhere
+            if i != s and queue[i] > 0:
+                queue[i] -= 1
+    mean_prefix_frac = prefix_frac_sum / n if n else 0.0
+    service_factor = max(0.0, 1.0 - prefill_savings_frac * mean_prefix_frac)
+    return {
+        "policy": policy, "n_servers": n_servers, "n_requests": n,
+        "exact_prefix_hit_rate": round(exact_hits / n, 4) if n else 0.0,
+        "mean_prefix_fraction": round(mean_prefix_frac, 4),
+        "service_factor": round(service_factor, 6),
+        "prefill_tokens_saved": saved_tokens,
+        "evictions": sum(c.evictions for c in caches),
+        "routed_distribution": routed,
+    }
+
+
+def routing_service_factors(requests: list, *, n_servers: int = 4, capacity_blocks: int = 2048,
+                            block_tokens: int = 16, prefill_savings_frac: float = 0.9) -> dict:
+    """``{policy: fleet_kv_routing(...)}`` for every ROUTING_POLICY — the routing→economics
+    map the controller uses to make ``routing_policy`` a CONNECTED action."""
+    return {p: fleet_kv_routing(requests, n_servers=n_servers, capacity_blocks=capacity_blocks,
+                                block_tokens=block_tokens, policy=p,
+                                prefill_savings_frac=prefill_savings_frac)
+            for p in ROUTING_POLICIES}
+
+
 __all__ = [
     "KVFootprint", "FOOTPRINTS", "DEFAULT_FOOTPRINT", "GPU_MEM_GIB", "gpu_mem_for",
     "StatefulKVCache", "KVModel", "KVOutcome", "KVAwareRouter", "RouteDecision",
+    "ROUTING_POLICIES", "fleet_kv_routing", "routing_service_factors",
 ]

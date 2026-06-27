@@ -31,7 +31,8 @@ _OUT = os.path.join(_REPO, "data", "external", "mpc_controller")
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--heldout-only", action="store_true", default=True)
-    ap.add_argument("--baselines", default="fifo_weak,sla_aware,greedy_packing,aurelius_canonical")
+    ap.add_argument("--baselines", default="fifo_weak,sla_aware,greedy_packing,aurelius_canonical,"
+                    "sla_aware_kv_routing,aurelius_canonical_kv_routing")
     ap.add_argument("--limit", type=int, default=28185)      # per-minute fallback (1-hour/sample)
     ap.add_argument("--bin-seconds", type=float, default=60.0)
     ap.add_argument("--hourly-stride", type=int, default=24, help="1/N per-hour sample of the 1-week trace")

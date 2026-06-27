@@ -30,6 +30,13 @@ DEFAULT_BASELINES = {
     "sla_aware": {"capacity": "backlog_aware", "ordering": "abs_conformal", "admission": "off"},
     "greedy_packing": {"capacity": "forecasted_mcs", "ordering": "fifo", "admission": "off"},
     "aurelius_canonical": {"capacity": "backlog_aware", "ordering": "abs_conformal", "admission": "class_aware"},
+    # routing baselines (CONNECTED): the same policies but WITH best (kv-aware) routing, so the
+    # MPC must beat a strong routing-enabled baseline, not merely "discover" routing. Round-robin
+    # is the implicit routing of the rows above (no routing_policy key → round_robin factor).
+    "sla_aware_kv_routing": {"capacity": "backlog_aware", "ordering": "abs_conformal",
+                             "admission": "off", "routing_policy": "kv_aware"},
+    "aurelius_canonical_kv_routing": {"capacity": "backlog_aware", "ordering": "abs_conformal",
+                                      "admission": "class_aware", "routing_policy": "kv_aware"},
 }
 
 
@@ -55,7 +62,7 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
     from .forecasting import build_frames
     from .ingestion.azure import azure_period_frames, context_tokens, ingest_azure, to_serving_raw
     from .ingestion.mooncake import ingest_mooncake
-    from .kv_cache import KVModel, gpu_mem_for
+    from .kv_cache import KVModel, gpu_mem_for, routing_service_factors
 
     pf = azure_period_frames(bin_seconds=3600.0, sample_stride=hourly_stride)
     coverage = None
@@ -82,9 +89,18 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
     fleet = V2026FleetPlane(processed_dir=processed_dir).state_at(0)
     gpu_type = max(fleet.gpu_type_mix, key=fleet.gpu_type_mix.get) if fleet.gpu_type_mix else "H100"
     mreqs, _ = ingest_mooncake()
-    kv = KVModel.fit(mreqs[: int(len(mreqs) * 0.7)] or mreqs, gpu_mem_gib=gpu_mem_for(gpu_type),
-                     mem_pressure=fleet.mem_pressure)
-    kv_factor = float(kv.stats(1000).get("mean_ttft_factor", 1.0))
+    mtrain = mreqs[: int(len(mreqs) * 0.7)] or mreqs
+    kv = KVModel.fit(mtrain, gpu_mem_gib=gpu_mem_for(gpu_type), mem_pressure=fleet.mem_pressure)
+    # routing → KV economics (CONNECTED action): replay the Mooncake reuse trace across the
+    # fleet under each routing policy → routing-specific service factor. Causal; the held-out
+    # validation (kv_aware reuses more prefix than round_robin) lives in tests.
+    n_servers = max(1, min(int(getattr(fleet, "capacity_envelope", 4) or 4), 4))
+    rmap = routing_service_factors(mtrain, n_servers=n_servers,
+                                   capacity_blocks=max(64, kv.capacity_blocks // n_servers),
+                                   block_tokens=kv.block_tokens,
+                                   prefill_savings_frac=kv.prefill_savings_frac)
+    kv_by_routing = {p: r["service_factor"] for p, r in rmap.items()}
+    kv_factor = kv_by_routing.get("round_robin", float(kv.stats(1000).get("mean_ttft_factor", 1.0)))
     anchors = {"gpu_utilization": fleet.util_target, "gpu_memory_pressure": fleet.mem_pressure,
                "network_pressure": fleet.net_pressure, "kv_reuse": kv.warm_hit_rate()}
     frames = build_frames(per, period_seconds=period_seconds, cycle_len=cycle_len,
@@ -92,9 +108,10 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
                           anchors=anchors)
     common = {"sla_s": 10.0, "period_seconds": period_seconds, "tick_seconds": 10.0,
               "kv_service_factor": kv_factor, "cost_scenario": "owned",
-              "sim_seconds": (sim_seconds if cycle_len == 24 else None)}
+              "sim_seconds": (sim_seconds if cycle_len == 24 else None),
+              "kv_service_factor_by_routing": kv_by_routing}
     return {"frames": frames, "per": per, "fleet_state": fleet, "cost_model": CostModel(),
-            "common": common, "coverage": coverage}
+            "common": common, "coverage": coverage, "kv_routing": rmap}
 
 
 def split_cuts(n: int, train: float = 0.5, val: float = 0.25) -> tuple:
@@ -117,6 +134,7 @@ def _controller(fm, fleet_state, cost_model, cfg, common):
         confidence_min=cfg["confidence_min"], sla_s=common["sla_s"],
         period_seconds=common["period_seconds"], tick_seconds=common["tick_seconds"],
         kv_service_factor=common.get("kv_service_factor", 1.0),
+        kv_service_factor_by_routing=common.get("kv_service_factor_by_routing"),
         cost_scenario=common.get("cost_scenario", "owned"),
         sim_seconds=common.get("sim_seconds"))
 
