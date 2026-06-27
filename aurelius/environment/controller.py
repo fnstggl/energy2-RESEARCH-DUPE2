@@ -29,6 +29,7 @@ from ..optimizer.unified_replay import (
     Job,
     run_unified_replay,
 )
+from .action_registry import enumerate_candidate_bundles, planned_report
 from .cost_model import CostModel
 from .forecasting import ForecastingModel
 
@@ -46,18 +47,22 @@ def enumerate_actions() -> list:
 
 @dataclass
 class Decision:
-    action: dict
+    action: dict                       # legacy {capacity, ordering, admission} (back-compat)
     expected_gpd: float
     risk_gpd: float                    # gp/$ in the p90 high-load scenario
     score: float
     used_fallback: bool
     confidence: float
     forecast: dict = field(default_factory=dict)
+    bundle: object = None              # the full ActionBundle chosen (connected levers)
 
     def to_dict(self) -> dict:
-        return {"action": self.action, "expected_gpd": round(self.expected_gpd, 2),
-                "risk_gpd": round(self.risk_gpd, 2), "score": round(self.score, 2),
-                "used_fallback": self.used_fallback, "confidence": round(self.confidence, 3)}
+        d = {"action": self.action, "expected_gpd": round(self.expected_gpd, 2),
+             "risk_gpd": round(self.risk_gpd, 2), "score": round(self.score, 2),
+             "used_fallback": self.used_fallback, "confidence": round(self.confidence, 3)}
+        if self.bundle is not None:
+            d["bundle_changes"] = self.bundle.non_default_surfaces()
+        return d
 
 
 def _synth_jobs(arrival_rate: float, tok_mean: float, tok_p95: float, cv: float, *,
@@ -105,7 +110,9 @@ class ModelPredictiveEconomicController:
     kv_service_factor: float = 1.0     # avg KV service discount (≤1), applied to all candidates
     cost_scenario: str = "owned"
     sim_seconds: float | None = None   # bounded decision-sim window (default = period_seconds)
-    candidates: list = field(default_factory=enumerate_actions)
+    optimize_simulated: bool = False   # opt-in to vary SIMULATED_ONLY surfaces (no reward
+    #                                    effect until they are wired into run_unified_replay)
+    candidates: list | None = None     # explicit candidate bundles; else registry-enumerated
 
     def _gpd(self, jobs: list, action: dict, price: float) -> tuple:
         if not jobs:
@@ -147,15 +154,28 @@ class ModelPredictiveEconomicController:
                             best_effort_fraction=be, kv_service_factor=self.kv_service_factor)
         risk = _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
                            best_effort_fraction=be, kv_service_factor=self.kv_service_factor)
+        # candidate ACTION BUNDLES from the registry — CONNECTED surfaces only by default;
+        # SIMULATED_ONLY varied only when opted in; PLANNED surfaces are never enumerated.
+        cands = self.candidates if self.candidates is not None else \
+            enumerate_candidate_bundles(connected_only=not self.optimize_simulated)
         best = None
-        for action in self.candidates:
-            exp_gpd, _ = self._gpd(point, action, pr.value)
-            risk_gpd, risk_viol = self._gpd(risk, action, pr.value)
+        for cand in cands:
+            act = cand.legacy_action() if hasattr(cand, "legacy_action") else cand
+            ab = cand if hasattr(cand, "legacy_action") else None
+            exp_gpd, _ = self._gpd(point, act, pr.value)
+            risk_gpd, risk_viol = self._gpd(risk, act, pr.value)
             score = exp_gpd - self.risk_weight * risk_viol * exp_gpd     # risk-adjusted
             if best is None or score > best.score:
-                best = Decision(action, exp_gpd, risk_gpd, score, False, confidence,
-                                forecast={"arrival_rate": ar.to_dict(), "price": pr.value})
+                best = Decision(act, exp_gpd, risk_gpd, score, False, confidence,
+                                forecast={"arrival_rate": ar.to_dict(), "price": pr.value},
+                                bundle=ab)
         return best
+
+    def understood_but_unavailable(self) -> list:
+        """Action surfaces the controller REPRESENTS but does not optimize today
+        (SIMULATED_ONLY + PLANNED) — reported separately so planned knobs are never
+        mistaken for active ones. See research/AURELIUS_ACTION_SURFACE_AUDIT.md."""
+        return planned_report()
 
 
 def _causal_pred(slice_sorted: list) -> list:
