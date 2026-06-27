@@ -2,26 +2,33 @@
   "eval_periods": 42,
   "controller_config": {
     "horizon": 1,
-    "risk_weight": 1.0,
+    "risk_weight": 0.0,
     "confidence_min": 0.1
   },
   "arms": {
     "mpc_controller": {
       "name": "mpc_controller",
       "n_periods": 42,
-      "sla_safe_goodput": 21462241.0,
-      "total_operator_cost": 108.23125,
-      "goodput_per_dollar": 198299.85812,
-      "sla_violation_rate": 0.04328,
-      "gpu_hours": 122.86389,
-      "energy_cost": 3.03956,
-      "n_sla_safe": 223597,
-      "queue_delay_p95": 61.9677,
+      "sla_safe_goodput": 21879552.0,
+      "total_operator_cost": 80.37022,
+      "goodput_per_dollar": 272234.55733,
+      "sla_violation_rate": 0.01856,
+      "gpu_hours": 91.23611,
+      "energy_cost": 2.25711,
+      "n_sla_safe": 229375,
+      "queue_delay_p95": 9.21769,
       "used_fallback_frac": 0.0,
       "routing_mix": {
         "kv_aware": 42
       },
-      "mean_kv_service_factor": 0.75647
+      "mean_kv_service_factor": 0.75647,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "batching_mix": {
+        "balanced": 40,
+        "aggressive": 2
+      }
     },
     "fifo_weak": {
       "name": "fifo_weak",
@@ -38,7 +45,13 @@
       "routing_mix": {
         "round_robin": 42
       },
-      "mean_kv_service_factor": 0.83205
+      "mean_kv_service_factor": 0.83205,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
     },
     "sla_aware": {
       "name": "sla_aware",
@@ -55,7 +68,13 @@
       "routing_mix": {
         "round_robin": 42
       },
-      "mean_kv_service_factor": 0.83205
+      "mean_kv_service_factor": 0.83205,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
     },
     "greedy_packing": {
       "name": "greedy_packing",
@@ -72,7 +91,13 @@
       "routing_mix": {
         "round_robin": 42
       },
-      "mean_kv_service_factor": 0.83205
+      "mean_kv_service_factor": 0.83205,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
     },
     "aurelius_canonical": {
       "name": "aurelius_canonical",
@@ -89,7 +114,13 @@
       "routing_mix": {
         "round_robin": 42
       },
-      "mean_kv_service_factor": 0.83205
+      "mean_kv_service_factor": 0.83205,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
     },
     "sla_aware_kv_routing": {
       "name": "sla_aware_kv_routing",
@@ -106,7 +137,13 @@
       "routing_mix": {
         "kv_aware": 42
       },
-      "mean_kv_service_factor": 0.75647
+      "mean_kv_service_factor": 0.75647,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
     },
     "aurelius_canonical_kv_routing": {
       "name": "aurelius_canonical_kv_routing",
@@ -123,19 +160,94 @@
       "routing_mix": {
         "kv_aware": 42
       },
-      "mean_kv_service_factor": 0.75647
+      "mean_kv_service_factor": 0.75647,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
+    },
+    "sla_aware_batched": {
+      "name": "sla_aware_batched",
+      "n_periods": 42,
+      "sla_safe_goodput": 22386722.0,
+      "total_operator_cost": 127.6772,
+      "goodput_per_dollar": 175338.4537,
+      "sla_violation_rate": 0.01373,
+      "gpu_hours": 144.93889,
+      "energy_cost": 3.58568,
+      "n_sla_safe": 230503,
+      "queue_delay_p95": 0.0,
+      "used_fallback_frac": 0.0,
+      "routing_mix": {
+        "kv_aware": 42
+      },
+      "mean_kv_service_factor": 0.75647,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "balanced": 42
+      }
+    },
+    "aurelius_static_full": {
+      "name": "aurelius_static_full",
+      "n_periods": 42,
+      "sla_safe_goodput": 22343143.0,
+      "total_operator_cost": 110.82502,
+      "goodput_per_dollar": 201607.39115,
+      "sla_violation_rate": 0.01413,
+      "gpu_hours": 125.80833,
+      "energy_cost": 3.11241,
+      "n_sla_safe": 230410,
+      "queue_delay_p95": 8.7361,
+      "used_fallback_frac": 0.0,
+      "routing_mix": {
+        "kv_aware": 42
+      },
+      "mean_kv_service_factor": 0.75647,
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "balanced": 42
+      }
+    },
+    "sla_aware_capacity_1p5": {
+      "name": "sla_aware_capacity_1p5",
+      "n_periods": 42,
+      "sla_safe_goodput": 23206621.0,
+      "total_operator_cost": 170.15388,
+      "goodput_per_dollar": 136386.08213,
+      "sla_violation_rate": 0.00794,
+      "gpu_hours": 193.15833,
+      "energy_cost": 4.77859,
+      "n_sla_safe": 231857,
+      "queue_delay_p95": 1.06292,
+      "used_fallback_frac": 0.0,
+      "routing_mix": {
+        "kv_aware": 42
+      },
+      "mean_kv_service_factor": 0.75647,
+      "capacity_multiplier_mix": {
+        "1.5": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
     }
   },
   "gate": {
-    "fair_baseline": "aurelius_canonical_kv_routing",
+    "fair_baseline": "aurelius_static_full",
     "fair_baseline_not_weak": true,
     "beats_fair_baseline": true,
     "pareto_sla_not_worse": false,
-    "mpc_sla_violation_rate": 0.0433,
-    "fair_sla_violation_rate": 0.0139,
+    "mpc_sla_violation_rate": 0.0186,
+    "fair_sla_violation_rate": 0.0141,
     "no_oracle": true,
     "splits_disjoint": true,
-    "candidate_vs_baseline_pct": 1.478,
+    "candidate_vs_baseline_pct": 35.032,
     "note": "SIMULATED (directional simulator evidence), not production telemetry",
     "headline_claim_allowed": false
   },
@@ -157,25 +269,5 @@
     "total_requests_exact": 27303999,
     "sample_stride": 24,
     "granularity": "hourly"
-  },
-  "kv_routing": {
-    "round_robin": {
-      "exact_prefix_hit_rate": 0.9995,
-      "mean_prefix_fraction": 0.1866,
-      "service_factor": 0.832048,
-      "prefill_tokens_saved": 337152
-    },
-    "shortest_queue": {
-      "exact_prefix_hit_rate": 0.9998,
-      "mean_prefix_fraction": 0.1898,
-      "service_factor": 0.829218,
-      "prefill_tokens_saved": 340272
-    },
-    "kv_aware": {
-      "exact_prefix_hit_rate": 0.9995,
-      "mean_prefix_fraction": 0.2706,
-      "service_factor": 0.756471,
-      "prefill_tokens_saved": 703136
-    }
   }
 }
