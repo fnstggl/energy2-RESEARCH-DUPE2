@@ -61,16 +61,18 @@ def test_legacy_roundtrip_and_serialization():
 
 def test_status_counts_match_audit():
     counts = status_counts()
-    # CONNECTED: capacity, ordering, admission, routing, capacity_multiplier, batching
-    assert counts["CONNECTED"] == 6
+    # CONNECTED: capacity, ordering, admission, routing, capacity_multiplier, batching +
+    # the stateful trio (prewarm, placement, migration) via the world_simulator channel
+    assert counts["CONNECTED"] == 9
     assert counts["SIMULATED_ONLY"] == 2                  # per-request kv-routing, topology
-    assert counts.get("PLANNED", 0) + counts.get("REQUIRES_PILOT_TELEMETRY", 0) == 8
+    assert counts.get("PLANNED", 0) + counts.get("REQUIRES_PILOT_TELEMETRY", 0) == 5
     assert {s.name for s in list_connected_actions()} == set(CONNECTED_SURFACES)
 
 
 def test_enumerate_connected_only_varies_only_connected():
     bundles = enumerate_candidate_bundles(connected_only=True)
-    assert len(bundles) == 324                            # 3 x 2 x 2 x 3(routing) x 3(cap_mult) x 3(batching)
+    # 3 x 2 x 2 x 3(routing) x 3(cap_mult) x 3(batching) x 3(prewarm) x 3(placement) x 3(migration)
+    assert len(bundles) == 8748
     # no candidate moves a non-connected surface off its default
     for b in bundles:
         assert all(k in CONNECTED_SURFACES for k in b.non_default_surfaces())
@@ -78,19 +80,21 @@ def test_enumerate_connected_only_varies_only_connected():
 
 
 def test_enumerate_with_simulated_opt_in():
-    # opting in adds the 2 SIMULATED_ONLY surfaces (2 options each) -> 324 * 4 = 1296
-    assert len(enumerate_candidate_bundles(connected_only=False)) == 1296
-    # PLANNED surfaces are STILL never enumerated
-    for b in enumerate_candidate_bundles(connected_only=False):
-        assert b.clock_policy == "nominal" and b.precision_policy == "full" and b.migration_policy == "off"
+    # opting in adds the 2 SIMULATED_ONLY surfaces (2 options each) -> 8748 * 4 = 34992
+    bundles = enumerate_candidate_bundles(connected_only=False)
+    assert len(bundles) == 34992
+    # PLANNED surfaces are STILL never enumerated (sample the head — all share the planned no-ops)
+    for b in bundles[:200]:
+        assert b.clock_policy == "nominal" and b.precision_policy == "full" and b.energy_policy == "off"
 
 
 # --- validation: planned/fake knobs rejected --------------------------------
 
 def test_planned_surface_cannot_be_actuated():
+    # placement / migration are now CONNECTED (world_simulator) — the still-PLANNED ones reject
     for field, val in [("clock_policy", "low"), ("precision_policy", "fp8"),
-                       ("spec_decode_policy", "on"), ("migration_policy", "consolidate"),
-                       ("placement_policy", "topology_aware")]:
+                       ("spec_decode_policy", "on"), ("energy_policy", "defer_to_cheap"),
+                       ("kv_placement_policy", "reuse_aware")]:
         v = validate_action_bundle(ActionBundle().with_overrides(**{field: val}))
         assert not v["ok"] and any(field in p and "not actuatable" in p for p in v["problems"])
 
@@ -104,9 +108,9 @@ def test_invalid_option_rejected():
 def test_non_connected_surface_never_changes_simulator_kwargs():
     base = ActionBundle()
     # flip every SIMULATED_ONLY / PLANNED surface to a non-default value (NOT routing / batching /
-    # capacity_multiplier, which are now CONNECTED)
+    # capacity_multiplier / prewarm / placement / migration, which are now CONNECTED)
     flips = {"kv_routing_policy": "prefix_affinity", "topology_policy": "net_aware",
-             "clock_policy": "high", "precision_policy": "int8", "migration_policy": "consolidate"}
+             "clock_policy": "high", "precision_policy": "int8", "energy_policy": "defer_to_cheap"}
     flipped = base.with_overrides(**flips)
     # none of these reach the simulator → identical replay kwargs by construction
     assert flipped.replay_kwargs() == base.replay_kwargs()

@@ -337,6 +337,8 @@ def run_unified_replay(
     capacity_multiplier: float = 1.0,
     batch_concurrency: float = 1.0,
     batch_service_factor: float = 1.0,
+    warm_capacity: int | None = None,
+    cold_start_s: float = 0.0,
 ) -> UnifiedKPI:
     """Run one configuration of all serving surfaces in ONE event loop.
 
@@ -352,6 +354,13 @@ def run_unified_replay(
       batching): more concurrency cuts queue delay at the SAME GPU-hours, but
     - ``batch_service_factor`` inflates each batched request's service time (shared compute) →
       higher latency / SLA risk. Together they model the real throughput↔latency batch trade.
+
+    Persistent-world hook (default off → identical to before):
+    - ``warm_capacity`` / ``cold_start_s`` model a COLD START: until ``cold_start_s`` elapses only
+      ``warm_capacity`` replicas can actually serve (cold ones are still loading), even though the
+      controller may have provisioned — and you pay for — more. Fewer warm replicas → a real
+      warm-up queue spike + SLA hit. ``prewarm_policy`` (in ``world_simulator``) raises
+      ``warm_capacity`` ahead of the period to avoid it, paying warm-hold GPU-hours instead.
     """
     if not jobs:
         return UnifiedKPI(capacity, ordering, admission, (), 0, 0.0, 0, 0,
@@ -392,7 +401,12 @@ def run_unified_replay(
     def _free_sid() -> int | None:
         # effective slots = replicas x batch concurrency (continuous batching packs more
         # requests per replica; the GPU-hours denominator still counts physical replicas).
-        slots = max(1, int(round(st.c * batch_concurrency)))
+        eff_c = st.c
+        if warm_capacity is not None and st.now < cold_start_s:
+            # cold start: only warm replicas serve until they finish loading (provisioned-but-
+            # cold capacity is paid for via c_per_tick but cannot serve yet → warm-up queue).
+            eff_c = min(st.c, max(1, warm_capacity))
+        slots = max(1, int(round(eff_c * batch_concurrency)))
         for s in range(slots):
             if servers.get(s) is None:
                 return s

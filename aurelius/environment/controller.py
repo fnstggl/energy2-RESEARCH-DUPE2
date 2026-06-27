@@ -34,6 +34,7 @@ from .actions import replay_kwargs_from_action
 from .candidate_search import CandidateBundleGenerator, plan_bundle
 from .cost_model import CostModel
 from .forecasting import ForecastingModel
+from .world_simulator import simulate_period
 
 # Connected action levers (the only ones the environment actually executes).
 CAPACITY = ("reactive_lag1", "backlog_aware", "forecasted_mcs")
@@ -67,6 +68,9 @@ class Decision:
             d["routing_policy"] = self.bundle.routing_policy   # connected via kv_service_factor
             d["capacity_multiplier"] = self.bundle.capacity_multiplier
             d["batching_policy"] = self.bundle.batching_policy
+            d["prewarm_policy"] = self.bundle.prewarm_policy   # connected via world_simulator
+            d["placement_policy"] = self.bundle.placement_policy
+            d["migration_policy"] = self.bundle.migration_policy
         return d
 
 
@@ -123,6 +127,9 @@ class ModelPredictiveEconomicController:
     candidates: list | None = None     # explicit candidate bundles; else generator-enumerated
     candidate_generator: object = None  # CandidateBundleGenerator (else a default exhaustive one)
     search_budget: int = 256           # exhaustive at/below this many bundles, else coordinate descent
+    world_state: object = None         # CanonicalWorldState — when set, the stateful actions
+    #                                    (prewarm/placement/migration) are scored through the
+    #                                    world_simulator on a READ-ONLY (mutate=False) candidate sim
 
     def _gpd(self, jobs: list, replay_kw: dict, price: float) -> tuple:
         if not jobs:
@@ -169,6 +176,23 @@ class ModelPredictiveEconomicController:
 
         job_cache: dict = {}               # KV factor → (point, risk) jobs (routing changes the factor)
 
+        # world-state scoring (stateful actions): forecast + synthetic recs (factor 1.0 — the world
+        # simulator re-applies the combined service factor) reused across candidates; READ-ONLY.
+        world = self.world_state
+        ws_forecast = ({"arrival_rate": ar.mean, "arrival_p90": ar.p90,
+                        "mean_service_s": max(_service_time_s(int(tm.mean)), 1e-3)}
+                       if world is not None else None)
+        ws_recs: dict = {}
+
+        def _world_recs(peak):
+            key = "risk" if peak else "point"
+            if key not in ws_recs:
+                js = _synth_jobs(ar.p90 if peak else ar.mean, tp.p99 if peak else tm.mean,
+                                 tp.p99 if peak else tp.value, cv.p90 if peak else cv.mean,
+                                 window_seconds=win, best_effort_fraction=be, kv_service_factor=1.0)
+                ws_recs[key] = [(j.arrival_s, j.actual_tokens, j.actual_tokens) for j in js]
+            return ws_recs[key]
+
         def _resolve(cand):
             ab = cand if hasattr(cand, "replay_kwargs") else None
             if ab is not None:
@@ -177,8 +201,18 @@ class ModelPredictiveEconomicController:
             return None, cand, replay_kwargs_from_action(cand if isinstance(cand, dict) else {}), routing
 
         def _eval(cand):                   # → (score, exp_gpd, risk_gpd, routing)
-            _ab, _act, rkw, routing = _resolve(cand)
+            ab, _act, rkw, routing = _resolve(cand)
             factor = by_routing.get(routing, self.kv_service_factor)
+            if world is not None and ab is not None:
+                # score the stateful bundle through the persistent world (READ-ONLY clone-free sim).
+                common = dict(sla_s=self.sla_s, tick_seconds=self.tick_seconds,
+                              base_service_factor=factor, replay_kwargs=rkw, cost_model=self.cost_model,
+                              fleet_state=self.fleet_state, cost_scenario=self.cost_scenario,
+                              best_effort_fraction=be, period_hours=max(win, 1.0) / 3600.0)
+                exp_o = simulate_period(world, ab, _world_recs(False), ws_forecast, mutate=False, **common)
+                risk_o = simulate_period(world, ab, _world_recs(True), ws_forecast, mutate=False, **common)
+                exp_gpd, risk_viol = exp_o.goodput_per_dollar, risk_o.sla_violation_rate
+                return exp_gpd - self.risk_weight * risk_viol * exp_gpd, exp_gpd, risk_o.goodput_per_dollar, routing
             if factor not in job_cache:
                 job_cache[factor] = _jobs(factor)
             point, risk = job_cache[factor]
@@ -269,6 +303,13 @@ class EpisodeReport:
     mean_kv_service_factor: float = 1.0                 # mean KV service factor applied
     capacity_multiplier_mix: dict = field(default_factory=dict)  # capacity_multiplier → periods
     batching_mix: dict = field(default_factory=dict)    # batching_policy → periods chosen
+    prewarm_mix: dict = field(default_factory=dict)     # prewarm_policy → periods (world path)
+    placement_mix: dict = field(default_factory=dict)   # placement_policy → periods
+    migration_mix: dict = field(default_factory=dict)   # migration_policy → periods
+    cold_start_events: int = 0                          # total cold starts incurred
+    warm_hold_gpu_hours: float = 0.0                    # total GPU-hours held warm (prewarm cost)
+    migration_cost: float = 0.0                         # total $ spent on live moves
+    mean_topology_factor: float = 1.0                   # mean placement service-time factor
 
     def to_dict(self) -> dict:
         return {k: (round(v, 5) if isinstance(v, float) else v) for k, v in self.__dict__.items()}
@@ -277,14 +318,21 @@ class EpisodeReport:
 def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *,
                        fleet_state, cost_model, sla_s=10.0, tick_seconds=60.0,
                        period_seconds=60.0, kv_service_factor=1.0, cost_scenario="owned",
-                       sim_seconds=None, kv_service_factor_by_routing=None):
+                       sim_seconds=None, kv_service_factor_by_routing=None, world_state=None,
+                       world_state_params=None):
     """Run ``decide_fn(history_frames)`` over the REAL eval periods (causal: the action
     for period p is chosen from frames[:p], then applied to the real requests of p).
 
     The chosen ``routing_policy`` (CONNECTED via the fleet-KV channel) selects the period's
     KV service factor from ``kv_service_factor_by_routing`` — so a routing decision changes
     the replayed service times (and thus goodput/$). ``sim_seconds`` is accepted (and ignored)
-    so the same ``common`` dict can be splatted here and into the controller."""
+    so the same ``common`` dict can be splatted here and into the controller.
+
+    When ``world_state`` is given, the period is replayed through the PERSISTENT world simulator
+    (``simulate_period``, ``mutate=True``) so prewarm / placement / migration take effect and the
+    state evolves period→period; the warm pool is sized from a causal lag-1 forecast. With every
+    stateful surface at its no-op this reproduces the stateless replay above."""
+    from .world_simulator import simulate_period as _sim_period
     by_routing = kv_service_factor_by_routing or {}
     gpu_type = (max(fleet_state.gpu_type_mix, key=fleet_state.gpu_type_mix.get)
                 if fleet_state.gpu_type_mix else "H100")
@@ -297,16 +345,22 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
     routing_mix: dict = {}
     cap_mult_mix: dict = {}
     batch_mix: dict = {}
+    prewarm_mix: dict = {}
+    placement_mix: dict = {}
+    migration_mix: dict = {}
+    cold_starts = mig_cost = warm_hold = topo_sum = topo_n = 0.0
     factor_sum, factor_n = 0.0, 0
+    period_hours = max(period_seconds, 1.0) / 3600.0
     for p in eval_indices:
         out = decide_fn(frames[:p])
         action = out["action"] if isinstance(out, dict) and "action" in out else out
         fb += int(bool(isinstance(out, dict) and out.get("used_fallback")))
-        # merge the connected surfaces the MPC exposes at the top level (routing / capacity
-        # multiplier / batching) onto the legacy 3-key action; baselines carry their own keys.
+        # merge the connected surfaces the MPC exposes at the top level onto the legacy 3-key
+        # action; baselines carry their own keys (else the no-op default).
         merged = dict(action) if isinstance(action, dict) else {}
         if isinstance(out, dict):
-            for _k in ("routing_policy", "capacity_multiplier", "batching_policy"):
+            for _k in ("routing_policy", "capacity_multiplier", "batching_policy",
+                       "prewarm_policy", "placement_policy", "migration_policy"):
                 if _k in out:
                     merged[_k] = out[_k]
         routing = merged.get("routing_policy", "round_robin")
@@ -317,10 +371,47 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         cap_mult_mix[_cm] = cap_mult_mix.get(_cm, 0) + 1
         _bp = merged.get("batching_policy", "conservative")
         batch_mix[_bp] = batch_mix.get(_bp, 0) + 1
+        _pw = merged.get("prewarm_policy", "off")
+        _pl = merged.get("placement_policy", "topology_blind")
+        _mg = merged.get("migration_policy", "off")
+        prewarm_mix[_pw] = prewarm_mix.get(_pw, 0) + 1
+        placement_mix[_pl] = placement_mix.get(_pl, 0) + 1
+        migration_mix[_mg] = migration_mix.get(_mg, 0) + 1
         factor_sum += factor
         factor_n += 1
         recs = sorted(real_per_period.get(p, []), key=lambda r: r[0])
         if not recs:
+            continue
+        if world_state is not None:
+            # causal lag-1 forecast (previous real period) sizes the warm pool.
+            prev = real_per_period.get(p - 1, recs)
+            fcast = {"arrival_rate": len(prev) / max(period_seconds, 1e-9),
+                     "arrival_p90": 1.3 * len(prev) / max(period_seconds, 1e-9),
+                     "mean_service_s": (statistics.mean(_service_time_s(int(r[1])) for r in prev)
+                                        if prev else 1.0)}
+            from types import SimpleNamespace
+            pol = SimpleNamespace(prewarm_policy=_pw, placement_policy=_pl, migration_policy=_mg)
+            t0 = recs[0][0]
+            oc = _sim_period(world_state, pol, [(r[0] - t0, int(r[1]), r[2] if len(r) > 2 else r[1])
+                                                for r in recs], fcast, sla_s=sla_s,
+                             tick_seconds=tick_seconds, base_service_factor=factor,
+                             replay_kwargs=replay_kw, cost_model=cost_model, fleet_state=fleet_state,
+                             cost_scenario=cost_scenario, best_effort_fraction=be,
+                             period_hours=period_hours, mutate=True)
+            kpi = oc.kpi
+            tot_cost += oc.operator_cost
+            cold_starts += oc.cold_start_events
+            mig_cost += oc.migration_cost
+            warm_hold += oc.wasted_prewarm_hours
+            topo_sum += oc.topology_factor
+            topo_n += 1
+            if oc.queue_delay_p95 > 0:
+                waits_p95.append(oc.queue_delay_p95)
+            tot_g += kpi.sla_safe_goodput
+            tot_gpu_h += kpi.gpu_hours
+            tot_viol += kpi.sla_violations
+            tot_n += kpi.n_total
+            tot_safe += kpi.n_sla_safe
             continue
         t0 = recs[0][0]
         pred = _causal_pred(recs)
@@ -355,7 +446,10 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         queue_delay_p95=(statistics.mean(waits_p95) if waits_p95 else 0.0),
         used_fallback_frac=(fb / ne if ne else 0.0), routing_mix=routing_mix,
         mean_kv_service_factor=(factor_sum / factor_n if factor_n else kv_service_factor),
-        capacity_multiplier_mix=cap_mult_mix, batching_mix=batch_mix)
+        capacity_multiplier_mix=cap_mult_mix, batching_mix=batch_mix,
+        prewarm_mix=prewarm_mix, placement_mix=placement_mix, migration_mix=migration_mix,
+        cold_start_events=int(cold_starts), warm_hold_gpu_hours=warm_hold, migration_cost=mig_cost,
+        mean_topology_factor=(topo_sum / topo_n if topo_n else 1.0))
 
 
 __all__ = [
