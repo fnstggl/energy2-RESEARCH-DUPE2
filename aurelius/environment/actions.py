@@ -39,10 +39,12 @@ class ActionSpec:
     surface: str               # human label (e.g. "replica count / capacity")
     status: str                # one of STATUSES
     options: tuple             # allowed values; options[0] is the no-op / reward-path default
-    sim_param: str | None      # the run_unified_replay kwarg it maps to (CONNECTED only)
+    sim_param: str | None      # the run_unified_replay kwarg it maps to (else None)
     fidelity: str              # provenance of the model behind it
     limitation: str            # what is missing / why it is not CONNECTED
     roadmap: str = ""          # roadmap id (e.g. "N4"), if any
+    reward_channel: str = ""   # HOW a CONNECTED surface reaches the reward
+    #                            ("run_unified_replay" kwarg, or "kv_service_factor", ...)
 
     @property
     def default(self):
@@ -71,27 +73,33 @@ ACTION_SPECS: dict = {
         "capacity_policy", "replica count / capacity adjustment", CONNECTED,
         ("reactive_lag1", "backlog_aware", "forecasted_mcs"), "capacity",
         "CapacityController (unified_replay.py) — Erlang-C + live backlog",
-        "", roadmap=""),
+        "", roadmap="", reward_channel="run_unified_replay"),
     "ordering_policy": ActionSpec(
         "ordering_policy", "ordering / scheduling", CONNECTED,
         ("fifo", "abs_conformal"), "ordering",
-        "_dispatch_index (unified_replay.py) — class priority + SRPT", ""),
+        "_dispatch_index (unified_replay.py) — class priority + SRPT", "",
+        reward_channel="run_unified_replay"),
     "admission_policy": ActionSpec(
         "admission_policy", "admission / defer", CONNECTED,
         ("off", "class_aware"), "admission",
-        "AdmissionController (unified_replay.py) — best-effort deferral", ""),
-    # ---- SIMULATED_ONLY (opt in with an explicit flag) ----
+        "AdmissionController (unified_replay.py) — best-effort deferral", "",
+        reward_channel="run_unified_replay"),
+    # routing — CONNECTED via the fleet-KV channel: a routing policy is replayed over the
+    # real Mooncake prefix trace (fleet_kv_routing), and its fleet prefix-reuse depth sets
+    # the serving service-time discount → it changes goodput/$ (kv_service_factor channel).
     "routing_policy": ActionSpec(
-        "routing_policy", "routing (request → replica)", SIMULATED_ONLY,
-        ("round_robin", "kv_aware"), None,
-        "KVAwareRouter (kv_cache.py) exists; dispatch is round-robin _free_sid",
-        "router output is not fed into run_unified_replay's reward path", roadmap="N4"),
+        "routing_policy", "routing (request → replica) / KV-aware routing", CONNECTED,
+        ("round_robin", "shortest_queue", "kv_aware"), None,
+        "fleet_kv_routing (kv_cache.py) over the Mooncake trace → routing-specific "
+        "service factor (kv_aware reuses ~50% more prefix depth than round_robin)", "",
+        roadmap="N4", reward_channel="kv_service_factor"),
+    # ---- SIMULATED_ONLY (opt in with an explicit flag) ----
     "kv_routing_policy": ActionSpec(
-        "kv_routing_policy", "KV-aware routing", SIMULATED_ONLY,
-        ("off", "prefix_affinity"), None,
-        "StatefulKVCache/KVModel (kv_cache.py); applied as a uniform service discount",
-        "no per-server cache routing in the serving loop; the ACTION_SPACE kv_routing "
-        "knob is currently inert", roadmap="N4"),
+        "kv_routing_policy", "per-request KV prefix routing (finer than routing_policy)",
+        SIMULATED_ONLY, ("off", "prefix_affinity"), None,
+        "StatefulKVCache exists; the FLEET effect is CONNECTED via routing_policy",
+        "per-Azure-request prefix routing needs per-request prefix ids (Azure trace has "
+        "none) — fleet-level KV routing is already CONNECTED via routing_policy", roadmap="N4"),
     "topology_policy": ActionSpec(
         "topology_policy", "network / topology-aware routing", SIMULATED_ONLY,
         ("off", "net_aware"), None,
@@ -172,8 +180,11 @@ class ActionBundle:
     placement_policy: str = "off"
 
     def connected_kwargs(self) -> dict:
-        """The lever subset the serving simulator actually executes."""
-        return {ACTION_SPECS[n].sim_param: getattr(self, n) for n in CONNECTED_SURFACES}
+        """The lever subset passed DIRECTLY to run_unified_replay (capacity/ordering/admission).
+        CONNECTED surfaces that act through another channel (routing → kv_service_factor) are
+        excluded here and applied by the controller via that channel (see reward_channel)."""
+        return {ACTION_SPECS[n].sim_param: getattr(self, n)
+                for n in CONNECTED_SURFACES if ACTION_SPECS[n].sim_param}
 
     def legacy_action(self) -> dict:
         """Back-compat dict for the existing controller/replay harness."""

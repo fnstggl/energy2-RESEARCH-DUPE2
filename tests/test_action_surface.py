@@ -56,15 +56,16 @@ def test_legacy_roundtrip_and_serialization():
 
 def test_status_counts_match_audit():
     counts = status_counts()
-    assert counts["CONNECTED"] == 3                       # admission, ordering, capacity
-    assert counts["SIMULATED_ONLY"] == 3                  # routing, kv-routing, topology
+    # CONNECTED: capacity, ordering, admission, + routing (now connected via the KV channel)
+    assert counts["CONNECTED"] == 4
+    assert counts["SIMULATED_ONLY"] == 2                  # per-request kv-routing, topology
     assert counts.get("PLANNED", 0) + counts.get("REQUIRES_PILOT_TELEMETRY", 0) == 9
     assert {s.name for s in list_connected_actions()} == set(CONNECTED_SURFACES)
 
 
-def test_enumerate_connected_only_is_12_and_varies_only_connected():
+def test_enumerate_connected_only_varies_only_connected():
     bundles = enumerate_candidate_bundles(connected_only=True)
-    assert len(bundles) == 12                             # 3 capacity x 2 ordering x 2 admission
+    assert len(bundles) == 36                             # 3 capacity x 2 ordering x 2 admission x 3 routing
     # no candidate moves a non-connected surface off its default
     for b in bundles:
         assert all(k in CONNECTED_SURFACES for k in b.non_default_surfaces())
@@ -72,8 +73,8 @@ def test_enumerate_connected_only_is_12_and_varies_only_connected():
 
 
 def test_enumerate_with_simulated_opt_in():
-    # opting in adds the 3 SIMULATED_ONLY surfaces (2 options each) -> 12 * 8 = 96
-    assert len(enumerate_candidate_bundles(connected_only=False)) == 96
+    # opting in adds the 2 SIMULATED_ONLY surfaces (2 options each) -> 36 * 4 = 144
+    assert len(enumerate_candidate_bundles(connected_only=False)) == 144
     # PLANNED surfaces are STILL never enumerated
     for b in enumerate_candidate_bundles(connected_only=False):
         assert b.clock_policy == "nominal" and b.precision_policy == "full" and b.migration_policy == "off"
@@ -97,14 +98,13 @@ def test_invalid_option_rejected():
 
 def test_non_connected_surface_never_changes_simulator_kwargs():
     base = ActionBundle()
-    # flip every SIMULATED_ONLY / PLANNED surface to a non-default value
-    flips = {"routing_policy": "kv_aware", "kv_routing_policy": "prefix_affinity",
-             "topology_policy": "net_aware", "batching_policy": "roofline_aware",
-             "clock_policy": "high", "precision_policy": "int8"}
+    # flip every SIMULATED_ONLY / PLANNED surface to a non-default value (NOT routing, which
+    # is now CONNECTED via the kv_service_factor channel)
+    flips = {"kv_routing_policy": "prefix_affinity", "topology_policy": "net_aware",
+             "batching_policy": "roofline_aware", "clock_policy": "high", "precision_policy": "int8"}
     flipped = base.with_overrides(**flips)
-    # the only thing the simulator sees is unchanged → identical reward by construction
+    # none of these reach the simulator → identical run_unified_replay kwargs by construction
     assert flipped.connected_kwargs() == base.connected_kwargs()
-    # and the specs say so
     for f in flips:
         assert not ACTION_SPECS[f].affects_reward and ACTION_SPECS[f].status in (SIMULATED_ONLY, PLANNED)
 
@@ -113,9 +113,22 @@ def test_no_action_spec_outside_connected_claims_reward_effect():
     for spec in ACTION_SPECS.values():
         assert spec.affects_reward == (spec.status == CONNECTED)
         if spec.status == CONNECTED:
-            assert spec.sim_param in ("capacity", "ordering", "admission")
+            assert spec.reward_channel                    # every connected surface names HOW it pays out
+            # sim_param is set only for the run_unified_replay channel (routing pays via kv factor)
+            assert (spec.sim_param in ("capacity", "ordering", "admission")) == \
+                (spec.reward_channel == "run_unified_replay")
         else:
-            assert spec.sim_param is None                # non-connected map to NO simulator kwarg
+            assert spec.sim_param is None                 # non-connected map to NO simulator kwarg
+
+
+def test_routing_is_connected_via_kv_channel_not_replay_kwargs():
+    spec = ACTION_SPECS["routing_policy"]
+    assert spec.status == CONNECTED and spec.reward_channel == "kv_service_factor"
+    assert spec.sim_param is None                         # routing is NOT a run_unified_replay kwarg
+    # a routing flip changes no replay kwarg, but IS a reward-affecting connected surface
+    b = ActionBundle().with_overrides(routing_policy="kv_aware")
+    assert b.connected_kwargs() == ActionBundle().connected_kwargs()
+    assert spec.affects_reward and "routing_policy" in dict(b.non_default_surfaces())
 
 
 # --- MPC controller uses ActionBundle ---------------------------------------
@@ -143,7 +156,8 @@ def test_controller_optimizes_bundles_keeps_legacy_action_and_reports_planned():
     assert d.bundle.connected_kwargs() == d.action               # they agree
     # planned/simulated surfaces are reported separately, never as the chosen action
     rep = {p["field"] for p in ctrl.understood_but_unavailable()}
-    assert "clock_policy" in rep and "routing_policy" in rep
+    assert "clock_policy" in rep and "kv_routing_policy" in rep   # still planned/simulated
+    assert "routing_policy" not in rep                            # routing is now CONNECTED
     assert d.bundle.non_default_surfaces().keys() <= set(CONNECTED_SURFACES)
 
 

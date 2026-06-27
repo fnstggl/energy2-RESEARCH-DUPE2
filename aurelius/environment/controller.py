@@ -29,7 +29,8 @@ from ..optimizer.unified_replay import (
     Job,
     run_unified_replay,
 )
-from .action_registry import enumerate_candidate_bundles, planned_report
+from .action_registry import planned_report
+from .candidate_search import CandidateBundleGenerator, plan_bundle
 from .cost_model import CostModel
 from .forecasting import ForecastingModel
 
@@ -62,6 +63,7 @@ class Decision:
              "used_fallback": self.used_fallback, "confidence": round(self.confidence, 3)}
         if self.bundle is not None:
             d["bundle_changes"] = self.bundle.non_default_surfaces()
+            d["routing_policy"] = self.bundle.routing_policy   # connected via kv_service_factor
         return d
 
 
@@ -107,12 +109,16 @@ class ModelPredictiveEconomicController:
     tick_seconds: float = 60.0
     risk_weight: float = 0.5           # penalty on the p90 high-load SLA-violation rate
     confidence_min: float = 0.15       # below this, fall back to the SLA-aware action
-    kv_service_factor: float = 1.0     # avg KV service discount (≤1), applied to all candidates
+    kv_service_factor: float = 1.0     # default KV service discount (≤1) when no routing map
+    kv_service_factor_by_routing: dict | None = None   # routing_policy → service factor
+    #                                    (from fleet_kv_routing on Mooncake) — makes routing
+    #                                    a CONNECTED action: kv_aware reuses more prefix → lower factor
     cost_scenario: str = "owned"
     sim_seconds: float | None = None   # bounded decision-sim window (default = period_seconds)
     optimize_simulated: bool = False   # opt-in to vary SIMULATED_ONLY surfaces (no reward
     #                                    effect until they are wired into run_unified_replay)
-    candidates: list | None = None     # explicit candidate bundles; else registry-enumerated
+    candidates: list | None = None     # explicit candidate bundles; else generator-enumerated
+    candidate_generator: object = None  # CandidateBundleGenerator (else a default exhaustive one)
 
     def _gpd(self, jobs: list, action: dict, price: float) -> tuple:
         if not jobs:
@@ -150,24 +156,41 @@ class ModelPredictiveEconomicController:
 
         be = self.fleet_state.best_effort_fraction
         win = self.sim_seconds or self.period_seconds
-        point = _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
-                            best_effort_fraction=be, kv_service_factor=self.kv_service_factor)
-        risk = _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
-                           best_effort_fraction=be, kv_service_factor=self.kv_service_factor)
-        # candidate ACTION BUNDLES from the registry — CONNECTED surfaces only by default;
-        # SIMULATED_ONLY varied only when opted in; PLANNED surfaces are never enumerated.
-        cands = self.candidates if self.candidates is not None else \
-            enumerate_candidate_bundles(connected_only=not self.optimize_simulated)
+        by_routing = self.kv_service_factor_by_routing or {}
+
+        def _jobs(factor):                 # synth point+risk job sets at a given KV factor
+            return (_synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
+                                best_effort_fraction=be, kv_service_factor=factor),
+                    _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
+                                best_effort_fraction=be, kv_service_factor=factor))
+
+        # candidate ACTION BUNDLES from the search generator — CONNECTED surfaces only by
+        # default; SIMULATED_ONLY varied only when opted in; PLANNED surfaces never generated.
+        if self.candidates is not None:
+            cands = self.candidates
+        else:
+            gen = self.candidate_generator or CandidateBundleGenerator(
+                include_simulated=self.optimize_simulated)
+            cands = gen.generate()[0]
+        job_cache: dict = {}               # KV factor → (point, risk) jobs (routing changes the factor)
         best = None
         for cand in cands:
-            act = cand.legacy_action() if hasattr(cand, "legacy_action") else cand
             ab = cand if hasattr(cand, "legacy_action") else None
+            act = ab.legacy_action() if ab is not None else cand
+            routing = (ab.routing_policy if ab is not None
+                       else (cand.get("routing_policy", "round_robin") if isinstance(cand, dict)
+                             else "round_robin"))
+            factor = by_routing.get(routing, self.kv_service_factor)
+            if factor not in job_cache:
+                job_cache[factor] = _jobs(factor)
+            point, risk = job_cache[factor]
             exp_gpd, _ = self._gpd(point, act, pr.value)
             risk_gpd, risk_viol = self._gpd(risk, act, pr.value)
             score = exp_gpd - self.risk_weight * risk_viol * exp_gpd     # risk-adjusted
             if best is None or score > best.score:
                 best = Decision(act, exp_gpd, risk_gpd, score, False, confidence,
-                                forecast={"arrival_rate": ar.to_dict(), "price": pr.value},
+                                forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
+                                          "routing_policy": routing},
                                 bundle=ab)
         return best
 
@@ -176,6 +199,37 @@ class ModelPredictiveEconomicController:
         (SIMULATED_ONLY + PLANNED) — reported separately so planned knobs are never
         mistaken for active ones. See research/AURELIUS_ACTION_SURFACE_AUDIT.md."""
         return planned_report()
+
+    def search_report(self, history: list) -> dict | None:
+        """Audit the planner's bundle search for ONE decision: total connected dimensions,
+        theoretical combinations, candidates evaluated, search method, best bundle, and a
+        per-surface ablation (how much each connected knob moves the score). Proves the search
+        is over the connected action space — not a hand-picked preset list — and that no
+        connected knob is silently excluded."""
+        if not self.forecasters.fitted or len(history) < 3:
+            return None
+        fb = self.forecasters.predict(history, horizon=self.horizon)
+        ar, tm, tp, cv, pr = (fb.at(t, 0) for t in
+                              ("arrival_rate", "output_token_mean", "output_token_p95",
+                               "interarrival_cv", "electricity_price"))
+        be = self.fleet_state.best_effort_fraction
+        win = self.sim_seconds or self.period_seconds
+        by_routing = self.kv_service_factor_by_routing or {}
+
+        def score_fn(b):
+            factor = by_routing.get(b.routing_policy, self.kv_service_factor)
+            point = _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
+                                best_effort_fraction=be, kv_service_factor=factor)
+            risk = _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
+                               best_effort_fraction=be, kv_service_factor=factor)
+            exp_gpd, _ = self._gpd(point, b.legacy_action(), pr.value)
+            _r, risk_viol = self._gpd(risk, b.legacy_action(), pr.value)
+            return exp_gpd - self.risk_weight * risk_viol * exp_gpd, risk_viol
+
+        gen = self.candidate_generator or CandidateBundleGenerator(
+            include_simulated=self.optimize_simulated)
+        _best, report = plan_bundle(gen, score_fn)
+        return report.to_dict()
 
 
 def _causal_pred(slice_sorted: list) -> list:
@@ -204,6 +258,8 @@ class EpisodeReport:
     n_sla_safe: int
     queue_delay_p95: float
     used_fallback_frac: float = 0.0
+    routing_mix: dict = field(default_factory=dict)     # routing_policy → periods chosen
+    mean_kv_service_factor: float = 1.0                 # mean KV service factor applied
 
     def to_dict(self) -> dict:
         return {k: (round(v, 5) if isinstance(v, float) else v) for k, v in self.__dict__.items()}
@@ -212,13 +268,15 @@ class EpisodeReport:
 def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *,
                        fleet_state, cost_model, sla_s=10.0, tick_seconds=60.0,
                        period_seconds=60.0, kv_service_factor=1.0, cost_scenario="owned",
-                       sim_seconds=None):
+                       sim_seconds=None, kv_service_factor_by_routing=None):
     """Run ``decide_fn(history_frames)`` over the REAL eval periods (causal: the action
     for period p is chosen from frames[:p], then applied to the real requests of p).
 
-    ``sim_seconds`` is accepted (and ignored) so the same ``common`` dict can be splatted
-    here and into the controller — this harness always replays the REAL per-period load,
-    never a bounded synthetic window."""
+    The chosen ``routing_policy`` (CONNECTED via the fleet-KV channel) selects the period's
+    KV service factor from ``kv_service_factor_by_routing`` — so a routing decision changes
+    the replayed service times (and thus goodput/$). ``sim_seconds`` is accepted (and ignored)
+    so the same ``common`` dict can be splatted here and into the controller."""
+    by_routing = kv_service_factor_by_routing or {}
     gpu_type = (max(fleet_state.gpu_type_mix, key=fleet_state.gpu_type_mix.get)
                 if fleet_state.gpu_type_mix else "H100")
     be = fleet_state.best_effort_fraction
@@ -227,10 +285,19 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
     tot_viol = tot_n = tot_safe = 0
     waits_p95 = []
     fb = 0
+    routing_mix: dict = {}
+    factor_sum, factor_n = 0.0, 0
     for p in eval_indices:
         out = decide_fn(frames[:p])
         action = out["action"] if isinstance(out, dict) and "action" in out else out
         fb += int(bool(isinstance(out, dict) and out.get("used_fallback")))
+        # routing (connected via the KV channel): pick this period's service factor
+        routing = action.get("routing_policy", out.get("routing_policy", "round_robin")) \
+            if isinstance(action, dict) else "round_robin"
+        factor = by_routing.get(routing, kv_service_factor)
+        routing_mix[routing] = routing_mix.get(routing, 0) + 1
+        factor_sum += factor
+        factor_n += 1
         recs = sorted(real_per_period.get(p, []), key=lambda r: r[0])
         if not recs:
             continue
@@ -238,7 +305,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         pred = _causal_pred(recs)
         jobs = [Job(idx=i, arrival_s=(r[0] - t0), actual_tokens=int(r[1]),
                     predicted_tokens=float(pred[i]),
-                    service_s=_service_time_s(int(r[1])) * kv_service_factor,
+                    service_s=_service_time_s(int(r[1])) * factor,
                     cls=(CLASS_BEST_EFFORT if (be_stride and i % be_stride == 0) else CLASS_LATENCY))
                 for i, r in enumerate(recs)]
         kpi = run_unified_replay(jobs, tick_seconds=tick_seconds, sla_s=sla_s,
@@ -267,7 +334,8 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         sla_violation_rate=(tot_viol / tot_n if tot_n else 0.0), gpu_hours=tot_gpu_h,
         energy_cost=tot_energy, n_sla_safe=tot_safe,
         queue_delay_p95=(statistics.mean(waits_p95) if waits_p95 else 0.0),
-        used_fallback_frac=(fb / ne if ne else 0.0))
+        used_fallback_frac=(fb / ne if ne else 0.0), routing_mix=routing_mix,
+        mean_kv_service_factor=(factor_sum / factor_n if factor_n else kv_service_factor))
 
 
 __all__ = [

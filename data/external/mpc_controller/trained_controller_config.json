@@ -30,7 +30,7 @@
         "risk_weight": 0.0,
         "confidence_min": 0.1
       },
-      "val_gpd": 179117.74
+      "val_gpd": 196102.68
     },
     {
       "cfg": {
@@ -38,7 +38,7 @@
         "risk_weight": 0.0,
         "confidence_min": 0.3
       },
-      "val_gpd": 179117.74
+      "val_gpd": 196102.68
     },
     {
       "cfg": {
@@ -46,7 +46,7 @@
         "risk_weight": 0.5,
         "confidence_min": 0.1
       },
-      "val_gpd": 189478.27
+      "val_gpd": 199238.11
     },
     {
       "cfg": {
@@ -54,7 +54,7 @@
         "risk_weight": 0.5,
         "confidence_min": 0.3
       },
-      "val_gpd": 189478.27
+      "val_gpd": 199238.11
     },
     {
       "cfg": {
@@ -62,7 +62,7 @@
         "risk_weight": 1.0,
         "confidence_min": 0.1
       },
-      "val_gpd": 192399.04
+      "val_gpd": 209527.36
     },
     {
       "cfg": {
@@ -70,7 +70,7 @@
         "risk_weight": 1.0,
         "confidence_min": 0.3
       },
-      "val_gpd": 192399.04
+      "val_gpd": 209527.36
     },
     {
       "cfg": {
@@ -78,7 +78,7 @@
         "risk_weight": 0.0,
         "confidence_min": 0.1
       },
-      "val_gpd": 179117.74
+      "val_gpd": 196102.68
     },
     {
       "cfg": {
@@ -86,7 +86,7 @@
         "risk_weight": 0.0,
         "confidence_min": 0.3
       },
-      "val_gpd": 179117.74
+      "val_gpd": 196102.68
     },
     {
       "cfg": {
@@ -94,7 +94,7 @@
         "risk_weight": 0.5,
         "confidence_min": 0.1
       },
-      "val_gpd": 189478.27
+      "val_gpd": 199238.11
     },
     {
       "cfg": {
@@ -102,7 +102,7 @@
         "risk_weight": 0.5,
         "confidence_min": 0.3
       },
-      "val_gpd": 189478.27
+      "val_gpd": 199238.11
     },
     {
       "cfg": {
@@ -110,7 +110,7 @@
         "risk_weight": 1.0,
         "confidence_min": 0.1
       },
-      "val_gpd": 192399.04
+      "val_gpd": 209527.36
     },
     {
       "cfg": {
@@ -118,7 +118,7 @@
         "risk_weight": 1.0,
         "confidence_min": 0.3
       },
-      "val_gpd": 192399.04
+      "val_gpd": 209527.36
     },
     {
       "cfg": {
@@ -126,7 +126,7 @@
         "risk_weight": 0.0,
         "confidence_min": 0.1
       },
-      "val_gpd": 179117.74
+      "val_gpd": 196102.68
     },
     {
       "cfg": {
@@ -134,7 +134,7 @@
         "risk_weight": 0.0,
         "confidence_min": 0.3
       },
-      "val_gpd": 179117.74
+      "val_gpd": 196102.68
     },
     {
       "cfg": {
@@ -142,7 +142,7 @@
         "risk_weight": 0.5,
         "confidence_min": 0.1
       },
-      "val_gpd": 189478.27
+      "val_gpd": 199238.11
     },
     {
       "cfg": {
@@ -150,7 +150,7 @@
         "risk_weight": 0.5,
         "confidence_min": 0.3
       },
-      "val_gpd": 189478.27
+      "val_gpd": 199238.11
     },
     {
       "cfg": {
@@ -158,7 +158,7 @@
         "risk_weight": 1.0,
         "confidence_min": 0.1
       },
-      "val_gpd": 192399.04
+      "val_gpd": 209527.36
     },
     {
       "cfg": {
@@ -166,15 +166,20 @@
         "risk_weight": 1.0,
         "confidence_min": 0.3
       },
-      "val_gpd": 192399.04
+      "val_gpd": 209527.36
     }
   ],
   "common": {
     "sla_s": 10.0,
     "period_seconds": 3600.0,
     "tick_seconds": 10.0,
-    "kv_service_factor": 0.8095,
+    "kv_service_factor": 0.832048,
     "cost_scenario": "owned",
-    "sim_seconds": 240.0
+    "sim_seconds": 240.0,
+    "kv_service_factor_by_routing": {
+      "round_robin": 0.832048,
+      "shortest_queue": 0.829218,
+      "kv_aware": 0.756471
+    }
   }
 }
