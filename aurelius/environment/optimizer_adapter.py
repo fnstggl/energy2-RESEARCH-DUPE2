@@ -32,12 +32,17 @@ from ..optimizer.aurelius_optimizer import AureliusOptimizer
 from .canonical import DEFAULT_ACTION, CanonicalMultiPlaneEnvironment
 
 # Levers the environment can execute (causal; map 1:1 to unified_replay).
+# NOTE: the canonical, audited action surface now lives in `actions.py` / `action_registry.py`
+# (see research/AURELIUS_ACTION_SURFACE_AUDIT.md). Of the keys below only capacity/ordering/
+# admission are CONNECTED (change the reward); `kv_routing` is SIMULATED_ONLY and currently
+# INERT (nothing consumes it — do not treat it as a real lever); `cost_scenario` is a
+# cost-accounting context, not an infrastructure control action.
 ACTION_SPACE = {
     "capacity": ["reactive_lag1", "backlog_aware", "forecasted_mcs"],
     "ordering": ["fifo", "abs_conformal"],
     "admission": ["off", "class_aware"],
-    "kv_routing": [True, False],
-    "cost_scenario": ["owned", "leased"],
+    "kv_routing": [True, False],        # SIMULATED_ONLY / inert — see action_registry
+    "cost_scenario": ["owned", "leased"],   # accounting context, not a control action
 }
 
 
