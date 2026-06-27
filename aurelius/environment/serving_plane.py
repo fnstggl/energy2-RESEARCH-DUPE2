@@ -27,6 +27,15 @@ from ..optimizer.unified_replay import (
 from .schemas import ServingRequest
 
 
+def _percentile(sorted_xs: list, q: float) -> float:
+    if not sorted_xs:
+        return 0.0
+    k = (len(sorted_xs) - 1) * q
+    lo = int(k)
+    hi = min(lo + 1, len(sorted_xs) - 1)
+    return sorted_xs[lo] + (sorted_xs[hi] - sorted_xs[lo]) * (k - lo)
+
+
 def _causal_predicted_tokens(slice_sorted: list) -> list:
     """Running-median causal token prior (deployable ordering, no oracle)."""
     n = len(slice_sorted)
@@ -131,6 +140,8 @@ class ServingPlane:
         kpi = run_unified_replay(
             jobs, tick_seconds=tick_seconds, sla_s=sla_s, capacity=capacity,
             ordering=ordering, admission=admission, warmup_c=warmup_c)
+        # run_unified_replay mutates each Job's start_s → per-request queue wait.
+        waits = sorted(max(0.0, j.start_s - j.arrival_s) for j in jobs if j.start_s >= 0)
         n_hits = sum(1 for r in requests if r.kv_prefix_id)
         action = {
             "capacity": capacity, "ordering": ordering, "admission": admission,
@@ -140,6 +151,9 @@ class ServingPlane:
             "n_kv_hits": n_hits,
             "kv_tokens_saved": sum(r.kv_tokens_saved for r in requests),
             "capacity_envelope": fleet.capacity_envelope,
+            "queue_delay_p50": round(_percentile(waits, 0.50), 4),
+            "queue_delay_p95": round(_percentile(waits, 0.95), 4),
+            "queue_delay_p99": round(_percentile(waits, 0.99), 4),
         }
         return kpi, action
 
