@@ -21,13 +21,14 @@ from typing import Any
 MEASURED = "MEASURED"
 TRACE_DERIVED = "TRACE_DERIVED"
 BENCHMARK_DERIVED = "BENCHMARK_DERIVED"
+EXTERNAL_OBSERVED = "EXTERNAL_OBSERVED"   # a public external list/contract rate (not operator-measured)
 INFERRED = "INFERRED"
 HEURISTIC = "HEURISTIC"
 ABSENT = "ABSENT"
 
 TIER_ORDER = {
     MEASURED: 0, TRACE_DERIVED: 1, BENCHMARK_DERIVED: 2,
-    INFERRED: 3, HEURISTIC: 4, ABSENT: 5,
+    EXTERNAL_OBSERVED: 3, INFERRED: 4, HEURISTIC: 5, ABSENT: 6,
 }
 # A value is trustworthy for a headline only at these tiers.
 HEADLINE_SAFE_TIERS = frozenset({MEASURED, TRACE_DERIVED})
@@ -142,6 +143,8 @@ class ServingRequest:
     cls: str                          # "latency_critical" | "best_effort"
     kv_prefix_id: str = ""            # block-prefix id (Mooncake) for KV routing
     kv_reuse_prob: float = 0.0        # calibrated prefix-hit probability
+    kv_service_factor: float = 1.0    # stateful-KV service-time multiplier (≤1 on a hit)
+    kv_tokens_saved: int = 0          # prefill tokens skipped by a KV hit
 
 
 @dataclass
@@ -177,8 +180,8 @@ class EnvStep:
 
 
 __all__ = [
-    "MEASURED", "TRACE_DERIVED", "BENCHMARK_DERIVED", "INFERRED", "HEURISTIC", "ABSENT",
-    "TIER_ORDER", "HEADLINE_SAFE_TIERS",
+    "MEASURED", "TRACE_DERIVED", "BENCHMARK_DERIVED", "EXTERNAL_OBSERVED",
+    "INFERRED", "HEURISTIC", "ABSENT", "TIER_ORDER", "HEADLINE_SAFE_TIERS",
     "CalibratedParam", "SignalProvenance", "FleetState", "ServingRequest",
     "EnvObservation", "EnvStep",
 ]
