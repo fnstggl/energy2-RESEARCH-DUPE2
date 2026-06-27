@@ -99,3 +99,65 @@ def test_multi_class_unlocks_admission_vs_single_class():
     # multi-class: best-effort exists and admission-on cells defer some of it
     assert multi.n_best_effort > 0
     assert any(c.n_deferred > 0 for c in multi.cells if c.admission != "off")
+
+
+# --- newly CONNECTED knobs: capacity_multiplier + batching (next batch) ------
+# Each test proves the knob changes the simulator output in a causally defensible,
+# NON-free way — it buys one KPI by paying another (a real Pareto move, not a fake win).
+
+def _run(**kw):
+    return run_unified_replay(_burst_jobs(), tick_seconds=30.0, sla_s=10.0,
+                              capacity="backlog_aware", **kw)
+
+
+def test_capacity_multiplier_default_is_exact_noop():
+    """The connected default (1.0x) must reproduce today's run bit-for-bit — the knob is
+    additive, never silently rescaling the no-op baseline."""
+    bare = run_unified_replay(_burst_jobs(), tick_seconds=30.0, sla_s=10.0,
+                              capacity="backlog_aware")
+    assert _run(capacity_multiplier=1.0).to_dict() == bare.to_dict()
+
+
+def test_capacity_multiplier_buys_sla_with_more_gpu_hours_no_free_capacity():
+    """More replicas (higher multiplier) must cut SLA violations BUT cost strictly more
+    GPU-hours — capacity is never free. Monotone in both directions = a real Pareto trade."""
+    lo, mid, hi = (_run(capacity_multiplier=m) for m in (0.75, 1.0, 1.5))
+    # provisioning more capacity costs strictly more GPU-hours / dollars (no free capacity)
+    assert lo.gpu_hours < mid.gpu_hours < hi.gpu_hours
+    assert lo.cost_usd < mid.cost_usd < hi.cost_usd
+    # ...and it buys fewer SLA violations (the thing you pay for)
+    assert hi.sla_violations < mid.sla_violations < lo.sla_violations
+    # peak provisioned replicas scale up with the multiplier
+    assert hi.c_max > lo.c_max
+
+
+def test_batching_default_is_exact_noop():
+    bare = run_unified_replay(_burst_jobs(), tick_seconds=30.0, sla_s=10.0,
+                              capacity="backlog_aware")
+    assert _run(batch_concurrency=1.0, batch_service_factor=1.0).to_dict() == bare.to_dict()
+
+
+def test_batch_concurrency_cuts_queue_at_roughly_constant_gpu_hours():
+    """Per-replica concurrency packs more requests onto the same hardware → it drains the
+    queue (fewer violations, more SLA-safe goodput) WITHOUT inflating GPU-hours. This is the
+    throughput lever; service inflation (tested separately) is its honest cost."""
+    c1, c2, c4 = (_run(batch_concurrency=c, batch_service_factor=1.0) for c in (1.0, 2.0, 4.0))
+    assert c4.sla_violations < c2.sla_violations < c1.sla_violations
+    assert c4.sla_safe_goodput > c2.sla_safe_goodput > c1.sla_safe_goodput
+    # concurrency reuses existing replicas — it does NOT manufacture extra GPU-hours
+    assert c4.gpu_hours <= c1.gpu_hours * 1.05
+
+
+def test_batch_service_inflation_is_not_free():
+    """The honest cost of batching: a larger batch inflates per-request service time. Holding
+    concurrency fixed, raising ONLY the service factor must make latency strictly WORSE — more
+    violations and less SLA-safe goodput. A fake knob could not pay this price."""
+    jobs = _burst_jobs()
+
+    def tight(sf):  # a tight SLA surfaces the latency penalty cleanly
+        return run_unified_replay(jobs, tick_seconds=30.0, sla_s=5.0, capacity="backlog_aware",
+                                  batch_concurrency=1.0, batch_service_factor=sf)
+
+    s1, s13, s18 = tight(1.0), tight(1.3), tight(1.8)
+    assert s1.sla_violations < s13.sla_violations < s18.sla_violations
+    assert s1.sla_safe_goodput > s18.sla_safe_goodput

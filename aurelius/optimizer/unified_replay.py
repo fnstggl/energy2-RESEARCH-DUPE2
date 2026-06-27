@@ -334,6 +334,9 @@ def run_unified_replay(
     mcs_gate: float = 9.5,
     warmup_c: int = 4,
     best_effort_sla_s: float = 300.0,
+    capacity_multiplier: float = 1.0,
+    batch_concurrency: float = 1.0,
+    batch_service_factor: float = 1.0,
 ) -> UnifiedKPI:
     """Run one configuration of all serving surfaces in ONE event loop.
 
@@ -341,16 +344,27 @@ def run_unified_replay(
     Returns a :class:`UnifiedKPI`. The capacity controller observes the live
     backlog produced by this run's ordering+admission — the structural difference
     from the open-loop combination search.
+
+    Connected economic levers (all default to today's behaviour, 1.0):
+    - ``capacity_multiplier`` scales the sized replica count ``c`` → more replicas cut queue
+      delay but raise GPU-hours/cost (the GPU-hours denominator counts the scaled ``c``).
+    - ``batch_concurrency`` is the number of requests a replica serves at once (continuous
+      batching): more concurrency cuts queue delay at the SAME GPU-hours, but
+    - ``batch_service_factor`` inflates each batched request's service time (shared compute) →
+      higher latency / SLA risk. Together they model the real throughput↔latency batch trade.
     """
     if not jobs:
         return UnifiedKPI(capacity, ordering, admission, (), 0, 0.0, 0, 0,
                           0.0, 1e-9, 0.0, 0.0, 0, 0, 0, 0, 0, ())
+    capacity_multiplier = max(0.1, capacity_multiplier)
+    batch_concurrency = max(1.0, batch_concurrency)
+    batch_service_factor = max(0.1, batch_service_factor)
 
     jobs = sorted(jobs, key=lambda j: (j.arrival_s, j.idx))
     t_max = jobs[-1].arrival_s
     n_ticks = max(1, int(t_max / tick_seconds) + 1)
 
-    st = _State(c=max(1, warmup_c))
+    st = _State(c=max(1, round(warmup_c * capacity_multiplier)))
     cap = CapacityController(capacity, tick_seconds=tick_seconds, sla_s=sla_s,
                              mcs_gate=mcs_gate, warmup_c=warmup_c)
     adm = AdmissionController(admission)
@@ -376,7 +390,10 @@ def run_unified_replay(
     response: dict = {}
 
     def _free_sid() -> int | None:
-        for s in range(st.c):
+        # effective slots = replicas x batch concurrency (continuous batching packs more
+        # requests per replica; the GPU-hours denominator still counts physical replicas).
+        slots = max(1, int(round(st.c * batch_concurrency)))
+        for s in range(slots):
             if servers.get(s) is None:
                 return s
         return None
@@ -386,7 +403,9 @@ def run_unified_replay(
         servers[sid] = job
         s_ver[sid] = s_ver.get(sid, 0) + 1
         st.busy += 1
-        heapq.heappush(events, (t + job.service_s, _EV_COMPLETION, _en(), (sid, s_ver[sid], job)))
+        # batched requests share compute → each takes longer (batch_service_factor ≥ 1)
+        svc = job.service_s * batch_service_factor
+        heapq.heappush(events, (t + svc, _EV_COMPLETION, _en(), (sid, s_ver[sid], job)))
 
     def _dispatch() -> None:
         nonlocal backlog_peak
@@ -435,8 +454,9 @@ def run_unified_replay(
                 job.admit_s = t
                 st.wait_queue.append(job)
             st.defer_buffer = defer
-            # 2) capacity sizes the next window from the LIVE backlog + history
-            st.c = cap.decide(st)
+            # 2) capacity sizes the next window from the LIVE backlog + history, scaled by
+            #    the capacity_multiplier action (more replicas → less queue, more GPU-hours).
+            st.c = max(1, round(cap.decide(st) * capacity_multiplier))
             c_per_tick[k] = st.c
             # 3) fold realised tick history for the next forecast
             mean_svc = (st._tick_service_sum / st._tick_service_n) if st._tick_service_n else None

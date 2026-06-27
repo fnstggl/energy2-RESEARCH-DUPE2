@@ -37,6 +37,21 @@ DEFAULT_BASELINES = {
                              "admission": "off", "routing_policy": "kv_aware"},
     "aurelius_canonical_kv_routing": {"capacity": "backlog_aware", "ordering": "abs_conformal",
                                       "admission": "class_aware", "routing_policy": "kv_aware"},
+    # next-batch action-specific baselines (CONNECTED capacity_multiplier + batching). Batching's
+    # concurrency lever is a near-free throughput win, so a COMPETENT static operator simply turns
+    # it on — these baselines do, raising the bar: the MPC must beat an operator who already batches
+    # (and routes KV-aware), i.e. win by per-period ADAPTATION, not by "discovering" a fixed knob.
+    "sla_aware_batched": {"capacity": "backlog_aware", "ordering": "abs_conformal",
+                          "admission": "off", "routing_policy": "kv_aware",
+                          "batching_policy": "balanced"},
+    "aurelius_static_full": {"capacity": "backlog_aware", "ordering": "abs_conformal",
+                             "admission": "class_aware", "routing_policy": "kv_aware",
+                             "batching_policy": "balanced"},
+    # a fixed OVER-PROVISIONED operator (1.5x replicas): buys SLA headroom but pays it in gp/$ —
+    # documents the capacity Pareto point so the MPC's adaptive capacity is judged against a fixed one.
+    "sla_aware_capacity_1p5": {"capacity": "backlog_aware", "ordering": "abs_conformal",
+                               "admission": "off", "routing_policy": "kv_aware",
+                               "capacity_multiplier": 1.5},
 }
 
 

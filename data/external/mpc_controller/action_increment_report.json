@@ -1,0 +1,143 @@
+{
+  "eval_periods": [
+    126,
+    168
+  ],
+  "controller_config": {
+    "horizon": 1,
+    "risk_weight": 0.0,
+    "confidence_min": 0.1
+  },
+  "coverage": {
+    "trace_version": "AzureLLMInferenceDataset2024/1week/conv",
+    "tier": "FULL_TRACE",
+    "n_bins_exact": 168,
+    "total_requests_exact": 27303999,
+    "sample_stride": 24,
+    "granularity": "hourly"
+  },
+  "rungs": {
+    "pr99_core": {
+      "free_surfaces": [
+        "admission_policy",
+        "capacity_policy",
+        "ordering_policy",
+        "routing_policy"
+      ],
+      "frozen": {
+        "capacity_multiplier": 1.0,
+        "batching_policy": "conservative"
+      },
+      "goodput_per_dollar": 198515.53,
+      "sla_violation_rate": 0.0938,
+      "queue_delay_p95": 162.648,
+      "gpu_hours": 113.017,
+      "routing_mix": {
+        "kv_aware": 41,
+        "shortest_queue": 1
+      },
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
+    },
+    "+capacity_mult": {
+      "free_surfaces": [
+        "admission_policy",
+        "capacity_multiplier",
+        "capacity_policy",
+        "ordering_policy",
+        "routing_policy"
+      ],
+      "frozen": {
+        "batching_policy": "conservative"
+      },
+      "goodput_per_dollar": 186350.08,
+      "sla_violation_rate": 0.1797,
+      "queue_delay_p95": 444.737,
+      "gpu_hours": 107.206,
+      "routing_mix": {
+        "kv_aware": 41,
+        "shortest_queue": 1
+      },
+      "capacity_multiplier_mix": {
+        "0.75": 40,
+        "1.0": 2
+      },
+      "batching_mix": {
+        "conservative": 42
+      }
+    },
+    "+batching": {
+      "free_surfaces": [
+        "admission_policy",
+        "batching_policy",
+        "capacity_policy",
+        "ordering_policy",
+        "routing_policy"
+      ],
+      "frozen": {
+        "capacity_multiplier": 1.0
+      },
+      "goodput_per_dollar": 221657.7,
+      "sla_violation_rate": 0.01732,
+      "queue_delay_p95": 4.008,
+      "gpu_hours": 112.631,
+      "routing_mix": {
+        "kv_aware": 42
+      },
+      "capacity_multiplier_mix": {
+        "1.0": 42
+      },
+      "batching_mix": {
+        "balanced": 37,
+        "aggressive": 5
+      }
+    },
+    "full": {
+      "free_surfaces": [
+        "admission_policy",
+        "batching_policy",
+        "capacity_multiplier",
+        "capacity_policy",
+        "ordering_policy",
+        "routing_policy"
+      ],
+      "frozen": {},
+      "goodput_per_dollar": 272234.56,
+      "sla_violation_rate": 0.01856,
+      "queue_delay_p95": 9.218,
+      "gpu_hours": 91.236,
+      "routing_mix": {
+        "kv_aware": 42
+      },
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "batching_mix": {
+        "balanced": 40,
+        "aggressive": 2
+      }
+    }
+  },
+  "marginals_vs_pr99_core": {
+    "+capacity_mult": {
+      "gp_per_dollar_pct_vs_pr99_core": -6.128,
+      "sla_violation_rate_delta": 0.0859,
+      "pareto_sla_not_worse": false
+    },
+    "+batching": {
+      "gp_per_dollar_pct_vs_pr99_core": 11.658,
+      "sla_violation_rate_delta": -0.07648,
+      "pareto_sla_not_worse": true
+    },
+    "full": {
+      "gp_per_dollar_pct_vs_pr99_core": 37.135,
+      "sla_violation_rate_delta": -0.07524,
+      "pareto_sla_not_worse": true
+    }
+  },
+  "note": "SIMULATED (directional simulator evidence), not production telemetry"
+}
