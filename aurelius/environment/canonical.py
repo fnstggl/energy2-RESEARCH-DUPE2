@@ -30,7 +30,8 @@ from .fleet_plane_v2026 import (
 )
 from .schemas import EnvObservation, EnvStep
 from .serving_plane import KVReuseModel, ServingPlane
-from .validation_suite import check_distribution, run_validation
+from .validation_suite import run_validation
+from .validators import build_all_checks
 
 # Default policy: the canonical best closed-loop config (the env is policy-pluggable).
 DEFAULT_ACTION = {"capacity": "backlog_aware", "ordering": "abs_conformal",
@@ -70,14 +71,16 @@ class CanonicalMultiPlaneEnvironment:
         warp: float = 1.0,
         tick_seconds: float = 60.0,
         sla_s: float = 10.0,
+        processed_dir: str | None = None,
     ) -> None:
-        self.fleet_plane = fleet_plane or V2026FleetPlane()
+        self.fleet_plane = fleet_plane or V2026FleetPlane(processed_dir=processed_dir)
         self.serving_plane = serving_plane or ServingPlane()
         self.cost_model = cost_model or CostModel()
         self.mooncake_path = mooncake_path
         self.warp = warp
         self.tick_seconds = tick_seconds
         self.sla_s = sla_s
+        self.processed_dir = processed_dir
         self._bridge: CalibrationBridge | None = None
 
     # -- calibration -----------------------------------------------------
@@ -94,6 +97,7 @@ class CanonicalMultiPlaneEnvironment:
 
     def manifest(self) -> FidelityManifest:
         params = list(self._bridge.params) if self._bridge else []
+        params += self.fleet_plane.full_trace_params()   # FULL_TRACE_EXACT fleet marginals
         params += self.cost_model.params()
         return FidelityManifest.from_params(params)
 
@@ -146,26 +150,28 @@ class CanonicalMultiPlaneEnvironment:
                 metrics={"kpi": kpi.to_dict(), "cost": cost.to_dict(),
                          "gpu_type": gpu_type}))
 
-        validation = self.validate().to_dict()
+        validation = self.validate(processed_dir=self.processed_dir).to_dict()
         return EnvironmentResult(
             steps=steps, total_goodput=total_goodput, total_cost=total_cost,
             goodput_per_dollar=total_goodput / max(total_cost, 1e-9),
             manifest=self.manifest().to_dict(), validation=validation)
 
     # -- validation ------------------------------------------------------
-    def validate(self):
-        """Held-out distribution match: the env's served token + inter-arrival
-        distributions vs the Azure holdout slice (seeded end-to-end checks)."""
-        bridge = self._bridge
-        checks = []
-        if bridge:
-            checks.append(check_distribution(
-                "azure_token_distribution", bridge.holdout["train_tokens"],
-                bridge.holdout["azure_tokens"]))
-            checks.append(check_distribution(
-                "azure_interarrival", bridge.holdout["train_interarrival"],
-                bridge.holdout["azure_interarrival"], tolerance=0.20, warn_tolerance=0.35))
-        params = list(bridge.params) if bridge else []
+    def validate(self, *, processed_dir: str | None = None):
+        """Full held-out distribution validation across all four planes.
+
+        Azure (token + inter-arrival, held-out time split), v2026 fleet (the env's
+        committed sample vs the FULL_TRACE_EXACT artifacts), Mooncake KV (train vs
+        holdout prefix reuse), and electricity (price sanity / held-out ISO skipped).
+        Each check carries its real reference's data tier; SKIPPED checks name the
+        exact artifact/command required. The overall verdict is capped by the
+        honesty gate (NOT_PRODUCTION_REALISTIC_YET unless every calibrated param is
+        ≥ TRACE_DERIVED)."""
+        checks = build_all_checks(
+            bridge=self._bridge, fleet_plane=self.fleet_plane,
+            processed_dir=processed_dir or self.processed_dir)
+        params = list(self._bridge.params) if self._bridge else []
+        params += self.fleet_plane.full_trace_params()
         params += self.cost_model.params()
         return run_validation(checks, params)
 

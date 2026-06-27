@@ -20,6 +20,7 @@ import os
 from collections import defaultdict
 
 from ..datasets.calibration import alibaba_v2026_serving_class_mix
+from .ingestion import v2026_artifacts
 from .schemas import TRACE_DERIVED, CalibratedParam, FleetState
 
 # Repo-root-relative default sample slices (substitute the full trace when present).
@@ -76,6 +77,43 @@ def load_electricity(path: str = SAMPLE_ELECTRICITY) -> dict:
     return {"region": region, "by_hour": out}
 
 
+def full_trace_marginals(processed_dir: str | None = None) -> dict | None:
+    """Global fleet marginals from the FULL_TRACE_EXACT v2026 calibration artifacts.
+
+    These are the real population distributions (6.5 B pod rows etc.) the
+    environment calibrates its fleet DISTRIBUTIONS to — util/memory means, priority
+    and GPU-type mixes, queue/ready delay, GPU request, network rx/tx. Returns
+    ``None`` if the pod artifact is absent (env falls back to the sample). Topology
+    and scale (GPU counts, racks) stay sample-derived; only distributions anchor."""
+    pdir = processed_dir or v2026_artifacts.PROCESSED_DIR
+    pod = v2026_artifacts.load_table("pod_hourly", pdir)
+    if pod is None:
+        return None
+    srv = v2026_artifacts.load_table("server_hourly", pdir) or {"artifacts": {}, "label": "n/a"}
+    net = v2026_artifacts.load_table("network_hourly", pdir) or {"artifacts": {}, "label": "n/a"}
+    pa, sa, na = pod["artifacts"], srv["artifacts"], net["artifacts"]
+    jt = (pa.get("job_type_public") or {}).get("fractions", {})
+    online = jt.get("online_inference", 0.0)
+    offline = jt.get("offline_inference", 0.0)
+    be = offline / (online + offline) if (online + offline) > 0 else 0.0
+    return {
+        "util_mean_pct": pa["gpu_sm_util"]["mean"],                      # 0..100
+        "mem_util_mean": (pa.get("gpu_mem_util") or {}).get("mean", 0.0),  # 0..1
+        "priority_mix": (pa.get("priority_class") or {}).get("fractions", {}),
+        "job_type_mix": jt,
+        "best_effort_fraction": round(be, 4),
+        "queue_delay_mean_s": (pa.get("schedule_delay_s") or {}).get("mean", 0.0),
+        "ready_delay_mean_s": (pa.get("ready_delay_s") or {}).get("mean", 0.0),
+        "gpu_request_mean": (pa.get("gpu_request") or {}).get("mean", 0.0),
+        "gpu_type_mix": (sa.get("gpu_type") or {}).get("fractions", {}),
+        "rx_mean": (na.get("rx_gibps") or {}).get("mean", 0.0),
+        "tx_mean": (na.get("tx_gibps") or {}).get("mean", 0.0),
+        "pod_label": pod.get("label", "n/a"),
+        "server_label": srv.get("label", "n/a"),
+        "network_label": net.get("label", "n/a"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # The v2026-native fleet plane
 # ---------------------------------------------------------------------------
@@ -97,6 +135,8 @@ class V2026FleetPlane:
         electricity_path: str = SAMPLE_ELECTRICITY,
         net_ref_gibps: float = 50.0,
         trace_version: str = "v2026-sample",
+        processed_dir: str | None = None,
+        anchor_full_trace: bool = True,
     ) -> None:
         self.pods = load_pod_hourly(pod_path)
         self.servers = load_server_hourly(server_path)
@@ -107,6 +147,16 @@ class V2026FleetPlane:
         self.net_ref_gibps = net_ref_gibps
         self.trace_version = trace_version
         self._class_mix = alibaba_v2026_serving_class_mix(pod_path)
+        # When the FULL_TRACE_EXACT artifacts are available, anchor the fleet
+        # DISTRIBUTIONS (util/mem/mixes/delays/network) to the real 6.5 B-row
+        # marginals; topology/scale stay sample-derived. Opt-out via processed_dir
+        # left None or anchor_full_trace=False (keeps the legacy sample behaviour).
+        self.full_trace = (full_trace_marginals(processed_dir)
+                           if (processed_dir is not None and anchor_full_trace) else None)
+        if self.full_trace is not None:
+            self.trace_version = "v2026-full_trace_exact"
+        self._mean_price = (sum(self.price_by_hour.values()) / len(self.price_by_hour)
+                            if self.price_by_hour else 0.06)
 
         self._pods_by_hour = self._group(self.pods)
         self._servers_by_hour = self._group(self.servers)
@@ -153,6 +203,42 @@ class V2026FleetPlane:
                 "energy_price_per_kwh", fs.energy_price_per_kwh, f"iso_{self.region.lower()}",
                 "electricity.price_per_kwh", "hour-of-day lookup", "n/a", self.trace_version,
                 TRACE_DERIVED, "regional marginal price; PUE/depreciation in CostModel", False),
+        ]
+
+    def full_trace_params(self) -> list:
+        """Provenance for the fleet DISTRIBUTIONS anchored to the FULL_TRACE_EXACT
+        artifacts (empty if not anchored). Tier is TRACE_DERIVED (fitted from a real
+        public trace — here the full population) → headline-safe; the FULL_TRACE_EXACT
+        source and the SAMPLE_FIXTURE temporal caveat are recorded in the method/note."""
+        ft = self.full_trace
+        if ft is None:
+            return []
+
+        def _p(name, value, col, method):
+            return CalibratedParam(
+                name=name, value=value, source_dataset="alibaba_gpu_v2026",
+                table_column=col, fitting_method=method,
+                train_holdout_split="full population (all 4440 partitions; no holdout split)",
+                trace_version=self.trace_version, tier=TRACE_DERIVED,
+                limitations="FULL_TRACE_EXACT global marginal; per-hour temporal shape "
+                            "is SAMPLE_FIXTURE (v2026 has no per-hour breakdown)",
+                safe_for_headline=True)
+
+        return [
+            _p("fleet_gpu_utilization", round(ft["util_mean_pct"] / 100.0, 4),
+               "pod_hourly.avg_gpu_sm_util", "full-trace mean (FULL_TRACE_EXACT)"),
+            _p("fleet_gpu_memory_util", round(ft["mem_util_mean"], 4),
+               "pod_hourly.avg_memory_util", "full-trace mean (FULL_TRACE_EXACT)"),
+            _p("fleet_priority_mix", ft["priority_mix"],
+               "pod_hourly.priority_class", "full-trace fractions (FULL_TRACE_EXACT)"),
+            _p("fleet_gpu_type_mix", ft["gpu_type_mix"],
+               "server_hourly.gpu_spec_public", "full-trace fractions (FULL_TRACE_EXACT)"),
+            _p("fleet_queue_delay_s", round(ft["queue_delay_mean_s"], 2),
+               "pod_hourly.schedule_delay_sec", "full-trace mean (FULL_TRACE_EXACT)"),
+            _p("fleet_gpu_request", round(ft["gpu_request_mean"], 4),
+               "pod_hourly.gpu_request", "full-trace mean (FULL_TRACE_EXACT)"),
+            _p("fleet_network_rx_tx", round(ft["rx_mean"] + ft["tx_mean"], 4),
+               "network_hourly.rx/tx_gibps_avg", "full-trace mean (FULL_TRACE_EXACT)"),
         ]
 
     def state_at(self, hour: int) -> FleetState:
@@ -208,19 +294,41 @@ class V2026FleetPlane:
 
         be = self._class_mix.best_effort_fraction_by_count
         price = self.price_by_hour.get(hour % 24, self.price_by_hour.get(0, 0.06))
+        queue_delay_s = sum(sched) / len(sched) if sched else 0.0
+        ready_delay_s = sum(ready) / len(ready) if ready else 0.0
 
         fidelity = {k: TRACE_DERIVED for k in (
             "util_target", "mem_pressure", "priority_mix", "best_effort_fraction",
             "queue_delay_s", "gpu_type_inventory", "rack_locality", "net_pressure",
             "fragmentation", "capacity_envelope", "energy_price_per_kwh")}
 
+        ft = self.full_trace
+        if ft is not None:
+            # Anchor DISTRIBUTIONS to the full-trace marginals. v2026 is globally
+            # aggregated (no per-hour breakdown), so the honest representation is a
+            # CONSTANT marginal across hours — the only legitimately-hourly cost
+            # signal, the regional electricity price, still varies (real ISO series).
+            # Topology/scale (GPU counts, racks, capacity) stay sample-derived.
+            util_target = max(0.0, min(1.0, ft["util_mean_pct"] / 100.0))
+            mem_pressure = max(0.0, min(1.0, ft["mem_util_mean"]))
+            priority_mix = dict(ft["priority_mix"]) or priority_mix
+            be = ft["best_effort_fraction"] or be
+            queue_delay_s = ft["queue_delay_mean_s"]
+            ready_delay_s = ft["ready_delay_mean_s"]
+            net_pressure = max(0.0, min(1.0, (ft["rx_mean"] + ft["tx_mean"]) / self.net_ref_gibps))
+            if ft["gpu_type_mix"]:
+                mix = dict(ft["gpu_type_mix"])
+            fidelity.update({k: "FULL_TRACE_EXACT" for k in (
+                "util_target", "mem_pressure", "priority_mix", "best_effort_fraction",
+                "queue_delay_s", "net_pressure", "gpu_type_mix")})
+            fidelity.update({k: "SAMPLE_FIXTURE" for k in (
+                "total_gpus", "gpu_type_inventory", "rack_locality", "capacity_envelope")})
+
         return FleetState(
             hour=hour, total_gpus=total_gpus, gpu_type_inventory=dict(inv),
             gpu_type_mix=mix, util_target=util_target, util_by_class=util_by_class,
             mem_pressure=mem_pressure, priority_mix=priority_mix,
-            best_effort_fraction=be,
-            queue_delay_s=(sum(sched) / len(sched) if sched else 0.0),
-            ready_delay_s=(sum(ready) / len(ready) if ready else 0.0),
+            best_effort_fraction=be, queue_delay_s=queue_delay_s, ready_delay_s=ready_delay_s,
             rack_locality=dict(rack), net_pressure=net_pressure,
             capacity_envelope=capacity_envelope, fragmentation=fragmentation,
             energy_price_per_kwh=price, region=self.region, fidelity=fidelity)
