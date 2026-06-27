@@ -114,6 +114,34 @@ ACTION_SPECS: dict = {
         "per-replica continuous-batching concurrency + service inflation (run_unified_replay)",
         "INFERRED magnitudes (public prior; not trace-calibrated) — sanity-banded",
         roadmap="N1", reward_channel="run_unified_replay"),
+    # stateful infrastructure actions — CONNECTED via the world_simulator channel (a persistent
+    # cluster of server/rack/replica/warm/migration state; see world_state.py + world_simulator.py).
+    # Each changes the per-period service factor / warm-capacity ramp / operator cost, so it moves
+    # goodput/$ — and each can HURT (over-warm wastes warm-hold; migration costs before it pays),
+    # so none can fake a win. Defaults are the no-op (collapse to the stateless PR-#100 path).
+    "prewarm_policy": ActionSpec(
+        "prewarm_policy", "prewarming / pre-positioning", CONNECTED,
+        ("off", "conservative", "aggressive"), None,
+        "warm-pool state + cold-start ramp in world_simulator (warm replicas avoid the cold_start_s "
+        "serving gap; prewarming pays warm-hold GPU-hours, wasted if the load does not arrive)",
+        "BENCHMARK_DERIVED cold-start magnitude (vLLM/TGI model-load regime, order-checked vs the "
+        "v2026 ready_delay distribution); live warm state remains SIMULATED until pilot telemetry",
+        roadmap="N7", reward_channel="world_simulator"),
+    "placement_policy": ActionSpec(
+        "placement_policy", "topology-aware placement (replica → rack)", CONNECTED,
+        ("topology_blind", "rack_local", "network_aware"), None,
+        "world_simulator macro topology service-time discount from rack locality + the v2026 macro "
+        "network pressure (network_aware prefers the lowest-pressure racks); topology_blind = no-op",
+        "MACRO ONLY — v2026 asw/rack + network_hourly rx/tx marginals; NO per-link / NVLink / "
+        "NVSwitch / PFC-ECN / congestion / hardware-health (all ABSENT)",
+        roadmap="N4", reward_channel="world_simulator"),
+    "migration_policy": ActionSpec(
+        "migration_policy", "migration / consolidation", CONNECTED,
+        ("off", "conservative", "aggressive"), None,
+        "world_simulator live move: operator cost + capacity loss + KV cache invalidation THIS "
+        "period, locality benefit only AFTER the move lands next period (persistent MigrationState)",
+        "BENCHMARK_DERIVED move cost / duration; real operator migration reasons ABSENT (pilot)",
+        roadmap="N6", reward_channel="world_simulator"),
     # ---- SIMULATED_ONLY (opt in with an explicit flag) ----
     "kv_routing_policy": ActionSpec(
         "kv_routing_policy", "per-request KV prefix routing (finer than routing_policy)",
@@ -132,10 +160,6 @@ ACTION_SPECS: dict = {
         "kv_placement_policy", "KV placement / eviction", PLANNED,
         ("lru", "reuse_aware"), None, "StatefulKVCache LRU is simulated STATE, not an action",
         "needs an eviction/placement lever + counterfactual sim"),
-    "prewarm_policy": ActionSpec(
-        "prewarm_policy", "prewarming / pre-positioning", PLANNED,
-        ("off", "forecast_driven"), None, "no warm-pool state; cold start not modelled",
-        "needs warm-pool state + cold-start tax (arrival forecast exists)", roadmap="N7"),
     "clock_policy": ActionSpec(
         "clock_policy", "clock / DVFS / power shaping", PLANNED,
         ("nominal", "low", "high"), None, "service time is fixed (TTFT + tokens·TPOT)",
@@ -153,16 +177,6 @@ ACTION_SPECS: dict = {
         ("off", "defer_to_cheap"), None,
         "price IS in the objective (CostModel), but there is no shifting action",
         "needs a temporal-shift / power-shape action the simulator honours", roadmap="N2"),
-    "migration_policy": ActionSpec(
-        "migration_policy", "migration", PLANNED,
-        ("off", "consolidate"), None, "no migration state/cost/simulator branch",
-        "needs a live-move cost model + replica-assignment state"),
-    # ---- PLANNED, with fidelity gated on pilot telemetry ----
-    "placement_policy": ActionSpec(
-        "placement_policy", "placement / packing (job → node/rack)", REQUIRES_PILOT_TELEMETRY,
-        ("off", "topology_aware"), None,
-        "v2026 topology is anchored marginals; serving servers are homogeneous",
-        "needs a topology placement simulator; live residency/health is ABSENT (pilot)"),
 }
 
 # Derived views.
@@ -190,12 +204,12 @@ class ActionBundle:
     topology_policy: str = "off"
     kv_placement_policy: str = "lru"
     prewarm_policy: str = "off"
+    placement_policy: str = "topology_blind"
+    migration_policy: str = "off"
     clock_policy: str = "nominal"
     precision_policy: str = "full"
     spec_decode_policy: str = "off"
     energy_policy: str = "off"
-    migration_policy: str = "off"
-    placement_policy: str = "off"
 
     def connected_kwargs(self) -> dict:
         """The lever subset passed DIRECTLY to run_unified_replay (capacity/ordering/admission).

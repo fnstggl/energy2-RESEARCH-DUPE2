@@ -52,12 +52,21 @@ DEFAULT_BASELINES = {
     "sla_aware_capacity_1p5": {"capacity": "backlog_aware", "ordering": "abs_conformal",
                                "admission": "off", "routing_policy": "kv_aware",
                                "capacity_multiplier": 1.5},
+    # stateful-action baselines (only bite on the --world-state path; harmless no-ops otherwise).
+    # A competent static operator already places topology-aware → the MPC must beat THAT, not merely
+    # "discover" placement. always-prewarm is the fair upper bound on prewarming (and shows its cost).
+    "world_static_best": {"capacity": "backlog_aware", "ordering": "abs_conformal",
+                          "admission": "class_aware", "routing_policy": "kv_aware",
+                          "batching_policy": "balanced", "placement_policy": "network_aware"},
+    "prewarm_always": {"capacity": "backlog_aware", "ordering": "abs_conformal", "admission": "off",
+                       "routing_policy": "kv_aware", "batching_policy": "balanced",
+                       "placement_policy": "network_aware", "prewarm_policy": "aggressive"},
 }
 
 
 def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
                      processed_dir: str | None = None, hourly_stride: int = 24,
-                     sim_seconds: float = 240.0) -> dict | None:
+                     sim_seconds: float = 240.0, use_world_state: bool = False) -> dict | None:
     """Build the (frames, per-period real trace, fleet state, cost model, common) inputs
     from the canonical sources.
 
@@ -125,6 +134,11 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
               "kv_service_factor": kv_factor, "cost_scenario": "owned",
               "sim_seconds": (sim_seconds if cycle_len == 24 else None),
               "kv_service_factor_by_routing": kv_by_routing}
+    if use_world_state:
+        # persistent world: a TRACE_DERIVED_SAMPLE cluster sampled from the SAME v2026 processed
+        # marginals the fleet is calibrated to. Fresh per arm/config (isolated timelines).
+        common["world_state_params"] = {"n_servers": 24, "n_racks": 4, "seed": 0, "warm": 8,
+                                        "processed_dir": processed_dir}
     return {"frames": frames, "per": per, "fleet_state": fleet, "cost_model": CostModel(),
             "common": common, "coverage": coverage, "kv_routing": rmap}
 
@@ -142,7 +156,21 @@ def train_forecasters(frames: list, train_cut: int, *, train_frac: float = 0.7) 
     return fm, fm.report()
 
 
-def _controller(fm, fleet_state, cost_model, cfg, common):
+def make_world_state(params: dict | None):
+    """Build a fresh, warm-seeded persistent world state from ``params`` (or None to disable).
+    A fresh state per arm/config keeps the stateful timelines isolated; the seed is fixed so the
+    sampled cluster is reproducible."""
+    if not params:
+        return None
+    from .world_simulator import initialize_world_state, warm_seed
+    ws = initialize_world_state(n_servers=params.get("n_servers", 24),
+                                n_racks=params.get("n_racks", 4), seed=params.get("seed", 0),
+                                processed_dir=params.get("processed_dir"))
+    warm_seed(ws, params.get("warm", 16))
+    return ws
+
+
+def _controller(fm, fleet_state, cost_model, cfg, common, world_state=None):
     return ModelPredictiveEconomicController(
         forecasters=fm, fleet_state=fleet_state, cost_model=cost_model,
         horizon=cfg["horizon"], risk_weight=cfg["risk_weight"],
@@ -151,7 +179,7 @@ def _controller(fm, fleet_state, cost_model, cfg, common):
         kv_service_factor=common.get("kv_service_factor", 1.0),
         kv_service_factor_by_routing=common.get("kv_service_factor_by_routing"),
         cost_scenario=common.get("cost_scenario", "owned"),
-        sim_seconds=common.get("sim_seconds"))
+        sim_seconds=common.get("sim_seconds"), world_state=world_state)
 
 
 def tune_controller(fm, frames, per, val_idx, *, fleet_state, cost_model,
@@ -160,12 +188,15 @@ def tune_controller(fm, frames, per, val_idx, *, fleet_state, cost_model,
     grid = grid or DEFAULT_GRID
     common = common or {}
     keys = list(grid)
+    wsp = common.get("world_state_params")
     best_cfg, best_gpd, results = None, -1.0, []
     for combo in itertools.product(*(grid[k] for k in keys)):
         cfg = dict(zip(keys, combo))
-        ctrl = _controller(fm, fleet_state, cost_model, cfg, common)
+        ws = make_world_state(wsp)                 # fresh persistent state per config (isolated)
+        ctrl = _controller(fm, fleet_state, cost_model, cfg, common, world_state=ws)
         rep = run_period_episode("mpc", lambda h: ctrl.decide(h).to_dict(), per, frames, val_idx,
-                                 fleet_state=fleet_state, cost_model=cost_model, **common)
+                                 fleet_state=fleet_state, cost_model=cost_model,
+                                 world_state=ws, **common)
         results.append({"cfg": cfg, "val_gpd": round(rep.goodput_per_dollar, 2)})
         if rep.goodput_per_dollar > best_gpd:
             best_cfg, best_gpd = cfg, rep.goodput_per_dollar
@@ -230,14 +261,17 @@ def evaluate_mpc(trained, fm, frames, per, *, fleet_state, cost_model,
     common = common or trained.get("common", {"sla_s": 10.0, "period_seconds": 60.0, "tick_seconds": 10.0})
     e0, e1 = trained["splits"]["eval"]
     eval_idx = list(range(e0, e1))
-    ctrl = _controller(fm, fleet_state, cost_model, trained["controller_config"], common)
+    wsp = common.get("world_state_params")
+    mpc_ws = make_world_state(wsp)                  # mpc arm: controller + episode SHARE one state
+    ctrl = _controller(fm, fleet_state, cost_model, trained["controller_config"], common,
+                       world_state=mpc_ws)
     arms = {"mpc_controller": run_period_episode(
         "mpc_controller", lambda h: ctrl.decide(h).to_dict(), per, frames, eval_idx,
-        fleet_state=fleet_state, cost_model=cost_model, **common)}
+        fleet_state=fleet_state, cost_model=cost_model, world_state=mpc_ws, **common)}
     for name, action in baselines.items():
-        arms[name] = run_period_episode(
+        arms[name] = run_period_episode(            # each baseline gets its own fresh state
             name, (lambda act: (lambda h: dict(act)))(action), per, frames, eval_idx,
-            fleet_state=fleet_state, cost_model=cost_model, **common)
+            fleet_state=fleet_state, cost_model=cost_model, world_state=make_world_state(wsp), **common)
     gate = claim_gate(arms)
     return {"eval_periods": len(eval_idx), "controller_config": trained["controller_config"],
             "arms": {n: r.to_dict() for n, r in arms.items()}, "gate": gate,
@@ -247,5 +281,5 @@ def evaluate_mpc(trained, fm, frames, per, *, fleet_state, cost_model,
 __all__ = [
     "DEFAULT_GRID", "DEFAULT_BASELINES", "WEAK_BASELINES", "SLA_AWARE_FALLBACK",
     "build_mpc_inputs", "split_cuts", "train_forecasters", "tune_controller",
-    "train_mpc_policy", "claim_gate", "evaluate_mpc",
+    "train_mpc_policy", "claim_gate", "evaluate_mpc", "make_world_state",
 ]

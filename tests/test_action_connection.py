@@ -100,17 +100,18 @@ def test_routing_choice_changes_episode_service_factor_and_goodput():
 def test_generator_searches_connected_space_no_silent_exclusion():
     g = CandidateBundleGenerator()
     surfaces = g.surfaces()
-    # routing + capacity_multiplier + batching are now searched dimensions
-    assert {"routing_policy", "capacity_multiplier", "batching_policy"} <= set(surfaces)
+    # routing + capacity_multiplier + batching + the stateful trio are all searched dimensions
+    assert {"routing_policy", "capacity_multiplier", "batching_policy",
+            "prewarm_policy", "placement_policy", "migration_policy"} <= set(surfaces)
     assert all(ACTION_SPECS[s].status == CONNECTED for s in surfaces)
-    assert g.theoretical_combinations() == 324                # 3 x 2 x 2 x 3 x 3 x 3
+    assert g.theoretical_combinations() == 8748              # 3·2·2·3·3·3·3·3·3
 
 
 def test_generator_freezing_is_explicit_with_reason():
     g = CandidateBundleGenerator(frozen={"capacity_policy": "backlog_aware"},
                                  frozen_reasons={"capacity_policy": "pinned by operator"})
     assert "capacity_policy" not in g.surfaces()              # frozen → not searched
-    assert g.theoretical_combinations() == 108                # 324 / 3
+    assert g.theoretical_combinations() == 2916               # 8748 / 3
     # every generated bundle honours the freeze
     assert all(b.capacity_policy == "backlog_aware" for b in g.generate()[0])
 
@@ -125,9 +126,9 @@ def test_plan_bundle_searches_large_space_via_coordinate_descent():
         return s, 0.1
     best, report = plan_bundle(g, score_fn)
     d = report.to_dict()
-    assert d["connected_dimensions"] == 6 and d["theoretical_combinations"] == 324
-    # the space (324) exceeds the exhaustive budget → coordinate descent, no full enumeration
-    assert d["method"] == "coordinate_descent" and d["candidates_evaluated"] < 324
+    assert d["connected_dimensions"] == 9 and d["theoretical_combinations"] == 8748
+    # the space (8748) far exceeds the exhaustive budget → coordinate descent, no full enumeration
+    assert d["method"] == "coordinate_descent" and d["candidates_evaluated"] < 8748
     assert best.capacity_policy == "backlog_aware" and best.routing_policy == "kv_aware"
     assert best.capacity_multiplier == 1.5
     surfaces_ranked = [a["surface"] for a in d["ablation"]]
