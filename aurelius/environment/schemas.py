@@ -142,6 +142,8 @@ class ServingRequest:
     cls: str                          # "latency_critical" | "best_effort"
     kv_prefix_id: str = ""            # block-prefix id (Mooncake) for KV routing
     kv_reuse_prob: float = 0.0        # calibrated prefix-hit probability
+    kv_service_factor: float = 1.0    # stateful-KV service-time multiplier (≤1 on a hit)
+    kv_tokens_saved: int = 0          # prefill tokens skipped by a KV hit
 
 
 @dataclass

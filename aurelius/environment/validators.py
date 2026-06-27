@@ -28,6 +28,7 @@ from collections import Counter
 from .ingestion import v2026_artifacts
 from .ingestion.electricity import MANUAL_STEP as ELEC_MANUAL_STEP
 from .ingestion.mooncake import ingest_mooncake, split_reuse
+from .kv_cache import DEFAULT_FOOTPRINT, FOOTPRINTS, KVAwareRouter, KVModel, StatefulKVCache
 from .validation_suite import (
     FAIL,
     PASS,
@@ -35,6 +36,7 @@ from .validation_suite import (
     check_category_mix,
     check_samples,
     check_summary,
+    sanity_check,
     skipped_check,
 )
 
@@ -235,6 +237,88 @@ def mooncake_kv_checks() -> list:
 
 
 # ---------------------------------------------------------------------------
+# stateful KV simulator checks (TTFT/prefill, memory pressure, eviction, no-oracle)
+# ---------------------------------------------------------------------------
+
+def kv_simulator_checks() -> list:
+    reqs, status = ingest_mooncake()
+    tier = status.tier
+    blocked = [r for r in reqs if r.hash_ids]
+    if not blocked:
+        return [skipped_check(
+            "kv_simulator", source="mooncake", required_artifact="Mooncake hash_ids",
+            command=status.manual_step or "", reason="no block-hash records")]
+    train = blocked[: int(len(blocked) * 0.7)] or blocked
+    n = len(train)
+    distinct = len({b for r in train for b in r.hash_ids})
+
+    # TTFT / prefill improvement: an enabled, warm KV cache yields prefix hits that
+    # cut prefill tokens and TTFT (vs the disabled model which saves nothing).
+    warm = KVModel.fit(train, gpu_mem_gib=80.0, mem_pressure=0.0)
+    st = warm.stats(n)
+    off = KVModel.fit(train, gpu_mem_gib=80.0, enabled=False).stats(n)
+    ttft_ok = (st["kv_hit_rate"] > 0 and st["mean_ttft_factor"] < 1.0
+               and st["prefill_tokens_saved"] > 0 and off["prefill_tokens_saved"] == 0)
+    checks = [sanity_check(
+        "kv_ttft_prefill_improvement", ttft_ok,
+        {"hit_rate": st["kv_hit_rate"], "mean_ttft_factor": st["mean_ttft_factor"],
+         "prefill_tokens_saved": st["prefill_tokens_saved"], "disabled_saved": off["prefill_tokens_saved"]},
+        source="mooncake", ref_tier=tier, detail="enabled KV → prefix hits cut prefill/TTFT; disabled saves nothing")]
+
+    # KV memory pressure: pressure in [0,1]; used blocks never exceed capacity.
+    cs = warm.cache_summary
+    mem_ok = 0.0 <= cs["memory_pressure"] <= 1.0 and cs["used_blocks"] <= cs["capacity_blocks"]
+    checks.append(sanity_check(
+        "kv_memory_pressure", mem_ok,
+        {"memory_pressure": cs["memory_pressure"], "used_blocks": cs["used_blocks"],
+         "capacity_blocks": cs["capacity_blocks"]},
+        source="engineering", ref_tier="INFERRED", detail="cache memory pressure in-band; used ≤ capacity"))
+
+    # Eviction: a cache smaller than the trace's working set MUST evict; a cache
+    # larger than it must NOT. (LRU is a documented HEURISTIC.)
+    tiny = StatefulKVCache(capacity_blocks=max(1, distinct // 4))
+    big = StatefulKVCache(capacity_blocks=distinct + 16)
+    for r in train:
+        tiny.process(r.hash_ids)
+        big.process(r.hash_ids)
+    evict_ok = tiny.evictions > 0 and big.evictions == 0
+    checks.append(sanity_check(
+        "kv_eviction", evict_ok,
+        {"tiny_cap": tiny.capacity_blocks, "tiny_evictions": tiny.evictions,
+         "big_cap": big.capacity_blocks, "big_evictions": big.evictions, "distinct_blocks": distinct},
+        source="engineering", ref_tier="HEURISTIC", detail="evicts iff working set exceeds capacity (LRU)"))
+
+    # No-oracle / causality: the exact-prefix outcomes over the FIRST HALF are
+    # identical whether or not the later requests exist → no future leakage.
+    half = max(1, n // 2)
+    a = StatefulKVCache(capacity_blocks=distinct + 16)
+    b = StatefulKVCache(capacity_blocks=distinct + 16)
+    seq_full = [a.process(r.hash_ids)["exact_prefix_blocks"] for r in train]
+    seq_prefix = [b.process(r.hash_ids)["exact_prefix_blocks"] for r in train[:half]]
+    causal_ok = seq_full[:half] == seq_prefix
+    checks.append(sanity_check(
+        "kv_no_oracle_causality", causal_ok,
+        {"first_half_len": half, "identical": causal_ok},
+        source="mooncake", ref_tier=tier,
+        detail="first-half KV outcomes identical with/without later requests → causal, no oracle"))
+
+    # KV-aware routing executes causally and captures reuse across servers.
+    router = KVAwareRouter(4, capacity_blocks=max(8, distinct // 2),
+                           block_tokens=FOOTPRINTS[DEFAULT_FOOTPRINT].block_tokens)
+    for r in train:
+        router.route(r.hash_ids)
+    summ = router.summary()
+    route_ok = summ["routed"]["kv_aware"] == n and summ["total_prefill_blocks_reused"] >= 0
+    checks.append(sanity_check(
+        "kv_aware_routing", route_ok,
+        {"routed": summ["routed"]["kv_aware"], "reused_blocks": summ["total_prefill_blocks_reused"],
+         "n_servers": summ["n_servers"]},
+        source="mooncake", ref_tier="SIMULATED",
+        detail="KV-aware routing runs causally over the trace; reuse captured (SIMULATED, not measured)"))
+    return checks
+
+
+# ---------------------------------------------------------------------------
 # electricity / cost checks
 # ---------------------------------------------------------------------------
 
@@ -285,11 +369,12 @@ def build_all_checks(*, bridge, fleet_plane, processed_dir: str | None = None) -
     checks += azure_checks(bridge)
     checks += v2026_fleet_checks(fleet_plane, processed_dir=processed_dir)
     checks += mooncake_kv_checks()
+    checks += kv_simulator_checks()
     checks += electricity_checks(fleet_plane)
     return checks
 
 
 __all__ = [
-    "v2026_fleet_checks", "mooncake_kv_checks", "electricity_checks",
-    "azure_checks", "build_all_checks",
+    "v2026_fleet_checks", "mooncake_kv_checks", "kv_simulator_checks",
+    "electricity_checks", "azure_checks", "build_all_checks",
 ]

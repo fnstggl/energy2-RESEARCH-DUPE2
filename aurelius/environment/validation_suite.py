@@ -237,6 +237,17 @@ def check_category_mix(
         verdict=_verdict(tv, tolerance, warn_tolerance))
 
 
+def sanity_check(
+    kind: str, ok: bool, metrics: dict, *, source: str, ref_tier: str, detail: str = "",
+) -> ValidationCheck:
+    """A boolean sanity invariant (eviction-when-over-capacity, causality, in-band
+    pressure, …) → PASS/FAIL with the supporting numbers."""
+    return ValidationCheck(
+        kind=kind, source=source, ref_tier=ref_tier, mode="sanity",
+        metric=0.0 if ok else 1.0, metric_name="invariant_holds", metrics=metrics,
+        tolerance=0.5, warn_tolerance=0.5, verdict=PASS if ok else FAIL, detail=detail)
+
+
 def skipped_check(
     kind: str, *, source: str, required_artifact: str, command: str, reason: str = "",
 ) -> ValidationCheck:

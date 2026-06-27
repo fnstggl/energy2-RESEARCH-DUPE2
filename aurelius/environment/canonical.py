@@ -28,8 +28,10 @@ from .fidelity_manifest import FidelityManifest
 from .fleet_plane_v2026 import (
     V2026FleetPlane,
 )
+from .ingestion.mooncake import ingest_mooncake
+from .kv_cache import KVModel, gpu_mem_for
 from .schemas import EnvObservation, EnvStep
-from .serving_plane import KVReuseModel, ServingPlane
+from .serving_plane import ServingPlane
 from .validation_suite import run_validation
 from .validators import build_all_checks
 
@@ -72,6 +74,7 @@ class CanonicalMultiPlaneEnvironment:
         tick_seconds: float = 60.0,
         sla_s: float = 10.0,
         processed_dir: str | None = None,
+        kv_enabled: bool = True,
     ) -> None:
         self.fleet_plane = fleet_plane or V2026FleetPlane(processed_dir=processed_dir)
         self.serving_plane = serving_plane or ServingPlane()
@@ -81,7 +84,10 @@ class CanonicalMultiPlaneEnvironment:
         self.tick_seconds = tick_seconds
         self.sla_s = sla_s
         self.processed_dir = processed_dir
+        self.kv_enabled = kv_enabled
         self._bridge: CalibrationBridge | None = None
+        self._kv: KVModel | None = None
+        self._kv_source_tier = "n/a"
 
     # -- calibration -----------------------------------------------------
     def calibrate(self, azure_raw: list) -> CalibrationBridge:
@@ -90,14 +96,32 @@ class CanonicalMultiPlaneEnvironment:
             azure_raw, mooncake_path=self.mooncake_path, fleet_plane=self.fleet_plane)
         return self._bridge
 
-    def _kv_model(self) -> KVReuseModel:
-        p = self._bridge.by_name("kv_prefix_hit_rate") if self._bridge else None
-        rate = p.value["prefix_hit_rate"] if p else 0.0
-        return KVReuseModel(hit_rate=rate)
+    def _build_kv(self) -> KVModel:
+        """Fit the stateful KV cache on the Mooncake train split, sized to this
+        fleet's representative GPU memory budget + live memory pressure (couples KV
+        capacity/eviction to the v2026 GPU-memory calibration). Causal; holdout is
+        validated separately. ``kv_enabled=False`` yields a no-op (KV-disabled) model."""
+        reqs, status = ingest_mooncake()
+        n = len(reqs)
+        train = reqs[: int(n * 0.7)] if n > 3 else reqs
+        hours = self.fleet_plane.hours()
+        fleet0 = self.fleet_plane.state_at(hours[0]) if hours else None
+        gpu_type = (max(fleet0.gpu_type_mix, key=fleet0.gpu_type_mix.get)
+                    if (fleet0 and fleet0.gpu_type_mix) else "H100")
+        gpu_mem = gpu_mem_for(gpu_type)
+        mem_pressure = fleet0.mem_pressure if fleet0 else 0.0
+        self._kv = KVModel.fit(train, gpu_mem_gib=gpu_mem, mem_pressure=mem_pressure,
+                               enabled=self.kv_enabled)
+        self._kv_source_tier = status.tier
+        return self._kv
 
     def manifest(self) -> FidelityManifest:
         params = list(self._bridge.params) if self._bridge else []
         params += self.fleet_plane.full_trace_params()   # FULL_TRACE_EXACT fleet marginals
+        if self._kv is None and self._bridge is not None:
+            self._build_kv()
+        if self._kv is not None:
+            params += self._kv.params()                  # KV reuse/footprint/eviction provenance
         params += self.cost_model.params()
         return FidelityManifest.from_params(params)
 
@@ -116,7 +140,8 @@ class CanonicalMultiPlaneEnvironment:
             # calibrate from the union of hourly slices (train split inside)
             allraw = [r for h in sorted(azure_hourly) for r in azure_hourly[h]]
             self.calibrate(allraw)
-        kv = self._kv_model()
+        if self._kv is None:
+            self._build_kv()
         policy = policy or (lambda obs: dict(DEFAULT_ACTION))
 
         steps: list = []
@@ -132,9 +157,10 @@ class CanonicalMultiPlaneEnvironment:
             action = policy(obs)
             requests = self.serving_plane.build_requests(
                 raw_slice, warp=self.warp,
-                best_effort_fraction=fleet.best_effort_fraction, kv=kv)
+                best_effort_fraction=fleet.best_effort_fraction, kv_model=self._kv)
             kpi, run_action = self.serving_plane.run_hour(
-                requests, fleet, tick_seconds=self.tick_seconds, sla_s=self.sla_s, kv=kv,
+                requests, fleet, tick_seconds=self.tick_seconds, sla_s=self.sla_s,
+                kv_model=self._kv,
                 capacity=action["capacity"], ordering=action["ordering"],
                 admission=action["admission"])
             gpu_type = max(fleet.gpu_type_mix, key=fleet.gpu_type_mix.get) if fleet.gpu_type_mix else "H100"
@@ -148,7 +174,8 @@ class CanonicalMultiPlaneEnvironment:
                 hour=hour, observation=obs.to_dict(), action={**action, **run_action},
                 reward=reward,
                 metrics={"kpi": kpi.to_dict(), "cost": cost.to_dict(),
-                         "gpu_type": gpu_type}))
+                         "gpu_type": gpu_type,
+                         "kv": self._kv.stats(len(requests)) if self._kv else {}}))
 
         validation = self.validate(processed_dir=self.processed_dir).to_dict()
         return EnvironmentResult(
@@ -172,6 +199,8 @@ class CanonicalMultiPlaneEnvironment:
             processed_dir=processed_dir or self.processed_dir)
         params = list(self._bridge.params) if self._bridge else []
         params += self.fleet_plane.full_trace_params()
+        if self._kv is not None:
+            params += self._kv.params()
         params += self.cost_model.params()
         return run_validation(checks, params)
 
