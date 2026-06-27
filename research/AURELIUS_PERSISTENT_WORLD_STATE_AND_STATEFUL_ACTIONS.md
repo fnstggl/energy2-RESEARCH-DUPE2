@@ -77,13 +77,65 @@ Each effect is proven in a controlled fixture, in the right regime, deterministi
   that **already** places topology-aware (so the MPC must beat adaptation, not lever access).
 - migration: `off` (no migration) vs the MPC's adaptive use.
 
-## Incremental held-out results (Azure 2024 week, persistent world)
+## Incremental held-out results (Azure 2024 week, persistent world, 42 held-out periods)
 
-<!-- WS_INCREMENT_TABLE -->
+Each stateful action isolated by freezing the other two to their no-op (the *other six* connected
+surfaces vary in every rung, so the capacity/batching/routing behaviour is identical across rungs and
+cancels in the marginal — the delta is the stateful action alone).
 
-## Final fair backtest (Azure 2024 week, persistent world)
+| Rung | gp/$ | SLA viol | queue p95 | cold-starts | warm-hold (GPU-h) | migration $ | Δ gp/$ vs core |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| core (all stateful no-op) | 96,627 | 0.0151 | 8.3s | 31 | 30.0 | 0 | — |
+| +prewarm | 96,627 | 0.0151 | 8.3s | 31 | 30.0 | 0 | **+0.00%** |
+| +placement | 93,950 | 0.0143 | 9.0s | 37 | 36.0 | 0 | **−2.77%** |
+| +migration | 96,627 | 0.0151 | 8.3s | 31 | 30.0 | 0 | **+0.00%** |
+| full | 93,950 | 0.0143 | 9.0s | 37 | 36.0 | 0 | −2.77% |
 
-<!-- WS_FULL_TABLE -->
+**Honest reading.** On the Azure serving trace the MPC **does not select prewarm or migration**
+(both rungs == core): reactive scaling is adequate so prewarming's warm-hold is not worth it, and
+the single-period decision horizon cannot amortise a migration whose benefit only lands next period
+(so it never pays the up-front cost). **Placement is selected** (the MPC picks rack_local /
+network_aware) and trades **−2.77% gp/$ for a slightly better SLA** (0.0151→0.0143; Pareto-not-worse
+True). So none of the three is a gp/$ win on this trace — the effects are real (proven below) but
+the workload doesn't reward them. They stay CONNECTED (they meet every bar: change output + reward,
+tested, fair baseline, behind the gate) exactly as capacity_multiplier did in PR #100 despite being
+net-negative alone; this is reported, not hidden.
+
+## Final fair backtest (Azure 2024 week, persistent world, 42 held-out periods)
+
+| Arm | gp/$ | SLA viol | queue p95 | GPU-h | note |
+|---|--:|--:|--:|--:|---|
+| `aurelius_canonical_kv_routing` ⟵ **fair baseline** | 162,965 | 0.0162 | 17.7s | 121.8 | no stateful actions (capacity 1.0×) |
+| `world_static_best` | 157,739 | 0.0124 | 8.8s | — | static operator that **already** places topology-aware |
+| `aurelius_static_full` | 149,849 | 0.0141 | 8.8s | — | |
+| `sla_aware` | 143,861 | 0.0210 | 6.2s | — | |
+| **mpc_controller** | **93,950** | 0.0143 | 9.0s | 188.7 | prewarm off ×42, migration off ×42, placement topology-aware, **capacity 1.5× ×42** |
+| `prewarm_always` | 32,877 | 0.0124 | 0.0s | — | aggressive prewarm everywhere → warm-hold dominates |
+
+```
+fair_baseline          = aurelius_canonical_kv_routing
+beats_fair_baseline    = False  (mpc −42.35% gp/$)
+pareto_sla_not_worse   = True   (mpc 0.0143 ≤ fair 0.0162)
+headline_claim_allowed = False
+```
+
+**Honest reading.** The world-path MPC **regresses 42% on gp/$** — but the cause is **not** the new
+stateful actions (prewarm/migration stay off). It is `capacity_multiplier=1.5` chosen in every period
+(GPU-hours 188.7 vs the baseline's 121.8): the tuner, run on the now-riskier cold-start world, selected
+a **risk-averse config (risk_weight=1.0)** that over-provisions to suppress SLA risk, trading gp/$ for a
+slightly better SLA. A competent static operator (no stateful actions, capacity 1.0×) beats it. The
+`prewarm_always` row is the other end of the honesty ledger — holding everything warm craters gp/$ to
+32,877. So on this trace the persistent-world MPC is a Pareto *re-balance* (cheaper SLA, much worse
+gp/$), not a win — the gate blocks the headline, correctly. The stateless PR-#100 path (world_state
+off) is unchanged and still posts its +35% (its result is not affected by this opt-in path).
+
+## Verdict on each connected action (Azure trace)
+
+- **placement_policy** — CONNECTED, selected, **Pareto-neutral-to-slightly-negative** here (−2.77%
+  gp/$, +SLA). Real macro discount; the trace's locality/pressure structure is thin.
+- **prewarm_policy** — CONNECTED, effect proven in tests, **not selected** (reactive scaling adequate).
+- **migration_policy** — CONNECTED + honestly costed, **not selected**: the single-period MPC horizon
+  cannot amortise a deferred benefit. The honest fix is multi-period lookahead (next step), not a knob.
 
 ## Safe vs unsafe claims
 
@@ -91,7 +143,9 @@ Each effect is proven in a controlled fixture, in the right regime, deterministi
 replica, warm/cold, placement, and migration state, sampled from public v2026 trace marginals. The
 MPC can simulate and optimise prewarming, topology-aware placement, and migration as stateful
 infrastructure actions behind a Pareto-aware claim gate, with each action's effect proven in tests
-and each able to HURT (so none is a fake knob).*
+and each able to HURT (so none is a fake knob).* **On the Azure 2024 serving trace these actions do
+NOT produce a goodput/$ win** — prewarm/migration are left off and placement is gp/$-negative — and
+the gate blocks the headline; this is reported honestly, not forced into a claim.
 
 **Unsafe (NOT claimed):** that Aurelius has production telemetry for live placement, warm state, or
 operator migration decisions; that the cluster is a real machine inventory; or that any per-link /
