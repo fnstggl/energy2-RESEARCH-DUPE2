@@ -12,15 +12,19 @@ Two requests sharing a leading sub-list of ``hash_ids`` shared that KV prefix.
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import statistics
 from dataclasses import dataclass
 
-from ..data_tier import FULL_TRACE, SAMPLE_FIXTURE, SourceStatus
+from ..data_tier import FULL_TRACE, SAMPLE_FIXTURE, VALIDATION_FIXTURE, SourceStatus
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 RAW = os.path.join(_REPO, "data", "external", "mooncake", "raw", "conversation_trace.jsonl")
+# Committed, CI-reproducible fixture (the complete public trace, gzipped compact CSV).
+# Built by scripts/build_mooncake_fixture.py; tier VALIDATION_FIXTURE (real public data).
+FIXTURE_GZ = os.path.join(_REPO, "tests", "fixtures", "mooncake", "mooncake_validation.csv.gz")
 SAMPLE = os.path.join(_REPO, "tests", "fixtures", "mooncake", "mooncake_sample.csv")
 
 DOWNLOAD_HINT = (
@@ -56,30 +60,52 @@ def _load_jsonl(path: str) -> list:
     return out
 
 
-def _load_sample_csv(path: str) -> list:
-    import csv
+def _load_csv_rows(rows) -> list:
     out = []
-    with open(path, newline="") as fh:
-        for i, r in enumerate(csv.DictReader(fh)):
-            out.append(MooncakeRequest(
-                timestamp=float(r.get("timestamp_s") or i),
-                input_length=int(float(r.get("input_length") or 0)),
-                output_length=0,
-                hash_ids=(r.get("hash_ids") or "").split()))
+    for i, r in enumerate(rows):
+        out.append(MooncakeRequest(
+            timestamp=float(r.get("timestamp_s") or i),
+            input_length=int(float(r.get("input_length") or 0)),
+            output_length=int(float(r.get("output_length") or 0)),
+            hash_ids=(r.get("hash_ids") or "").split()))
     return out
 
 
+def _load_sample_csv(path: str) -> list:
+    import csv
+    with open(path, newline="") as fh:
+        return _load_csv_rows(csv.DictReader(fh))
+
+
+def _load_fixture_gz(path: str) -> list:
+    """Load the committed gzipped compact-CSV validation fixture."""
+    import csv
+    with gzip.open(path, "rt", newline="") as fh:
+        return _load_csv_rows(csv.DictReader(fh))
+
+
 def ingest_mooncake() -> tuple:
-    """Return ``(requests, SourceStatus)``. FULL_TRACE if the JSONL is present."""
+    """Return ``(requests, SourceStatus)``.
+
+    Source preference (so validation is CI-reproducible without local raw files):
+    RAW JSONL → FULL_TRACE; else the committed gz fixture → VALIDATION_FIXTURE (the
+    complete public trace, real data); else the 8-row sample → SAMPLE_FIXTURE. Both
+    real paths sort by the same key, so the fixture reproduces the RAW reuse stats.
+    """
     if os.path.exists(RAW):
         reqs = sorted(_load_jsonl(RAW), key=lambda r: r.timestamp)
         return reqs, SourceStatus(
             source="mooncake", tier=FULL_TRACE, path=RAW, n_records=len(reqs),
             trace_version="Mooncake/FAST25/conversation_trace")
+    if os.path.exists(FIXTURE_GZ):
+        reqs = sorted(_load_fixture_gz(FIXTURE_GZ), key=lambda r: r.timestamp)
+        return reqs, SourceStatus(
+            source="mooncake", tier=VALIDATION_FIXTURE, path=FIXTURE_GZ, n_records=len(reqs),
+            trace_version="Mooncake/FAST25 (committed validation fixture)")
     reqs = sorted(_load_sample_csv(SAMPLE), key=lambda r: r.timestamp)
     return reqs, SourceStatus(
         source="mooncake", tier=SAMPLE_FIXTURE, path=SAMPLE, n_records=len(reqs),
-        trace_version="sample", blocked_reason="full JSONL not downloaded",
+        trace_version="sample", blocked_reason="full JSONL + validation fixture not present",
         manual_step=DOWNLOAD_HINT)
 
 
