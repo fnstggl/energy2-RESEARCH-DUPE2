@@ -403,9 +403,12 @@ def run_unified_replay(
         # requests per replica; the GPU-hours denominator still counts physical replicas).
         eff_c = st.c
         if warm_capacity is not None and st.now < cold_start_s:
-            # cold start: only warm replicas serve until they finish loading (provisioned-but-
-            # cold capacity is paid for via c_per_tick but cannot serve yet → warm-up queue).
-            eff_c = min(st.c, max(1, warm_capacity))
+            # cold start: cold replicas come online PROGRESSIVELY as each finishes loading (staggered
+            # readiness), so serving capacity ramps linearly from the warm pool to full over
+            # cold_start_s — not a worst-case all-at-once step. Provisioned-but-not-yet-ready capacity
+            # is still paid for via c_per_tick (the warm-up queue is real, just not catastrophic).
+            frac = st.now / cold_start_s
+            eff_c = min(st.c, max(1, int(round(warm_capacity + (st.c - warm_capacity) * frac))))
         slots = max(1, int(round(eff_c * batch_concurrency)))
         for s in range(slots):
             if servers.get(s) is None:

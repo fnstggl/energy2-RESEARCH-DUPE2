@@ -1,0 +1,205 @@
+{
+  "stride": 48,
+  "eval_periods": [
+    126,
+    168
+  ],
+  "fair_baseline_gp_per_dollar": 151218.6,
+  "fair_sla": 0.0158,
+  "rows": [
+    {
+      "risk_weight": 0.0,
+      "horizon": 1,
+      "goodput_per_dollar": 176902.4,
+      "sla_violation_rate": 0.022,
+      "gpu_hours": 70.14,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 36,
+        "rack_local": 6
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "risk_weight": 0.0,
+      "horizon": 2,
+      "goodput_per_dollar": 176902.4,
+      "sla_violation_rate": 0.022,
+      "gpu_hours": 70.14,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 36,
+        "rack_local": 6
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "risk_weight": 0.25,
+      "horizon": 1,
+      "goodput_per_dollar": 177219.3,
+      "sla_violation_rate": 0.0191,
+      "gpu_hours": 69.59,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "network_aware": 15,
+        "rack_local": 21,
+        "topology_blind": 6
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "risk_weight": 0.25,
+      "horizon": 2,
+      "goodput_per_dollar": 177219.3,
+      "sla_violation_rate": 0.0191,
+      "gpu_hours": 69.59,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "network_aware": 15,
+        "rack_local": 21,
+        "topology_blind": 6
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "risk_weight": 0.5,
+      "horizon": 1,
+      "goodput_per_dollar": 173255.4,
+      "sla_violation_rate": 0.018,
+      "gpu_hours": 71.6,
+      "capacity_multiplier_mix": {
+        "0.75": 39,
+        "1.0": 3
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "network_aware": 11,
+        "rack_local": 25,
+        "topology_blind": 6
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "risk_weight": 0.5,
+      "horizon": 2,
+      "goodput_per_dollar": 173255.4,
+      "sla_violation_rate": 0.018,
+      "gpu_hours": 71.6,
+      "capacity_multiplier_mix": {
+        "0.75": 39,
+        "1.0": 3
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "network_aware": 11,
+        "rack_local": 25,
+        "topology_blind": 6
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "risk_weight": 1.0,
+      "horizon": 1,
+      "goodput_per_dollar": 169744.1,
+      "sla_violation_rate": 0.0183,
+      "gpu_hours": 72.91,
+      "capacity_multiplier_mix": {
+        "0.75": 31,
+        "1.0": 11
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "rack_local": 25,
+        "network_aware": 5,
+        "topology_blind": 12
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "risk_weight": 1.0,
+      "horizon": 2,
+      "goodput_per_dollar": 169744.1,
+      "sla_violation_rate": 0.0183,
+      "gpu_hours": 72.91,
+      "capacity_multiplier_mix": {
+        "0.75": 31,
+        "1.0": 11
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "rack_local": 25,
+        "network_aware": 5,
+        "topology_blind": 12
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    }
+  ]
+}

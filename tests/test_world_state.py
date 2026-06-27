@@ -104,10 +104,12 @@ def _heavy_recs(n=900):
     return [(i * 0.2, 240, 100) for i in range(n)]          # heavy load from t=0 (coincides w/ warm-up)
 
 
-def test_prewarm_reduces_cold_starts_and_helps_under_forecast_load():
+def test_prewarm_reduces_cold_starts_and_right_sized_prewarm_helps():
+    # Calibrated model (progressive ramp + idle-timeout warm-hold): right-sized prewarm helps SLA +
+    # gp/$, but OVER-prewarming pays warm-hold. A small warm pool → off eats cold starts on the ramp.
     fc = {"arrival_rate": 8.0, "arrival_p90": 11.0, "mean_service_s": 2.0}   # forecast says heavy
     recs = _heavy_recs()
-    # a cluster with a SMALL warm pool → off eats cold starts; prewarming warms ahead.
+
     def run(pol):
         ws = initialize_world_state(n_servers=20, n_racks=4, seed=0)
         warm_seed(ws, 2)
@@ -115,7 +117,11 @@ def test_prewarm_reduces_cold_starts_and_helps_under_forecast_load():
     off, cons, aggr = run("off"), run("conservative"), run("aggressive")
     assert aggr.cold_start_events < cons.cold_start_events < off.cold_start_events   # fewer cold starts
     assert aggr.warm_capacity > off.warm_capacity                       # it warmed ahead
-    assert aggr.goodput_per_dollar > off.goodput_per_dollar             # and it pays off here
+    # right-sized (conservative) prewarm improves SLA AND gp/$ over reactive cold-starting
+    assert cons.sla_violation_rate < off.sla_violation_rate
+    assert cons.goodput_per_dollar > off.goodput_per_dollar
+    # over-prewarming (aggressive) holds replicas the load doesn't use → it pays warm-hold (not free)
+    assert aggr.warm_hold_cost > 0 and aggr.goodput_per_dollar < cons.goodput_per_dollar
 
 
 def test_prewarm_is_not_free_when_forecast_is_wrong():
