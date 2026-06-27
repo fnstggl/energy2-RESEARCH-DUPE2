@@ -42,12 +42,14 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--processed-dir", default=os.environ.get("V2026_PROCESSED_DIR"))
     ap.add_argument("--out-dir", default=_OUT)
+    ap.add_argument("--world-state", action="store_true",
+                    help="run the persistent-world path (prewarm/placement/migration active)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
     inp = build_mpc_inputs(limit=args.limit, bin_seconds=args.bin_seconds,
                            processed_dir=args.processed_dir, hourly_stride=args.hourly_stride,
-                           sim_seconds=args.sim_seconds)
+                           sim_seconds=args.sim_seconds, use_world_state=args.world_state)
     if inp is None:
         raise SystemExit("no Azure serving data available")
     names = [n.strip() for n in args.baselines.split(",") if n.strip()]

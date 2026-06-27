@@ -334,13 +334,18 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
 
     if mutate:
         _advance(ws, peak_c=peak_c, warm_capacity=warm_capacity, prewarm_events=pw["prewarm_events"],
-                 cold_started=cold_started, warm_hold_gpu_hours=warm_hold_gpu_hours, mg=mg)
+                 cold_started=cold_started, warm_hold_gpu_hours=warm_hold_gpu_hours, mg=mg,
+                 prewarm=prewarm)
     return outcome
 
 
 def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewarm_events: int,
-             cold_started: int, warm_hold_gpu_hours: float, mg: dict) -> None:
-    """Commit the chosen action to the REAL world state and step the clock one period."""
+             cold_started: int, warm_hold_gpu_hours: float, mg: dict, prewarm: str = "off") -> None:
+    """Commit the chosen action to the REAL world state and step the clock one period.
+
+    Reactive (``off``) cools idle replicas down to what was actually used (``peak_c``) so it never
+    carries a warm pool it isn't paying off — that is what makes ``off`` the no-warm-hold baseline.
+    Proactive prewarming holds the larger forecast-sized pool warm (and pays for it)."""
     # land any migrations that have now completed — the moved replica adopts its target rack (its
     # locality benefit turns on for subsequent periods).
     for m in ws.migrations:
@@ -351,8 +356,9 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
                                if ":" in m.target_server_id else rep.rack_id)
                 rep.migrating = False
             m.status = "completed"
-    # warm the replicas that served (or were prewarmed); the rest cool down.
-    warm_target = max(peak_c, warm_capacity)
+    # warm the replicas that served (or were prewarmed); the rest cool down. Reactive (off) cools
+    # to actual usage (peak_c); proactive prewarming holds the forecast-sized warm pool.
+    warm_target = peak_c if prewarm == "off" else max(peak_c, warm_capacity)
     rep_ids = list(ws.replicas)
     for i, rid in enumerate(rep_ids):
         r = ws.replicas[rid]

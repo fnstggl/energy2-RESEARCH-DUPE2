@@ -52,6 +52,15 @@ DEFAULT_BASELINES = {
     "sla_aware_capacity_1p5": {"capacity": "backlog_aware", "ordering": "abs_conformal",
                                "admission": "off", "routing_policy": "kv_aware",
                                "capacity_multiplier": 1.5},
+    # stateful-action baselines (only bite on the --world-state path; harmless no-ops otherwise).
+    # A competent static operator already places topology-aware → the MPC must beat THAT, not merely
+    # "discover" placement. always-prewarm is the fair upper bound on prewarming (and shows its cost).
+    "world_static_best": {"capacity": "backlog_aware", "ordering": "abs_conformal",
+                          "admission": "class_aware", "routing_policy": "kv_aware",
+                          "batching_policy": "balanced", "placement_policy": "network_aware"},
+    "prewarm_always": {"capacity": "backlog_aware", "ordering": "abs_conformal", "admission": "off",
+                       "routing_policy": "kv_aware", "batching_policy": "balanced",
+                       "placement_policy": "network_aware", "prewarm_policy": "aggressive"},
 }
 
 
@@ -128,7 +137,7 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
     if use_world_state:
         # persistent world: a TRACE_DERIVED_SAMPLE cluster sampled from the SAME v2026 processed
         # marginals the fleet is calibrated to. Fresh per arm/config (isolated timelines).
-        common["world_state_params"] = {"n_servers": 24, "n_racks": 4, "seed": 0, "warm": 16,
+        common["world_state_params"] = {"n_servers": 24, "n_racks": 4, "seed": 0, "warm": 8,
                                         "processed_dir": processed_dir}
     return {"frames": frames, "per": per, "fleet_state": fleet, "cost_model": CostModel(),
             "common": common, "coverage": coverage, "kv_routing": rmap}

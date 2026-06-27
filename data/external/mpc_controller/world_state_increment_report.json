@@ -1,0 +1,212 @@
+{
+  "eval_periods": [
+    126,
+    168
+  ],
+  "controller_config": {
+    "horizon": 1,
+    "risk_weight": 0.0,
+    "confidence_min": 0.1
+  },
+  "coverage": {
+    "trace_version": "AzureLLMInferenceDataset2024/1week/conv",
+    "tier": "FULL_TRACE",
+    "n_bins_exact": 168,
+    "total_requests_exact": 27303999,
+    "sample_stride": 168,
+    "granularity": "hourly"
+  },
+  "world_state_params": {
+    "n_servers": 24,
+    "n_racks": 4,
+    "seed": 0,
+    "warm": 8,
+    "processed_dir": null
+  },
+  "rungs": {
+    "core": {
+      "free_surfaces": [
+        "admission_policy",
+        "batching_policy",
+        "capacity_multiplier",
+        "capacity_policy",
+        "ordering_policy",
+        "routing_policy"
+      ],
+      "frozen": {
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "goodput_per_dollar": 26203.58,
+      "sla_violation_rate": 0.01117,
+      "queue_delay_p95": 0.0,
+      "gpu_hours": 97.489,
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 42
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "cold_start_events": 19,
+      "warm_hold_gpu_hours": 19.0,
+      "migration_cost": 0.0,
+      "mean_topology_factor": 1.0
+    },
+    "+prewarm": {
+      "free_surfaces": [
+        "admission_policy",
+        "batching_policy",
+        "capacity_multiplier",
+        "capacity_policy",
+        "ordering_policy",
+        "prewarm_policy",
+        "routing_policy"
+      ],
+      "frozen": {
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "goodput_per_dollar": 26203.58,
+      "sla_violation_rate": 0.01117,
+      "queue_delay_p95": 0.0,
+      "gpu_hours": 97.489,
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 42
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "cold_start_events": 19,
+      "warm_hold_gpu_hours": 19.0,
+      "migration_cost": 0.0,
+      "mean_topology_factor": 1.0
+    },
+    "+placement": {
+      "free_surfaces": [
+        "admission_policy",
+        "batching_policy",
+        "capacity_multiplier",
+        "capacity_policy",
+        "ordering_policy",
+        "placement_policy",
+        "routing_policy"
+      ],
+      "frozen": {
+        "prewarm_policy": "off",
+        "migration_policy": "off"
+      },
+      "goodput_per_dollar": 26227.03,
+      "sla_violation_rate": 0.01105,
+      "queue_delay_p95": 0.0,
+      "gpu_hours": 97.478,
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 41,
+        "rack_local": 1
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "cold_start_events": 19,
+      "warm_hold_gpu_hours": 19.0,
+      "migration_cost": 0.0,
+      "mean_topology_factor": 0.99914
+    },
+    "+migration": {
+      "free_surfaces": [
+        "admission_policy",
+        "batching_policy",
+        "capacity_multiplier",
+        "capacity_policy",
+        "migration_policy",
+        "ordering_policy",
+        "routing_policy"
+      ],
+      "frozen": {
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind"
+      },
+      "goodput_per_dollar": 26203.58,
+      "sla_violation_rate": 0.01117,
+      "queue_delay_p95": 0.0,
+      "gpu_hours": 97.489,
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 42
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "cold_start_events": 19,
+      "warm_hold_gpu_hours": 19.0,
+      "migration_cost": 0.0,
+      "mean_topology_factor": 1.0
+    },
+    "full": {
+      "free_surfaces": [
+        "admission_policy",
+        "batching_policy",
+        "capacity_multiplier",
+        "capacity_policy",
+        "migration_policy",
+        "ordering_policy",
+        "placement_policy",
+        "prewarm_policy",
+        "routing_policy"
+      ],
+      "frozen": {},
+      "goodput_per_dollar": 26227.03,
+      "sla_violation_rate": 0.01105,
+      "queue_delay_p95": 0.0,
+      "gpu_hours": 97.478,
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 41,
+        "rack_local": 1
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "cold_start_events": 19,
+      "warm_hold_gpu_hours": 19.0,
+      "migration_cost": 0.0,
+      "mean_topology_factor": 0.99914
+    }
+  },
+  "marginals_vs_core": {
+    "+prewarm": {
+      "gp_per_dollar_pct_vs_core": 0.0,
+      "sla_violation_rate_delta": 0.0,
+      "pareto_sla_not_worse": true
+    },
+    "+placement": {
+      "gp_per_dollar_pct_vs_core": 0.089,
+      "sla_violation_rate_delta": -0.00012,
+      "pareto_sla_not_worse": true
+    },
+    "+migration": {
+      "gp_per_dollar_pct_vs_core": 0.0,
+      "sla_violation_rate_delta": 0.0,
+      "pareto_sla_not_worse": true
+    },
+    "full": {
+      "gp_per_dollar_pct_vs_core": 0.089,
+      "sla_violation_rate_delta": -0.00012,
+      "pareto_sla_not_worse": true
+    }
+  },
+  "note": "SIMULATED (directional simulator evidence on a TRACE_DERIVED_SAMPLE cluster), not production telemetry"
+}
