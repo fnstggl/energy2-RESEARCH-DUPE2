@@ -1,0 +1,89 @@
+{
+  "stride": 96,
+  "eval_periods": [
+    126,
+    168
+  ],
+  "fair_gp_per_dollar": 107152.2,
+  "fair_sla": 0.0143,
+  "rows": [
+    {
+      "horizon_steps": 1,
+      "lookahead_minutes": 60.0,
+      "goodput_per_dollar": 111078.7,
+      "sla_violation_rate": 0.022,
+      "queue_delay_p95": 6.77,
+      "gpu_hours": 56.21,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 42
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "wall_seconds_total": 5.6,
+      "runtime_s_per_decision": 0.132,
+      "world_steps_last_decision": 34,
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "horizon_steps": 2,
+      "lookahead_minutes": 120.0,
+      "goodput_per_dollar": 111790.7,
+      "sla_violation_rate": 0.021,
+      "queue_delay_p95": 6.53,
+      "gpu_hours": 56.09,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 42
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "wall_seconds_total": 8.5,
+      "runtime_s_per_decision": 0.202,
+      "world_steps_last_decision": 68,
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    },
+    {
+      "horizon_steps": 4,
+      "lookahead_minutes": 240.0,
+      "goodput_per_dollar": 111665.2,
+      "sla_violation_rate": 0.0208,
+      "queue_delay_p95": 6.68,
+      "gpu_hours": 56.17,
+      "capacity_multiplier_mix": {
+        "0.75": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 42
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "wall_seconds_total": 14.3,
+      "runtime_s_per_decision": 0.341,
+      "world_steps_last_decision": 136,
+      "beats_fair": true,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false
+    }
+  ]
+}

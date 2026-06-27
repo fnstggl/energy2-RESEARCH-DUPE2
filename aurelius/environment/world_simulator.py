@@ -174,43 +174,54 @@ def _prewarm_plan(ws: CanonicalWorldState, policy: str, forecast: dict) -> dict:
 
 
 def _placement_plan(ws: CanonicalWorldState, policy: str, *, c_used: int) -> dict:
-    """Topology service-time factor (≤ 1.0) from which racks the c_used replicas land on.
+    """Topology service-time factor (≤ 1.0) from WHERE THE WARM REPLICAS ACTUALLY SIT.
 
-    Mirrors the KV-routing channel: topology_blind = 1.0 (no exploitation, the PR-#100 baseline);
-    rack_local consolidates onto the fewest racks; network_aware prefers the lowest-pressure racks.
-    Discount scales with how much the macro network pressure VARIES across racks (no spread → no
-    free lunch). Macro only — no per-link claims."""
+    The serving replicas are drawn from the warm pool, each on its home rack — you can only place on
+    the racks your warm replicas occupy. ``network_aware`` activates the ``c_used`` warm replicas on
+    the LOWEST-pressure home racks; the discount scales with the relief vs the warm pool's average
+    rack pressure. ``rack_local`` rewards locality (fewest racks). ``topology_blind`` = 1.0 (baseline).
+
+    This is the channel that makes MIGRATION worthwhile: if every warm replica sits on a high-pressure
+    rack, network_aware finds no relief (no free lunch) — only physically MOVING replicas to a
+    low-pressure rack (migration) creates low-pressure home racks for future placement to exploit.
+    Macro only — no per-link claims."""
     if not ws.racks:
         return {"topology_factor": 1.0, "locality_score": 1.0, "rack_spread": 1, "used_racks": []}
-    order = _racks_by_pressure(ws)
-    pressures = [ws.racks[r].macro_network_pressure for r in order]
-    p_min, p_max = min(pressures), max(pressures)
-    spread_range = p_max - p_min                       # 0 → all racks equal → no topology lever
-    per_rack_cap = {r: max(1, ws.racks[r].gpu_capacity) for r in order}
+    # warm replicas per home rack (what we can actually serve from this period)
+    warm_by_rack: dict = {}
+    for r in ws.replicas.values():
+        if r.warm and not r.migrating:
+            warm_by_rack[r.rack_id] = warm_by_rack.get(r.rack_id, 0) + 1
+    if not warm_by_rack:                                # nothing warm yet → fall back to rack capacity
+        warm_by_rack = {rid: max(1, rk.gpu_capacity) for rid, rk in ws.racks.items()}
+    total_warm = sum(warm_by_rack.values())
+    avg_press = (sum(ws.racks[rid].macro_network_pressure * n for rid, n in warm_by_rack.items())
+                 / max(1, total_warm))                  # pressure topology_blind effectively serves at
 
     if policy == "topology_blind":
-        used = list(order)                              # spread across all racks (baseline)
-        factor = 1.0
-    else:
-        # consolidate onto as few of the PREFERRED racks as hold c_used (network_aware prefers the
-        # lowest-pressure racks; rack_local just minimises spread from the current order).
-        used, acc = [], 0
-        for r in order:
-            used.append(r)
-            acc += per_rack_cap[r]
-            if acc >= c_used:
-                break
-        # discount: bigger when we concentrate onto low-pressure racks AND pressure varies.
-        used_press = sum(ws.racks[r].macro_network_pressure for r in used) / len(used)
-        avg_press = sum(pressures) / len(pressures)
-        relief = max(0.0, avg_press - used_press)       # how much pressure we avoided
-        locality_bonus = (len(order) - len(used)) / len(order)   # 0..1 consolidation
-        if policy == "network_aware":
-            factor = 1.0 - TOPOLOGY_MAX_DISCOUNT * (0.5 * locality_bonus + 0.5 * (relief + spread_range) / 2.0)
-        else:  # rack_local: locality only, ignores which racks are hot
-            factor = 1.0 - TOPOLOGY_MAX_DISCOUNT * 0.6 * locality_bonus
+        return {"topology_factor": 1.0, "locality_score": 1.0,
+                "rack_spread": len(warm_by_rack), "used_racks": list(warm_by_rack)}
+    # activate c_used warm replicas from the lowest-pressure home racks first.
+    order = sorted(warm_by_rack, key=lambda rid: ws.racks[rid].macro_network_pressure)
+    used, acc, w_press = [], 0, 0.0
+    for rid in order:
+        take = min(warm_by_rack[rid], max(1, c_used) - acc)
+        used.append(rid)
+        w_press += ws.racks[rid].macro_network_pressure * take
+        acc += take
+        if acc >= max(1, c_used):
+            break
+    used_press = w_press / max(1, acc)
+    relief = max(0.0, avg_press - used_press)           # pressure avoided by serving the best warm racks
+    if policy == "network_aware":
+        factor = 1.0 - TOPOLOGY_MAX_DISCOUNT * min(1.0, relief / max(avg_press, 1e-6))
+    else:  # rack_local: locality (fewest racks) only, ignoring which racks are hot
+        locality_bonus = (len(warm_by_rack) - len(used)) / max(1, len(warm_by_rack))
+        factor = 1.0 - TOPOLOGY_MAX_DISCOUNT * 0.6 * locality_bonus
     factor = min(1.0, max(1.0 - TOPOLOGY_MAX_DISCOUNT, factor))
-    return {"topology_factor": round(factor, 5), "locality_score": round(1.0 - (len(used) - 1) / max(1, len(order) - 1), 4) if len(order) > 1 else 1.0,
+    return {"topology_factor": round(factor, 5),
+            "locality_score": round(1.0 - (len(used) - 1) / max(1, len(warm_by_rack) - 1), 4)
+            if len(warm_by_rack) > 1 else 1.0,
             "rack_spread": len(used), "used_racks": used}
 
 
@@ -249,7 +260,8 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
                     sla_s: float, tick_seconds: float, base_service_factor: float = 1.0,
                     replay_kwargs: dict | None = None, cost_model=None, fleet_state=None,
                     cost_scenario: str = "owned", best_effort_fraction: float = 0.0,
-                    period_hours: float = 1.0, mutate: bool = False) -> PeriodOutcome:
+                    period_hours: float = 1.0, dt_seconds: float | None = None,
+                    mutate: bool = False) -> PeriodOutcome:
     """Simulate one period under ``bundle`` on the world state.
 
     ``recs`` are the period's raw ``(arrival_s, tokens, ctx)`` request records. ``forecast`` carries
@@ -274,8 +286,9 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     # 2) capacity the period will actually drive (forecast-sized), for placement consolidation.
     c_used = _forecast_capacity(forecast, peak=False)
 
-    # 3) placement → topology service factor.
-    pl = _placement_plan(ws, placement, c_used=max(c_used, warm_capacity))
+    # 3) placement → topology service factor. Placement activates the SERVING-sized subset of warm
+    # replicas (not the whole pool), so network_aware can be selective about low-pressure home racks.
+    pl = _placement_plan(ws, placement, c_used=max(1, c_used))
 
     # 4) migration → capacity loss + cost + cache penalty THIS period.
     mg = _migration_plan(ws, migration, placement=pl)
@@ -325,11 +338,15 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         cb = cost_model.operator_cost(
             gpu_hours=kpi.gpu_hours, gpu_type=gpu_type,
             energy_price_per_kwh=fleet_state.energy_price_per_kwh, utilization=fleet_state.util_target,
-            scenario=cost_scenario, sla_violations=kpi.sla_violations, migrations=mg["n_migrations"])
+            scenario=cost_scenario, sla_violations=kpi.sla_violations)   # migration priced below, once
         base_cost = cb.total_operator_cost
     else:
         base_cost = kpi.cost_usd
-    total_cost = base_cost + warm_hold_cost + mg["migration_cost"]
+    # migration is a one-time operator $ for the move, amortised over the period it benefits (× the
+    # window's period_hours) so it is COMMENSURATE with the window-scaled serving cost — otherwise a
+    # fixed $ swamps a bounded scoring window and migration could never be worthwhile at any horizon.
+    migration_cost = mg["migration_cost"] * max(period_hours, 1e-6)
+    total_cost = base_cost + warm_hold_cost + migration_cost
 
     outcome = PeriodOutcome(
         kpi=kpi, operator_cost=total_cost, warm_hold_cost=round(warm_hold_cost, 5),
@@ -347,12 +364,13 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     if mutate:
         _advance(ws, peak_c=peak_c, warm_capacity=warm_capacity, prewarm_events=pw["prewarm_events"],
                  cold_started=cold_started, warm_hold_gpu_hours=warm_hold_gpu_hours, mg=mg,
-                 prewarm=prewarm)
+                 prewarm=prewarm, dt_seconds=(dt_seconds if dt_seconds is not None else 3600.0))
     return outcome
 
 
 def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewarm_events: int,
-             cold_started: int, warm_hold_gpu_hours: float, mg: dict, prewarm: str = "off") -> None:
+             cold_started: int, warm_hold_gpu_hours: float, mg: dict, prewarm: str = "off",
+             dt_seconds: float = 3600.0) -> None:
     """Commit the chosen action to the REAL world state and step the clock one period.
 
     Reactive (``off``) cools idle replicas down to what was actually used (``peak_c``) so it never
@@ -368,16 +386,27 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
                                if ":" in m.target_server_id else rep.rack_id)
                 rep.migrating = False
             m.status = "completed"
-    # warm the replicas that served (or were prewarmed); the rest cool down. Reactive (off) cools
-    # to actual usage (peak_c); proactive prewarming holds the forecast-sized warm pool.
+    # warm the replicas that served (or were prewarmed); the rest cool down AFTER the idle timeout.
+    # Persistence is TIME-based: a replica idle for less than WARM_IDLE_TIMEOUT_S stays warm. At a
+    # coarse control interval (dt≥timeout, e.g. hourly) the pool cools every step (the PR-#102
+    # behaviour); at a FINE interval (dt<timeout, e.g. 5-min) a prewarmed/used pool SURVIVES across
+    # steps — which is what lets prewarming/migration pay off over a multi-step horizon. (See the
+    # multi-period MPC architecture doc: deferred-benefit actions only span periods when the control
+    # interval is shorter than the action's persistence timescale.)
     warm_target = peak_c if prewarm == "off" else max(peak_c, warm_capacity)
     rep_ids = list(ws.replicas)
     for i, rid in enumerate(rep_ids):
         r = ws.replicas[rid]
+        idle_s = ((ws.period - r.last_used_period) * dt_seconds) if r.last_used_period >= 0 else 1e18
+        held_by_timeout = r.warm and idle_s < WARM_IDLE_TIMEOUT_S
         if i < warm_target:
             r.warm = True
-            r.last_used_period = ws.period if i < peak_c else r.last_used_period
             r.active = i < peak_c
+            if i < peak_c:
+                r.last_used_period = ws.period
+        elif held_by_timeout:
+            r.warm = True                     # still within the idle timeout → not cooled yet
+            r.active = False
         else:
             r.warm = False
             r.active = False
