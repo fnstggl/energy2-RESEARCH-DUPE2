@@ -1,0 +1,75 @@
+{
+  "controller_config": {
+    "horizon": 4,
+    "risk_weight": 0.0,
+    "confidence_min": 0.1
+  },
+  "splits": {
+    "train_cut": 29,
+    "val": [
+      29,
+      44
+    ],
+    "eval": [
+      44,
+      59
+    ]
+  },
+  "val_results": [
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 1926002.72
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 1926002.72
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.5,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 1926002.72
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.5,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 1926002.72
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 1.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 1926002.72
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 1.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 1926002.72
+    }
+  ],
+  "common": {
+    "sla_s": 10.0,
+    "period_seconds": 60.0,
+    "tick_seconds": 10.0,
+    "kv_service_factor": 0.9192,
+    "cost_scenario": "owned"
+  }
+}

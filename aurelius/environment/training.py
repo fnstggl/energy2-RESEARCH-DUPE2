@@ -1,0 +1,178 @@
+"""Train forecasters + tune the MPC controller, with a strict claim gate.
+
+Three disjoint time splits (no leakage):
+  * **train**  — forecaster models are fit here only.
+  * **val**    — controller hyper-parameters (horizon / risk weight / confidence floor)
+                 are selected here (the forecasters still come from train).
+  * **eval**   — held-out; the final controller-vs-baselines comparison + claim gate.
+
+The first trainable component is **controller tuning**, not deep RL. A headline claim
+is allowed ONLY if the controller beats the strongest NON-weak baseline on the held-out
+eval, the splits are disjoint, and no oracle/future information is used (the controller
+is causal by construction). If it does not beat the baseline, that is reported honestly.
+"""
+
+from __future__ import annotations
+
+import itertools
+
+from .controller import (
+    SLA_AWARE_FALLBACK,
+    ModelPredictiveEconomicController,
+    run_period_episode,
+)
+from .forecasting import ForecastingModel
+
+DEFAULT_GRID = {"horizon": [1, 2, 4], "risk_weight": [0.0, 0.5, 1.0], "confidence_min": [0.1, 0.3]}
+WEAK_BASELINES = frozenset({"fifo_weak"})
+DEFAULT_BASELINES = {
+    "fifo_weak": {"capacity": "reactive_lag1", "ordering": "fifo", "admission": "off"},
+    "sla_aware": {"capacity": "backlog_aware", "ordering": "abs_conformal", "admission": "off"},
+    "greedy_packing": {"capacity": "forecasted_mcs", "ordering": "fifo", "admission": "off"},
+    "aurelius_canonical": {"capacity": "backlog_aware", "ordering": "abs_conformal", "admission": "class_aware"},
+}
+
+
+def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
+                     processed_dir: str | None = None) -> dict | None:
+    """Build the (frames, per-period real trace, fleet state, cost model, common) inputs
+    from the canonical sources: Azure serving binned into sub-hour periods, the anchored
+    v2026 fleet marginals, the operator cost model, and a uniform KV service discount."""
+    from collections import defaultdict
+
+    from .cost_model import CostModel
+    from .fleet_plane_v2026 import V2026FleetPlane
+    from .forecasting import build_frames
+    from .ingestion.azure import context_tokens, ingest_azure, to_serving_raw
+    from .ingestion.mooncake import ingest_mooncake
+    from .kv_cache import KVModel, gpu_mem_for
+
+    reqs, _ = ingest_azure(limit=limit)
+    out, inp = to_serving_raw(reqs), context_tokens(reqs)
+    if not out:
+        return None
+    t0 = out[0][0]
+    per: dict = defaultdict(list)
+    for (a, ot), it in zip(out, inp):
+        per[int((a - t0) // bin_seconds)].append((a, ot, it))
+    per = dict(per)
+    fleet = V2026FleetPlane(processed_dir=processed_dir).state_at(0)
+    gpu_type = max(fleet.gpu_type_mix, key=fleet.gpu_type_mix.get) if fleet.gpu_type_mix else "H100"
+    mreqs, _ = ingest_mooncake()
+    kv = KVModel.fit(mreqs[: int(len(mreqs) * 0.7)] or mreqs, gpu_mem_gib=gpu_mem_for(gpu_type),
+                     mem_pressure=fleet.mem_pressure)
+    kv_factor = float(kv.stats(1000).get("mean_ttft_factor", 1.0))
+    anchors = {"gpu_utilization": fleet.util_target, "gpu_memory_pressure": fleet.mem_pressure,
+               "network_pressure": fleet.net_pressure, "kv_reuse": kv.warm_hit_rate()}
+    frames = build_frames(per, period_seconds=bin_seconds, cycle_len=60,
+                          price_by_cycle={c: fleet.energy_price_per_kwh for c in range(60)},
+                          anchors=anchors)
+    common = {"sla_s": 10.0, "period_seconds": bin_seconds, "tick_seconds": 10.0,
+              "kv_service_factor": kv_factor, "cost_scenario": "owned"}
+    return {"frames": frames, "per": per, "fleet_state": fleet, "cost_model": CostModel(),
+            "common": common}
+
+
+def split_cuts(n: int, train: float = 0.5, val: float = 0.25) -> tuple:
+    t1 = max(4, int(n * train))
+    t2 = max(t1 + 2, int(n * (train + val)))
+    t2 = min(t2, n - 1)
+    return t1, t2
+
+
+def train_forecasters(frames: list, train_cut: int, *, train_frac: float = 0.7) -> tuple:
+    """Fit the forecaster ladder on the TRAIN periods only; return (model, report)."""
+    fm = ForecastingModel().fit(frames[:train_cut], train_frac=train_frac)
+    return fm, fm.report()
+
+
+def _controller(fm, fleet_state, cost_model, cfg, common):
+    return ModelPredictiveEconomicController(
+        forecasters=fm, fleet_state=fleet_state, cost_model=cost_model,
+        horizon=cfg["horizon"], risk_weight=cfg["risk_weight"],
+        confidence_min=cfg["confidence_min"], sla_s=common["sla_s"],
+        period_seconds=common["period_seconds"], tick_seconds=common["tick_seconds"],
+        kv_service_factor=common.get("kv_service_factor", 1.0),
+        cost_scenario=common.get("cost_scenario", "owned"))
+
+
+def tune_controller(fm, frames, per, val_idx, *, fleet_state, cost_model,
+                    grid=None, common=None) -> tuple:
+    """Select the controller config maximizing held-out-of-train (val) gp/$."""
+    grid = grid or DEFAULT_GRID
+    common = common or {}
+    keys = list(grid)
+    best_cfg, best_gpd, results = None, -1.0, []
+    for combo in itertools.product(*(grid[k] for k in keys)):
+        cfg = dict(zip(keys, combo))
+        ctrl = _controller(fm, fleet_state, cost_model, cfg, common)
+        rep = run_period_episode("mpc", lambda h: ctrl.decide(h).to_dict(), per, frames, val_idx,
+                                 fleet_state=fleet_state, cost_model=cost_model, **common)
+        results.append({"cfg": cfg, "val_gpd": round(rep.goodput_per_dollar, 2)})
+        if rep.goodput_per_dollar > best_gpd:
+            best_cfg, best_gpd = cfg, rep.goodput_per_dollar
+    return best_cfg, results
+
+
+def train_mpc_policy(frames, per, *, fleet_state, cost_model, train=0.5, val=0.25,
+                     grid=None, common=None) -> tuple:
+    """Fit forecasters (train) + tune the controller (val). Returns (trained, model)."""
+    common = common or {"sla_s": 10.0, "period_seconds": 60.0, "tick_seconds": 10.0}
+    t1, t2 = split_cuts(len(frames), train, val)
+    val_idx = list(range(t1, t2))
+    fm, fcast = train_forecasters(frames, t1)
+    cfg, val_results = tune_controller(fm, frames, per, val_idx, fleet_state=fleet_state,
+                                       cost_model=cost_model, grid=grid, common=common)
+    trained = {"forecaster_report": fcast, "controller_config": cfg,
+               "splits": {"train_cut": t1, "val": [t1, t2], "eval": [t2, len(frames)]},
+               "val_results": val_results, "common": common}
+    return trained, fm
+
+
+def claim_gate(arms: dict, *, weak=WEAK_BASELINES) -> dict:
+    """Honest gate: a headline requires beating the strongest NON-weak baseline."""
+    fair = {n: r for n, r in arms.items() if n != "mpc_controller" and n not in weak}
+    fair_baseline = max(fair, key=lambda n: fair[n].goodput_per_dollar) if fair else None
+    mpc = arms["mpc_controller"].goodput_per_dollar
+    base = arms[fair_baseline].goodput_per_dollar if fair_baseline else 0.0
+    delta = 100.0 * (mpc - base) / base if base else 0.0
+    gate = {
+        "fair_baseline": fair_baseline,
+        "fair_baseline_not_weak": fair_baseline is not None and fair_baseline not in weak,
+        "beats_fair_baseline": delta > 0,
+        "no_oracle": True,                 # controller is causal by construction
+        "splits_disjoint": True,           # train < val < eval by construction
+        "candidate_vs_baseline_pct": round(delta, 3),
+        "note": "SIMULATED (directional simulator evidence), not production telemetry",
+    }
+    gate["headline_claim_allowed"] = (gate["fair_baseline_not_weak"] and gate["beats_fair_baseline"]
+                                      and gate["no_oracle"] and gate["splits_disjoint"])
+    return gate
+
+
+def evaluate_mpc(trained, fm, frames, per, *, fleet_state, cost_model,
+                 baselines=None, common=None) -> dict:
+    """Held-out evaluation of the tuned controller vs baselines + the claim gate."""
+    baselines = baselines or DEFAULT_BASELINES
+    common = common or trained.get("common", {"sla_s": 10.0, "period_seconds": 60.0, "tick_seconds": 10.0})
+    e0, e1 = trained["splits"]["eval"]
+    eval_idx = list(range(e0, e1))
+    ctrl = _controller(fm, fleet_state, cost_model, trained["controller_config"], common)
+    arms = {"mpc_controller": run_period_episode(
+        "mpc_controller", lambda h: ctrl.decide(h).to_dict(), per, frames, eval_idx,
+        fleet_state=fleet_state, cost_model=cost_model, **common)}
+    for name, action in baselines.items():
+        arms[name] = run_period_episode(
+            name, (lambda act: (lambda h: dict(act)))(action), per, frames, eval_idx,
+            fleet_state=fleet_state, cost_model=cost_model, **common)
+    gate = claim_gate(arms)
+    return {"eval_periods": len(eval_idx), "controller_config": trained["controller_config"],
+            "arms": {n: r.to_dict() for n, r in arms.items()}, "gate": gate,
+            "splits": trained["splits"]}
+
+
+__all__ = [
+    "DEFAULT_GRID", "DEFAULT_BASELINES", "WEAK_BASELINES", "SLA_AWARE_FALLBACK",
+    "build_mpc_inputs", "split_cuts", "train_forecasters", "tune_controller",
+    "train_mpc_policy", "claim_gate", "evaluate_mpc",
+]

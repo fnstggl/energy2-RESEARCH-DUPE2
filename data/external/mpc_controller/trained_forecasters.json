@@ -1,0 +1,72 @@
+{
+  "n_frames": 59,
+  "train_cut": 35,
+  "report": {
+    "arrival_rate": {
+      "target": "arrival_rate",
+      "model_used": "ridge",
+      "fidelity": "LINEAR",
+      "metric": "mae",
+      "holdout_metric": 0.90606,
+      "naive_metric": 1.55667,
+      "beats_naive": true,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "output_token_mean": {
+      "target": "output_token_mean",
+      "model_used": "ridge",
+      "fidelity": "LINEAR",
+      "metric": "mae",
+      "holdout_metric": 15.95037,
+      "naive_metric": 16.34651,
+      "beats_naive": true,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "output_token_p95": {
+      "target": "output_token_p95",
+      "model_used": "naive:median",
+      "fidelity": "RUNNING_STATISTIC",
+      "metric": "pinball",
+      "holdout_metric": 0.865,
+      "naive_metric": 0.865,
+      "beats_naive": false,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "input_token_mean": {
+      "target": "input_token_mean",
+      "model_used": "naive:ewma",
+      "fidelity": "RUNNING_STATISTIC",
+      "metric": "mae",
+      "holdout_metric": 105.37959,
+      "naive_metric": 105.37959,
+      "beats_naive": false,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "interarrival_cv": {
+      "target": "interarrival_cv",
+      "model_used": "ridge",
+      "fidelity": "LINEAR",
+      "metric": "mae",
+      "holdout_metric": 0.09202,
+      "naive_metric": 0.11463,
+      "beats_naive": true,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "electricity_price": {
+      "target": "electricity_price",
+      "model_used": "naive:last",
+      "fidelity": "RUNNING_STATISTIC",
+      "metric": "mae",
+      "holdout_metric": 0.0,
+      "naive_metric": 0.0,
+      "beats_naive": false,
+      "coverage_err": 0.2,
+      "status": "OK"
+    }
+  }
+}
