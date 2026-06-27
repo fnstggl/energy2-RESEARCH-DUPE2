@@ -7,7 +7,7 @@ downgraded; a blocked source records the exact manual unblock step.
 """
 
 from . import azure, electricity, mooncake, v2026
-from .azure import ingest_azure, to_serving_raw
+from .azure import hourly_arrival_frames, ingest_azure, to_serving_raw
 from .electricity import load_prices
 from .mooncake import ingest_mooncake, reuse_distribution, split_reuse
 from .v2026 import v2026_status
@@ -28,6 +28,6 @@ def source_statuses() -> dict:
 
 __all__ = [
     "azure", "mooncake", "v2026", "electricity",
-    "ingest_azure", "to_serving_raw", "ingest_mooncake", "reuse_distribution",
-    "split_reuse", "load_prices", "v2026_status", "source_statuses",
+    "ingest_azure", "hourly_arrival_frames", "to_serving_raw", "ingest_mooncake",
+    "reuse_distribution", "split_reuse", "load_prices", "v2026_status", "source_statuses",
 ]
