@@ -33,7 +33,9 @@ from .action_registry import planned_report
 from .actions import replay_kwargs_from_action
 from .candidate_search import CandidateBundleGenerator, plan_bundle
 from .cost_model import CostModel
+from .forecast_trajectory import build_trajectory
 from .forecasting import ForecastingModel
+from .simulation_clock import SimulationClock
 from .world_simulator import simulate_period
 
 # Connected action levers (the only ones the environment actually executes).
@@ -130,6 +132,15 @@ class ModelPredictiveEconomicController:
     world_state: object = None         # CanonicalWorldState — when set, the stateful actions
     #                                    (prewarm/placement/migration) are scored through the
     #                                    world_simulator on a READ-ONLY (mutate=False) candidate sim
+    # --- receding-horizon MPC (multi-period rollout over the persistent world) ---
+    horizon_steps: int = 1             # MPC planning horizon in SIM STEPS (1 = single-period; >1
+    #                                    rolls each candidate first-action H steps on a CLONE)
+    gamma: float = 1.0                 # discount factor on future-step reward
+    uncertainty_mode: str = "deterministic"   # forecast trajectory mode (point path)
+    max_candidate_bundles: int = 256   # search-budget cap (bundles evaluated per decision)
+    max_horizon_steps: int = 48        # hard cap on H (runtime safety)
+    decision_timeout_s: float = 0.0    # >0 → abort the search after this wall-time, keep best so far
+    last_decision_diag: dict = field(default_factory=dict)   # rollout/credit-assignment diagnostics
 
     def _gpd(self, jobs: list, replay_kw: dict, price: float) -> tuple:
         if not jobs:
@@ -146,6 +157,56 @@ class ModelPredictiveEconomicController:
         gpd = kpi.sla_safe_goodput / max(cost.total_operator_cost, 1e-9)
         viol_rate = kpi.sla_violations / max(1, kpi.n_total)
         return gpd, viol_rate
+
+    def _rollout_world(self, cand_ab, traj, *, be, factor, horizon_steps):
+        """Receding-horizon rollout of ONE candidate first-action over the persistent world.
+
+        Clones the real ClusterState, simulates ``horizon_steps`` future steps consuming the forecast
+        TRAJECTORY (step k → ``traj.point(target, k)``), and accumulates the discounted risk-adjusted
+        per-step reward. Step 0 applies the candidate; steps 1..H-1 apply a BASE CONTINUATION (the
+        candidate's serving + placement levers held, prewarm/migration reverted to no-op) — we commit
+        only the first action, so future stateful actions are not pre-committed, but the first action's
+        STATE consequences (a moved replica's locality, a warm pool) persist and pay off downstream.
+        READ-ONLY on the real world (operates on a clone). Returns (cumulative_return, step_diags)."""
+        from .world_simulator import clone_world_state_for_candidate
+        clone = clone_world_state_for_candidate(self.world_state)
+        continuation = cand_ab.with_overrides(prewarm_policy="off", migration_policy="off")
+        win = self.sim_seconds or self.period_seconds
+        common0 = dict(sla_s=self.sla_s, tick_seconds=self.tick_seconds, base_service_factor=factor,
+                       cost_model=self.cost_model, fleet_state=self.fleet_state,
+                       cost_scenario=self.cost_scenario, best_effort_fraction=be,
+                       period_hours=max(win, 1.0) / 3600.0, dt_seconds=self.period_seconds)
+        cumulative, steps = 0.0, []
+        for k in range(horizon_steps):
+            bundle_k = cand_ab if k == 0 else continuation
+            ar, tm = traj.point("arrival_rate", k), traj.point("output_token_mean", k)
+            tp, cv = traj.point("output_token_p95", k), traj.point("interarrival_cv", k)
+            if ar is None or tm is None:                     # forecast ran out → hold last step
+                ar, tm, tp, cv = (traj.point(t, max(0, k - 1)) for t in
+                                  ("arrival_rate", "output_token_mean", "output_token_p95",
+                                   "interarrival_cv"))
+            fc_k = {"arrival_rate": ar.mean, "arrival_p90": ar.p90,
+                    "mean_service_s": max(_service_time_s(int(tm.mean)), 1e-3)}
+            rkw = bundle_k.replay_kwargs()
+            point = [(j.arrival_s, j.actual_tokens, j.actual_tokens) for j in
+                     _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
+                                 best_effort_fraction=be, kv_service_factor=1.0)]
+            risk = [(j.arrival_s, j.actual_tokens, j.actual_tokens) for j in
+                    _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
+                                best_effort_fraction=be, kv_service_factor=1.0)]
+            risk_viol = simulate_period(clone, bundle_k, risk, fc_k, replay_kwargs=rkw,
+                                        mutate=False, **common0).sla_violation_rate
+            out = simulate_period(clone, bundle_k, point, fc_k, replay_kwargs=rkw,
+                                  mutate=True, **common0)     # advance the cloned world one step
+            exp_gpd = out.goodput_per_dollar
+            reward = exp_gpd - self.risk_weight * risk_viol * exp_gpd
+            cumulative += (self.gamma ** k) * reward
+            steps.append({"step": k, "reward": round(reward, 2), "gp_per_dollar": round(exp_gpd, 1),
+                          "risk_viol": round(risk_viol, 4), "warm_hold_cost": round(out.warm_hold_cost, 3),
+                          "migration_cost": round(out.migration_cost, 3),
+                          "cold_start_events": out.cold_start_events, "peak_c": out.kpi.c_max,
+                          "topology_factor": out.topology_factor})
+        return cumulative, steps
 
     def decide(self, history: list) -> Decision:
         """Choose the action for the next period from the causal forecast only."""
@@ -176,22 +237,16 @@ class ModelPredictiveEconomicController:
 
         job_cache: dict = {}               # KV factor → (point, risk) jobs (routing changes the factor)
 
-        # world-state scoring (stateful actions): forecast + synthetic recs (factor 1.0 — the world
-        # simulator re-applies the combined service factor) reused across candidates; READ-ONLY.
+        # world-state scoring (stateful actions): a receding-horizon ROLLOUT over the persistent
+        # world consuming the forecast TRAJECTORY. H=1 reproduces the single-period score exactly.
         world = self.world_state
-        ws_forecast = ({"arrival_rate": ar.mean, "arrival_p90": ar.p90,
-                        "mean_service_s": max(_service_time_s(int(tm.mean)), 1e-3)}
-                       if world is not None else None)
-        ws_recs: dict = {}
-
-        def _world_recs(peak):
-            key = "risk" if peak else "point"
-            if key not in ws_recs:
-                js = _synth_jobs(ar.p90 if peak else ar.mean, tp.p99 if peak else tm.mean,
-                                 tp.p99 if peak else tp.value, cv.p90 if peak else cv.mean,
-                                 window_seconds=win, best_effort_fraction=be, kv_service_factor=1.0)
-                ws_recs[key] = [(j.arrival_s, j.actual_tokens, j.actual_tokens) for j in js]
-            return ws_recs[key]
+        H = max(1, min(int(self.horizon_steps), int(self.max_horizon_steps)))
+        clock = SimulationClock(dt_seconds=self.period_seconds)
+        traj = (build_trajectory(self.forecasters, history, clock, H, mode=self.uncertainty_mode)
+                if world is not None else None)
+        rollout_cache: dict = {}           # id(ab) → (cumulative, step_diags)
+        eval_count = [0]
+        t_start = [None]
 
         def _resolve(cand):
             ab = cand if hasattr(cand, "replay_kwargs") else None
@@ -204,15 +259,12 @@ class ModelPredictiveEconomicController:
             ab, _act, rkw, routing = _resolve(cand)
             factor = by_routing.get(routing, self.kv_service_factor)
             if world is not None and ab is not None:
-                # score the stateful bundle through the persistent world (READ-ONLY clone-free sim).
-                common = dict(sla_s=self.sla_s, tick_seconds=self.tick_seconds,
-                              base_service_factor=factor, replay_kwargs=rkw, cost_model=self.cost_model,
-                              fleet_state=self.fleet_state, cost_scenario=self.cost_scenario,
-                              best_effort_fraction=be, period_hours=max(win, 1.0) / 3600.0)
-                exp_o = simulate_period(world, ab, _world_recs(False), ws_forecast, mutate=False, **common)
-                risk_o = simulate_period(world, ab, _world_recs(True), ws_forecast, mutate=False, **common)
-                exp_gpd, risk_viol = exp_o.goodput_per_dollar, risk_o.sla_violation_rate
-                return exp_gpd - self.risk_weight * risk_viol * exp_gpd, exp_gpd, risk_o.goodput_per_dollar, routing
+                # receding-horizon rollout (H=1 reproduces the single-period score exactly).
+                eval_count[0] += 1
+                cumulative, steps = self._rollout_world(ab, traj, be=be, factor=factor, horizon_steps=H)
+                rollout_cache[id(ab)] = (cumulative, steps)
+                exp_gpd = steps[0]["gp_per_dollar"] if steps else 0.0
+                return cumulative, exp_gpd, exp_gpd, routing
             if factor not in job_cache:
                 job_cache[factor] = _jobs(factor)
             point, risk = job_cache[factor]
@@ -220,16 +272,37 @@ class ModelPredictiveEconomicController:
             risk_gpd, risk_viol = self._gpd(risk, rkw, pr.value)
             return exp_gpd - self.risk_weight * risk_viol * exp_gpd, exp_gpd, risk_gpd, routing
 
-        # search the CONNECTED bundle space — exhaustive when small, coordinate descent when
-        # large (no connected knob skipped). SIMULATED_ONLY only when opted in; PLANNED never.
+        # search the CONNECTED bundle space — exhaustive when small, coordinate descent when large
+        # (no connected knob skipped). Each candidate is scored by the receding-horizon rollout.
+        import time as _time
+        t_start[0] = _time.monotonic()
+        budget = min(int(self.search_budget), int(self.max_candidate_bundles))
+        timed_out = [False]
+
+        def _score(b):
+            if self.decision_timeout_s > 0 and (_time.monotonic() - t_start[0]) > self.decision_timeout_s:
+                timed_out[0] = True
+                return -1e18                       # freeze the search; keep best-so-far
+            return _eval(b)[0]
+
         if self.candidates is not None:
-            best_cand = max(self.candidates, key=lambda c: _eval(c)[0])
+            method, theoretical = "explicit", len(self.candidates)
+            best_cand = max(self.candidates, key=_score)
         else:
             gen = self.candidate_generator or CandidateBundleGenerator(
                 include_simulated=self.optimize_simulated)
-            best_cand, _n, _m = gen.search(lambda b: _eval(b)[0], budget=self.search_budget)
+            theoretical = gen.theoretical_combinations()
+            best_cand, _n, method = gen.search(_score, budget=budget)
         ab, act, _rkw, _routing = _resolve(best_cand)
         score, exp_gpd, risk_gpd, routing = _eval(best_cand)
+        cumulative, win_steps = rollout_cache.get(id(ab), (score, []))
+        self.last_decision_diag = {
+            **clock.horizon_meta(H), "gamma": self.gamma, "uncertainty_mode": self.uncertainty_mode,
+            "theoretical_bundles": theoretical, "candidate_bundles_evaluated": eval_count[0],
+            "world_steps_simulated": eval_count[0] * H, "search_method": method,
+            "runtime_s": round(_time.monotonic() - t_start[0], 4), "timed_out": timed_out[0],
+            "cumulative_return": round(cumulative, 2), "rollout": win_steps,
+            "trajectory": traj.to_dict() if traj is not None else None} if world is not None else {}
         return Decision(act, exp_gpd, risk_gpd, score, False, confidence,
                         forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
                                   "routing_policy": routing}, bundle=ab)
