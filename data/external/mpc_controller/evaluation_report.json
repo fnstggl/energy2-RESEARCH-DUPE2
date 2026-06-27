@@ -2,58 +2,56 @@
   "eval_periods": 42,
   "controller_config": {
     "horizon": 1,
-    "risk_weight": 1.0,
+    "risk_weight": 0.0,
     "confidence_min": 0.1
   },
   "arms": {
     "mpc_controller": {
       "name": "mpc_controller",
       "n_periods": 42,
-      "sla_safe_goodput": 22378751.0,
-      "total_operator_cost": 238.1996,
-      "goodput_per_dollar": 93949.57381,
-      "sla_violation_rate": 0.0143,
-      "gpu_hours": 188.66944,
+      "sla_safe_goodput": 21709653.0,
+      "total_operator_cost": 77.98934,
+      "goodput_per_dollar": 278366.94269,
+      "sla_violation_rate": 0.02012,
+      "gpu_hours": 88.53333,
       "energy_cost": 0.0,
-      "n_sla_safe": 230370,
-      "queue_delay_p95": 8.95088,
+      "n_sla_safe": 229009,
+      "queue_delay_p95": 6.06842,
       "used_fallback_frac": 0.0,
       "routing_mix": {
-        "kv_aware": 35,
-        "shortest_queue": 5,
-        "round_robin": 2
+        "kv_aware": 41,
+        "round_robin": 1
       },
-      "mean_kv_service_factor": 0.76873,
+      "mean_kv_service_factor": 0.75827,
       "capacity_multiplier_mix": {
-        "1.5": 42
+        "0.75": 42
       },
       "batching_mix": {
-        "balanced": 23,
-        "conservative": 12,
-        "aggressive": 7
+        "balanced": 33,
+        "aggressive": 9
       },
       "prewarm_mix": {
         "off": 42
       },
       "placement_mix": {
-        "rack_local": 24,
-        "topology_blind": 4,
-        "network_aware": 14
+        "rack_local": 25,
+        "network_aware": 6,
+        "topology_blind": 11
       },
       "migration_mix": {
         "off": 42
       },
-      "cold_start_events": 37,
-      "warm_hold_gpu_hours": 36.0,
+      "cold_start_events": 9,
+      "warm_hold_gpu_hours": 0.0,
       "migration_cost": 0.0,
-      "mean_topology_factor": 0.96641
+      "mean_topology_factor": 0.97299
     },
     "sla_aware": {
       "name": "sla_aware",
       "n_periods": 42,
       "sla_safe_goodput": 21745847.0,
-      "total_operator_cost": 151.15844,
-      "goodput_per_dollar": 143861.28134,
+      "total_operator_cost": 127.15844,
+      "goodput_per_dollar": 171013.79065,
       "sla_violation_rate": 0.02074,
       "gpu_hours": 144.35,
       "energy_cost": 0.0,
@@ -80,7 +78,7 @@
         "off": 42
       },
       "cold_start_events": 9,
-      "warm_hold_gpu_hours": 12.0,
+      "warm_hold_gpu_hours": 0.0,
       "migration_cost": 0.0,
       "mean_topology_factor": 1.0
     },
@@ -88,8 +86,8 @@
       "name": "aurelius_canonical_kv_routing",
       "n_periods": 42,
       "sla_safe_goodput": 22312975.0,
-      "total_operator_cost": 136.91877,
-      "goodput_per_dollar": 162965.05084,
+      "total_operator_cost": 114.91877,
+      "goodput_per_dollar": 194163.00907,
       "sla_violation_rate": 0.01618,
       "gpu_hours": 130.45556,
       "energy_cost": 0.0,
@@ -116,7 +114,7 @@
         "off": 42
       },
       "cold_start_events": 8,
-      "warm_hold_gpu_hours": 11.0,
+      "warm_hold_gpu_hours": 0.0,
       "migration_cost": 0.0,
       "mean_topology_factor": 1.0
     },
@@ -124,8 +122,8 @@
       "name": "aurelius_static_full",
       "n_periods": 42,
       "sla_safe_goodput": 22328725.0,
-      "total_operator_cost": 149.00854,
-      "goodput_per_dollar": 149848.6253,
+      "total_operator_cost": 111.00854,
+      "goodput_per_dollar": 201144.20779,
       "sla_violation_rate": 0.01431,
       "gpu_hours": 126.01667,
       "energy_cost": 0.0,
@@ -152,7 +150,7 @@
         "off": 42
       },
       "cold_start_events": 15,
-      "warm_hold_gpu_hours": 19.0,
+      "warm_hold_gpu_hours": 0.0,
       "migration_cost": 0.0,
       "mean_topology_factor": 1.0
     },
@@ -160,8 +158,8 @@
       "name": "world_static_best",
       "n_periods": 42,
       "sla_safe_goodput": 22600735.0,
-      "total_operator_cost": 143.27938,
-      "goodput_per_dollar": 157738.92011,
+      "total_operator_cost": 107.27938,
+      "goodput_per_dollar": 210671.74853,
       "sla_violation_rate": 0.01228,
       "gpu_hours": 121.78333,
       "energy_cost": 0.0,
@@ -188,7 +186,7 @@
         "off": 42
       },
       "cold_start_events": 14,
-      "warm_hold_gpu_hours": 18.0,
+      "warm_hold_gpu_hours": 0.0,
       "migration_cost": 0.0,
       "mean_topology_factor": 0.96095
     },
@@ -196,8 +194,8 @@
       "name": "prewarm_always",
       "n_periods": 42,
       "sla_safe_goodput": 22662075.0,
-      "total_operator_cost": 689.30204,
-      "goodput_per_dollar": 32876.84305,
+      "total_operator_cost": 170.46871,
+      "goodput_per_dollar": 132939.79505,
       "sla_violation_rate": 0.01171,
       "gpu_hours": 139.97222,
       "energy_cost": 0.0,
@@ -224,21 +222,57 @@
         "off": 42
       },
       "cold_start_events": 0,
-      "warm_hold_gpu_hours": 283.0,
+      "warm_hold_gpu_hours": 23.58337,
       "migration_cost": 0.0,
       "mean_topology_factor": 0.96095
+    },
+    "sla_aware_capacity_1p5": {
+      "name": "sla_aware_capacity_1p5",
+      "n_periods": 42,
+      "sla_safe_goodput": 23176043.0,
+      "total_operator_cost": 169.99972,
+      "goodput_per_dollar": 136329.88806,
+      "sla_violation_rate": 0.00825,
+      "gpu_hours": 192.98333,
+      "energy_cost": 0.0,
+      "n_sla_safe": 231783,
+      "queue_delay_p95": 0.81069,
+      "used_fallback_frac": 0.0,
+      "routing_mix": {
+        "kv_aware": 42
+      },
+      "mean_kv_service_factor": 0.75647,
+      "capacity_multiplier_mix": {
+        "1.5": 42
+      },
+      "batching_mix": {
+        "conservative": 42
+      },
+      "prewarm_mix": {
+        "off": 42
+      },
+      "placement_mix": {
+        "topology_blind": 42
+      },
+      "migration_mix": {
+        "off": 42
+      },
+      "cold_start_events": 25,
+      "warm_hold_gpu_hours": 0.0,
+      "migration_cost": 0.0,
+      "mean_topology_factor": 1.0
     }
   },
   "gate": {
-    "fair_baseline": "aurelius_canonical_kv_routing",
+    "fair_baseline": "world_static_best",
     "fair_baseline_not_weak": true,
-    "beats_fair_baseline": false,
-    "pareto_sla_not_worse": true,
-    "mpc_sla_violation_rate": 0.0143,
-    "fair_sla_violation_rate": 0.0162,
+    "beats_fair_baseline": true,
+    "pareto_sla_not_worse": false,
+    "mpc_sla_violation_rate": 0.0201,
+    "fair_sla_violation_rate": 0.0123,
     "no_oracle": true,
     "splits_disjoint": true,
-    "candidate_vs_baseline_pct": -42.35,
+    "candidate_vs_baseline_pct": 32.133,
     "note": "SIMULATED (directional simulator evidence), not production telemetry",
     "headline_claim_allowed": false
   },
