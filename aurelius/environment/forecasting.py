@@ -14,11 +14,13 @@ model is kept **only if it beats the best naive baseline** by a margin — other
 naive baseline is kept and that is reported. No future leakage (a target at period t+1
 is predicted from features at periods ≤ t).
 
-Granularity is a configurable **period** (the canonical Azure trace is a single fleet
-hour, so the genuinely-forecastable dynamics are sub-hour — bin by minute/second). v2026
-fleet + KV signals have no sub-period series, so they report a constant naive with a
-RUNNING_STATISTIC tag; job runtime is ABSENT/SKIPPED. (See
-``research/AURELIUS_FORECASTING_CONTROLLER_AUDIT.md``.)
+Granularity is a configurable **period** with an auto-detected seasonal cycle (the
+Fourier + naive-seasonal features use ``cycle_len = max(cycle_pos)+1``): the 2024 one-week
+Azure trace bins to **168 hourly periods** (cycle_len 24, a real diurnal cycle), while the
+2023 one-hour trace / sample fall back to per-minute (cycle_len 60). See
+``research/AZURE_TRACE_COVERAGE_AUDIT.md``. v2026 fleet + KV signals have no sub-period
+series, so they report a constant naive with a RUNNING_STATISTIC tag; job runtime is
+ABSENT/SKIPPED. (See ``research/AURELIUS_FORECASTING_CONTROLLER_AUDIT.md``.)
 """
 
 from __future__ import annotations
@@ -145,7 +147,7 @@ def _naive_predict(kind, hist, cyc_hist=None, cyc_next=None):
 _NAIVE_KINDS = ("last", "median", "ewma", "seasonal")
 
 
-def _supervised(frames, target, n_lags=3):
+def _supervised(frames, target, n_lags=3, cycle_len=60):
     vals = [f.get(target) for f in frames]
     cyc = [f.cycle_pos for f in frames]
     rows, ys, idx = [], [], []
@@ -155,8 +157,8 @@ def _supervised(frames, target, n_lags=3):
         rmean = statistics.mean(window)
         rstd = statistics.pstdev(window) if len(window) > 1 else 0.0
         cp = cyc[t + 1]
-        feat = [*lags, rmean, rstd, math.sin(2 * math.pi * cp / 60), math.cos(2 * math.pi * cp / 60),
-                frames[t].arrival_rate]
+        feat = [*lags, rmean, rstd, math.sin(2 * math.pi * cp / cycle_len),
+                math.cos(2 * math.pi * cp / cycle_len), frames[t].arrival_rate]
         rows.append(feat)
         ys.append(vals[t + 1])
         idx.append(t + 1)
@@ -210,6 +212,7 @@ class TargetForecaster:
     coverage_err: float = 0.0
     naive_kind: str = "last"
     n_lags: int = 3
+    cycle_len: int = 60
     quantile: float | None = None
     residual_q: dict = field(default_factory=dict)   # {q: residual} for calibrated bands
     _model: object = None
@@ -231,8 +234,8 @@ class TargetForecaster:
         window = vals[max(0, t - 5):t + 1]
         rmean = statistics.mean(window)
         rstd = statistics.pstdev(window) if len(window) > 1 else 0.0
-        feat = [*lags, rmean, rstd, math.sin(2 * math.pi * cyc_next / 60),
-                math.cos(2 * math.pi * cyc_next / 60), frames_tail[-1].arrival_rate]
+        feat = [*lags, rmean, rstd, math.sin(2 * math.pi * cyc_next / self.cycle_len),
+                math.cos(2 * math.pi * cyc_next / self.cycle_len), frames_tail[-1].arrival_rate]
         return float(self._model.predict(_np.asarray([feat]))[0])
 
     def forecast(self, vals, cyc, frames_tail, cyc_next):
@@ -246,21 +249,21 @@ class TargetForecaster:
             model_used=self.model_used, fidelity=self.fidelity, status=self.status)
 
 
-def fit_target(frames, target, *, train_frac=0.6, margin=0.02):
+def fit_target(frames, target, *, train_frac=0.6, margin=0.02, cycle_len=60):
     q = QUANTILE_TARGETS.get(target)
     metric_name = "pinball" if q is not None else "mae"
     if len(frames) < 8:
         return TargetForecaster(target, "naive:last", "RUNNING_STATISTIC", metric_name,
-                                0.0, 0.0, False, status="INSUFFICIENT_DATA")
-    X, y, idx = _supervised(frames, target)
+                                0.0, 0.0, False, cycle_len=cycle_len, status="INSUFFICIENT_DATA")
+    X, y, idx = _supervised(frames, target, cycle_len=cycle_len)
     if not y:
         return TargetForecaster(target, "naive:last", "RUNNING_STATISTIC", metric_name,
-                                0.0, 0.0, False, status="INSUFFICIENT_DATA")
+                                0.0, 0.0, False, cycle_len=cycle_len, status="INSUFFICIENT_DATA")
     cut = max(3, int(len(y) * train_frac))
     Xtr, ytr, Xho, yho = X[:cut], y[:cut], X[cut:], y[cut:]
     if not yho:
         return TargetForecaster(target, "naive:last", "RUNNING_STATISTIC", metric_name,
-                                0.0, 0.0, False, status="INSUFFICIENT_HOLDOUT")
+                                0.0, 0.0, False, cycle_len=cycle_len, status="INSUFFICIENT_HOLDOUT")
     vals_all = [f.get(target) for f in frames]
     cyc_all = [f.cycle_pos for f in frames]
 
@@ -288,8 +291,8 @@ def fit_target(frames, target, *, train_frac=0.6, margin=0.02):
         candidates.append((bo[0], "REAL_ML", bo[1]))
 
     chosen = TargetForecaster(target, f"naive:{best_kind}", "RUNNING_STATISTIC", metric_name,
-                              best_naive, best_naive, False, naive_kind=best_kind, quantile=q,
-                              residual_q=_resid_q(best_naive_pred))
+                              best_naive, best_naive, False, naive_kind=best_kind,
+                              cycle_len=cycle_len, quantile=q, residual_q=_resid_q(best_naive_pred))
     for name, fidelity, model in candidates:
         try:
             pred = [float(v) for v in model.predict(_np.asarray(Xho))]
@@ -302,7 +305,7 @@ def fit_target(frames, target, *, train_frac=0.6, margin=0.02):
             hi = [p + rq[0.9] for p in pred]
             chosen = TargetForecaster(target, name, fidelity, metric_name, s, best_naive, True,
                                       coverage_err=coverage_error(yho, lo, hi), naive_kind=best_kind,
-                                      quantile=q, residual_q=rq, _model=model)
+                                      cycle_len=cycle_len, quantile=q, residual_q=rq, _model=model)
             break
     if not chosen.beats_naive:                      # calibrate the naive band too
         lo = [p + chosen.residual_q[0.1] for p in best_naive_pred]
@@ -355,10 +358,14 @@ class ForecastingModel:
         self.fitted = False
 
     def fit(self, frames, *, train_frac=0.6):
-        for tgt in EXOGENOUS:
-            self.forecasters[tgt] = fit_target(frames, tgt, train_frac=train_frac)
+        # detect the seasonal cycle length from the frames first (per-minute → 60,
+        # hourly → 24), so the Fourier features + naive-seasonal align with the period.
         if frames:
             self.cycle_len = max(1, max(f.cycle_pos for f in frames) + 1)
+        for tgt in EXOGENOUS:
+            self.forecasters[tgt] = fit_target(frames, tgt, train_frac=train_frac,
+                                               cycle_len=self.cycle_len)
+        if frames:
             for tgt in ANCHORED:
                 self.anchors[tgt] = frames[-1].get(tgt)
         self.fitted = True

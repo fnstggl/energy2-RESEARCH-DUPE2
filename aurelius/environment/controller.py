@@ -61,9 +61,14 @@ class Decision:
 
 
 def _synth_jobs(arrival_rate: float, tok_mean: float, tok_p95: float, cv: float, *,
-                period_seconds: float, best_effort_fraction: float, kv_service_factor: float) -> list:
-    """Deterministic synthetic job set matching a forecasted period profile (no RNG)."""
-    n = max(0, int(round(arrival_rate * period_seconds)))
+                window_seconds: float, best_effort_fraction: float, kv_service_factor: float) -> list:
+    """Deterministic synthetic job set matching a forecasted period profile (no RNG).
+
+    ``window_seconds`` is the simulation window the candidate actions are scored over —
+    normally the full period, but for long (e.g. hourly) periods the controller scores a
+    bounded representative window instead (same arrival rate + token/burst profile, so the
+    queueing regime and therefore the action ranking are preserved at far less cost)."""
+    n = max(0, int(round(arrival_rate * window_seconds)))
     if n == 0:
         return []
     be_stride = max(1, round(1.0 / best_effort_fraction)) if best_effort_fraction > 0 else 0
@@ -75,9 +80,9 @@ def _synth_jobs(arrival_rate: float, tok_mean: float, tok_p95: float, cv: float,
         # tokens: most at mean, a deterministic 1-in-20 tail at p95
         tok = tok_p95 if (i % 20 == 0 and tok_p95 > 0) else tok_mean
         tok = max(1, int(tok))
-        # arrival time: compress `burst` of the mass into the first 30% of the period
+        # arrival time: compress `burst` of the mass into the first 30% of the window
         arr = (frac * 0.3 if frac < burst else 0.3 + (frac - burst) / max(1e-9, 1 - burst) * 0.7)
-        arr *= period_seconds
+        arr *= window_seconds
         cls = CLASS_BEST_EFFORT if (be_stride and i % be_stride == 0) else CLASS_LATENCY
         jobs.append(Job(idx=i, arrival_s=arr, actual_tokens=tok, predicted_tokens=float(tok_mean),
                         service_s=_service_time_s(tok) * kv_service_factor, cls=cls))
@@ -99,6 +104,7 @@ class ModelPredictiveEconomicController:
     confidence_min: float = 0.15       # below this, fall back to the SLA-aware action
     kv_service_factor: float = 1.0     # avg KV service discount (≤1), applied to all candidates
     cost_scenario: str = "owned"
+    sim_seconds: float | None = None   # bounded decision-sim window (default = period_seconds)
     candidates: list = field(default_factory=enumerate_actions)
 
     def _gpd(self, jobs: list, action: dict, price: float) -> tuple:
@@ -136,9 +142,10 @@ class ModelPredictiveEconomicController:
                             forecast={"arrival_rate": ar.to_dict() if ar else {}})
 
         be = self.fleet_state.best_effort_fraction
-        point = _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, period_seconds=self.period_seconds,
+        win = self.sim_seconds or self.period_seconds
+        point = _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
                             best_effort_fraction=be, kv_service_factor=self.kv_service_factor)
-        risk = _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, period_seconds=self.period_seconds,
+        risk = _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
                            best_effort_fraction=be, kv_service_factor=self.kv_service_factor)
         best = None
         for action in self.candidates:
@@ -184,9 +191,14 @@ class EpisodeReport:
 
 def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *,
                        fleet_state, cost_model, sla_s=10.0, tick_seconds=60.0,
-                       period_seconds=60.0, kv_service_factor=1.0, cost_scenario="owned"):
+                       period_seconds=60.0, kv_service_factor=1.0, cost_scenario="owned",
+                       sim_seconds=None):
     """Run ``decide_fn(history_frames)`` over the REAL eval periods (causal: the action
-    for period p is chosen from frames[:p], then applied to the real requests of p)."""
+    for period p is chosen from frames[:p], then applied to the real requests of p).
+
+    ``sim_seconds`` is accepted (and ignored) so the same ``common`` dict can be splatted
+    here and into the controller — this harness always replays the REAL per-period load,
+    never a bounded synthetic window."""
     gpu_type = (max(fleet_state.gpu_type_mix, key=fleet_state.gpu_type_mix.get)
                 if fleet_state.gpu_type_mix else "H100")
     be = fleet_state.best_effort_fraction

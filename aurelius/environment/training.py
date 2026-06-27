@@ -34,28 +34,51 @@ DEFAULT_BASELINES = {
 
 
 def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
-                     processed_dir: str | None = None) -> dict | None:
+                     processed_dir: str | None = None, hourly_stride: int = 24,
+                     sim_seconds: float = 240.0) -> dict | None:
     """Build the (frames, per-period real trace, fleet state, cost model, common) inputs
-    from the canonical sources: Azure serving binned into sub-hour periods, the anchored
-    v2026 fleet marginals, the operator cost model, and a uniform KV service discount."""
+    from the canonical sources.
+
+    When the **2024 one-week** Azure trace is present, bin it at HOURLY periods over the
+    full 168-hour week (``cycle_len=24`` diurnal) via the bounded-memory streaming binner
+    — 168 real periods support held-out *hourly* forecasting (see
+    ``research/AZURE_TRACE_COVERAGE_AUDIT.md``). The per-period load is a deterministic
+    1/``hourly_stride`` sample (proportional, so the diurnal shape is preserved and the
+    forecast + replay share one scale); the controller scores actions over a bounded
+    ``sim_seconds`` window so an hourly period stays tractable. When only the 2023
+    one-hour trace / sample is present, fall back to the original sub-hour (``bin_seconds``)
+    per-minute binning so CI and the 1-hour regime are unchanged."""
     from collections import defaultdict
 
     from .cost_model import CostModel
     from .fleet_plane_v2026 import V2026FleetPlane
     from .forecasting import build_frames
-    from .ingestion.azure import context_tokens, ingest_azure, to_serving_raw
+    from .ingestion.azure import azure_period_frames, context_tokens, ingest_azure, to_serving_raw
     from .ingestion.mooncake import ingest_mooncake
     from .kv_cache import KVModel, gpu_mem_for
 
-    reqs, _ = ingest_azure(limit=limit)
-    out, inp = to_serving_raw(reqs), context_tokens(reqs)
-    if not out:
-        return None
-    t0 = out[0][0]
-    per: dict = defaultdict(list)
-    for (a, ot), it in zip(out, inp):
-        per[int((a - t0) // bin_seconds)].append((a, ot, it))
-    per = dict(per)
+    pf = azure_period_frames(bin_seconds=3600.0, sample_stride=hourly_stride)
+    coverage = None
+    if pf is not None and "1week" in pf["trace_version"]:
+        per = pf["per_period"]
+        period_seconds, cycle_len = pf["bin_seconds"], 24
+        coverage = {"trace_version": pf["trace_version"], "tier": pf["tier"],
+                    "n_bins_exact": pf["n_bins"], "total_requests_exact": pf["total_requests"],
+                    "sample_stride": pf["sample_stride"], "granularity": "hourly"}
+    else:                                          # 2023 one-hour / sample → per-minute
+        reqs, _ = ingest_azure(limit=limit)
+        out, inp = to_serving_raw(reqs), context_tokens(reqs)
+        if not out:
+            return None
+        t0 = out[0][0]
+        per_dd: dict = defaultdict(list)
+        for (a, ot), it in zip(out, inp):
+            per_dd[int((a - t0) // bin_seconds)].append((a, ot, it))
+        per = dict(per_dd)
+        period_seconds, cycle_len = bin_seconds, 60
+        coverage = {"trace_version": "AzureLLMInferenceTrace2023/1hour-or-sample",
+                    "granularity": "per_minute", "n_periods": len(per)}
+
     fleet = V2026FleetPlane(processed_dir=processed_dir).state_at(0)
     gpu_type = max(fleet.gpu_type_mix, key=fleet.gpu_type_mix.get) if fleet.gpu_type_mix else "H100"
     mreqs, _ = ingest_mooncake()
@@ -64,13 +87,14 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
     kv_factor = float(kv.stats(1000).get("mean_ttft_factor", 1.0))
     anchors = {"gpu_utilization": fleet.util_target, "gpu_memory_pressure": fleet.mem_pressure,
                "network_pressure": fleet.net_pressure, "kv_reuse": kv.warm_hit_rate()}
-    frames = build_frames(per, period_seconds=bin_seconds, cycle_len=60,
-                          price_by_cycle={c: fleet.energy_price_per_kwh for c in range(60)},
+    frames = build_frames(per, period_seconds=period_seconds, cycle_len=cycle_len,
+                          price_by_cycle={c: fleet.energy_price_per_kwh for c in range(cycle_len)},
                           anchors=anchors)
-    common = {"sla_s": 10.0, "period_seconds": bin_seconds, "tick_seconds": 10.0,
-              "kv_service_factor": kv_factor, "cost_scenario": "owned"}
+    common = {"sla_s": 10.0, "period_seconds": period_seconds, "tick_seconds": 10.0,
+              "kv_service_factor": kv_factor, "cost_scenario": "owned",
+              "sim_seconds": (sim_seconds if cycle_len == 24 else None)}
     return {"frames": frames, "per": per, "fleet_state": fleet, "cost_model": CostModel(),
-            "common": common}
+            "common": common, "coverage": coverage}
 
 
 def split_cuts(n: int, train: float = 0.5, val: float = 0.25) -> tuple:
@@ -93,7 +117,8 @@ def _controller(fm, fleet_state, cost_model, cfg, common):
         confidence_min=cfg["confidence_min"], sla_s=common["sla_s"],
         period_seconds=common["period_seconds"], tick_seconds=common["tick_seconds"],
         kv_service_factor=common.get("kv_service_factor", 1.0),
-        cost_scenario=common.get("cost_scenario", "owned"))
+        cost_scenario=common.get("cost_scenario", "owned"),
+        sim_seconds=common.get("sim_seconds"))
 
 
 def tune_controller(fm, frames, per, val_idx, *, fleet_state, cost_model,
@@ -130,23 +155,38 @@ def train_mpc_policy(frames, per, *, fleet_state, cost_model, train=0.5, val=0.2
 
 
 def claim_gate(arms: dict, *, weak=WEAK_BASELINES) -> dict:
-    """Honest gate: a headline requires beating the strongest NON-weak baseline."""
+    """Honest gate: a headline requires beating the strongest NON-weak baseline on
+    SLA-safe goodput/$ **without** simply trading away SLA compliance to do it.
+
+    The Pareto clause matters: a controller can raise goodput/$ purely by under-provisioning
+    (lower cost) while letting more requests miss the SLA. That is a *cheaper* policy, not a
+    *better* one — so a headline also requires the candidate's SLA-violation rate to be no
+    worse than the fair baseline's. (On the full Azure week the MPC controller's gp/$ edge is
+    small, regime-dependent, and always bought with a higher violation rate → this clause
+    keeps the gate honestly False. See research/AURELIUS_FORECASTING_AND_MPC_CONTROLLER.md.)"""
     fair = {n: r for n, r in arms.items() if n != "mpc_controller" and n not in weak}
     fair_baseline = max(fair, key=lambda n: fair[n].goodput_per_dollar) if fair else None
-    mpc = arms["mpc_controller"].goodput_per_dollar
-    base = arms[fair_baseline].goodput_per_dollar if fair_baseline else 0.0
+    mpc_arm = arms["mpc_controller"]
+    base_arm = arms[fair_baseline] if fair_baseline else None
+    mpc = mpc_arm.goodput_per_dollar
+    base = base_arm.goodput_per_dollar if base_arm else 0.0
     delta = 100.0 * (mpc - base) / base if base else 0.0
+    sla_not_worse = base_arm is not None and mpc_arm.sla_violation_rate <= base_arm.sla_violation_rate + 1e-9
     gate = {
         "fair_baseline": fair_baseline,
         "fair_baseline_not_weak": fair_baseline is not None and fair_baseline not in weak,
         "beats_fair_baseline": delta > 0,
+        "pareto_sla_not_worse": sla_not_worse,
+        "mpc_sla_violation_rate": round(mpc_arm.sla_violation_rate, 4),
+        "fair_sla_violation_rate": round(base_arm.sla_violation_rate, 4) if base_arm else None,
         "no_oracle": True,                 # controller is causal by construction
         "splits_disjoint": True,           # train < val < eval by construction
         "candidate_vs_baseline_pct": round(delta, 3),
         "note": "SIMULATED (directional simulator evidence), not production telemetry",
     }
     gate["headline_claim_allowed"] = (gate["fair_baseline_not_weak"] and gate["beats_fair_baseline"]
-                                      and gate["no_oracle"] and gate["splits_disjoint"])
+                                      and gate["pareto_sla_not_worse"] and gate["no_oracle"]
+                                      and gate["splits_disjoint"])
     return gate
 
 

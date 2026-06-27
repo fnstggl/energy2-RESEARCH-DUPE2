@@ -26,9 +26,9 @@ def _synth():
     return frames, per
 
 
-def _arm(gpd):
+def _arm(gpd, viol=0.1):
     return EpisodeReport(name="x", n_periods=5, sla_safe_goodput=gpd, total_operator_cost=1.0,
-                         goodput_per_dollar=gpd, sla_violation_rate=0.1, gpu_hours=1.0,
+                         goodput_per_dollar=gpd, sla_violation_rate=viol, gpu_hours=1.0,
                          energy_cost=0.1, n_sla_safe=10, queue_delay_p95=1.0)
 
 
@@ -45,11 +45,24 @@ def test_claim_gate_blocks_when_not_beating_fair_baseline():
 
 
 def test_claim_gate_allows_only_when_beats_and_clean():
-    arms = {"mpc_controller": _arm(120.0), "sla_aware": _arm(100.0), "fifo_weak": _arm(50.0)}
+    # beats on gp/$ AND SLA no worse (equal here) → allowed
+    arms = {"mpc_controller": _arm(120.0, viol=0.10), "sla_aware": _arm(100.0, viol=0.10),
+            "fifo_weak": _arm(50.0)}
     g = claim_gate(arms)
     assert g["fair_baseline"] == "sla_aware" and g["beats_fair_baseline"]
-    assert g["no_oracle"] and g["splits_disjoint"] and g["headline_claim_allowed"]
+    assert g["pareto_sla_not_worse"] and g["no_oracle"] and g["splits_disjoint"]
+    assert g["headline_claim_allowed"]
     assert g["fair_baseline"] not in ("fifo_weak",)   # weak is never the fair baseline
+
+
+def test_claim_gate_blocks_when_win_comes_from_more_sla_violations():
+    # higher gp/$ but a WORSE violation rate → not a real win (the Pareto clause).
+    # This is exactly the full-week MPC behaviour: cheaper, not safer.
+    arms = {"mpc_controller": _arm(120.0, viol=0.20), "sla_aware": _arm(100.0, viol=0.05),
+            "fifo_weak": _arm(50.0)}
+    g = claim_gate(arms)
+    assert g["beats_fair_baseline"] and not g["pareto_sla_not_worse"]
+    assert not g["headline_claim_allowed"]
 
 
 def test_train_and_evaluate_pipeline_deterministic_and_gated():
@@ -69,4 +82,5 @@ def test_train_and_evaluate_pipeline_deterministic_and_gated():
     # the gate is internally consistent and never claims on a weak baseline
     assert g["fair_baseline"] != "fifo_weak"
     assert g["headline_claim_allowed"] == (g["beats_fair_baseline"] and g["fair_baseline_not_weak"]
-                                           and g["no_oracle"] and g["splits_disjoint"])
+                                           and g["pareto_sla_not_worse"] and g["no_oracle"]
+                                           and g["splits_disjoint"])

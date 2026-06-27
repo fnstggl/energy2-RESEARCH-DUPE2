@@ -1,83 +1,107 @@
 {
-  "eval_periods": 15,
+  "eval_periods": 42,
   "controller_config": {
     "horizon": 1,
-    "risk_weight": 0.0,
+    "risk_weight": 1.0,
     "confidence_min": 0.1
   },
   "arms": {
     "mpc_controller": {
       "name": "mpc_controller",
-      "n_periods": 15,
-      "sla_safe_goodput": 542609.0,
-      "total_operator_cost": 0.31022,
-      "goodput_per_dollar": 1749129.87006,
-      "sla_violation_rate": 0.36198,
-      "gpu_hours": 3.48333,
-      "energy_cost": 0.01199,
-      "n_sla_safe": 3185,
-      "queue_delay_p95": 54.91458,
-      "used_fallback_frac": 0.46667
+      "n_periods": 42,
+      "sla_safe_goodput": 21238470.0,
+      "total_operator_cost": 115.36901,
+      "goodput_per_dollar": 184091.63163,
+      "sla_violation_rate": 0.03851,
+      "gpu_hours": 130.96667,
+      "energy_cost": 3.24002,
+      "n_sla_safe": 224712,
+      "queue_delay_p95": 58.75538,
+      "used_fallback_frac": 0.0
+    },
+    "fifo_weak": {
+      "name": "fifo_weak",
+      "n_periods": 42,
+      "sla_safe_goodput": 19029286.0,
+      "total_operator_cost": 105.175,
+      "goodput_per_dollar": 180929.74371,
+      "sla_violation_rate": 0.10683,
+      "gpu_hours": 119.39444,
+      "energy_cost": 2.95373,
+      "n_sla_safe": 208745,
+      "queue_delay_p95": 167.42579,
+      "used_fallback_frac": 0.0
     },
     "sla_aware": {
       "name": "sla_aware",
-      "n_periods": 15,
-      "sla_safe_goodput": 588363.0,
-      "total_operator_cost": 0.31615,
-      "goodput_per_dollar": 1861003.11389,
-      "sla_violation_rate": 0.30829,
-      "gpu_hours": 3.55,
-      "energy_cost": 0.01222,
-      "n_sla_safe": 3453,
-      "queue_delay_p95": 50.70762,
-      "used_fallback_frac": 0.0
-    },
-    "aurelius_canonical": {
-      "name": "aurelius_canonical",
-      "n_periods": 15,
-      "sla_safe_goodput": 586700.0,
-      "total_operator_cost": 0.31195,
-      "goodput_per_dollar": 1880760.96101,
-      "sla_violation_rate": 0.30749,
-      "gpu_hours": 3.50278,
-      "energy_cost": 0.01205,
-      "n_sla_safe": 3457,
-      "queue_delay_p95": 62.50898,
+      "n_periods": 42,
+      "sla_safe_goodput": 22252607.0,
+      "total_operator_cost": 125.14215,
+      "goodput_per_dollar": 177818.64009,
+      "sla_violation_rate": 0.01599,
+      "gpu_hours": 142.06111,
+      "energy_cost": 3.51449,
+      "n_sla_safe": 229976,
+      "queue_delay_p95": 8.29679,
       "used_fallback_frac": 0.0
     },
     "greedy_packing": {
       "name": "greedy_packing",
-      "n_periods": 15,
-      "sla_safe_goodput": 350057.0,
-      "total_operator_cost": 0.213,
-      "goodput_per_dollar": 1643494.34849,
-      "sla_violation_rate": 0.63762,
-      "gpu_hours": 2.39167,
-      "energy_cost": 0.00823,
-      "n_sla_safe": 1809,
-      "queue_delay_p95": 65.8934,
+      "n_periods": 42,
+      "sla_safe_goodput": 18294611.0,
+      "total_operator_cost": 104.83977,
+      "goodput_per_dollar": 174500.68125,
+      "sla_violation_rate": 0.13971,
+      "gpu_hours": 119.01389,
+      "energy_cost": 2.94432,
+      "n_sla_safe": 201061,
+      "queue_delay_p95": 257.22026,
+      "used_fallback_frac": 0.0
+    },
+    "aurelius_canonical": {
+      "name": "aurelius_canonical",
+      "n_periods": 42,
+      "sla_safe_goodput": 22066637.0,
+      "total_operator_cost": 121.99781,
+      "goodput_per_dollar": 180877.31508,
+      "sla_violation_rate": 0.01784,
+      "gpu_hours": 138.49167,
+      "energy_cost": 3.42618,
+      "n_sla_safe": 229542,
+      "queue_delay_p95": 21.89265,
       "used_fallback_frac": 0.0
     }
   },
   "gate": {
     "fair_baseline": "aurelius_canonical",
     "fair_baseline_not_weak": true,
-    "beats_fair_baseline": false,
+    "beats_fair_baseline": true,
+    "pareto_sla_not_worse": false,
+    "mpc_sla_violation_rate": 0.0385,
+    "fair_sla_violation_rate": 0.0178,
     "no_oracle": true,
     "splits_disjoint": true,
-    "candidate_vs_baseline_pct": -6.999,
+    "candidate_vs_baseline_pct": 1.777,
     "note": "SIMULATED (directional simulator evidence), not production telemetry",
     "headline_claim_allowed": false
   },
   "splits": {
-    "train_cut": 29,
+    "train_cut": 84,
     "val": [
-      29,
-      44
+      84,
+      126
     ],
     "eval": [
-      44,
-      59
+      126,
+      168
     ]
+  },
+  "coverage": {
+    "trace_version": "AzureLLMInferenceDataset2024/1week/conv",
+    "tier": "FULL_TRACE",
+    "n_bins_exact": 168,
+    "total_requests_exact": 27303999,
+    "sample_stride": 24,
+    "granularity": "hourly"
   }
 }

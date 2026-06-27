@@ -21,15 +21,18 @@ _OUT = os.path.join(_REPO, "data", "external", "mpc_controller")
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--horizon", type=int, default=None, help="pin a single horizon (else grid 1,2,4)")
-    ap.add_argument("--limit", type=int, default=28185)
+    ap.add_argument("--limit", type=int, default=28185)      # per-minute fallback (1-hour/sample)
     ap.add_argument("--bin-seconds", type=float, default=60.0)
+    ap.add_argument("--hourly-stride", type=int, default=24, help="1/N per-hour sample of the 1-week trace")
+    ap.add_argument("--sim-seconds", type=float, default=240.0, help="bounded controller decision window")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--processed-dir", default=os.environ.get("V2026_PROCESSED_DIR"))
     ap.add_argument("--out-dir", default=_OUT)
     args = ap.parse_args()
 
     inp = build_mpc_inputs(limit=args.limit, bin_seconds=args.bin_seconds,
-                           processed_dir=args.processed_dir)
+                           processed_dir=args.processed_dir, hourly_stride=args.hourly_stride,
+                           sim_seconds=args.sim_seconds)
     if inp is None:
         raise SystemExit("no Azure serving data available")
     grid = dict(DEFAULT_GRID)
@@ -40,7 +43,8 @@ def main() -> None:
     os.makedirs(args.out_dir, exist_ok=True)
     with open(os.path.join(args.out_dir, "trained_controller_config.json"), "w") as f:
         json.dump({"controller_config": trained["controller_config"], "splits": trained["splits"],
-                   "val_results": trained["val_results"], "common": trained["common"]}, f, indent=2)
+                   "coverage": inp.get("coverage"), "val_results": trained["val_results"],
+                   "common": trained["common"]}, f, indent=2)
     print(f"tuned controller → {args.out_dir}/trained_controller_config.json")
     print("selected config:", trained["controller_config"], "| splits:", trained["splits"])
 
