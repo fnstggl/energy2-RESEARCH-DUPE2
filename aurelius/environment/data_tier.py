@@ -12,12 +12,17 @@ from dataclasses import dataclass
 
 # Source tiers, best → worst.
 FULL_TRACE = "FULL_TRACE"          # the complete available public source, ingested
+VALIDATION_FIXTURE = "VALIDATION_FIXTURE"  # the complete (or proven-representative) public
+#                                    trace, committed deterministically as a repo fixture so
+#                                    validation is CI-reproducible without the raw download.
+#                                    Real public data (never synthetic), just repo-provenance.
 SUBSET_TRACE = "SUBSET_TRACE"      # a real but partial slice of the full source
 SAMPLE_FIXTURE = "SAMPLE_FIXTURE"  # a small committed schema-shaped fixture
 MOCK = "MOCK"                      # hand-authored, not from any trace
 BLOCKED = "BLOCKED"                # full source exists but access is blocked here
 
-TIER_ORDER = {FULL_TRACE: 0, SUBSET_TRACE: 1, SAMPLE_FIXTURE: 2, MOCK: 3, BLOCKED: 4}
+TIER_ORDER = {FULL_TRACE: 0, VALIDATION_FIXTURE: 1, SUBSET_TRACE: 2,
+              SAMPLE_FIXTURE: 3, MOCK: 4, BLOCKED: 5}
 
 # Artifact-quality labels for a *computed* statistic (orthogonal to source tier):
 # how exact is this aggregate relative to processing the whole source conventionally?
@@ -46,7 +51,7 @@ class SourceStatus:
 
     @property
     def headline_safe(self) -> bool:
-        return self.tier in (FULL_TRACE, SUBSET_TRACE)
+        return self.tier in (FULL_TRACE, VALIDATION_FIXTURE, SUBSET_TRACE)
 
     def to_dict(self) -> dict:
         return {
@@ -58,7 +63,7 @@ class SourceStatus:
 
 
 __all__ = [
-    "FULL_TRACE", "SUBSET_TRACE", "SAMPLE_FIXTURE", "MOCK", "BLOCKED",
+    "FULL_TRACE", "VALIDATION_FIXTURE", "SUBSET_TRACE", "SAMPLE_FIXTURE", "MOCK", "BLOCKED",
     "FULL_TRACE_EXACT", "FULL_TRACE_APPROX", "ARTIFACT_LABELS",
     "TIER_ORDER", "SourceStatus",
 ]

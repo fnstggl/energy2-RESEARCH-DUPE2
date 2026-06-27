@@ -1,0 +1,80 @@
+{
+  "n_frames": 168,
+  "train_cut": 100,
+  "coverage": {
+    "trace_version": "AzureLLMInferenceDataset2024/1week/conv",
+    "tier": "FULL_TRACE",
+    "n_bins_exact": 168,
+    "total_requests_exact": 27303999,
+    "sample_stride": 24,
+    "granularity": "hourly"
+  },
+  "report": {
+    "arrival_rate": {
+      "target": "arrival_rate",
+      "model_used": "ridge",
+      "fidelity": "LINEAR",
+      "metric": "mae",
+      "holdout_metric": 0.14411,
+      "naive_metric": 0.18342,
+      "beats_naive": true,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "output_token_mean": {
+      "target": "output_token_mean",
+      "model_used": "ridge",
+      "fidelity": "LINEAR",
+      "metric": "mae",
+      "holdout_metric": 1.91,
+      "naive_metric": 2.47784,
+      "beats_naive": true,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "output_token_p95": {
+      "target": "output_token_p95",
+      "model_used": "naive:seasonal",
+      "fidelity": "RUNNING_STATISTIC",
+      "metric": "pinball",
+      "holdout_metric": 1.40749,
+      "naive_metric": 1.40749,
+      "beats_naive": false,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "input_token_mean": {
+      "target": "input_token_mean",
+      "model_used": "ridge",
+      "fidelity": "LINEAR",
+      "metric": "mae",
+      "holdout_metric": 27.06345,
+      "naive_metric": 38.658,
+      "beats_naive": true,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "interarrival_cv": {
+      "target": "interarrival_cv",
+      "model_used": "ridge",
+      "fidelity": "LINEAR",
+      "metric": "mae",
+      "holdout_metric": 0.00754,
+      "naive_metric": 0.00776,
+      "beats_naive": true,
+      "coverage_err": 0.0,
+      "status": "OK"
+    },
+    "electricity_price": {
+      "target": "electricity_price",
+      "model_used": "naive:last",
+      "fidelity": "RUNNING_STATISTIC",
+      "metric": "mae",
+      "holdout_metric": 0.0,
+      "naive_metric": 0.0,
+      "beats_naive": false,
+      "coverage_err": 0.2,
+      "status": "OK"
+    }
+  }
+}

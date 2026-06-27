@@ -1,0 +1,180 @@
+{
+  "controller_config": {
+    "horizon": 1,
+    "risk_weight": 1.0,
+    "confidence_min": 0.1
+  },
+  "splits": {
+    "train_cut": 84,
+    "val": [
+      84,
+      126
+    ],
+    "eval": [
+      126,
+      168
+    ]
+  },
+  "coverage": {
+    "trace_version": "AzureLLMInferenceDataset2024/1week/conv",
+    "tier": "FULL_TRACE",
+    "n_bins_exact": 168,
+    "total_requests_exact": 27303999,
+    "sample_stride": 24,
+    "granularity": "hourly"
+  },
+  "val_results": [
+    {
+      "cfg": {
+        "horizon": 1,
+        "risk_weight": 0.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 179117.74
+    },
+    {
+      "cfg": {
+        "horizon": 1,
+        "risk_weight": 0.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 179117.74
+    },
+    {
+      "cfg": {
+        "horizon": 1,
+        "risk_weight": 0.5,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 189478.27
+    },
+    {
+      "cfg": {
+        "horizon": 1,
+        "risk_weight": 0.5,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 189478.27
+    },
+    {
+      "cfg": {
+        "horizon": 1,
+        "risk_weight": 1.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 192399.04
+    },
+    {
+      "cfg": {
+        "horizon": 1,
+        "risk_weight": 1.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 192399.04
+    },
+    {
+      "cfg": {
+        "horizon": 2,
+        "risk_weight": 0.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 179117.74
+    },
+    {
+      "cfg": {
+        "horizon": 2,
+        "risk_weight": 0.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 179117.74
+    },
+    {
+      "cfg": {
+        "horizon": 2,
+        "risk_weight": 0.5,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 189478.27
+    },
+    {
+      "cfg": {
+        "horizon": 2,
+        "risk_weight": 0.5,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 189478.27
+    },
+    {
+      "cfg": {
+        "horizon": 2,
+        "risk_weight": 1.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 192399.04
+    },
+    {
+      "cfg": {
+        "horizon": 2,
+        "risk_weight": 1.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 192399.04
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 179117.74
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 179117.74
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.5,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 189478.27
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 0.5,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 189478.27
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 1.0,
+        "confidence_min": 0.1
+      },
+      "val_gpd": 192399.04
+    },
+    {
+      "cfg": {
+        "horizon": 4,
+        "risk_weight": 1.0,
+        "confidence_min": 0.3
+      },
+      "val_gpd": 192399.04
+    }
+  ],
+  "common": {
+    "sla_s": 10.0,
+    "period_seconds": 3600.0,
+    "tick_seconds": 10.0,
+    "kv_service_factor": 0.8095,
+    "cost_scenario": "owned",
+    "sim_seconds": 240.0
+  }
+}
