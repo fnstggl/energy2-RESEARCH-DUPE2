@@ -1,0 +1,2114 @@
+{
+  "controller_config": {
+    "horizon": 1,
+    "risk_weight": 1.0,
+    "confidence_min": 0.1
+  },
+  "risk_weight": 1.0,
+  "eval_periods": [
+    126,
+    168
+  ],
+  "rows": [
+    {
+      "period": 126,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 67521.3,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 41065.0,
+          "exp_gpd": 41065.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 47005.4,
+          "exp_gpd": 47005.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 67521.3,
+          "exp_gpd": 67521.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 119327.0,
+        "sla_viol": 0.0244,
+        "gpu_hours": 3.617,
+        "cold_start_events": 2,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.54,
+        "warm_capacity": 8,
+        "peak_c": 10,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 127,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 46528.0,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 32982.0,
+          "exp_gpd": 32982.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 36526.8,
+          "exp_gpd": 36526.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 46528.0,
+          "exp_gpd": 46528.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 82781.9,
+        "sla_viol": 0.0173,
+        "gpu_hours": 3.678,
+        "cold_start_events": 0,
+        "warm_hold_h": 1.0,
+        "queue_p95": 8.36,
+        "warm_capacity": 10,
+        "peak_c": 9,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 128,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "shortest_queue",
+        "prewarm_policy": "off",
+        "placement_policy": "network_aware",
+        "migration_policy": "off"
+      },
+      "predicted_score": 83675.3,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 45013.5,
+          "exp_gpd": 45013.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 50499.0,
+          "exp_gpd": 50499.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 84429.2,
+          "exp_gpd": 84429.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 100861.4,
+        "sla_viol": 0.0253,
+        "gpu_hours": 4.406,
+        "cold_start_events": 1,
+        "warm_hold_h": 0.0,
+        "queue_p95": 0.0,
+        "warm_capacity": 9,
+        "peak_c": 10,
+        "migration_cost": 0.0,
+        "topology_factor": 0.96095
+      }
+    },
+    {
+      "period": 129,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 48224.5,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 34184.6,
+          "exp_gpd": 34184.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 37727.3,
+          "exp_gpd": 37727.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 48224.5,
+          "exp_gpd": 48224.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 57870.7,
+        "sla_viol": 0.0173,
+        "gpu_hours": 3.478,
+        "cold_start_events": 0,
+        "warm_hold_h": 2.0,
+        "queue_p95": 8.46,
+        "warm_capacity": 10,
+        "peak_c": 8,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 130,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 134762.9,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 44321.7,
+          "exp_gpd": 44321.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 61670.2,
+          "exp_gpd": 61670.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 135367.2,
+          "exp_gpd": 135367.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 109342.6,
+        "sla_viol": 0.0118,
+        "gpu_hours": 3.45,
+        "cold_start_events": 1,
+        "warm_hold_h": 0.0,
+        "queue_p95": 0.0,
+        "warm_capacity": 8,
+        "peak_c": 9,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 131,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 53091.4,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 35355.9,
+          "exp_gpd": 35355.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 39786.2,
+          "exp_gpd": 39786.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 53091.4,
+          "exp_gpd": 53091.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 71448.1,
+        "sla_viol": 0.0148,
+        "gpu_hours": 3.378,
+        "cold_start_events": 0,
+        "warm_hold_h": 1.0,
+        "queue_p95": 8.68,
+        "warm_capacity": 9,
+        "peak_c": 8,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 132,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 66077.8,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 40466.7,
+          "exp_gpd": 40466.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 46097.2,
+          "exp_gpd": 46097.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 66077.8,
+          "exp_gpd": 66077.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 126329.0,
+        "sla_viol": 0.0127,
+        "gpu_hours": 3.364,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.5,
+        "warm_capacity": 8,
+        "peak_c": 8,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 133,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 67794.3,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 41231.0,
+          "exp_gpd": 41231.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 47195.4,
+          "exp_gpd": 47195.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 67794.3,
+          "exp_gpd": 67794.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 132382.4,
+        "sla_viol": 0.0106,
+        "gpu_hours": 3.481,
+        "cold_start_events": 1,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.5,
+        "warm_capacity": 8,
+        "peak_c": 9,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 134,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "network_aware",
+        "migration_policy": "off"
+      },
+      "predicted_score": 55760.1,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 36931.9,
+          "exp_gpd": 36931.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 41559.7,
+          "exp_gpd": 41559.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 55760.1,
+          "exp_gpd": 55760.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 78534.2,
+        "sla_viol": 0.0118,
+        "gpu_hours": 3.4,
+        "cold_start_events": 0,
+        "warm_hold_h": 1.0,
+        "queue_p95": 8.42,
+        "warm_capacity": 9,
+        "peak_c": 8,
+        "migration_cost": 0.0,
+        "topology_factor": 0.96095
+      }
+    },
+    {
+      "period": 135,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 69901.4,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 42099.1,
+          "exp_gpd": 42099.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 48218.7,
+          "exp_gpd": 48218.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 69901.4,
+          "exp_gpd": 69901.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 134606.1,
+        "sla_viol": 0.0087,
+        "gpu_hours": 3.244,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.38,
+        "warm_capacity": 8,
+        "peak_c": 8,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 136,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 67591.8,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 40535.9,
+          "exp_gpd": 40535.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 46853.5,
+          "exp_gpd": 46853.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 67591.8,
+          "exp_gpd": 67591.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 51962.6,
+        "sla_viol": 0.0057,
+        "gpu_hours": 3.078,
+        "cold_start_events": 0,
+        "warm_hold_h": 2.0,
+        "queue_p95": 8.52,
+        "warm_capacity": 8,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 137,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 155352.0,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 58111.0,
+          "exp_gpd": 58386.4,
+          "risk_viol": 0.0047,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 74686.3,
+          "exp_gpd": 75040.3,
+          "risk_viol": 0.0047,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 159104.5,
+          "exp_gpd": 159104.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 130646.5,
+        "sla_viol": 0.0077,
+        "gpu_hours": 3.017,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.42,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 138,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 157809.5,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 56736.8,
+          "exp_gpd": 56736.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 74810.3,
+          "exp_gpd": 74810.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 163360.6,
+          "exp_gpd": 163360.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 121555.6,
+        "sla_viol": 0.0066,
+        "gpu_hours": 2.758,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.66,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 139,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 148823.5,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 51252.2,
+          "exp_gpd": 51252.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 68167.5,
+          "exp_gpd": 68167.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 150406.7,
+          "exp_gpd": 150406.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 118781.1,
+        "sla_viol": 0.0074,
+        "gpu_hours": 2.689,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.46,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 140,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 144433.1,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 48134.9,
+          "exp_gpd": 48134.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 65157.3,
+          "exp_gpd": 65157.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 146909.1,
+          "exp_gpd": 146909.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 111150.6,
+        "sla_viol": 0.0098,
+        "gpu_hours": 2.708,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.42,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 141,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "network_aware",
+        "migration_policy": "off"
+      },
+      "predicted_score": 138523.5,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 45696.2,
+          "exp_gpd": 45696.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 60519.5,
+          "exp_gpd": 60519.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 138523.5,
+          "exp_gpd": 138523.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 103288.6,
+        "sla_viol": 0.0038,
+        "gpu_hours": 2.589,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.5,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.96095
+      }
+    },
+    {
+      "period": 142,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 126541.0,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 41191.4,
+          "exp_gpd": 41191.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 55145.2,
+          "exp_gpd": 55145.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 126541.0,
+          "exp_gpd": 126541.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 88774.1,
+        "sla_viol": 0.0058,
+        "gpu_hours": 2.531,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.6,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 143,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 115553.9,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 36862.6,
+          "exp_gpd": 36862.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 49783.9,
+          "exp_gpd": 49783.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 115553.9,
+          "exp_gpd": 115553.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 90514.4,
+        "sla_viol": 0.003,
+        "gpu_hours": 2.447,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.75,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 144,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 113332.7,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 37133.6,
+          "exp_gpd": 37133.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 50265.4,
+          "exp_gpd": 50265.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 113332.7,
+          "exp_gpd": 113332.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 82291.5,
+        "sla_viol": 0.0121,
+        "gpu_hours": 2.514,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.53,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 145,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 110789.5,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 36876.5,
+          "exp_gpd": 36876.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 49917.4,
+          "exp_gpd": 49917.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 112548.1,
+          "exp_gpd": 112548.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 92089.6,
+        "sla_viol": 0.0086,
+        "gpu_hours": 2.589,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.71,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 146,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 115629.9,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 38644.0,
+          "exp_gpd": 38644.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 51398.1,
+          "exp_gpd": 51398.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 115629.9,
+          "exp_gpd": 115629.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 96440.7,
+        "sla_viol": 0.0097,
+        "gpu_hours": 2.564,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.7,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 147,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 122029.2,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 39983.0,
+          "exp_gpd": 39983.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 53646.7,
+          "exp_gpd": 53646.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 122029.2,
+          "exp_gpd": 122029.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 79288.7,
+        "sla_viol": 0.0204,
+        "gpu_hours": 2.614,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.65,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 148,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 115461.7,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 38336.5,
+          "exp_gpd": 38336.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 51774.6,
+          "exp_gpd": 51774.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 115461.7,
+          "exp_gpd": 115461.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 75211.6,
+        "sla_viol": 0.0182,
+        "gpu_hours": 2.533,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.5,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 149,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 114243.6,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 37932.1,
+          "exp_gpd": 37932.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 51228.4,
+          "exp_gpd": 51228.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 114243.6,
+          "exp_gpd": 114243.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 81824.8,
+        "sla_viol": 0.0128,
+        "gpu_hours": 2.519,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.71,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 150,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "network_aware",
+        "migration_policy": "off"
+      },
+      "predicted_score": 118223.7,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 39351.0,
+          "exp_gpd": 39351.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 53267.0,
+          "exp_gpd": 53267.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 120100.3,
+          "exp_gpd": 120100.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 89273.3,
+        "sla_viol": 0.016,
+        "gpu_hours": 2.475,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 0.0,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.96095
+      }
+    },
+    {
+      "period": 151,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 122176.4,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 39770.6,
+          "exp_gpd": 39770.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 53711.3,
+          "exp_gpd": 53711.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 122176.4,
+          "exp_gpd": 122176.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 96355.6,
+        "sla_viol": 0.0085,
+        "gpu_hours": 2.711,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.7,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 152,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 128535.3,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 42114.7,
+          "exp_gpd": 42114.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 56506.8,
+          "exp_gpd": 56506.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 128535.3,
+          "exp_gpd": 128535.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 90591.7,
+        "sla_viol": 0.0126,
+        "gpu_hours": 2.75,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.66,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 153,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 125762.8,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 43394.3,
+          "exp_gpd": 43394.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 57592.5,
+          "exp_gpd": 57592.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 125762.8,
+          "exp_gpd": 125762.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 79955.7,
+        "sla_viol": 0.0186,
+        "gpu_hours": 2.714,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.44,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 154,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 121963.9,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 39701.4,
+          "exp_gpd": 39701.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 53150.6,
+          "exp_gpd": 53150.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 121963.9,
+          "exp_gpd": 121963.9,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 90227.7,
+        "sla_viol": 0.0127,
+        "gpu_hours": 2.678,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.52,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 155,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 122697.5,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 41006.0,
+          "exp_gpd": 41006.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 54539.7,
+          "exp_gpd": 54539.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 122697.5,
+          "exp_gpd": 122697.5,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 96669.8,
+        "sla_viol": 0.0167,
+        "gpu_hours": 2.794,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.34,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 156,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 131986.6,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 43842.0,
+          "exp_gpd": 43842.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 59346.3,
+          "exp_gpd": 59346.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 133807.1,
+          "exp_gpd": 133807.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 105601.6,
+        "sla_viol": 0.0121,
+        "gpu_hours": 2.714,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.49,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 157,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 131222.8,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 44136.6,
+          "exp_gpd": 44136.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 58959.1,
+          "exp_gpd": 58959.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 131222.8,
+          "exp_gpd": 131222.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 109169.2,
+        "sla_viol": 0.0054,
+        "gpu_hours": 2.733,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.75,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 158,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 129611.7,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 43878.6,
+          "exp_gpd": 43878.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 58235.2,
+          "exp_gpd": 58235.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 129611.7,
+          "exp_gpd": 129611.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 113011.3,
+        "sla_viol": 0.006,
+        "gpu_hours": 2.9,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.77,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 159,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 138992.6,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 46110.3,
+          "exp_gpd": 46110.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 62416.7,
+          "exp_gpd": 62416.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 140730.0,
+          "exp_gpd": 140730.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 114044.3,
+        "sla_viol": 0.0085,
+        "gpu_hours": 2.728,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.5,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 160,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 137638.3,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 46560.3,
+          "exp_gpd": 46560.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 62471.6,
+          "exp_gpd": 62471.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 139316.8,
+          "exp_gpd": 139316.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 111616.7,
+        "sla_viol": 0.0101,
+        "gpu_hours": 2.756,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.5,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 161,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 130216.8,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 44083.4,
+          "exp_gpd": 44083.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 58507.1,
+          "exp_gpd": 58507.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 130216.8,
+          "exp_gpd": 130216.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 103341.0,
+        "sla_viol": 0.0073,
+        "gpu_hours": 2.772,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.59,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 162,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 129213.7,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 42337.0,
+          "exp_gpd": 42337.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 57309.0,
+          "exp_gpd": 57309.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 129213.7,
+          "exp_gpd": 129213.7,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 98774.4,
+        "sla_viol": 0.0078,
+        "gpu_hours": 2.6,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.3,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 163,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 116904.0,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 38815.4,
+          "exp_gpd": 38815.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 52421.4,
+          "exp_gpd": 52421.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 116904.0,
+          "exp_gpd": 116904.0,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 94652.8,
+        "sla_viol": 0.0073,
+        "gpu_hours": 2.628,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.84,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 164,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "rack_local",
+        "migration_policy": "off"
+      },
+      "predicted_score": 115762.4,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 37171.1,
+          "exp_gpd": 37171.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 50316.2,
+          "exp_gpd": 50316.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 115762.4,
+          "exp_gpd": 115762.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 95486.7,
+        "sla_viol": 0.0096,
+        "gpu_hours": 2.631,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.45,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 0.964
+      }
+    },
+    {
+      "period": 165,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 114524.1,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 38025.2,
+          "exp_gpd": 38025.2,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 50906.6,
+          "exp_gpd": 50906.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 114524.1,
+          "exp_gpd": 114524.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 93961.7,
+        "sla_viol": 0.0069,
+        "gpu_hours": 2.636,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.34,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 166,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "balanced",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 114701.6,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 37354.3,
+          "exp_gpd": 37354.3,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 50682.4,
+          "exp_gpd": 50682.4,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 115570.6,
+          "exp_gpd": 115570.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 84824.8,
+        "sla_viol": 0.0135,
+        "gpu_hours": 2.514,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.74,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    },
+    {
+      "period": 167,
+      "chosen": {
+        "capacity_multiplier": 1.5,
+        "batching_policy": "conservative",
+        "routing_policy": "kv_aware",
+        "prewarm_policy": "off",
+        "placement_policy": "topology_blind",
+        "migration_policy": "off"
+      },
+      "predicted_score": 103986.8,
+      "capacity_option_scores": {
+        "0.75": {
+          "score": 34526.6,
+          "exp_gpd": 34526.6,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.0": {
+          "score": 46629.1,
+          "exp_gpd": 46629.1,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        },
+        "1.5": {
+          "score": 103986.8,
+          "exp_gpd": 103986.8,
+          "risk_viol": 0.0,
+          "point_sla": 0.0,
+          "point_cold": 0,
+          "risk_cold": 0
+        }
+      },
+      "realized": {
+        "gp_per_dollar": 83141.1,
+        "sla_viol": 0.0059,
+        "gpu_hours": 2.536,
+        "cold_start_events": 0,
+        "warm_hold_h": 0.0,
+        "queue_p95": 8.75,
+        "warm_capacity": 6,
+        "peak_c": 6,
+        "migration_cost": 0.0,
+        "topology_factor": 1.0
+      }
+    }
+  ]
+}

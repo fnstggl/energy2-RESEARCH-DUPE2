@@ -36,16 +36,22 @@ from ..optimizer.unified_replay import (
     Job,
     run_unified_replay,
 )
+from .world_calibration import world_calibration as _wc
 from .world_state import CanonicalWorldState, MigrationState, build_sample_cluster
 
-# --- BENCHMARK_DERIVED constants (documented public-prior magnitudes, not our trace) ----------
-COLD_START_S = 30.0            # serving replica model-load / container warm time (vLLM/TGI regime)
-WARM_HOLD_GPU_FRACTION = 1.0   # a warm idle replica still occupies its GPU → ~full GPU-hour held
-TOPOLOGY_MAX_DISCOUNT = 0.08   # max service-time discount from perfect locality + lowest pressure
-MIGRATION_COST_PER_REPLICA = 0.40   # operator $ to live-migrate one replica (move + reschedule)
-MIGRATION_CAPACITY_LOSS_FRAC = 0.10 # capacity withheld per migrating replica, this period only
-MIGRATION_CACHE_PENALTY = 0.04      # service-time surcharge from KV warmth lost on a moved replica
-MIGRATION_DURATION_PERIODS = 1      # a move started in period p lands (benefit on) at p+1
+# All transition magnitudes are CALIBRATED with public-source provenance in world_calibration.py.
+# (PR #101 used a full-period warm-hold here; that inverted the capacity economics — see
+# research/WORLD_STATE_REGRESSION_ROOT_CAUSE_AUDIT.md. The idle-timeout warm-hold is the fix.)
+_CAL = _wc()
+COLD_START_S = _CAL.base("cold_start_s")                       # 30s — evidence-supported, not tuned
+WARM_IDLE_TIMEOUT_S = _CAL.base("warm_idle_timeout_s")         # 300s — idle replicas cool after this
+WARM_HOLD_GPU_FRACTION = _CAL.base("warm_hold_gpu_fraction")   # 1.0 — a warm replica occupies its GPU
+COLD_START_RAMP = _CAL.base("cold_start_ramp")                 # 1.0 — progressive (staggered) ramp
+TOPOLOGY_MAX_DISCOUNT = _CAL.base("topology_max_discount")     # 0.08 macro locality relief (no per-link)
+MIGRATION_COST_PER_REPLICA = _CAL.base("migration_cost_per_replica")    # $0.40 per live move
+MIGRATION_CAPACITY_LOSS_FRAC = _CAL.base("migration_capacity_loss_frac")  # 0.10 withheld while moving
+MIGRATION_CACHE_PENALTY = _CAL.base("migration_cache_penalty")  # 0.04 KV-warmth-lost surcharge
+MIGRATION_DURATION_PERIODS = int(_CAL.base("migration_duration_periods"))  # lands next period
 PREWARM_MARGIN = {"off": 0.0, "conservative": 0.15, "aggressive": 0.45}  # headroom over forecast
 
 PREWARM_OPTIONS = ("off", "conservative", "aggressive")
@@ -303,8 +309,14 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
 
     # 7) cost = serving operator cost + warm-hold + migration.
     peak_c = kpi.c_max
-    idle_warm = max(0, warm_capacity - peak_c)                 # warm but never needed this period
-    warm_hold_gpu_hours = idle_warm * WARM_HOLD_GPU_FRACTION * period_hours
+    # warm-hold belongs to the PREWARM decision, not the capacity decision. A reactive (off) operator
+    # cools idle replicas down to what it serves (peak_c) within the idle timeout, so it carries no
+    # INTENTIONAL warm-hold — only PROACTIVE prewarming (conservative/aggressive) holds replicas above
+    # current usage and pays for them. Charging reactive idle against capacity_multiplier (via
+    # peak_c) is exactly what inverted the capacity economics in PR #101 (see root-cause audit).
+    prewarmed_idle = max(0, warm_capacity - peak_c) if prewarm != "off" else 0
+    warm_hold_hours = min(period_hours, WARM_IDLE_TIMEOUT_S / 3600.0)   # idle replicas cool after timeout
+    warm_hold_gpu_hours = prewarmed_idle * WARM_HOLD_GPU_FRACTION * warm_hold_hours
     warm_hold_cost = warm_hold_gpu_hours * _gpu_hour_usd()
     cold_started = max(0, peak_c - pw["reactive_warm"]) if prewarm == "off" else max(0, peak_c - warm_capacity)
     if cost_model is not None and fleet_state is not None:
