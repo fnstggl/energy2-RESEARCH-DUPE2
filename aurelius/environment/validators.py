@@ -363,7 +363,48 @@ def azure_checks(bridge) -> list:
     ]
 
 
-def build_all_checks(*, bridge, fleet_plane, processed_dir: str | None = None) -> list:
+def cost_checks(cost_model, fleet_plane) -> list:
+    """Operator-side cost sanity + sensitivity bands (heuristic assumptions visible)."""
+    if cost_model is None:
+        return []
+    hours = fleet_plane.hours()
+    fs = fleet_plane.state_at(hours[0]) if hours else None
+    gpu_type = max(fs.gpu_type_mix, key=fs.gpu_type_mix.get) if (fs and fs.gpu_type_mix) else "H100"
+    price = fs.energy_price_per_kwh if fs else 0.06
+    util = fs.util_target if fs else 0.8
+    owned = cost_model.operator_cost(gpu_hours=1.0, gpu_type=gpu_type,
+                                     energy_price_per_kwh=price, utilization=util, scenario="owned")
+    leased = cost_model.operator_cost(gpu_hours=1.0, gpu_type=gpu_type,
+                                      energy_price_per_kwh=price, utilization=util, scenario="leased")
+    band_ok = 0.02 <= owned.total_operator_cost <= 15.0 and leased.total_operator_cost > 0
+    checks = [sanity_check(
+        "cost_operator_sanity_band", band_ok,
+        {"owned_usd_per_gpu_hour": round(owned.total_operator_cost, 4),
+         "leased_usd_per_gpu_hour": round(leased.total_operator_cost, 4), "gpu_type": gpu_type},
+        source="engineering", ref_tier="INFERRED",
+        detail="owned $/GPU-hr in [0.02, 15] (covers cheap→flagship GPUs); leased > 0; operator-side")]
+    basis_ok = owned.basis == "owned_depreciation" and leased.basis == "leased_contract"
+    checks.append(sanity_check(
+        "cost_operator_side_only", basis_ok,
+        {"owned_basis": owned.basis, "leased_basis": leased.basis},
+        source="engineering", ref_tier="INFERRED",
+        detail="cost basis is operator depreciation/lease — NOT tenant-side spot/reserved arbitrage"))
+    sens = cost_model.sensitivity(gpu_hours=1.0, gpu_type=gpu_type,
+                                  energy_price_per_kwh=price, utilization=util)
+    sens_ok = (sens["low_total"] <= sens["base_total"] <= sens["high_total"]
+               and len(sens["per_factor"]) >= 5)
+    checks.append(sanity_check(
+        "cost_sensitivity_bands", sens_ok,
+        {"base": sens["base_total"], "low": sens["low_total"], "high": sens["high_total"],
+         "factors": list(sens["per_factor"].keys())},
+        source="engineering", ref_tier="INFERRED",
+        detail="low ≤ base ≤ high; PUE/CapEx/electricity/service-life/power/util bands reported "
+               "(heuristic assumptions made visible)"))
+    return checks
+
+
+def build_all_checks(*, bridge, fleet_plane, cost_model=None,
+                     processed_dir: str | None = None) -> list:
     """Assemble the full breadth of validation checks across all four planes."""
     checks: list = []
     checks += azure_checks(bridge)
@@ -371,10 +412,11 @@ def build_all_checks(*, bridge, fleet_plane, processed_dir: str | None = None) -
     checks += mooncake_kv_checks()
     checks += kv_simulator_checks()
     checks += electricity_checks(fleet_plane)
+    checks += cost_checks(cost_model, fleet_plane)
     return checks
 
 
 __all__ = [
     "v2026_fleet_checks", "mooncake_kv_checks", "kv_simulator_checks",
-    "electricity_checks", "azure_checks", "build_all_checks",
+    "electricity_checks", "cost_checks", "azure_checks", "build_all_checks",
 ]

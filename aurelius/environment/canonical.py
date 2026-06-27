@@ -20,7 +20,7 @@ telemetry (see the manifest framing).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .calibration_bridge import CalibrationBridge, build_bridge
 from .cost_model import CostModel
@@ -48,6 +48,7 @@ class EnvironmentResult:
     goodput_per_dollar: float
     manifest: dict
     validation: dict
+    cost_sensitivity: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +56,7 @@ class EnvironmentResult:
             "total_goodput": round(self.total_goodput, 2),
             "total_cost": round(self.total_cost, 4),
             "goodput_per_dollar": round(self.goodput_per_dollar, 4),
+            "cost_sensitivity": self.cost_sensitivity,
             "manifest": self.manifest, "validation": self.validation,
         }
 
@@ -75,6 +77,7 @@ class CanonicalMultiPlaneEnvironment:
         sla_s: float = 10.0,
         processed_dir: str | None = None,
         kv_enabled: bool = True,
+        cost_scenario: str = "owned",
     ) -> None:
         self.fleet_plane = fleet_plane or V2026FleetPlane(processed_dir=processed_dir)
         self.serving_plane = serving_plane or ServingPlane()
@@ -85,6 +88,7 @@ class CanonicalMultiPlaneEnvironment:
         self.sla_s = sla_s
         self.processed_dir = processed_dir
         self.kv_enabled = kv_enabled
+        self.cost_scenario = cost_scenario
         self._bridge: CalibrationBridge | None = None
         self._kv: KVModel | None = None
         self._kv_source_tier = "n/a"
@@ -122,7 +126,7 @@ class CanonicalMultiPlaneEnvironment:
             self._build_kv()
         if self._kv is not None:
             params += self._kv.params()                  # KV reuse/footprint/eviction provenance
-        params += self.cost_model.params()
+        params += self.cost_model.params(scenario=self.cost_scenario)
         return FidelityManifest.from_params(params)
 
     # -- the two-clock run ----------------------------------------------
@@ -147,6 +151,10 @@ class CanonicalMultiPlaneEnvironment:
         steps: list = []
         total_goodput = 0.0
         total_cost = 0.0
+        total_gpu_hours = 0.0
+        gpu_type_hours: dict = {}
+        util_sum = 0.0
+        price_sum = 0.0
         for hour in sorted(azure_hourly):
             raw_slice = azure_hourly[hour]
             fleet = self.fleet_plane.state_at(hour)
@@ -164,24 +172,40 @@ class CanonicalMultiPlaneEnvironment:
                 capacity=action["capacity"], ordering=action["ordering"],
                 admission=action["admission"])
             gpu_type = max(fleet.gpu_type_mix, key=fleet.gpu_type_mix.get) if fleet.gpu_type_mix else "H100"
-            cost = self.cost_model.cost(
+            cost = self.cost_model.operator_cost(
                 gpu_hours=kpi.gpu_hours, gpu_type=gpu_type,
-                energy_price_per_kwh=fleet.energy_price_per_kwh)
-            reward = kpi.sla_safe_goodput / max(cost.total, 1e-9)
+                energy_price_per_kwh=fleet.energy_price_per_kwh,
+                utilization=fleet.util_target, scenario=self.cost_scenario,
+                sla_violations=kpi.sla_violations)
+            reward = kpi.sla_safe_goodput / max(cost.total_operator_cost, 1e-9)
             total_goodput += kpi.sla_safe_goodput
-            total_cost += cost.total
+            total_cost += cost.total_operator_cost
+            total_gpu_hours += kpi.gpu_hours
+            gpu_type_hours[gpu_type] = gpu_type_hours.get(gpu_type, 0.0) + kpi.gpu_hours
+            util_sum += fleet.util_target
+            price_sum += fleet.energy_price_per_kwh
             steps.append(EnvStep(
                 hour=hour, observation=obs.to_dict(), action={**action, **run_action},
                 reward=reward,
-                metrics={"kpi": kpi.to_dict(), "cost": cost.to_dict(),
+                metrics={"kpi": kpi.to_dict(),
+                         "cost": cost.to_dict(n_sla_safe=kpi.n_sla_safe,
+                                              sla_safe_tokens=kpi.sla_safe_goodput,
+                                              sla_safe_goodput=kpi.sla_safe_goodput),
                          "gpu_type": gpu_type,
                          "kv": self._kv.stats(len(requests)) if self._kv else {}}))
 
+        n = max(1, len(steps))
+        rep_gpu = max(gpu_type_hours, key=gpu_type_hours.get) if gpu_type_hours else "H100"
+        sensitivity = self.cost_model.sensitivity(
+            gpu_hours=total_gpu_hours or 1.0, gpu_type=rep_gpu,
+            energy_price_per_kwh=(price_sum / n) or 0.06, utilization=(util_sum / n),
+            scenario=self.cost_scenario)
         validation = self.validate(processed_dir=self.processed_dir).to_dict()
         return EnvironmentResult(
             steps=steps, total_goodput=total_goodput, total_cost=total_cost,
             goodput_per_dollar=total_goodput / max(total_cost, 1e-9),
-            manifest=self.manifest().to_dict(), validation=validation)
+            manifest=self.manifest().to_dict(), validation=validation,
+            cost_sensitivity=sensitivity)
 
     # -- validation ------------------------------------------------------
     def validate(self, *, processed_dir: str | None = None):
@@ -195,13 +219,13 @@ class CanonicalMultiPlaneEnvironment:
         honesty gate (NOT_PRODUCTION_REALISTIC_YET unless every calibrated param is
         ≥ TRACE_DERIVED)."""
         checks = build_all_checks(
-            bridge=self._bridge, fleet_plane=self.fleet_plane,
+            bridge=self._bridge, fleet_plane=self.fleet_plane, cost_model=self.cost_model,
             processed_dir=processed_dir or self.processed_dir)
         params = list(self._bridge.params) if self._bridge else []
         params += self.fleet_plane.full_trace_params()
         if self._kv is not None:
             params += self._kv.params()
-        params += self.cost_model.params()
+        params += self.cost_model.params(scenario=self.cost_scenario)
         return run_validation(checks, params)
 
 
