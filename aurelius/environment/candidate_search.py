@@ -85,6 +85,35 @@ class CandidateBundleGenerator:
             return self.coordinate_neighbors(base), "coordinate"
         return self.latin_hypercube(budget), "latin_hypercube"
 
+    def search(self, score_fn, *, budget: int = EXHAUSTIVE_BUDGET, passes: int = 3,
+               start=None) -> tuple:
+        """Find the best-scoring bundle. Returns ``(best, candidates_evaluated, method)``.
+        Exhaustive when the space ≤ ``budget``; otherwise **coordinate descent** — from a start
+        bundle (default the no-op), repeatedly move each free surface to its best option until no
+        improvement. Covers every connected dimension at a cost ≈ surfaces·options·passes, far
+        cheaper than enumerating a large space, and no connected knob is skipped."""
+        comb = self.theoretical_combinations()
+        if comb <= budget:
+            bundles = self.exhaustive()
+            return max(bundles, key=score_fn), len(bundles), "exhaustive"
+        cur = start if start is not None else ActionBundle(**self._base())
+        cur_s = score_fn(cur)
+        evaluated = 1
+        for _ in range(max(1, passes)):
+            improved = False
+            for s in self.surfaces():
+                for o in ACTION_SPECS[s].options:
+                    if o == getattr(cur, s):
+                        continue
+                    cand = cur.with_overrides(**{s: o})
+                    sc = score_fn(cand)
+                    evaluated += 1
+                    if sc > cur_s:
+                        cur, cur_s, improved = cand, sc, True
+            if not improved:
+                break
+        return cur, evaluated, "coordinate_descent"
+
 
 @dataclass
 class SearchReport:
@@ -97,41 +126,51 @@ class SearchReport:
     best_score: float
     ablation: list                      # per-surface contribution at the incumbent
     pareto_safe_vs: dict                # {baseline_name: bool} SLA-not-worse vs baselines
+    top_bundles: list = field(default_factory=list)   # top-10 scored bundles AMONG THOSE EVALUATED
 
     def to_dict(self) -> dict:
         return {"method": self.method, "connected_dimensions": self.connected_dimensions,
                 "theoretical_combinations": self.theoretical_combinations,
                 "candidates_evaluated": self.candidates_evaluated, "frozen": self.frozen,
                 "best": self.best, "best_score": round(self.best_score, 4),
-                "ablation": self.ablation, "pareto_safe_vs": self.pareto_safe_vs}
+                "ablation": self.ablation, "top_bundles": self.top_bundles,
+                "pareto_safe_vs": self.pareto_safe_vs}
 
 
-def plan_bundle(gen: CandidateBundleGenerator, score_fn, *, method: str = "auto",
+def plan_bundle(gen: CandidateBundleGenerator, score_fn, *,
                 budget: int = EXHAUSTIVE_BUDGET) -> tuple:
     """Search with ``gen`` using ``score_fn(bundle) -> (score, sla_violation_rate)``; return
-    ``(best_bundle, SearchReport)``. The report includes a per-surface ablation: from the best
-    bundle, hold all but one surface and measure the best achievable score when that surface is
-    free vs frozen at the incumbent — i.e. how much that dimension contributed."""
-    bundles, method_used = gen.generate(method=method, budget=budget)
-    scored = [(b, *score_fn(b)) for b in bundles]
-    best, best_score, _best_viol = max(scored, key=lambda t: t[1])
-    # ablation: for each free surface, the score range achievable by moving ONLY that surface
+    ``(best_bundle, SearchReport)``. Uses ``gen.search`` (exhaustive when small, coordinate
+    descent when large — the SAME path the controller takes), then a per-surface ablation: from
+    the best bundle, the score range achievable by moving ONLY that surface — i.e. how much that
+    dimension contributed. No connected surface is omitted. We also surface the top-10 bundles —
+    honestly labelled the best AMONG THOSE EVALUATED (the full enumeration when exhaustive; the
+    coordinate-descent trajectory otherwise), not the global top-10 of the theoretical space."""
+    seen: dict = {}                     # bundle key → (score, non_default_surfaces)
+
+    def _scored(b):
+        sc = score_fn(b)[0]
+        seen[tuple(sorted(b.to_dict().items()))] = (sc, b.non_default_surfaces())
+        return sc
+
+    best, evaluated, method = gen.search(_scored, budget=budget)
+    best_score = score_fn(best)[0]
     ablation = []
     for s in gen.surfaces():
-        moves = [(getattr(b, s), sc) for (b, sc, _v) in
-                 [(nb, *score_fn(nb)) for nb in
-                  [best.with_overrides(**{s: o}) for o in ACTION_SPECS[s].options]]]
+        moves = [(o, score_fn(best.with_overrides(**{s: o}))[0]) for o in ACTION_SPECS[s].options]
         scores = [sc for _o, sc in moves]
         ablation.append({"surface": s, "incumbent": getattr(best, s),
                          "score_range": round(max(scores) - min(scores), 4),
                          "best_value": max(moves, key=lambda m: m[1])[0]})
     ablation.sort(key=lambda a: -a["score_range"])
+    top = sorted(seen.values(), key=lambda v: -v[0])[:10]
+    top_bundles = [{"surfaces": surf, "score": round(sc, 4)} for sc, surf in top]
     report = SearchReport(
-        method=method_used, connected_dimensions=len(gen.surfaces()),
+        method=method, connected_dimensions=len(gen.surfaces()),
         theoretical_combinations=gen.theoretical_combinations(),
-        candidates_evaluated=len(bundles), frozen=dict(gen.frozen_reasons),
+        candidates_evaluated=evaluated, frozen=dict(gen.frozen_reasons),
         best=best.non_default_surfaces(), best_score=best_score, ablation=ablation,
-        pareto_safe_vs={})
+        pareto_safe_vs={}, top_bundles=top_bundles)
     return best, report
 
 

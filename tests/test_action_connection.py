@@ -100,35 +100,41 @@ def test_routing_choice_changes_episode_service_factor_and_goodput():
 def test_generator_searches_connected_space_no_silent_exclusion():
     g = CandidateBundleGenerator()
     surfaces = g.surfaces()
-    assert "routing_policy" in surfaces                       # routing is now a searched dimension
+    # routing + capacity_multiplier + batching are now searched dimensions
+    assert {"routing_policy", "capacity_multiplier", "batching_policy"} <= set(surfaces)
     assert all(ACTION_SPECS[s].status == CONNECTED for s in surfaces)
-    assert g.theoretical_combinations() == 36                 # 3 x 2 x 2 x 3
-    bundles, method = g.generate()
-    assert method == "exhaustive" and len(bundles) == 36
+    assert g.theoretical_combinations() == 324                # 3 x 2 x 2 x 3 x 3 x 3
 
 
 def test_generator_freezing_is_explicit_with_reason():
     g = CandidateBundleGenerator(frozen={"capacity_policy": "backlog_aware"},
                                  frozen_reasons={"capacity_policy": "pinned by operator"})
     assert "capacity_policy" not in g.surfaces()              # frozen → not searched
-    assert g.theoretical_combinations() == 12                 # 2 x 2 x 3
+    assert g.theoretical_combinations() == 108                # 324 / 3
     # every generated bundle honours the freeze
     assert all(b.capacity_policy == "backlog_aware" for b in g.generate()[0])
 
 
-def test_plan_bundle_reports_dimensions_and_ablation():
+def test_plan_bundle_searches_large_space_via_coordinate_descent():
     g = CandidateBundleGenerator()
-    # toy scorer: reward favours backlog_aware + kv_aware (deterministic, no sim)
+    # toy scorer: reward favours backlog_aware + kv_aware + 1.5x capacity (deterministic, no sim)
     def score_fn(b):
         s = (1.0 if b.capacity_policy == "backlog_aware" else 0.0) + \
-            (0.5 if b.routing_policy == "kv_aware" else 0.0)
+            (0.5 if b.routing_policy == "kv_aware" else 0.0) + \
+            (0.3 if b.capacity_multiplier == 1.5 else 0.0)
         return s, 0.1
     best, report = plan_bundle(g, score_fn)
     d = report.to_dict()
-    assert d["connected_dimensions"] == 4 and d["theoretical_combinations"] == 36
-    assert d["candidates_evaluated"] == 36 and d["method"] == "exhaustive"
+    assert d["connected_dimensions"] == 6 and d["theoretical_combinations"] == 324
+    # the space (324) exceeds the exhaustive budget → coordinate descent, no full enumeration
+    assert d["method"] == "coordinate_descent" and d["candidates_evaluated"] < 324
     assert best.capacity_policy == "backlog_aware" and best.routing_policy == "kv_aware"
-    # ablation ranks the surfaces that move the score; capacity (range 1.0) above routing (0.5)
+    assert best.capacity_multiplier == 1.5
     surfaces_ranked = [a["surface"] for a in d["ablation"]]
-    assert surfaces_ranked[0] == "capacity_policy"
+    assert surfaces_ranked[0] == "capacity_policy"           # biggest score range (1.0)
     assert {a["surface"] for a in d["ablation"]} == set(g.surfaces())
+    # top-10 bundles are reported (best-among-evaluated), descending, headed by the winner
+    top = d["top_bundles"]
+    assert 1 <= len(top) <= 10
+    assert [t["score"] for t in top] == sorted((t["score"] for t in top), reverse=True)
+    assert top[0]["surfaces"] == best.non_default_surfaces() and top[0]["score"] == d["best_score"]

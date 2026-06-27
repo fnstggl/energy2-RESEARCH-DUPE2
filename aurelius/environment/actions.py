@@ -30,6 +30,16 @@ REQUIRES_PILOT_TELEMETRY = "REQUIRES_PILOT_TELEMETRY"   # needs operator data (A
 REJECTED = "REJECTED"                        # out of product scope
 STATUSES = (CONNECTED, SIMULATED_ONLY, PLANNED, REQUIRES_PILOT_TELEMETRY, REJECTED)
 
+# batching_policy → (batch_concurrency, batch_service_factor) for run_unified_replay.
+# More concurrency packs more requests per replica (throughput ↑, queue ↓, same GPU-hours);
+# the service factor inflates each batched request's latency (shared compute → SLA risk ↑).
+# INFERRED magnitudes (public prior, not trace-calibrated); options[0] == today's behaviour.
+BATCHING_MODELS = {
+    "conservative": (1.0, 1.0),       # one request per replica — today's no-batching behaviour
+    "balanced": (2.0, 1.15),
+    "aggressive": (4.0, 1.5),
+}
+
 
 @dataclass(frozen=True)
 class ActionSpec:
@@ -93,6 +103,17 @@ ACTION_SPECS: dict = {
         "fleet_kv_routing (kv_cache.py) over the Mooncake trace → routing-specific "
         "service factor (kv_aware reuses ~50% more prefix depth than round_robin)", "",
         roadmap="N4", reward_channel="kv_service_factor"),
+    "capacity_multiplier": ActionSpec(
+        "capacity_multiplier", "explicit replica count / capacity level", CONNECTED,
+        (1.0, 0.75, 1.5), "capacity_multiplier",
+        "scales the CapacityController-sized replica count in run_unified_replay",
+        "", reward_channel="run_unified_replay"),
+    "batching_policy": ActionSpec(
+        "batching_policy", "batching / batch composition", CONNECTED,
+        ("conservative", "balanced", "aggressive"), None,
+        "per-replica continuous-batching concurrency + service inflation (run_unified_replay)",
+        "INFERRED magnitudes (public prior; not trace-calibrated) — sanity-banded",
+        roadmap="N1", reward_channel="run_unified_replay"),
     # ---- SIMULATED_ONLY (opt in with an explicit flag) ----
     "kv_routing_policy": ActionSpec(
         "kv_routing_policy", "per-request KV prefix routing (finer than routing_policy)",
@@ -107,10 +128,6 @@ ACTION_SPECS: dict = {
         "no network model in run_unified_replay; net_penalty unused in reward", roadmap="N4"),
     # ---- PLANNED (never optimized; options[0] is the no-op, the rest are the conceivable
     # future values the surface WILL expose once it is simulatable — represented, not actuated)
-    "batching_policy": ActionSpec(
-        "batching_policy", "batching / batch composition", PLANNED,
-        ("static", "roofline_aware"), None, "per-request discrete-event dispatch (no batch model)",
-        "needs a roofline throughput/latency/memory batch model", roadmap="N1"),
     "kv_placement_policy": ActionSpec(
         "kv_placement_policy", "KV placement / eviction", PLANNED,
         ("lru", "reuse_aware"), None, "StatefulKVCache LRU is simulated STATE, not an action",
@@ -167,9 +184,10 @@ class ActionBundle:
     ordering_policy: str = "fifo"
     admission_policy: str = "off"
     routing_policy: str = "round_robin"
+    capacity_multiplier: float = 1.0
+    batching_policy: str = "conservative"
     kv_routing_policy: str = "off"
     topology_policy: str = "off"
-    batching_policy: str = "static"
     kv_placement_policy: str = "lru"
     prewarm_policy: str = "off"
     clock_policy: str = "nominal"
@@ -185,6 +203,15 @@ class ActionBundle:
         excluded here and applied by the controller via that channel (see reward_channel)."""
         return {ACTION_SPECS[n].sim_param: getattr(self, n)
                 for n in CONNECTED_SURFACES if ACTION_SPECS[n].sim_param}
+
+    def replay_kwargs(self) -> dict:
+        """ALL run_unified_replay action kwargs this bundle implies: capacity/ordering/admission
+        + capacity_multiplier + the batching translation. (Routing acts via the kv_service_factor
+        channel applied to the jobs, not here.)"""
+        conc, svc = BATCHING_MODELS.get(self.batching_policy, (1.0, 1.0))
+        return {"capacity": self.capacity_policy, "ordering": self.ordering_policy,
+                "admission": self.admission_policy, "capacity_multiplier": float(self.capacity_multiplier),
+                "batch_concurrency": conc, "batch_service_factor": svc}
 
     def legacy_action(self) -> dict:
         """Back-compat dict for the existing controller/replay harness."""
@@ -221,8 +248,18 @@ class ActionBundle:
         return out
 
 
+def replay_kwargs_from_action(action: dict) -> dict:
+    """run_unified_replay action kwargs from a legacy/baseline action dict — any unset connected
+    surface defaults to its no-op (capacity_multiplier 1.0, batching conservative)."""
+    conc, svc = BATCHING_MODELS.get(action.get("batching_policy", "conservative"), (1.0, 1.0))
+    return {"capacity": action.get("capacity", "reactive_lag1"),
+            "ordering": action.get("ordering", "fifo"), "admission": action.get("admission", "off"),
+            "capacity_multiplier": float(action.get("capacity_multiplier", 1.0)),
+            "batch_concurrency": conc, "batch_service_factor": svc}
+
+
 __all__ = [
     "CONNECTED", "SIMULATED_ONLY", "PLANNED", "REQUIRES_PILOT_TELEMETRY", "REJECTED", "STATUSES",
-    "ActionSpec", "ACTION_SPECS", "CONNECTED_SURFACES", "SIMULATED_SURFACES", "PLANNED_SURFACES",
-    "ActionBundle",
+    "BATCHING_MODELS", "ActionSpec", "ACTION_SPECS", "CONNECTED_SURFACES", "SIMULATED_SURFACES",
+    "PLANNED_SURFACES", "ActionBundle", "replay_kwargs_from_action",
 ]

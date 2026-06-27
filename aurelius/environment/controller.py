@@ -30,6 +30,7 @@ from ..optimizer.unified_replay import (
     run_unified_replay,
 )
 from .action_registry import planned_report
+from .actions import replay_kwargs_from_action
 from .candidate_search import CandidateBundleGenerator, plan_bundle
 from .cost_model import CostModel
 from .forecasting import ForecastingModel
@@ -64,6 +65,8 @@ class Decision:
         if self.bundle is not None:
             d["bundle_changes"] = self.bundle.non_default_surfaces()
             d["routing_policy"] = self.bundle.routing_policy   # connected via kv_service_factor
+            d["capacity_multiplier"] = self.bundle.capacity_multiplier
+            d["batching_policy"] = self.bundle.batching_policy
         return d
 
 
@@ -119,14 +122,14 @@ class ModelPredictiveEconomicController:
     #                                    effect until they are wired into run_unified_replay)
     candidates: list | None = None     # explicit candidate bundles; else generator-enumerated
     candidate_generator: object = None  # CandidateBundleGenerator (else a default exhaustive one)
+    search_budget: int = 256           # exhaustive at/below this many bundles, else coordinate descent
 
-    def _gpd(self, jobs: list, action: dict, price: float) -> tuple:
+    def _gpd(self, jobs: list, replay_kw: dict, price: float) -> tuple:
         if not jobs:
             return 0.0, 0.0
         kpi = run_unified_replay(jobs, tick_seconds=self.tick_seconds, sla_s=self.sla_s,
-                                 capacity=action["capacity"], ordering=action["ordering"],
-                                 admission=action["admission"],
-                                 warmup_c=max(1, min(self.fleet_state.capacity_envelope, 4)))
+                                 warmup_c=max(1, min(self.fleet_state.capacity_envelope, 4)),
+                                 **replay_kw)
         gpu_type = (max(self.fleet_state.gpu_type_mix, key=self.fleet_state.gpu_type_mix.get)
                     if self.fleet_state.gpu_type_mix else "H100")
         cost = self.cost_model.operator_cost(
@@ -164,35 +167,38 @@ class ModelPredictiveEconomicController:
                     _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
                                 best_effort_fraction=be, kv_service_factor=factor))
 
-        # candidate ACTION BUNDLES from the search generator — CONNECTED surfaces only by
-        # default; SIMULATED_ONLY varied only when opted in; PLANNED surfaces never generated.
-        if self.candidates is not None:
-            cands = self.candidates
-        else:
-            gen = self.candidate_generator or CandidateBundleGenerator(
-                include_simulated=self.optimize_simulated)
-            cands = gen.generate()[0]
         job_cache: dict = {}               # KV factor → (point, risk) jobs (routing changes the factor)
-        best = None
-        for cand in cands:
-            ab = cand if hasattr(cand, "legacy_action") else None
-            act = ab.legacy_action() if ab is not None else cand
-            routing = (ab.routing_policy if ab is not None
-                       else (cand.get("routing_policy", "round_robin") if isinstance(cand, dict)
-                             else "round_robin"))
+
+        def _resolve(cand):
+            ab = cand if hasattr(cand, "replay_kwargs") else None
+            if ab is not None:
+                return ab, ab.legacy_action(), ab.replay_kwargs(), ab.routing_policy
+            routing = cand.get("routing_policy", "round_robin") if isinstance(cand, dict) else "round_robin"
+            return None, cand, replay_kwargs_from_action(cand if isinstance(cand, dict) else {}), routing
+
+        def _eval(cand):                   # → (score, exp_gpd, risk_gpd, routing)
+            _ab, _act, rkw, routing = _resolve(cand)
             factor = by_routing.get(routing, self.kv_service_factor)
             if factor not in job_cache:
                 job_cache[factor] = _jobs(factor)
             point, risk = job_cache[factor]
-            exp_gpd, _ = self._gpd(point, act, pr.value)
-            risk_gpd, risk_viol = self._gpd(risk, act, pr.value)
-            score = exp_gpd - self.risk_weight * risk_viol * exp_gpd     # risk-adjusted
-            if best is None or score > best.score:
-                best = Decision(act, exp_gpd, risk_gpd, score, False, confidence,
-                                forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
-                                          "routing_policy": routing},
-                                bundle=ab)
-        return best
+            exp_gpd, _ = self._gpd(point, rkw, pr.value)
+            risk_gpd, risk_viol = self._gpd(risk, rkw, pr.value)
+            return exp_gpd - self.risk_weight * risk_viol * exp_gpd, exp_gpd, risk_gpd, routing
+
+        # search the CONNECTED bundle space — exhaustive when small, coordinate descent when
+        # large (no connected knob skipped). SIMULATED_ONLY only when opted in; PLANNED never.
+        if self.candidates is not None:
+            best_cand = max(self.candidates, key=lambda c: _eval(c)[0])
+        else:
+            gen = self.candidate_generator or CandidateBundleGenerator(
+                include_simulated=self.optimize_simulated)
+            best_cand, _n, _m = gen.search(lambda b: _eval(b)[0], budget=self.search_budget)
+        ab, act, _rkw, _routing = _resolve(best_cand)
+        score, exp_gpd, risk_gpd, routing = _eval(best_cand)
+        return Decision(act, exp_gpd, risk_gpd, score, False, confidence,
+                        forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
+                                  "routing_policy": routing}, bundle=ab)
 
     def understood_but_unavailable(self) -> list:
         """Action surfaces the controller REPRESENTS but does not optimize today
@@ -222,8 +228,9 @@ class ModelPredictiveEconomicController:
                                 best_effort_fraction=be, kv_service_factor=factor)
             risk = _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
                                best_effort_fraction=be, kv_service_factor=factor)
-            exp_gpd, _ = self._gpd(point, b.legacy_action(), pr.value)
-            _r, risk_viol = self._gpd(risk, b.legacy_action(), pr.value)
+            rkw = b.replay_kwargs()
+            exp_gpd, _ = self._gpd(point, rkw, pr.value)
+            _r, risk_viol = self._gpd(risk, rkw, pr.value)
             return exp_gpd - self.risk_weight * risk_viol * exp_gpd, risk_viol
 
         gen = self.candidate_generator or CandidateBundleGenerator(
@@ -260,6 +267,8 @@ class EpisodeReport:
     used_fallback_frac: float = 0.0
     routing_mix: dict = field(default_factory=dict)     # routing_policy → periods chosen
     mean_kv_service_factor: float = 1.0                 # mean KV service factor applied
+    capacity_multiplier_mix: dict = field(default_factory=dict)  # capacity_multiplier → periods
+    batching_mix: dict = field(default_factory=dict)    # batching_policy → periods chosen
 
     def to_dict(self) -> dict:
         return {k: (round(v, 5) if isinstance(v, float) else v) for k, v in self.__dict__.items()}
@@ -286,16 +295,28 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
     waits_p95 = []
     fb = 0
     routing_mix: dict = {}
+    cap_mult_mix: dict = {}
+    batch_mix: dict = {}
     factor_sum, factor_n = 0.0, 0
     for p in eval_indices:
         out = decide_fn(frames[:p])
         action = out["action"] if isinstance(out, dict) and "action" in out else out
         fb += int(bool(isinstance(out, dict) and out.get("used_fallback")))
-        # routing (connected via the KV channel): pick this period's service factor
-        routing = action.get("routing_policy", out.get("routing_policy", "round_robin")) \
-            if isinstance(action, dict) else "round_robin"
+        # merge the connected surfaces the MPC exposes at the top level (routing / capacity
+        # multiplier / batching) onto the legacy 3-key action; baselines carry their own keys.
+        merged = dict(action) if isinstance(action, dict) else {}
+        if isinstance(out, dict):
+            for _k in ("routing_policy", "capacity_multiplier", "batching_policy"):
+                if _k in out:
+                    merged[_k] = out[_k]
+        routing = merged.get("routing_policy", "round_robin")
         factor = by_routing.get(routing, kv_service_factor)
+        replay_kw = replay_kwargs_from_action(merged)
         routing_mix[routing] = routing_mix.get(routing, 0) + 1
+        _cm = float(merged.get("capacity_multiplier", 1.0))
+        cap_mult_mix[_cm] = cap_mult_mix.get(_cm, 0) + 1
+        _bp = merged.get("batching_policy", "conservative")
+        batch_mix[_bp] = batch_mix.get(_bp, 0) + 1
         factor_sum += factor
         factor_n += 1
         recs = sorted(real_per_period.get(p, []), key=lambda r: r[0])
@@ -309,9 +330,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                     cls=(CLASS_BEST_EFFORT if (be_stride and i % be_stride == 0) else CLASS_LATENCY))
                 for i, r in enumerate(recs)]
         kpi = run_unified_replay(jobs, tick_seconds=tick_seconds, sla_s=sla_s,
-                                 capacity=action["capacity"], ordering=action["ordering"],
-                                 admission=action["admission"],
-                                 warmup_c=max(1, min(fleet_state.capacity_envelope, 4)))
+                                 warmup_c=max(1, min(fleet_state.capacity_envelope, 4)), **replay_kw)
         cost = cost_model.operator_cost(
             gpu_hours=kpi.gpu_hours, gpu_type=gpu_type,
             energy_price_per_kwh=fleet_state.energy_price_per_kwh,
@@ -335,7 +354,8 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         energy_cost=tot_energy, n_sla_safe=tot_safe,
         queue_delay_p95=(statistics.mean(waits_p95) if waits_p95 else 0.0),
         used_fallback_frac=(fb / ne if ne else 0.0), routing_mix=routing_mix,
-        mean_kv_service_factor=(factor_sum / factor_n if factor_n else kv_service_factor))
+        mean_kv_service_factor=(factor_sum / factor_n if factor_n else kv_service_factor),
+        capacity_multiplier_mix=cap_mult_mix, batching_mix=batch_mix)
 
 
 __all__ = [

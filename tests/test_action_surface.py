@@ -37,15 +37,20 @@ def test_default_bundle_is_all_noops_and_reproduces_today():
     # every field sits at its surface's no-op default
     assert all(getattr(b, n) == ACTION_SPECS[n].default for n in ACTION_SPECS)
     assert b.non_default_surfaces() == {}
-    # only the 3 connected levers reach the simulator
-    assert set(b.connected_kwargs()) == {"capacity", "ordering", "admission"}
-    assert b.connected_kwargs() == {"capacity": "reactive_lag1", "ordering": "fifo", "admission": "off"}
+    # connected levers that are direct run_unified_replay kwargs (capacity_multiplier included)
+    assert set(b.connected_kwargs()) == {"capacity", "ordering", "admission", "capacity_multiplier"}
+    assert b.connected_kwargs() == {"capacity": "reactive_lag1", "ordering": "fifo",
+                                    "admission": "off", "capacity_multiplier": 1.0}
+    # a default bundle's full replay kwargs reproduce today's no-op behaviour
+    assert b.replay_kwargs() == {"capacity": "reactive_lag1", "ordering": "fifo", "admission": "off",
+                                 "capacity_multiplier": 1.0, "batch_concurrency": 1.0,
+                                 "batch_service_factor": 1.0}
 
 
 def test_legacy_roundtrip_and_serialization():
     act = {"capacity": "backlog_aware", "ordering": "abs_conformal", "admission": "class_aware"}
     b = ActionBundle.from_legacy(act)
-    assert b.legacy_action() == act and b.connected_kwargs() == act
+    assert b.legacy_action() == act                       # the 3-key back-compat view
     assert ActionBundle(**b.to_dict()) == b               # to_dict round-trips
     desc = {d["field"]: d for d in b.describe()}
     assert desc["capacity_policy"]["status"] == CONNECTED and desc["capacity_policy"]["affects_reward"]
@@ -56,16 +61,16 @@ def test_legacy_roundtrip_and_serialization():
 
 def test_status_counts_match_audit():
     counts = status_counts()
-    # CONNECTED: capacity, ordering, admission, + routing (now connected via the KV channel)
-    assert counts["CONNECTED"] == 4
+    # CONNECTED: capacity, ordering, admission, routing, capacity_multiplier, batching
+    assert counts["CONNECTED"] == 6
     assert counts["SIMULATED_ONLY"] == 2                  # per-request kv-routing, topology
-    assert counts.get("PLANNED", 0) + counts.get("REQUIRES_PILOT_TELEMETRY", 0) == 9
+    assert counts.get("PLANNED", 0) + counts.get("REQUIRES_PILOT_TELEMETRY", 0) == 8
     assert {s.name for s in list_connected_actions()} == set(CONNECTED_SURFACES)
 
 
 def test_enumerate_connected_only_varies_only_connected():
     bundles = enumerate_candidate_bundles(connected_only=True)
-    assert len(bundles) == 36                             # 3 capacity x 2 ordering x 2 admission x 3 routing
+    assert len(bundles) == 324                            # 3 x 2 x 2 x 3(routing) x 3(cap_mult) x 3(batching)
     # no candidate moves a non-connected surface off its default
     for b in bundles:
         assert all(k in CONNECTED_SURFACES for k in b.non_default_surfaces())
@@ -73,8 +78,8 @@ def test_enumerate_connected_only_varies_only_connected():
 
 
 def test_enumerate_with_simulated_opt_in():
-    # opting in adds the 2 SIMULATED_ONLY surfaces (2 options each) -> 36 * 4 = 144
-    assert len(enumerate_candidate_bundles(connected_only=False)) == 144
+    # opting in adds the 2 SIMULATED_ONLY surfaces (2 options each) -> 324 * 4 = 1296
+    assert len(enumerate_candidate_bundles(connected_only=False)) == 1296
     # PLANNED surfaces are STILL never enumerated
     for b in enumerate_candidate_bundles(connected_only=False):
         assert b.clock_policy == "nominal" and b.precision_policy == "full" and b.migration_policy == "off"
@@ -98,13 +103,13 @@ def test_invalid_option_rejected():
 
 def test_non_connected_surface_never_changes_simulator_kwargs():
     base = ActionBundle()
-    # flip every SIMULATED_ONLY / PLANNED surface to a non-default value (NOT routing, which
-    # is now CONNECTED via the kv_service_factor channel)
+    # flip every SIMULATED_ONLY / PLANNED surface to a non-default value (NOT routing / batching /
+    # capacity_multiplier, which are now CONNECTED)
     flips = {"kv_routing_policy": "prefix_affinity", "topology_policy": "net_aware",
-             "batching_policy": "roofline_aware", "clock_policy": "high", "precision_policy": "int8"}
+             "clock_policy": "high", "precision_policy": "int8", "migration_policy": "consolidate"}
     flipped = base.with_overrides(**flips)
-    # none of these reach the simulator → identical run_unified_replay kwargs by construction
-    assert flipped.connected_kwargs() == base.connected_kwargs()
+    # none of these reach the simulator → identical replay kwargs by construction
+    assert flipped.replay_kwargs() == base.replay_kwargs()
     for f in flips:
         assert not ACTION_SPECS[f].affects_reward and ACTION_SPECS[f].status in (SIMULATED_ONLY, PLANNED)
 
@@ -114,9 +119,8 @@ def test_no_action_spec_outside_connected_claims_reward_effect():
         assert spec.affects_reward == (spec.status == CONNECTED)
         if spec.status == CONNECTED:
             assert spec.reward_channel                    # every connected surface names HOW it pays out
-            # sim_param is set only for the run_unified_replay channel (routing pays via kv factor)
-            assert (spec.sim_param in ("capacity", "ordering", "admission")) == \
-                (spec.reward_channel == "run_unified_replay")
+            if spec.sim_param is not None:                # a direct run_unified_replay kwarg
+                assert spec.reward_channel == "run_unified_replay"
         else:
             assert spec.sim_param is None                 # non-connected map to NO simulator kwarg
 
@@ -151,9 +155,12 @@ def test_controller_optimizes_bundles_keeps_legacy_action_and_reports_planned():
     from aurelius.environment.controller import enumerate_actions
     ctrl, frames = _fitted_ctrl()
     d = ctrl.decide(frames[:20])
-    assert d.action in enumerate_actions()                       # legacy dict preserved
+    assert d.action in enumerate_actions()                       # legacy 3-key dict preserved
     assert isinstance(d.bundle, ActionBundle)                    # full bundle attached
-    assert d.bundle.connected_kwargs() == d.action               # they agree
+    assert d.bundle.legacy_action() == d.action                  # the 3-key view agrees
+    # connected_kwargs is the legacy action PLUS the newly-connected capacity_multiplier knob
+    assert d.action.items() <= d.bundle.connected_kwargs().items()
+    assert "capacity_multiplier" in d.bundle.connected_kwargs()
     # planned/simulated surfaces are reported separately, never as the chosen action
     rep = {p["field"] for p in ctrl.understood_but_unavailable()}
     assert "clock_policy" in rep and "kv_routing_policy" in rep   # still planned/simulated
