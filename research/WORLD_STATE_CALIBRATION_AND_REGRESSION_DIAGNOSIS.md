@@ -62,9 +62,23 @@ public serving-startup band.
    not all-at-once. Realism; secondary effect.
 3. cold_start_s, risk_weight, horizon: **unchanged by hand** (the tuner re-selects the config).
 
-## 5. Sensitivity sweep (`scripts/sweep_world_state_objective.py`)
+## 5. Sensitivity sweep (`scripts/sweep_world_state_objective.py`, calibrated world, stride 48)
 
-<!-- SWEEP_TABLE -->
+The fix is the cost model, NOT the objective — so `risk_weight` should now be **meaningful** (it was
+inert before, `risk_viol=0`). The sweep confirms it: raising risk-aversion shifts capacity up and
+**buys SLA at a gp/$ cost**, and **no config picks 1.5× anymore** (the inversion is gone everywhere).
+
+| risk_weight | horizon | gp/$ | SLA viol | GPU-h | capacity mix | gate (beats/pareto/headline) |
+|--:|--:|--:|--:|--:|---|---|
+| 0.0 | 1 | 176,902 | 0.0220 | 70.1 | 0.75× ×42 | True / False / False |
+| 0.25 | 1 | 177,219 | 0.0191 | 69.6 | 0.75× ×42 | True / False / False |
+| 0.5 | 1 | 173,255 | 0.0180 | 71.6 | 0.75× ×39, 1.0× ×3 | True / False / False |
+| 1.0 | 1 | 169,744 | **0.0183** | 72.9 | 0.75× ×31, 1.0× ×11 | True / False / False |
+
+(horizon 2 is identical to horizon 1 throughout — see §10.) As `risk_weight` rises 0→1.0 the planner
+moves periods from 0.75× to 1.0× (GPU-hours 70.1→72.9) and the violation rate falls 0.0220→0.0183 —
+**the calibrated simulator respects SLA risk**, and we did not zero it out to get the headline number.
+The gate still blocks (lean capacity stays slightly above the fair baseline's SLA on this trace).
 
 ## 6. Before / after evaluation (Azure 2024 week, 42 held-out periods, persistent world)
 
