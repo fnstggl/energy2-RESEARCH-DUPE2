@@ -45,7 +45,13 @@ _FALLBACK_GPU_COUNT_MEAN = 4.1
 
 @dataclass
 class ReplicaState:
-    """One serving replica with a home server — warm (ready) or cold (needs a cold start)."""
+    """One serving replica with a home server — warm (ready) or cold (needs a cold start).
+
+    Carries a persistent IDENTITY (PR #105): the loaded model + whether its weights are resident in
+    HBM + how much of its KV cache is warm. Live migration MOVES this identity (the same
+    ``replica_id``) to a new rack, keeping weights loaded and — for a pipelined move — most KV warmth;
+    a fresh cold replica would have ``weights_loaded=False`` and an empty cache. This is what lets the
+    simulator distinguish ``migrate a hot replica`` from ``cold-start a new one elsewhere``."""
     replica_id: str
     server_id: str
     rack_id: str
@@ -57,6 +63,11 @@ class ReplicaState:
     active: bool = False                    # currently serving this period
     migrating: bool = False                 # capacity withheld this period (mid-move)
     workload_class: str = "latency_critical"
+    # -- persistent identity (PR #105) --------------------------------------
+    model_id: str = "llama-8b-gqa"          # the model whose weights this replica serves
+    weights_loaded: bool = False            # model weights resident in HBM (skips model-load cold-start)
+    kv_warm_frac: float = 0.0               # 0..1 share of the KV cache that is warm (prefix residency)
+    warm_until_period: int = -1             # period the idle-timeout would cool it (book-keeping)
 
 
 @dataclass
@@ -98,6 +109,7 @@ class MigrationState:
     migration_cost: float = 0.0             # operator $ for the move (BENCHMARK_DERIVED)
     capacity_loss: int = 0                  # GPU slots withheld while migrating
     cache_invalidation_cost: float = 0.0    # KV warmth lost on the moved replica
+    kv_preserved_frac: float = 1.0          # KV warmth KEPT across the move (pipelined ≈ 0.9, bulk less)
     status: str = "in_flight"               # in_flight | completed
 
 
