@@ -208,7 +208,7 @@ def _prefill_decode_checks() -> list:
     dheavy_h = compute_phase_serving([(float(i), 2000, 64) for i in range(8)], [64] * 8)
     rel = (dheavy_c.realized_gpu_seconds - dheavy_h.realized_gpu_seconds) / dheavy_c.realized_gpu_seconds
     out.append(Check("prefill_decode", "decode_bound_barely_monetizes",
-                     _ok(dheavy_c.summary()["phase_bottleneck"] == "decode_bound" and rel < 0.05),
+                     _ok(dheavy_c.summary()["phase_bottleneck"] == "decode_phase_bound" and rel < 0.05),
                      round(rel, 4), "decode-bound work: KV reuse cuts <5% of realized GPU-seconds"))
     prov = effective_gpu_hours("provisioned_capacity", provisioned_gpu_seconds=1000, realized_gpu_seconds=300)
     hyb = effective_gpu_hours("hybrid_capacity_work", provisioned_gpu_seconds=1000, realized_gpu_seconds=300)
@@ -217,6 +217,55 @@ def _prefill_decode_checks() -> list:
                      _ok(real <= hyb <= prov), None, f"realized {real:.3f} ≤ hybrid {hyb:.3f} ≤ prov {prov:.3f}"))
     out.append(Check("prefill_decode", "no_free_cost_warm_idle_floor",
                      _ok(real > 0.0 and hyb >= 0.5 * prov), None, "no mode is free; hybrid keeps a warm-idle floor"))
+    return out
+
+
+def _roofline_checks() -> list:
+    """PR #109 roofline serving model: compute-bound vs memory-bandwidth-bound is roofline-DERIVED (from
+    arithmetic intensity vs the ridge point), distinct from decode-PHASE-bound; every mechanism is fully
+    simulated and produces a sensitivity curve. No reward bonus."""
+    from .roofline import (
+        ServingConfig,
+        Workload,
+        all_sensitivity_curves,
+        arithmetic_intensity,
+        roofline_regime,
+        serving_point,
+    )
+    out = []
+    # 1) low-batch long-context decode is memory-bandwidth-bound (AI < ridge) — numerically.
+    wl = Workload(decode_tokens=512, context_len=4096)
+    rr = roofline_regime("decode", ServingConfig(batch_size=1), wl)
+    out.append(Check("roofline", "low_batch_decode_is_memory_bandwidth_bound",
+                     _ok(rr["roofline_regime"] == "memory_bandwidth_bound" and rr["arithmetic_intensity"] < rr["ridge_point"]),
+                     rr["arithmetic_intensity"], f"AI {rr['arithmetic_intensity']} < ridge {rr['ridge_point']}"))
+    # 2) batching raises arithmetic intensity (amortises weight bytes).
+    lo = arithmetic_intensity("decode", ServingConfig(batch_size=1), wl)
+    hi = arithmetic_intensity("decode", ServingConfig(batch_size=64), wl)
+    out.append(Check("roofline", "batching_raises_arithmetic_intensity", _ok(hi > lo), round(hi / lo, 2),
+                     f"AI {lo:.2f}→{hi:.2f} as batch 1→64"))
+    # 3) decode-PHASE-bound is NOT the same label as memory-bandwidth-bound (the conflation fix).
+    p = serving_point(Workload(prompt_tokens=128, decode_tokens=2000, context_len=2048), ServingConfig(batch_size=4))
+    out.append(Check("roofline", "phase_bound_distinct_from_roofline_regime",
+                     _ok(p["phase_bottleneck"] == "decode_phase_bound" and p["decode_regime"] == "memory_bandwidth_bound"),
+                     None, "a decode-phase-bound load is still memory-bandwidth-bound by roofline"))
+    # 4) spec decode hurts in compute-bound (extra FLOPs), helps in memory-bound high-accept.
+    cb = ServingConfig(batch_size=128, gpu="H20")
+    cbw = Workload(decode_tokens=256, context_len=64)
+    spec_cb = serving_point(cbw, ServingConfig(batch_size=128, gpu="H20", spec_decode_accept=0.5))
+    out.append(Check("roofline", "spec_decode_hurts_compute_bound",
+                     _ok(roofline_regime("decode", cb, cbw)["roofline_regime"] == "compute_bound" and spec_cb["spec_speedup"] < 1.0),
+                     spec_cb["spec_speedup"], "compute-bound spec decode slows wall-clock (FLOP-limited)"))
+    # 5) every mechanism is fully simulated and yields a sensitivity curve with help/hurt/neutral.
+    curves = all_sensitivity_curves(Workload(prompt_tokens=1024, decode_tokens=256, context_len=2048))
+    full = all(len(c["curve"]) >= 3 and "completion_s" in c["help_hurt_neutral"] for c in curves.values())
+    out.append(Check("roofline", "all_mechanisms_fully_simulated_with_curves", _ok(full and len(curves) == 6),
+                     len(curves), "batching/alloc/spec/clock/precision/coloc each fully simulated + swept"))
+    # 6) only batching is a LIVE mpc action; the rest are fully-simulated diagnostic sweeps.
+    out.append(Check("roofline", "only_existing_action_surfaces_are_live",
+                     _ok(curves["batching"]["action_surface"] == "live_mpc_action"
+                         and curves["speculative_decoding"]["action_surface"] == "diagnostic_sweep_only"),
+                     None, "diagnostic = fully simulated, not controller-selected (no fake live knob)"))
     return out
 
 
@@ -237,7 +286,7 @@ def _skipped_distribution_checks() -> list:
 def run_world_validation() -> dict:
     """Run every world-model transition check → a structured PASS/WARN/FAIL/SKIPPED report."""
     checks = (_cold_start_checks() + _conservation_checks() + _isolation_determinism_checks()
-              + _migration_realism_checks() + _kv_residency_checks() + _prefill_decode_checks()
+              + _migration_realism_checks() + _kv_residency_checks() + _prefill_decode_checks() + _roofline_checks()
               + _skipped_distribution_checks())
     counts = {s: sum(1 for c in checks if c.status == s) for s in (PASS, WARN, FAIL, SKIPPED)}
     return {"checks": [c.to_dict() for c in checks], "counts": counts,

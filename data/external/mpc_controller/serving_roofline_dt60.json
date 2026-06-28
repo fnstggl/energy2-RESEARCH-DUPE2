@@ -1,0 +1,190 @@
+{
+  "eval_periods": 360,
+  "n_requests": 6427,
+  "bottleneck_proof": {
+    "gpu": "H100",
+    "prompt_median": 857,
+    "prompt_p95": 4625,
+    "output_median": 43,
+    "output_p95": 437,
+    "decode_gpu_sec_share": 0.5079,
+    "phase_bottleneck": "mixed_phase_bound",
+    "decode_arithmetic_intensity": 14.3543,
+    "ridge_point": 295.22,
+    "decode_roofline_regime": "memory_bandwidth_bound",
+    "prefill_roofline_regime": "compute_bound",
+    "ttft_s": 0.01392,
+    "completion_s": 0.02828,
+    "verdict": "Azure is mixed_phase_bound AND decode is memory_bandwidth_bound (AI 14.3543 vs ridge 295.22)"
+  },
+  "sensitivity": {
+    "batching": {
+      "action_surface": "live_mpc_action",
+      "settings": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "completion_help_at": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "cost_help_at": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "energy_help_at": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "decode_regime_per_setting": [
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound"
+      ]
+    },
+    "prefill_decode_allocation": {
+      "action_surface": "diagnostic_sweep_only",
+      "settings": [
+        0.2,
+        0.4,
+        0.5,
+        0.6,
+        0.8
+      ],
+      "completion_help_at": [],
+      "cost_help_at": [],
+      "energy_help_at": [],
+      "decode_regime_per_setting": [
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound"
+      ]
+    },
+    "speculative_decoding": {
+      "action_surface": "diagnostic_sweep_only",
+      "settings": [
+        0.0,
+        0.3,
+        0.5,
+        0.7,
+        0.9
+      ],
+      "completion_help_at": [
+        0.3,
+        0.5,
+        0.7,
+        0.9
+      ],
+      "cost_help_at": [],
+      "energy_help_at": [],
+      "decode_regime_per_setting": [
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound"
+      ]
+    },
+    "clock_dvfs": {
+      "action_surface": "diagnostic_sweep_only",
+      "settings": [
+        0.7,
+        0.85,
+        1.0,
+        1.15
+      ],
+      "completion_help_at": [
+        1.15
+      ],
+      "cost_help_at": [
+        1.15
+      ],
+      "energy_help_at": [
+        0.7,
+        0.85
+      ],
+      "decode_regime_per_setting": [
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound"
+      ]
+    },
+    "precision": {
+      "action_surface": "diagnostic_sweep_only",
+      "settings": [
+        "fp16",
+        "fp8",
+        "int4"
+      ],
+      "completion_help_at": [
+        "fp8",
+        "int4"
+      ],
+      "cost_help_at": [
+        "fp8",
+        "int4"
+      ],
+      "energy_help_at": [
+        "fp8",
+        "int4"
+      ],
+      "decode_regime_per_setting": [
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound"
+      ]
+    },
+    "co_location": {
+      "action_surface": "diagnostic_sweep_only",
+      "settings": [
+        0.0,
+        0.25,
+        0.5,
+        0.75
+      ],
+      "completion_help_at": [],
+      "cost_help_at": [],
+      "energy_help_at": [],
+      "decode_regime_per_setting": [
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound",
+        "memory_bandwidth_bound"
+      ]
+    }
+  },
+  "claim_safety": {
+    "bottleneck": "trace_derived_workload + public_spec_roofline",
+    "mechanism_curves": "simulator_inferred",
+    "live_action": "batching only"
+  }
+}
