@@ -56,17 +56,18 @@ def _row(rep, prices, periods):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--market", default="pjm", choices=["pjm", "ercot", "caiso"])
-    ap.add_argument("--mpc-periods", type=int, default=12)       # hours scored by the MPC arm (≈half day)
+    ap.add_argument("--mpc-periods", type=int, default=8)        # consecutive HOURS scored (price varies hourly)
+    ap.add_argument("--req-cap", type=int, default=150)          # bounded requests/hour for tractable eval
     ap.add_argument("--mooncake-limit", type=int, default=20000)
     ap.add_argument("--n-deferrable", type=int, default=12)
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
-    # HOURLY inputs: flat (constant price) and the real market (diurnal price path)
-    base = dict(hourly_stride=1, sim_seconds=180.0, use_world_state=True, control_dt_seconds=3600.0)
-    flat_in = build_mpc_inputs(**base)
-    real_in = build_mpc_inputs(**base, electricity_market=args.market)
-    if flat_in is None or real_in is None:
+    # ONE hourly build (control_dt=3600 → cycle_len 24 → diurnal price varies period-to-period). The flat
+    # baseline arm just passes electricity_prices=None (constant fleet price); no second heavy build needed.
+    real_in = build_mpc_inputs(hourly_stride=1, sim_seconds=180.0, use_world_state=True,
+                               control_dt_seconds=3600.0, electricity_market=args.market)
+    if real_in is None:
         raise SystemExit("no Azure serving data available")
     common, fleet, cm, frames, per = (real_in["common"], real_in["fleet_state"], real_in["cost_model"],
                                       real_in["frames"], real_in["per"])
@@ -74,6 +75,10 @@ def main() -> None:
     prices = elec["prices"]
     n = len(frames)
     mpc_ev = list(range(max(8, n - args.mpc_periods), n))
+    full_counts = {p: len(per.get(p, [])) for p in mpc_ev}      # serving pressure (BEFORE capping)
+    # cap each hour's request volume for a tractable hourly replay (all arms share the cap → comparison valid;
+    # absolute gp/$ is a BOUNDED-VOLUME sample, labelled in the doc). Planning is unaffected (synthetic window).
+    per = {p: sorted(per.get(p, []), key=lambda r: r[0])[:args.req_cap] for p in per}
     pool = _mooncake_pool(args.mooncake_limit)
     if not pool:
         raise SystemExit("no Mooncake prefix pool available")
@@ -110,10 +115,10 @@ def main() -> None:
 
     # --- deferrable energy shifting (separate ledger; serving dominates) ------
     # spare GPU-seconds per period: ample on low-arrival hours, 0 on the busiest quartile (serving protected).
-    counts = {p: len(per.get(p, [])) for p in mpc_ev}
-    busy = sorted(counts.values())
+    # Uses FULL serving pressure (pre-cap counts), not the bounded eval sample.
+    busy = sorted(full_counts.values())
     busy_cut = busy[int(0.75 * (len(busy) - 1))] if busy else 0
-    spare = {p: (0.0 if counts[p] >= busy_cut and busy_cut > 0 else 1e7) for p in mpc_ev}
+    spare = {p: (0.0 if full_counts[p] >= busy_cut and busy_cut > 0 else 1e7) for p in mpc_ev}
 
     def _defer(policy):
         st = generate_deferrable_pool(args.n_deferrable, horizon_periods=len(mpc_ev))
