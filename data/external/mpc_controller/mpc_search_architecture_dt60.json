@@ -1,0 +1,200 @@
+{
+  "control_dt_seconds": 60.0,
+  "eval_periods": 120,
+  "mpc_periods": 32,
+  "mooncake_pool_size": 12031,
+  "cost_mode": "hybrid_capacity_work",
+  "rows": {
+    "A_pre_roofline": {
+      "gp_per_dollar": 103583.5,
+      "sla": 0.038,
+      "ttft_p95": 0.892,
+      "queue_p99": 1.552,
+      "gpu_hours": 3.52,
+      "realized_gpu_seconds": 4460.8,
+      "energy_j": 0.0,
+      "precision_mix": {
+        "bf16": 120
+      },
+      "spec_mix": {
+        "off": 120
+      },
+      "clock_mix": {
+        "base": 120
+      },
+      "batching_mix": {
+        "balanced": 120
+      },
+      "routing_mix": {
+        "kv_aware": 120
+      },
+      "regime_mix": {},
+      "vs_pre_roofline_pct": 0.0,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": false,
+      "pct_of_static_fp8_spec": 69.2
+    },
+    "C_static_fp8": {
+      "gp_per_dollar": 143137.2,
+      "sla": 0.0037,
+      "ttft_p95": 0.892,
+      "queue_p99": 1.39,
+      "gpu_hours": 3.1,
+      "realized_gpu_seconds": 3359.0,
+      "energy_j": 2351269.0,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_mix": {
+        "off": 120
+      },
+      "clock_mix": {
+        "base": 120
+      },
+      "batching_mix": {
+        "balanced": 120
+      },
+      "routing_mix": {
+        "kv_aware": 120
+      },
+      "regime_mix": {
+        "memory_bandwidth_bound": 120
+      },
+      "vs_pre_roofline_pct": 38.185,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "pct_of_static_fp8_spec": 95.7
+    },
+    "D_static_fp8_spec": {
+      "gp_per_dollar": 149646.1,
+      "sla": 0.0,
+      "ttft_p95": 0.892,
+      "queue_p99": 0.0,
+      "gpu_hours": 3.02,
+      "realized_gpu_seconds": 4083.5,
+      "energy_j": 2858434.0,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_mix": {
+        "medium": 120
+      },
+      "clock_mix": {
+        "base": 120
+      },
+      "batching_mix": {
+        "aggressive": 120
+      },
+      "routing_mix": {
+        "kv_aware": 120
+      },
+      "regime_mix": {
+        "memory_bandwidth_bound": 120
+      },
+      "vs_pre_roofline_pct": 44.469,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "pct_of_static_fp8_spec": 100.0
+    },
+    "MPC_A_planning_off": {
+      "gp_per_dollar": 138497.2,
+      "sla": 0.0041,
+      "ttft_p95": 1.0429,
+      "queue_p99": 8.987,
+      "gpu_hours": 0.72,
+      "realized_gpu_seconds": 1430.2,
+      "energy_j": 807226.0,
+      "precision_mix": {
+        "bf16": 32
+      },
+      "spec_mix": {
+        "aggressive": 32
+      },
+      "clock_mix": {
+        "low": 32
+      },
+      "batching_mix": {
+        "aggressive": 32
+      },
+      "routing_mix": {
+        "kv_aware": 32
+      },
+      "regime_mix": {
+        "memory_bandwidth_bound": 32
+      },
+      "search_strategy_mix": {
+        "beam_search": 32
+      },
+      "mean_candidates_evaluated": 206.0,
+      "raw_candidate_count": 209952,
+      "planning_prompt_tokens": null,
+      "vs_pre_roofline_pct": 33.706,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "pct_of_static_fp8_spec": 92.5
+    },
+    "MPC_B_planning_on": {
+      "gp_per_dollar": 132273.1,
+      "sla": 0.0225,
+      "ttft_p95": 1.0035,
+      "queue_p99": 9.211,
+      "gpu_hours": 0.77,
+      "realized_gpu_seconds": 1216.4,
+      "energy_j": 726257.0,
+      "precision_mix": {
+        "fp8": 9,
+        "bf16": 23
+      },
+      "spec_mix": {
+        "off": 12,
+        "aggressive": 16,
+        "medium": 4
+      },
+      "clock_mix": {
+        "low": 23,
+        "base": 9
+      },
+      "batching_mix": {
+        "aggressive": 27,
+        "balanced": 5
+      },
+      "routing_mix": {
+        "kv_aware": 32
+      },
+      "regime_mix": {
+        "memory_bandwidth_bound": 32
+      },
+      "search_strategy_mix": {
+        "beam_search+local": 3,
+        "beam_search": 29
+      },
+      "mean_candidates_evaluated": 208.1,
+      "raw_candidate_count": 209952,
+      "planning_prompt_tokens": 828,
+      "vs_pre_roofline_pct": 27.697,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "pct_of_static_fp8_spec": 88.4
+    }
+  },
+  "summary": {
+    "median_prompt_tokens": 828,
+    "static_fp8_spec_gpd": 149646.1,
+    "mpc_planning_off_gpd": 138497.2,
+    "mpc_planning_on_gpd": 132273.1,
+    "B_minus_A_pct": -4.49,
+    "B_recovers_pct_of_static": 88.4,
+    "B_precision_selected": {
+      "fp8": 9,
+      "bf16": 23
+    },
+    "A_precision_selected": {
+      "bf16": 32
+    }
+  },
+  "claim_safety": {
+    "headline": "only if Pareto gate passes vs fair baseline (A)",
+    "planning_parity": "synthetic unique-prefix kv_state + hybrid cost (no invented reuse)",
+    "magnitudes": "simulator_inferred"
+  }
+}

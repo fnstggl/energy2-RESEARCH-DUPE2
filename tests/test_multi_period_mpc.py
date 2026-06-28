@@ -142,8 +142,8 @@ def test_candidate_budget_is_respected():
     # caps at a fixed budget (the hard rule). The raw connected space is ≥ the 8748 stateful space.
     assert sp is not None
     assert sp["raw_candidate_count"] >= 8748
-    assert sp["strategy"] in ("exhaustive_cartesian", "beam_search", "coordinate_descent",
-                              "cross_entropy", "random_restart")
+    assert sp["strategy"] in ("exhaustive_cartesian", "beam_search", "beam_search+local",
+                              "coordinate_descent", "cross_entropy", "random_restart")
     assert sp["candidates_evaluated"] >= 1
     assert d["candidate_bundles_evaluated"] <= d["theoretical_bundles"]
     # co-location + prefill/decode are frozen off with a recorded reason (no background work / no pools)

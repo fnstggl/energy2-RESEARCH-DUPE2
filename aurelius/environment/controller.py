@@ -136,6 +136,13 @@ class ModelPredictiveEconomicController:
     search_budget: int = 256           # exhaustive at/below this many bundles, else coordinate descent
     use_adaptive_search: bool = True   # adaptive planner (beam/CE + regret audit) over the fixed-256 cap
     search_planner_obj: object = None  # AdaptiveSearchPlanner instance (else a default one is built)
+    # planning/eval fidelity (this PR): when set, the planning rollout runs the SAME phase + cost + roofline
+    # model the evaluation path uses (a synthetic UNIQUE-prefix kv_state + this cost mode), so the planner
+    # SEES the precision/spec/clock COST economics — not only their latency. None → today's latency-only
+    # planning (default bundle still reproduces today's behaviour).
+    planning_kv_cost_mode: str | None = None
+    planning_capacity_blocks: int = 512
+    planning_prompt_tokens: int | None = None   # representative prompt length for the planning workload
     world_state: object = None         # CanonicalWorldState — when set, the stateful actions
     #                                    (prewarm/placement/migration) are scored through the
     #                                    world_simulator on a READ-ONLY (mutate=False) candidate sim
@@ -195,16 +202,26 @@ class ModelPredictiveEconomicController:
             fc_k = {"arrival_rate": ar.mean, "arrival_p90": ar.p90,
                     "mean_service_s": max(_service_time_s(int(tm.mean)), 1e-3)}
             rkw = bundle_k.replay_kwargs()
-            point = [(j.arrival_s, j.actual_tokens, j.actual_tokens) for j in
+            _pt = self.planning_prompt_tokens
+            point = [(j.arrival_s, j.actual_tokens, _pt or j.actual_tokens) for j in
                      _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
                                  best_effort_fraction=be, kv_service_factor=1.0)]
-            risk = [(j.arrival_s, j.actual_tokens, j.actual_tokens) for j in
+            risk = [(j.arrival_s, j.actual_tokens, _pt or j.actual_tokens) for j in
                     _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
                                 best_effort_fraction=be, kv_service_factor=1.0)]
+            # planning/eval PARITY: a synthetic UNIQUE-prefix kv_state + the eval cost mode makes the
+            # planning rollout run the same phase + hybrid-cost + roofline model the evaluator uses, so the
+            # planner SEES precision/spec/clock COST economics. Unique prefixes invent NO reuse (conservative).
+            kvp = kvr = None
+            if self.planning_kv_cost_mode:
+                _cm, _cb = self.planning_kv_cost_mode, self.planning_capacity_blocks
+                kvp = {"hash_seq": [(f"plan{k}_{i}",) for i in range(len(point))],
+                       "routing": bundle_k.routing_policy, "capacity_blocks": _cb, "cost_mode": _cm}
+                kvr = {**kvp, "hash_seq": [(f"plkr{k}_{i}",) for i in range(len(risk))]}
             risk_viol = simulate_period(clone, bundle_k, risk, fc_k, replay_kwargs=rkw,
-                                        mutate=False, **common0).sla_violation_rate
+                                        mutate=False, kv_state=kvr, **common0).sla_violation_rate
             out = simulate_period(clone, bundle_k, point, fc_k, replay_kwargs=rkw,
-                                  mutate=True, **common0)     # advance the cloned world one step
+                                  mutate=True, kv_state=kvp, **common0)     # advance the cloned world one step
             exp_gpd = out.goodput_per_dollar
             reward = exp_gpd - self.risk_weight * risk_viol * exp_gpd
             cumulative += (self.gamma ** k) * reward
@@ -224,8 +241,9 @@ class ModelPredictiveEconomicController:
             from .roofline import ServingConfig, Workload, roofline_regime
             gpu = (max(self.fleet_state.gpu_type_mix, key=self.fleet_state.gpu_type_mix.get)
                    if getattr(self.fleet_state, "gpu_type_mix", None) else "A100")
-            wl = Workload(prompt_tokens=512, decode_tokens=max(1, int(tm.mean)) if tm else 128,
-                          context_len=640)
+            pt = self.planning_prompt_tokens or 512
+            wl = Workload(prompt_tokens=pt, decode_tokens=max(1, int(tm.mean)) if tm else 128,
+                          context_len=pt + 320)
             return roofline_regime("decode", ServingConfig(gpu=gpu, batch_size=16), wl)["roofline_regime"]
         except Exception:
             return None
