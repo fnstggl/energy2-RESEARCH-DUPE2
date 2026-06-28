@@ -66,6 +66,7 @@ class ResidencyResult:
     service_factor: list = field(default_factory=list)   # per-request multiplier on base service time
     ttft_factor: list = field(default_factory=list)       # per-request multiplier on prefill/TTFT
     model_switch_s: list = field(default_factory=list)    # per-request added cold-start seconds
+    saved_tokens: list = field(default_factory=list)      # per-request prefill tokens skipped by a hit (PR #107)
     exact_prefix_hits: int = 0
     partial_prefix_hits: int = 0
     prefill_tokens_saved: int = 0
@@ -148,6 +149,7 @@ def simulate_residency_serving(replicas, sigs, *, policy="kv_aware", model_load_
             res.service_factor.append(1.0)
             res.ttft_factor.append(1.0)
             res.model_switch_s.append(model_load_s)
+            res.saved_tokens.append(0)
             res.model_switch_events += 1
         return res
     sigs = sorted(sigs, key=lambda s: s.arrival_s)
@@ -175,6 +177,7 @@ def simulate_residency_serving(replicas, sigs, *, policy="kv_aware", model_load_
         res.service_factor.append(round(service_factor, 6))
         res.ttft_factor.append(round(1.0 - prefix_frac, 6))
         res.model_switch_s.append(round(switch_s, 4))
+        res.saved_tokens.append(saved_tokens)
         if exact > 0:
             res.exact_prefix_hits += 1
             res.prefill_tokens_saved += saved_tokens
