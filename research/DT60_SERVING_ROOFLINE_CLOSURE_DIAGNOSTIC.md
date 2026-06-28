@@ -1,4 +1,4 @@
-# dt=60 Serving Roofline Closure Diagnostic (PR #108, Phase 11)
+# dt=60 Serving Roofline Closure Diagnostic (PR #109, Phase 11)
 
 Numerically proves the Azure+Mooncake bottleneck on the real prompt/output distribution and reports
 every mechanism's sensitivity curve. `data/external/mpc_controller/serving_roofline_dt60.json`

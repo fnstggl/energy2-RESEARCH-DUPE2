@@ -63,7 +63,7 @@ class PhaseResult:
         n = len(self.service_s)
         pf, dc = self.prefill_gpu_seconds, self.decode_gpu_seconds
         # PHASE-time bottleneck (which phase dominates GPU-seconds). NOT the roofline regime
-        # (compute- vs memory-bandwidth-bound) — see roofline.py. PR #108 renamed these to avoid the
+        # (compute- vs memory-bandwidth-bound) — see roofline.py. PR #109 renamed these to avoid the
         # decode-phase-bound / memory-bandwidth-bound conflation.
         bottleneck = ("decode_phase_bound" if dc > 2 * pf
                       else ("prefill_phase_bound" if pf > 2 * dc else "mixed_phase_bound"))

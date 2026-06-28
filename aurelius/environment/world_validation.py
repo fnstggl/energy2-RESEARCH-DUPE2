@@ -221,7 +221,7 @@ def _prefill_decode_checks() -> list:
 
 
 def _roofline_checks() -> list:
-    """PR #108 roofline serving model: compute-bound vs memory-bandwidth-bound is roofline-DERIVED (from
+    """PR #109 roofline serving model: compute-bound vs memory-bandwidth-bound is roofline-DERIVED (from
     arithmetic intensity vs the ridge point), distinct from decode-PHASE-bound; every mechanism is fully
     simulated and produces a sensitivity curve. No reward bonus."""
     from .roofline import (

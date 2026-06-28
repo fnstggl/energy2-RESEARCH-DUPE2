@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""dt=60 serving-roofline closure diagnostic (PR #108, Phase 11).
+"""dt=60 serving-roofline closure diagnostic (PR #109, Phase 11).
 
 Numerically PROVES the Azure+Mooncake bottleneck — is it decode-PHASE-bound? memory-BANDWIDTH-bound?
 compute-bound? — on the real prompt/output distribution, then runs every mechanism's sensitivity sweep

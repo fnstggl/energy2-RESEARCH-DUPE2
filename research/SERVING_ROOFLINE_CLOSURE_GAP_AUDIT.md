@@ -1,4 +1,4 @@
-# Serving Roofline Closure Gap Audit (PR #108, Phase 0)
+# Serving Roofline Closure Gap Audit (PR #109, Phase 0)
 
 State of the serving model after PR #107, before adding the roofline/disaggregation closure.
 

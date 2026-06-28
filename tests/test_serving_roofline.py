@@ -1,4 +1,4 @@
-"""Controlled fixtures for the PR #108 roofline serving model + mechanism sensitivity sweeps.
+"""Controlled fixtures for the PR #109 roofline serving model + mechanism sensitivity sweeps.
 
 Proves the roofline PHYSICS (compute-bound vs memory-bandwidth-bound, distinct from decode-PHASE-bound)
 and that every mechanism — batching, prefill/decode allocation, speculative decoding, clock/DVFS,

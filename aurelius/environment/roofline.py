@@ -1,4 +1,4 @@
-"""Roofline serving-physics model + mechanism sensitivity sweeps (PR #108).
+"""Roofline serving-physics model + mechanism sensitivity sweeps (PR #109).
 
 A conservative, analytical roofline model that distinguishes the two things PR #107 conflated:
 **decode-PHASE-bound** (decode dominates time/work) vs **memory-BANDWIDTH-bound** (arithmetic intensity

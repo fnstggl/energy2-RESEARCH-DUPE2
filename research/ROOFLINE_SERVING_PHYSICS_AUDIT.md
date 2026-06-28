@@ -1,4 +1,4 @@
-# Roofline / Serving Physics Audit (PR #108, Phase 1)
+# Roofline / Serving Physics Audit (PR #109, Phase 1)
 
 Public serving + roofline mechanisms, each classified and mapped to the conservative model in
 `roofline.py`. **The key distinction this PR enforces:** *decode-phase-bound* (decode dominates
