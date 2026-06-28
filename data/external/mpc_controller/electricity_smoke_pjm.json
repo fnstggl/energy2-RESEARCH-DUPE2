@@ -1,0 +1,52 @@
+{
+  "market": "pjm",
+  "provenance": "TRACE_DERIVED",
+  "p10": 0.02586,
+  "p90": 0.28125,
+  "P1_price_path_varies": {
+    "distinct_hourly_prices": 24,
+    "pass": true
+  },
+  "P2_high_price_costs_more": {
+    "cost_p10": 0.09924,
+    "cost_p90": 0.11637,
+    "pass": true
+  },
+  "P3_price_aware_clock": {
+    "at_p90": {
+      "gp_base": 101190.2,
+      "gp_low": 104471.2,
+      "sla_base": 0.04167,
+      "sla_low": 0.04167,
+      "low_wins_pareto_safe": true,
+      "gp_gain_low": 3281.0
+    },
+    "at_p10": {
+      "gp_base": 118658.6,
+      "gp_low": 119061.8,
+      "sla_base": 0.04167,
+      "sla_low": 0.04167,
+      "low_wins_pareto_safe": true,
+      "gp_gain_low": 403.2
+    },
+    "pass": true
+  },
+  "P4_deferrable_delays_to_cheap": {
+    "price_aware_cost": 0.115,
+    "asap_cost": 0.655,
+    "price_aware_avg_price": 0.02,
+    "shifted": 4,
+    "pass": true
+  },
+  "P5_flat_no_fake_shifting": {
+    "price_aware_cost": 0.575,
+    "asap_cost": 0.575,
+    "pass": true
+  },
+  "P6_serving_protected": {
+    "no_spare_completed": 0,
+    "no_spare_missed": 8,
+    "pass": true
+  },
+  "all_pass": true
+}

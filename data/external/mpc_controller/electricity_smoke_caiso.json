@@ -1,0 +1,52 @@
+{
+  "market": "caiso",
+  "provenance": "TRACE_DERIVED",
+  "p10": 0.00903,
+  "p90": 0.04092,
+  "P1_price_path_varies": {
+    "distinct_hourly_prices": 24,
+    "pass": true
+  },
+  "P2_high_price_costs_more": {
+    "cost_p10": 0.09811,
+    "cost_p90": 0.10025,
+    "pass": true
+  },
+  "P3_price_aware_clock": {
+    "at_p90": {
+      "gp_base": 117463.5,
+      "gp_low": 118089.8,
+      "sla_base": 0.04167,
+      "sla_low": 0.04167,
+      "low_wins_pareto_safe": true,
+      "gp_gain_low": 626.3
+    },
+    "at_p10": {
+      "gp_base": 120024.7,
+      "gp_low": 120168.3,
+      "sla_base": 0.04167,
+      "sla_low": 0.04167,
+      "low_wins_pareto_safe": true,
+      "gp_gain_low": 143.7
+    },
+    "pass": true
+  },
+  "P4_deferrable_delays_to_cheap": {
+    "price_aware_cost": 0.115,
+    "asap_cost": 0.655,
+    "price_aware_avg_price": 0.02,
+    "shifted": 4,
+    "pass": true
+  },
+  "P5_flat_no_fake_shifting": {
+    "price_aware_cost": 0.575,
+    "asap_cost": 0.575,
+    "pass": true
+  },
+  "P6_serving_protected": {
+    "no_spare_completed": 0,
+    "no_spare_missed": 8,
+    "pass": true
+  },
+  "all_pass": true
+}

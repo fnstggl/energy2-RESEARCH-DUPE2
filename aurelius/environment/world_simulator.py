@@ -86,6 +86,7 @@ class PeriodOutcome:
     quality_sla_risk: float = 0.0             # precision quality-failure fraction (int4) → counts as SLA fails
     power_w: float = 0.0                       # mean GPU power under the clock/DVFS action (diagnostic)
     energy_j: float = 0.0                      # serving energy under the action (diagnostic)
+    electricity_price_per_kwh: float = 0.0     # $/kWh applied to this period's energy cost (real or constant)
     metrics: dict = field(default_factory=dict)
 
     @property
@@ -284,7 +285,8 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
                     replay_kwargs: dict | None = None, cost_model=None, fleet_state=None,
                     cost_scenario: str = "owned", best_effort_fraction: float = 0.0,
                     period_hours: float = 1.0, dt_seconds: float | None = None,
-                    kv_state: dict | None = None, mutate: bool = False) -> PeriodOutcome:
+                    kv_state: dict | None = None, energy_price_per_kwh: float | None = None,
+                    mutate: bool = False) -> PeriodOutcome:
     """Simulate one period under ``bundle`` on the world state.
 
     ``recs`` are the period's raw ``(arrival_s, tokens, ctx)`` request records. ``forecast`` carries
@@ -430,9 +432,13 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     if cost_model is not None and fleet_state is not None:
         gpu_type = (max(fleet_state.gpu_type_mix, key=fleet_state.gpu_type_mix.get)
                     if getattr(fleet_state, "gpu_type_mix", None) else "H100")
+        # per-period electricity price (real diurnal price when supplied) overrides the constant fleet
+        # scalar; None reproduces the constant-price behaviour exactly. Cost still flows only through
+        # energy = gpu_hours · power_kw · power_scale · pue · price.
+        _price = energy_price_per_kwh if energy_price_per_kwh is not None else fleet_state.energy_price_per_kwh
         cb = cost_model.operator_cost(
             gpu_hours=billable_gpu_hours, gpu_type=gpu_type,
-            energy_price_per_kwh=fleet_state.energy_price_per_kwh, utilization=fleet_state.util_target,
+            energy_price_per_kwh=_price, utilization=fleet_state.util_target,
             scenario=cost_scenario, sla_violations=kpi.sla_violations,
             power_scale=(float(rl_mod["power_factor"]) if rl_mod else 1.0))   # clock/DVFS energy only (no GPU-hour fake)
         base_cost = cb.total_operator_cost
@@ -457,6 +463,9 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         queue_delay_p95=round(q_p95, 4), queue_delay_p99=round(q_p99, 4), kv_diag=res_diag,
         roofline_diag=rl_mod, quality_sla_risk=(float(rl_mod["quality_sla_risk"]) if rl_mod else 0.0),
         power_w=round(rl_power_w, 1), energy_j=round(rl_power_w * rl_gpu_s, 1),
+        electricity_price_per_kwh=round(
+            energy_price_per_kwh if energy_price_per_kwh is not None
+            else (fleet_state.energy_price_per_kwh if fleet_state is not None else 0.0), 6),
         metrics={"prewarm_policy": prewarm, "placement_policy": placement,
                  "migration_policy": migration, "warm_capacity": warm_capacity,
                  "peak_c": peak_c, "topology_factor": pl["topology_factor"],
@@ -466,6 +475,13 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         _advance(ws, peak_c=peak_c, warm_capacity=warm_capacity, prewarm_events=pw["prewarm_events"],
                  cold_started=cold_started, warm_hold_gpu_hours=warm_hold_gpu_hours, mg=mg,
                  prewarm=prewarm, dt_seconds=(dt_seconds if dt_seconds is not None else 3600.0))
+        # persist the electricity/power ledgers (DVFS energy economics) on the real timeline
+        if getattr(ws, "power_state", None) is not None:
+            ws.power_state.accumulate(power_w=rl_power_w, energy_j=outcome.energy_j,
+                                      price_per_kwh=outcome.electricity_price_per_kwh,
+                                      clock_state=getattr(bundle, "clock_policy", "base"))
+        if getattr(ws, "electricity_state", None) is not None:
+            ws.electricity_state.current_price = outcome.electricity_price_per_kwh
     return outcome
 
 
