@@ -12,11 +12,12 @@ Proves the controller is a genuine finite-horizon MPC (not a one-step optimizer)
 from __future__ import annotations
 
 from aurelius.environment.actions import ActionBundle
-from aurelius.environment.controller import ModelPredictiveEconomicController
+from aurelius.environment.controller import ModelPredictiveEconomicController, run_period_episode
 from aurelius.environment.cost_model import CostModel
 from aurelius.environment.fleet_plane_v2026 import V2026FleetPlane
 from aurelius.environment.forecast_trajectory import build_trajectory
 from aurelius.environment.forecasting import ForecastingModel, build_frames
+from aurelius.environment.ingestion.azure import _bin_stream
 from aurelius.environment.simulation_clock import SUPPORTED_CONTROL_DT, SimulationClock
 from aurelius.environment.training import make_world_state
 
@@ -138,3 +139,53 @@ def test_candidate_budget_is_respected():
     # coordinate descent over the connected space, capped — far below the 8748 theoretical bundles
     assert c.last_decision_diag["candidate_bundles_evaluated"] <= 200
     assert c.last_decision_diag["theoretical_bundles"] == 8748
+
+
+# --- sub-hour control: dt is the CONTROL INTERVAL, threaded into the eval replay ---------------
+
+def _episode_warm_count_after(dt):
+    """Run a few held-out periods of `run_period_episode` at control interval `dt` on a warm-seeded
+    cluster under steady LOW load (so most warm replicas sit idle) and return the surviving warm pool.
+    The reactive (`off`) policy cools an idle replica only AFTER the ~300s idle timeout, measured in
+    real time as `idle_steps × dt` — so the surviving pool is a direct read of whether `dt` was
+    threaded into the world simulator's time-based persistence."""
+    per = {p: [(i * 6.0, 180, 90) for i in range(2)] for p in range(5)}      # 2 short jobs / period
+    frames = build_frames(per, period_seconds=dt, cycle_len=max(1, round(86400 / dt)))
+    ws = make_world_state({"n_servers": 16, "n_racks": 4, "seed": 0, "warm": 12})
+
+    def decide(_h):                                   # fixed reactive (off) decision every period
+        return {"action": {}, "prewarm_policy": "off", "placement_policy": "topology_blind",
+                "migration_policy": "off", "routing_policy": "round_robin",
+                "capacity_multiplier": 1.0, "batching_policy": "conservative"}
+    run_period_episode("t", decide, per, frames, list(range(5)), fleet_state=V2026FleetPlane().state_at(0),
+                       cost_model=CostModel(), sla_s=10.0, tick_seconds=10.0, period_seconds=dt,
+                       kv_service_factor_by_routing={"round_robin": 1.0}, world_state=ws)
+    return ws.warm_count()
+
+
+def test_eval_replay_threads_dt_into_warm_persistence():
+    # The held-out eval replay must advance warm state at the CONTROL interval, not a hardcoded hour.
+    # At dt=60s an idle replica (idle 60..240s) stays warm across steps; at dt=3600s every idle step
+    # (3600s > 300s timeout) cools it. Same load, same seed — only dt differs.
+    warm_fine = _episode_warm_count_after(60.0)
+    warm_hourly = _episode_warm_count_after(3600.0)
+    assert warm_fine > warm_hourly                # sub-hour control preserves the warm pool across steps
+    assert warm_hourly <= 4                        # hourly control cools the idle pool down to what it serves
+
+
+def test_rebinning_changes_control_interval_not_hours():
+    # Re-binning the SAME arrival stream at a finer dt yields proportionally MORE control periods at
+    # the SAME arrival rate — dt is the control step length, not "hours". (Mirrors how the sweep
+    # re-bins the one-week trace for sub-hour control.)
+    rows = [(t * 1.0, 100, 50) for t in range(7200)]          # 1 req/s for 2 hours
+    counts, rates = {}, {}
+    for dt in (3600.0, 900.0, 300.0, 60.0):
+        per, _exact = _bin_stream(iter(rows), bin_seconds=dt, sample_stride=1)
+        frames = build_frames(per, period_seconds=dt, cycle_len=max(1, round(86400 / dt)))
+        counts[dt] = len(frames)
+        rates[dt] = sum(f.arrival_rate for f in frames) / len(frames)
+    # finer dt → strictly more periods (60s gives 60× the bins of 3600s over the same 2 hours)
+    assert counts[60.0] > counts[300.0] > counts[900.0] > counts[3600.0]
+    assert counts[3600.0] == 2 and counts[60.0] == 120
+    # ...but the arrival RATE (req/s) is invariant to the control interval (load unchanged, ~1/s)
+    assert all(abs(r - 1.0) < 0.05 for r in rates.values())

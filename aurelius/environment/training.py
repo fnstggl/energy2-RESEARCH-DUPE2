@@ -66,19 +66,24 @@ DEFAULT_BASELINES = {
 
 def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
                      processed_dir: str | None = None, hourly_stride: int = 24,
-                     sim_seconds: float = 240.0, use_world_state: bool = False) -> dict | None:
+                     sim_seconds: float = 240.0, use_world_state: bool = False,
+                     control_dt_seconds: float | None = None) -> dict | None:
     """Build the (frames, per-period real trace, fleet state, cost model, common) inputs
     from the canonical sources.
 
-    When the **2024 one-week** Azure trace is present, bin it at HOURLY periods over the
-    full 168-hour week (``cycle_len=24`` diurnal) via the bounded-memory streaming binner
-    — 168 real periods support held-out *hourly* forecasting (see
-    ``research/AZURE_TRACE_COVERAGE_AUDIT.md``). The per-period load is a deterministic
-    1/``hourly_stride`` sample (proportional, so the diurnal shape is preserved and the
-    forecast + replay share one scale); the controller scores actions over a bounded
-    ``sim_seconds`` window so an hourly period stays tractable. When only the 2023
-    one-hour trace / sample is present, fall back to the original sub-hour (``bin_seconds``)
-    per-minute binning so CI and the 1-hour regime are unchanged."""
+    When the **2024 one-week** Azure trace is present, bin it over the full week via the
+    bounded-memory streaming binner. The control interval defaults to HOURLY
+    (``control_dt_seconds=None`` → 3600s, ``cycle_len=24`` diurnal, 168 real periods — see
+    ``research/AZURE_TRACE_COVERAGE_AUDIT.md``); pass ``control_dt_seconds`` (e.g. 60 / 300 /
+    900) to re-bin the SAME week at a SUB-HOUR control interval so ``period_seconds`` is the
+    real control step (``cycle_len = 86400/dt`` keeps the diurnal cycle). The per-period load
+    is a deterministic 1/``hourly_stride`` sample (proportional, so the diurnal shape is
+    preserved and forecast + replay share one scale); since the sample stride is global the
+    arrival RATE is dt-invariant, so a finer ``dt`` changes only the control granularity, not
+    the load intensity. The controller scores actions over a bounded ``sim_seconds`` window
+    (clamped to the period). When only the 2023 one-hour trace / sample is present, fall back
+    to the original sub-hour (``bin_seconds``) per-minute binning so CI and the 1-hour regime
+    are unchanged."""
     from collections import defaultdict
 
     from .cost_model import CostModel
@@ -88,14 +93,19 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
     from .ingestion.mooncake import ingest_mooncake
     from .kv_cache import KVModel, gpu_mem_for, routing_service_factors
 
-    pf = azure_period_frames(bin_seconds=3600.0, sample_stride=hourly_stride)
+    week_dt = float(control_dt_seconds) if control_dt_seconds else 3600.0
+    pf = azure_period_frames(bin_seconds=week_dt, sample_stride=hourly_stride)
     coverage = None
-    if pf is not None and "1week" in pf["trace_version"]:
+    week_path = pf is not None and "1week" in pf["trace_version"]
+    if week_path:
         per = pf["per_period"]
-        period_seconds, cycle_len = pf["bin_seconds"], 24
+        period_seconds = pf["bin_seconds"]
+        cycle_len = max(1, round(86400.0 / period_seconds))     # diurnal cycle in control steps
         coverage = {"trace_version": pf["trace_version"], "tier": pf["tier"],
                     "n_bins_exact": pf["n_bins"], "total_requests_exact": pf["total_requests"],
-                    "sample_stride": pf["sample_stride"], "granularity": "hourly"}
+                    "sample_stride": pf["sample_stride"],
+                    "granularity": ("hourly" if period_seconds >= 3600.0 else "sub_hourly"),
+                    "control_dt_seconds": period_seconds, "cycle_len": cycle_len}
     else:                                          # 2023 one-hour / sample → per-minute
         reqs, _ = ingest_azure(limit=limit)
         out, inp = to_serving_raw(reqs), context_tokens(reqs)
@@ -132,7 +142,7 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
                           anchors=anchors)
     common = {"sla_s": 10.0, "period_seconds": period_seconds, "tick_seconds": 10.0,
               "kv_service_factor": kv_factor, "cost_scenario": "owned",
-              "sim_seconds": (sim_seconds if cycle_len == 24 else None),
+              "sim_seconds": (min(sim_seconds, period_seconds) if week_path else None),
               "kv_service_factor_by_routing": kv_by_routing}
     if use_world_state:
         # persistent world: a TRACE_DERIVED_SAMPLE cluster sampled from the SAME v2026 processed

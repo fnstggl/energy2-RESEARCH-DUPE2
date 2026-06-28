@@ -371,6 +371,7 @@ class EpisodeReport:
     energy_cost: float
     n_sla_safe: int
     queue_delay_p95: float
+    queue_delay_p99: float = 0.0                        # tail queueing delay (per-period averaged)
     used_fallback_frac: float = 0.0
     routing_mix: dict = field(default_factory=dict)     # routing_policy → periods chosen
     mean_kv_service_factor: float = 1.0                 # mean KV service factor applied
@@ -413,7 +414,8 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
     be_stride = max(1, round(1.0 / be)) if be > 0 else 0
     tot_g = tot_cost = tot_energy = tot_gpu_h = 0.0
     tot_viol = tot_n = tot_safe = 0
-    waits_p95 = []
+    waits_p95: list = []
+    waits_p99: list = []
     fb = 0
     routing_mix: dict = {}
     cap_mult_mix: dict = {}
@@ -470,7 +472,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                              tick_seconds=tick_seconds, base_service_factor=factor,
                              replay_kwargs=replay_kw, cost_model=cost_model, fleet_state=fleet_state,
                              cost_scenario=cost_scenario, best_effort_fraction=be,
-                             period_hours=period_hours, mutate=True)
+                             period_hours=period_hours, dt_seconds=period_seconds, mutate=True)
             kpi = oc.kpi
             tot_cost += oc.operator_cost
             cold_starts += oc.cold_start_events
@@ -480,6 +482,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
             topo_n += 1
             if oc.queue_delay_p95 > 0:
                 waits_p95.append(oc.queue_delay_p95)
+                waits_p99.append(oc.queue_delay_p99)
             tot_g += kpi.sla_safe_goodput
             tot_gpu_h += kpi.gpu_hours
             tot_viol += kpi.sla_violations
@@ -510,6 +513,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         waits = sorted(max(0.0, j.start_s - j.arrival_s) for j in jobs if j.start_s >= 0)
         if waits:
             waits_p95.append(waits[min(len(waits) - 1, int(len(waits) * 0.95))])
+            waits_p99.append(waits[min(len(waits) - 1, int(len(waits) * 0.99))])
     ne = len(eval_indices)
     return EpisodeReport(
         name=name, n_periods=ne, sla_safe_goodput=tot_g, total_operator_cost=tot_cost,
@@ -517,6 +521,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         sla_violation_rate=(tot_viol / tot_n if tot_n else 0.0), gpu_hours=tot_gpu_h,
         energy_cost=tot_energy, n_sla_safe=tot_safe,
         queue_delay_p95=(statistics.mean(waits_p95) if waits_p95 else 0.0),
+        queue_delay_p99=(statistics.mean(waits_p99) if waits_p99 else 0.0),
         used_fallback_frac=(fb / ne if ne else 0.0), routing_mix=routing_mix,
         mean_kv_service_factor=(factor_sum / factor_n if factor_n else kv_service_factor),
         capacity_multiplier_mix=cap_mult_mix, batching_mix=batch_mix,
