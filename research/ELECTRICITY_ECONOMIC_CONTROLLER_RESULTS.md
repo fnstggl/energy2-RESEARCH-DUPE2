@@ -36,10 +36,23 @@ runner needs checkpointing.
 
 ## Bounded smoke validation — the causal path, proven cheaply
 
-`scripts/smoke_electricity_validation.py` (one input build, capped per-hour requests, ≤6 MPC decisions) proves
-the **mechanisms** without chasing a headline. Artifact: `data/external/mpc_controller/electricity_smoke_pjm.json`.
+`scripts/smoke_electricity_validation.py` proves the **mechanisms** at the **fixture level** (direct
+`simulate_period` calls + the deferrable scheduler — no `build_mpc_inputs`, no MPC search, runs in seconds), so
+it is not blocked by the hourly-cadence planning cost. Artifact:
+`data/external/mpc_controller/electricity_smoke_pjm.json`. **PJM, all six PASS:**
 
-<!-- SMOKE_RESULTS -->
+| property | result (PJM, p10 $0.026 / p90 $0.281) | pass |
+|--|--|--|
+| **P1** real diurnal price path varies | 24 distinct hourly prices | ✅ |
+| **P2** high price increases cost (energy × price) | cost $0.099 (p10) → $0.116 (p90) | ✅ |
+| **P3** price-aware clock favours downclock at high price | low-clock gp/$ gain **+3281 at p90** vs **+403 at p10**, SLA unchanged (Pareto-safe) | ✅ |
+| **P4** deferrable shifts to cheap hours under slack | price-aware **$0.115** vs asap **$0.655** (avg paid $0.02), 0 missed | ✅ |
+| **P5** flat price → no fake shifting value | price-aware == asap ($0.575) | ✅ |
+| **P6** serving SLA not violated for free | no spare → 0 completed / 8 missed (deferred, never steals capacity) | ✅ |
+
+P3 is a fixture-level proof that the gp/$-optimal clock is **price-dependent** (downclock is a Pareto-safe gp/$
+win whose advantage scales with price), so a gp/$-maximising price-aware planner downclocks more when power is
+expensive. The independent full-MPC confirmation is PR #115 Track D/E (downclock fraction 0.0→0.5 at PJM p90).
 
 ## Honest bottom line
 
