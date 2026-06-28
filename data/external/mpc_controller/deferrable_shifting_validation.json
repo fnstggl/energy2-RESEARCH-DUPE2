@@ -1,0 +1,77 @@
+{
+  "pjm": {
+    "market": "pjm",
+    "provenance": "TRACE_DERIVED price path; SIMULATOR_INFERENCE deferrable workload",
+    "price_p10": 0.025865,
+    "price_p90": 0.281249,
+    "price_mean": 0.10018,
+    "real_price": {
+      "asap_cost": 1.76264,
+      "asap_avg_price": 0.09792,
+      "price_aware_cost": 1.68012,
+      "price_aware_avg_price": 0.09334,
+      "shifting_saving_$": 0.08252,
+      "shifting_saving_pct": 4.68,
+      "shifted": 18,
+      "completed": 24,
+      "missed": 0,
+      "deadlines_respected": true
+    },
+    "flat_price_control": {
+      "asap_cost": 1.80313,
+      "price_aware_cost": 1.80313,
+      "no_fake_shifting": true
+    },
+    "valid_shifting_saving": true
+  },
+  "ercot": {
+    "market": "ercot",
+    "provenance": "TRACE_DERIVED price path; SIMULATOR_INFERENCE deferrable workload",
+    "price_p10": 0.00972,
+    "price_p90": 0.0453,
+    "price_mean": 0.04121,
+    "real_price": {
+      "asap_cost": 0.79901,
+      "asap_avg_price": 0.04439,
+      "price_aware_cost": 0.64403,
+      "price_aware_avg_price": 0.03578,
+      "shifting_saving_$": 0.15498,
+      "shifting_saving_pct": 19.4,
+      "shifted": 18,
+      "completed": 24,
+      "missed": 0,
+      "deadlines_respected": true
+    },
+    "flat_price_control": {
+      "asap_cost": 0.74171,
+      "price_aware_cost": 0.74171,
+      "no_fake_shifting": true
+    },
+    "valid_shifting_saving": true
+  },
+  "caiso": {
+    "market": "caiso",
+    "provenance": "TRACE_DERIVED price path; SIMULATOR_INFERENCE deferrable workload",
+    "price_p10": 0.009027,
+    "price_p90": 0.040916,
+    "price_mean": 0.02948,
+    "real_price": {
+      "asap_cost": 0.54253,
+      "asap_avg_price": 0.03014,
+      "price_aware_cost": 0.51313,
+      "price_aware_avg_price": 0.02851,
+      "shifting_saving_$": 0.0294,
+      "shifting_saving_pct": 5.42,
+      "shifted": 24,
+      "completed": 24,
+      "missed": 0,
+      "deadlines_respected": true
+    },
+    "flat_price_control": {
+      "asap_cost": 0.53068,
+      "price_aware_cost": 0.53068,
+      "no_fake_shifting": true
+    },
+    "valid_shifting_saving": true
+  }
+}

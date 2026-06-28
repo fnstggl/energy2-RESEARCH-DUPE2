@@ -1,0 +1,2089 @@
+{
+  "cells": {
+    "pjm|cheap|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          88,
+          90
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 287182.4,
+        "sla_violation_rate": 0.17917,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 450.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03005,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.07682
+      },
+      "price_stats": {
+        "min": 0.06884,
+        "max": 0.08605
+      }
+    },
+    "pjm|cheap|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 12.2,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          88,
+          90
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 302226.0,
+        "sla_violation_rate": 0.37083,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 424.1,
+        "energy_kwh": 0.1022,
+        "operator_cost": 0.02956,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.07682
+      },
+      "price_stats": {
+        "min": 0.06884,
+        "max": 0.08605
+      }
+    },
+    "pjm|cheap|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 12.3,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          88,
+          90
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 293806.2,
+        "sla_violation_rate": 0.37083,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 424.1,
+        "energy_kwh": 0.1022,
+        "operator_cost": 0.03041,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.07682
+      },
+      "price_stats": {
+        "min": 0.06884,
+        "max": 0.08605
+      }
+    },
+    "pjm|cheap|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 12.5,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          88,
+          90
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 292248.1,
+        "sla_violation_rate": 0.375,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 444.3,
+        "energy_kwh": 0.0352,
+        "operator_cost": 0.03016,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.07682
+      },
+      "price_stats": {
+        "min": 0.06884,
+        "max": 0.08605
+      }
+    },
+    "pjm|cheap|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 12.1,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          88,
+          90
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 293806.2,
+        "sla_violation_rate": 0.37083,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 424.1,
+        "energy_kwh": 0.1022,
+        "operator_cost": 0.03041,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.07682,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.43619,
+          "shifting_saving": 0.43619,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.06884,
+        "max": 0.08605
+      }
+    },
+    "pjm|cheap|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 12.1,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          88,
+          90
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 292248.1,
+        "sla_violation_rate": 0.375,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 444.3,
+        "energy_kwh": 0.0352,
+        "operator_cost": 0.03016,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.07682,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.43619,
+          "shifting_saving": 0.43619,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.06884,
+        "max": 0.08605
+      }
+    },
+    "pjm|volatile|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 370365.0,
+        "sla_violation_rate": 0.175,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 564.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03116,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.13328
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 15.0,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 377339.8,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 564.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.13328
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 15.1,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 355632.5,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 564.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03116,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.13328
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 15.3,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 361416.9,
+        "sla_violation_rate": 0.3875,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 599.3,
+        "energy_kwh": 0.094,
+        "operator_cost": 0.03065,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.13328
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 15.3,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 355632.5,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 564.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03116,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.13328,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 1.02496,
+          "shifting_saving": 1.02496,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 15.0,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 361416.9,
+        "sla_violation_rate": 0.3875,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 599.3,
+        "energy_kwh": 0.094,
+        "operator_cost": 0.03065,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.13328,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 1.02496,
+          "shifting_saving": 1.02496,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 336410.4,
+        "sla_violation_rate": 0.275,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 587.7,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03077,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 10.8,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 344725.8,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 576.8,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 328114.4,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 576.8,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.03092,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 332973.6,
+        "sla_violation_rate": 0.52917,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 630.8,
+        "energy_kwh": 0.0989,
+        "operator_cost": 0.03034,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 11.1,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 328114.4,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 576.8,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.03092,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.11389,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 0,
+            "completed": 8,
+            "missed": 0,
+            "shifted": 8,
+            "energy_kwh_run": 5.75,
+            "electricity_cost": 0.60468,
+            "missed_penalty_cost": 0.0,
+            "policy": "price_aware",
+            "avg_price_paid": 0.10516
+          },
+          "asap_cost": 0.60468,
+          "shifting_saving": 0.0,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 11.1,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 332973.6,
+        "sla_violation_rate": 0.52917,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 630.8,
+        "energy_kwh": 0.0989,
+        "operator_cost": 0.03034,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.11389,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 0,
+            "completed": 8,
+            "missed": 0,
+            "shifted": 8,
+            "energy_kwh_run": 5.75,
+            "electricity_cost": 0.60468,
+            "missed_penalty_cost": 0.0,
+            "policy": "price_aware",
+            "avg_price_paid": 0.10516
+          },
+          "asap_cost": 0.60468,
+          "shifting_saving": 0.0,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "ercot|cheap|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 457282.3,
+        "sla_violation_rate": 0.15833,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 565.9,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02912,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02959
+      },
+      "price_stats": {
+        "min": 0.02096,
+        "max": 0.0297
+      }
+    },
+    "ercot|cheap|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 12.7,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 431748.2,
+        "sla_violation_rate": 0.4,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 557.2,
+        "energy_kwh": 0.0396,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02959
+      },
+      "price_stats": {
+        "min": 0.02096,
+        "max": 0.0297
+      }
+    },
+    "ercot|cheap|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 12.7,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 435638.9,
+        "sla_violation_rate": 0.4,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 557.2,
+        "energy_kwh": 0.0396,
+        "operator_cost": 0.02917,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02959
+      },
+      "price_stats": {
+        "min": 0.02096,
+        "max": 0.0297
+      }
+    },
+    "ercot|cheap|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 13.1,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 434569.8,
+        "sla_violation_rate": 0.39583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 540.1,
+        "energy_kwh": 0.1301,
+        "operator_cost": 0.02926,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02959
+      },
+      "price_stats": {
+        "min": 0.02096,
+        "max": 0.0297
+      }
+    },
+    "ercot|cheap|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 12.9,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 435638.9,
+        "sla_violation_rate": 0.4,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 557.2,
+        "energy_kwh": 0.0396,
+        "operator_cost": 0.02917,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02959,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.1708,
+          "shifting_saving": 0.1708,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02096,
+        "max": 0.0297
+      }
+    },
+    "ercot|cheap|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 12.9,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 434569.8,
+        "sla_violation_rate": 0.39583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 540.1,
+        "energy_kwh": 0.1301,
+        "operator_cost": 0.02926,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02959,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.1708,
+          "shifting_saving": 0.1708,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02096,
+        "max": 0.0297
+      }
+    },
+    "ercot|volatile|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 383468.9,
+        "sla_violation_rate": 0.225,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05568
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 9.5,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 393005.5,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05568
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 9.5,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05568
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 9.6,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05568
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 9.3,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05568,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.34189,
+          "shifting_saving": 0.34189,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 9.3,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05568,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.34189,
+          "shifting_saving": 0.34189,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 394097.5,
+        "sla_violation_rate": 0.20417,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 628.7,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02953,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 6.9,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 377074.6,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 617.6,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 7.0,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 374565.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 617.6,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 7.0,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 375745.4,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 628.7,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02953,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 7.1,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 374565.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 617.6,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05065,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 0,
+            "completed": 8,
+            "missed": 0,
+            "shifted": 0,
+            "energy_kwh_run": 5.75,
+            "electricity_cost": 0.25594,
+            "missed_penalty_cost": 0.0,
+            "policy": "price_aware",
+            "avg_price_paid": 0.04451
+          },
+          "asap_cost": 0.25594,
+          "shifting_saving": 0.0,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 7.1,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 375745.4,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 628.7,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02953,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.05065,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 0,
+            "completed": 8,
+            "missed": 0,
+            "shifted": 0,
+            "energy_kwh_run": 5.75,
+            "electricity_cost": 0.25594,
+            "missed_penalty_cost": 0.0,
+            "policy": "price_aware",
+            "avg_price_paid": 0.04451
+          },
+          "asap_cost": 0.25594,
+          "shifting_saving": 0.0,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "caiso|cheap|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 457500.6,
+        "sla_violation_rate": 0.15833,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 565.9,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02911,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02889
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03011
+      }
+    },
+    "caiso|cheap|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 12.7,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 431748.2,
+        "sla_violation_rate": 0.4,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 557.2,
+        "energy_kwh": 0.0396,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02889
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03011
+      }
+    },
+    "caiso|cheap|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 13.0,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 435875.5,
+        "sla_violation_rate": 0.4,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 557.2,
+        "energy_kwh": 0.0396,
+        "operator_cost": 0.02915,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02889
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03011
+      }
+    },
+    "caiso|cheap|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 13.2,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 434825.7,
+        "sla_violation_rate": 0.39583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 540.1,
+        "energy_kwh": 0.1301,
+        "operator_cost": 0.02924,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02889
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03011
+      }
+    },
+    "caiso|cheap|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 13.1,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 435875.5,
+        "sla_violation_rate": 0.4,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 557.2,
+        "energy_kwh": 0.0396,
+        "operator_cost": 0.02915,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02889,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.16369,
+          "shifting_saving": 0.16369,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03011
+      }
+    },
+    "caiso|cheap|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 13.0,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          83,
+          85
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 434825.7,
+        "sla_violation_rate": 0.39583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 540.1,
+        "energy_kwh": 0.1301,
+        "operator_cost": 0.02924,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.02889,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.16369,
+          "shifting_saving": 0.16369,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03011
+      }
+    },
+    "caiso|volatile|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 364862.1,
+        "sla_violation_rate": 0.22917,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 582.8,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03033
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 11.1,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 345643.2,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 572.0,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03033
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 11.3,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 572.0,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03033
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 572.0,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03033
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 11.2,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 572.0,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03033,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.17739,
+          "shifting_saving": 0.17739,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 11.1,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 572.0,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03033,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 6,
+            "completed": 0,
+            "missed": 2,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 6.25,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.17739,
+          "shifting_saving": 0.17739,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|baseline_sla_aware": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "baseline_sla_aware",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 390060.3,
+        "sla_violation_rate": 0.225,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|current_main_mpc_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 9.4,
+      "result": {
+        "arm": "current_main_mpc_flat_price",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 393005.5,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|current_main_mpc_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 9.6,
+      "result": {
+        "arm": "current_main_mpc_real_price",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 396136.2,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|real_price_dvfs_only": {
+      "status": "COMPLETED",
+      "runtime_s": 9.4,
+      "result": {
+        "arm": "real_price_dvfs_only",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 397675.6,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 573.5,
+        "energy_kwh": 0.0923,
+        "operator_cost": 0.02922,
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 9.4,
+      "result": {
+        "arm": "real_price_deferrable_only",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 396136.2,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03018,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 0,
+            "completed": 8,
+            "missed": 0,
+            "shifted": 0,
+            "energy_kwh_run": 5.75,
+            "electricity_cost": 0.16899,
+            "missed_penalty_cost": 0.0,
+            "policy": "price_aware",
+            "avg_price_paid": 0.02939
+          },
+          "asap_cost": 0.16899,
+          "shifting_saving": 0.0,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|real_price_dvfs_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 9.5,
+      "result": {
+        "arm": "real_price_dvfs_plus_deferrable",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 397675.6,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "gpu_seconds": 573.5,
+        "energy_kwh": 0.0923,
+        "operator_cost": 0.02922,
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "avg_price_paid": 0.03018,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 0,
+            "completed": 8,
+            "missed": 0,
+            "shifted": 0,
+            "energy_kwh_run": 5.75,
+            "electricity_cost": 0.16899,
+            "missed_penalty_cost": 0.0,
+            "policy": "price_aware",
+            "avg_price_paid": 0.02939
+          },
+          "asap_cost": 0.16899,
+          "shifting_saving": 0.0,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "pjm|cheap|all_knobs_current_aurelius": {
+      "status": "TIMEOUT",
+      "runtime_s": 300.1,
+      "result": null,
+      "price_stats": {
+        "min": 0.06884,
+        "max": 0.08605
+      }
+    },
+    "pjm|expensive|all_knobs_current_aurelius": {
+      "status": "COMPLETED",
+      "runtime_s": 212.7,
+      "result": {
+        "arm": "all_knobs_current_aurelius",
+        "periods": [
+          81,
+          81
+        ],
+        "n_decisions": 1,
+        "gp_per_dollar": 12902.2,
+        "sla_violation_rate": 0.0,
+        "gpu_hours": 0.011,
+        "gpu_seconds": 173.2,
+        "energy_kwh": 0.0337,
+        "operator_cost": 0.67678,
+        "clock_mix": {
+          "base": 1
+        },
+        "precision_mix": {
+          "fp8": 1
+        },
+        "avg_price_paid": 0.09212,
+        "deferrable": {
+          "price_aware": {
+            "n_jobs": 8,
+            "waiting": 8,
+            "completed": 0,
+            "missed": 0,
+            "shifted": 0,
+            "energy_kwh_run": 0.0,
+            "electricity_cost": 0.0,
+            "missed_penalty_cost": 0.0,
+            "policy": "price_aware",
+            "avg_price_paid": 0.0
+          },
+          "asap_cost": 0.0,
+          "shifting_saving": 0.0,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    }
+  },
+  "config": {
+    "max_decisions": 3,
+    "req_cap": 80,
+    "cell_timeout_s": 240,
+    "win_len": 6,
+    "quick": false,
+    "deterministic": "seed=0 fixed world-state; no RNG",
+    "arm7_all_knobs_note": "full action space (~314928 bundles): the 3-decision cell TIMED OUT at the 300s cap (pjm|cheap); a 1-decision probe COMPLETED in 212.7s at cell_timeout_s=420 (pjm|expensive). Per-cell n_decisions is recorded in each cell's result."
+  },
+  "summary": {
+    "pjm|cheap": {
+      "baseline": 287182.4,
+      "real_no_actions": 293806.2,
+      "dvfs_lift_gp$": -1558.1,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": -1558.1,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": 1.76,
+      "pareto_beats_baseline": true,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.43619,
+      "deferrable_deadlines_respected": false
+    },
+    "pjm|volatile": {
+      "baseline": 370365.0,
+      "real_no_actions": 355632.5,
+      "dvfs_lift_gp$": 5784.4,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": 5784.4,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": -2.42,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 1.02496,
+      "deferrable_deadlines_respected": false
+    },
+    "pjm|expensive": {
+      "baseline": 336410.4,
+      "real_no_actions": 328114.4,
+      "dvfs_lift_gp$": 4859.2,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": 4859.2,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": -1.02,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.0,
+      "deferrable_deadlines_respected": true
+    },
+    "ercot|cheap": {
+      "baseline": 457282.3,
+      "real_no_actions": 435638.9,
+      "dvfs_lift_gp$": -1069.1,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": -1069.1,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": -4.97,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.1708,
+      "deferrable_deadlines_respected": false
+    },
+    "ercot|volatile": {
+      "baseline": 383468.9,
+      "real_no_actions": 389442.1,
+      "dvfs_lift_gp$": 0.0,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": 0.0,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": 1.56,
+      "pareto_beats_baseline": true,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.34189,
+      "deferrable_deadlines_respected": false
+    },
+    "ercot|expensive": {
+      "baseline": 394097.5,
+      "real_no_actions": 374565.1,
+      "dvfs_lift_gp$": 1180.3,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": 1180.3,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": -4.66,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.0,
+      "deferrable_deadlines_respected": true
+    },
+    "caiso|cheap": {
+      "baseline": 457500.6,
+      "real_no_actions": 435875.5,
+      "dvfs_lift_gp$": -1049.8,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": -1049.8,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": -4.96,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.16369,
+      "deferrable_deadlines_respected": false
+    },
+    "caiso|volatile": {
+      "baseline": 364862.1,
+      "real_no_actions": 348558.8,
+      "dvfs_lift_gp$": 0.0,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": 0.0,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": -4.47,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.17739,
+      "deferrable_deadlines_respected": false
+    },
+    "caiso|expensive": {
+      "baseline": 390060.3,
+      "real_no_actions": 396136.2,
+      "dvfs_lift_gp$": 1539.4,
+      "deferrable_serving_gp$_delta": 0.0,
+      "combined_lift_gp$": 1539.4,
+      "interaction_gp$": 0.0,
+      "all_elec_vs_baseline_pct": 1.95,
+      "pareto_beats_baseline": true,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "deferrable_shifting_saving_$": 0.0,
+      "deferrable_deadlines_respected": true
+    }
+  }
+}

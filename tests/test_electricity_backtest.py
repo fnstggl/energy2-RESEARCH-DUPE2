@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from scripts import run_checkpointed_electricity_backtest as bt
 
 
