@@ -1,0 +1,96 @@
+{
+  "control_dt_seconds": 60.0,
+  "eval_periods": 120,
+  "mpc_periods": 12,
+  "median_prompt_tokens": 828,
+  "cost_mode": "hybrid_capacity_work",
+  "rows": {
+    "Static_fp8_spec": {
+      "gp_per_dollar": 149646.1,
+      "sla": 0.0,
+      "ttft_p95": 0.892,
+      "realized_gpu_seconds": 4083.5,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_mix": {
+        "medium": 120
+      },
+      "clock_mix": {
+        "base": 120
+      }
+    },
+    "Current_median": {
+      "gp_per_dollar": 149164.3,
+      "sla": 0.0112,
+      "ttft_p95": 1.0297,
+      "realized_gpu_seconds": 482.4,
+      "precision_mix": {
+        "bf16": 5,
+        "fp8": 7
+      },
+      "spec_mix": {
+        "aggressive": 8,
+        "medium": 2,
+        "off": 2
+      },
+      "clock_mix": {
+        "low": 12
+      }
+    },
+    "Scenario_ensemble": {
+      "gp_per_dollar": 171485.4,
+      "sla": 0.0,
+      "ttft_p95": 0.9689,
+      "realized_gpu_seconds": 358.8,
+      "precision_mix": {
+        "fp8": 12
+      },
+      "spec_mix": {
+        "off": 11,
+        "medium": 1
+      },
+      "clock_mix": {
+        "low": 7,
+        "base": 5
+      }
+    },
+    "Oracle_exact_future": {
+      "gp_per_dollar": 174061.5,
+      "sla": 0.0084,
+      "ttft_p95": 1.0082,
+      "realized_gpu_seconds": 417.5,
+      "precision_mix": {
+        "bf16": 5,
+        "fp8": 5,
+        "int4": 2
+      },
+      "spec_mix": {
+        "medium": 3,
+        "off": 5,
+        "aggressive": 4
+      },
+      "clock_mix": {
+        "low": 10,
+        "base": 2
+      }
+    }
+  },
+  "regret_decomposition": {
+    "static_optimum": 149646.1,
+    "oracle_mpc": 174061.5,
+    "scenario_mpc": 171485.4,
+    "current_mpc": 149164.3,
+    "scenario_minus_current": 22321.1,
+    "oracle_minus_scenario": 2576.1,
+    "oracle_minus_static": 24415.4,
+    "scenario_minus_static": 21839.3,
+    "adaptive_exceeds_static": true,
+    "forecast_residual_frac_of_scenario_gain": 0.115
+  },
+  "claim_safety": {
+    "oracle": "uses FUTURE info (labelled diagnostic) \u2014 not a deployable policy",
+    "scenarios": "trace-derived statistical extrapolation; risk-averse prior weights",
+    "magnitudes": "simulator_inferred on a bounded window"
+  }
+}

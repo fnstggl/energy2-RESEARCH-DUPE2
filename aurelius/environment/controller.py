@@ -143,6 +143,11 @@ class ModelPredictiveEconomicController:
     planning_kv_cost_mode: str | None = None
     planning_capacity_blocks: int = 512
     planning_prompt_tokens: int | None = None   # representative prompt length for the planning workload
+    # scenario forecaster (this PR): plan across a small trace-derived workload ENSEMBLE (incl. SLA-pressure
+    # futures) instead of one median, so the planning score is an expectation over realistic demand. Opt-in.
+    planning_scenarios: bool = False
+    scenario_tail_weight: float = 0.25          # risk-averse penalty on the worst-scenario SLA violation
+    planning_oracle_records: list | None = None  # ORACLE diagnostic: plan against the EXACT future workload
     world_state: object = None         # CanonicalWorldState — when set, the stateful actions
     #                                    (prewarm/placement/migration) are scored through the
     #                                    world_simulator on a READ-ONLY (mutate=False) candidate sim
@@ -202,28 +207,32 @@ class ModelPredictiveEconomicController:
             fc_k = {"arrival_rate": ar.mean, "arrival_p90": ar.p90,
                     "mean_service_s": max(_service_time_s(int(tm.mean)), 1e-3)}
             rkw = bundle_k.replay_kwargs()
-            _pt = self.planning_prompt_tokens
-            point = [(j.arrival_s, j.actual_tokens, _pt or j.actual_tokens) for j in
-                     _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
-                                 best_effort_fraction=be, kv_service_factor=1.0)]
-            risk = [(j.arrival_s, j.actual_tokens, _pt or j.actual_tokens) for j in
-                    _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
-                                best_effort_fraction=be, kv_service_factor=1.0)]
-            # planning/eval PARITY: a synthetic UNIQUE-prefix kv_state + the eval cost mode makes the
-            # planning rollout run the same phase + hybrid-cost + roofline model the evaluator uses, so the
-            # planner SEES precision/spec/clock COST economics. Unique prefixes invent NO reuse (conservative).
-            kvp = kvr = None
-            if self.planning_kv_cost_mode:
-                _cm, _cb = self.planning_kv_cost_mode, self.planning_capacity_blocks
-                kvp = {"hash_seq": [(f"plan{k}_{i}",) for i in range(len(point))],
-                       "routing": bundle_k.routing_policy, "capacity_blocks": _cb, "cost_mode": _cm}
-                kvr = {**kvp, "hash_seq": [(f"plkr{k}_{i}",) for i in range(len(risk))]}
-            risk_viol = simulate_period(clone, bundle_k, risk, fc_k, replay_kwargs=rkw,
-                                        mutate=False, kv_state=kvr, **common0).sla_violation_rate
-            out = simulate_period(clone, bundle_k, point, fc_k, replay_kwargs=rkw,
-                                  mutate=True, kv_state=kvp, **common0)     # advance the cloned world one step
-            exp_gpd = out.goodput_per_dollar
-            reward = exp_gpd - self.risk_weight * risk_viol * exp_gpd
+            if self.planning_scenarios or (self.planning_oracle_records is not None and k == 0):
+                # plan across the scenario ensemble (or the exact future, in oracle mode)
+                out, exp_gpd, reward, risk_viol = self._rollout_ensemble(clone, bundle_k, k, ar, tm, tp, cv,
+                                                                         be, win, fc_k, rkw, common0)
+            else:
+                _pt = self.planning_prompt_tokens
+                point = [(j.arrival_s, j.actual_tokens, _pt or j.actual_tokens) for j in
+                         _synth_jobs(ar.mean, tm.mean, tp.value, cv.mean, window_seconds=win,
+                                     best_effort_fraction=be, kv_service_factor=1.0)]
+                risk = [(j.arrival_s, j.actual_tokens, _pt or j.actual_tokens) for j in
+                        _synth_jobs(ar.p90, tm.p90, tp.p99, cv.p90, window_seconds=win,
+                                    best_effort_fraction=be, kv_service_factor=1.0)]
+                # planning/eval PARITY (PR #112): synthetic UNIQUE-prefix kv_state + the eval cost mode makes
+                # the planning rollout run the same phase + hybrid-cost + roofline model the evaluator uses.
+                kvp = kvr = None
+                if self.planning_kv_cost_mode:
+                    _cm, _cb = self.planning_kv_cost_mode, self.planning_capacity_blocks
+                    kvp = {"hash_seq": [(f"plan{k}_{i}",) for i in range(len(point))],
+                           "routing": bundle_k.routing_policy, "capacity_blocks": _cb, "cost_mode": _cm}
+                    kvr = {**kvp, "hash_seq": [(f"plkr{k}_{i}",) for i in range(len(risk))]}
+                risk_viol = simulate_period(clone, bundle_k, risk, fc_k, replay_kwargs=rkw,
+                                            mutate=False, kv_state=kvr, **common0).sla_violation_rate
+                out = simulate_period(clone, bundle_k, point, fc_k, replay_kwargs=rkw,
+                                      mutate=True, kv_state=kvp, **common0)   # advance the cloned world one step
+                exp_gpd = out.goodput_per_dollar
+                reward = exp_gpd - self.risk_weight * risk_viol * exp_gpd
             cumulative += (self.gamma ** k) * reward
             steps.append({"step": k, "reward": round(reward, 2), "gp_per_dollar": round(exp_gpd, 1),
                           "risk_viol": round(risk_viol, 4), "warm_hold_cost": round(out.warm_hold_cost, 3),
@@ -231,6 +240,48 @@ class ModelPredictiveEconomicController:
                           "cold_start_events": out.cold_start_events, "peak_c": out.kpi.c_max,
                           "topology_factor": out.topology_factor})
         return cumulative, steps
+
+    def _rollout_ensemble(self, clone, bundle_k, k, ar, tm, tp, cv, be, win, fc_k, rkw, common0):
+        """Score the candidate across a small trace-derived workload ENSEMBLE (SLA-pressure aware), or — in
+        ORACLE mode — against the EXACT realized future workload. Advances the clone on the BASE scenario
+        only (single world track). Returns ``(base_outcome, expected_gp_per_dollar, risk_aware_reward)``
+        where reward = E[gp/$] − risk·E[SLA] − tail·max(SLA), all scaled by E[gp/$]. No reward shaping."""
+        from .scenario_forecaster import build_scenarios
+        _pt = self.planning_prompt_tokens
+        if self.planning_oracle_records is not None and k == 0:
+            recs = self.planning_oracle_records                       # the EXACT future (oracle diagnostic)
+            t0 = recs[0][0] if recs else 0.0
+            scen = [("oracle", [(r[0] - t0, int(r[1]), int(r[2]) if len(r) > 2 else int(r[1])) for r in recs], 1.0)]
+        else:
+            scen = []
+            for sc in build_scenarios(ar, tm, tp, cv, prompt_tokens=_pt):
+                jobs = [(jb.arrival_s, jb.actual_tokens,
+                         max(1, int((_pt or jb.actual_tokens) * sc["prompt_mult"])))
+                        for jb in _synth_jobs(sc["arrival_rate"], sc["tm"], sc["tp"], sc["cv"],
+                                              window_seconds=win, best_effort_fraction=be, kv_service_factor=1.0)]
+                scen.append((sc["label"], jobs, sc["weight"]))
+        g = v = wsum = vmax = 0.0
+        base_out = None
+        for j, (_lbl, jobs, wt) in enumerate(scen):
+            mut = (j == 0)
+            kvs = None
+            if self.planning_kv_cost_mode:
+                kvs = {"hash_seq": [(f"sc{k}_{j}_{i}",) for i in range(len(jobs))],
+                       "routing": bundle_k.routing_policy, "capacity_blocks": self.planning_capacity_blocks,
+                       "cost_mode": self.planning_kv_cost_mode}
+            o = simulate_period(clone, bundle_k, jobs, fc_k, replay_kwargs=rkw, mutate=mut, kv_state=kvs, **common0)
+            if mut:
+                base_out = o
+            sv = o.sla_violation_rate
+            g += wt * o.goodput_per_dollar
+            v += wt * sv
+            wsum += wt
+            vmax = max(vmax, sv)
+        exp_gpd = g / wsum if wsum else 0.0
+        exp_viol = v / wsum if wsum else 0.0
+        tail_pen = self.scenario_tail_weight * vmax * exp_gpd if len(scen) > 1 else 0.0
+        reward = exp_gpd - self.risk_weight * exp_viol * exp_gpd - tail_pen
+        return base_out, exp_gpd, reward, exp_viol
 
     def _decode_regime_hint(self, tm) -> str | None:
         """The instantaneous decode roofline regime (memory-bandwidth-bound vs compute-bound) for the
