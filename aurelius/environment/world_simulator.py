@@ -50,8 +50,12 @@ COLD_START_RAMP = _CAL.base("cold_start_ramp")                 # 1.0 — progres
 TOPOLOGY_MAX_DISCOUNT = _CAL.base("topology_max_discount")     # 0.08 macro locality relief (no per-link)
 MIGRATION_COST_PER_REPLICA = _CAL.base("migration_cost_per_replica")    # $0.40 per live move
 MIGRATION_CAPACITY_LOSS_FRAC = _CAL.base("migration_capacity_loss_frac")  # 0.10 withheld while moving
-MIGRATION_CACHE_PENALTY = _CAL.base("migration_cache_penalty")  # 0.04 KV-warmth-lost surcharge
+MIGRATION_CACHE_PENALTY = _CAL.base("migration_cache_penalty")  # 0.04 KV-warmth-lost surcharge (bulk move)
+MIGRATION_KV_PRESERVED_FRAC = _CAL.base("migration_kv_preserved_frac")  # 0.90 KV kept by a pipelined move
 MIGRATION_DURATION_PERIODS = int(_CAL.base("migration_duration_periods"))  # lands next period
+# share of KV warmth a move KEEPS, by mode: conservative ≈ pipelined (Llumnix), aggressive ≈ bulk.
+MIGRATION_KV_PRESERVED_BY_MODE = {"conservative": MIGRATION_KV_PRESERVED_FRAC,
+                                  "aggressive": max(0.0, MIGRATION_KV_PRESERVED_FRAC - 0.3)}
 PREWARM_MARGIN = {"off": 0.0, "conservative": 0.15, "aggressive": 0.45}  # headroom over forecast
 
 PREWARM_OPTIONS = ("off", "conservative", "aggressive")
@@ -110,9 +114,12 @@ def warm_seed(ws: CanonicalWorldState, n_warm: int) -> None:
     condition under which ``off`` reproduces the stateless path on stable load."""
     n = max(0, min(n_warm, ws.total_replicas()))
     for i, rid in enumerate(ws.replicas):
-        ws.replicas[rid].warm = i < n
+        r = ws.replicas[rid]
+        r.warm = i < n
         if i < n:
-            ws.replicas[rid].last_used_period = ws.period
+            r.last_used_period = ws.period
+            r.weights_loaded = True            # a warm replica has its weights resident…
+            r.kv_warm_frac = 1.0               # …and a hot cache (it has been serving)
     ws.warm_state.warm_replicas = ws.warm_count()
 
 
@@ -124,6 +131,9 @@ def reset_world_state(ws: CanonicalWorldState) -> None:
         r.migrating = False
         r.last_used_period = -1
         r.cold_start_remaining_s = 0.0
+        r.weights_loaded = False
+        r.kv_warm_frac = 0.0
+        r.warm_until_period = -1
     ws.migrations = []
     ws.period = 0
 
@@ -247,9 +257,14 @@ def _migration_plan(ws: CanonicalWorldState, policy: str, *, placement: dict) ->
     n = max(1, int(round(len(candidates) * frac)))
     targets = sorted(candidates, key=lambda r: -ws.racks[r.rack_id].macro_network_pressure)[:n]
     cap_loss = min(0.5, MIGRATION_CAPACITY_LOSS_FRAC * n / max(1, ws.warm_count()))
+    # KV warmth KEPT across the move (Llumnix pipelined → conservative keeps ~0.9; bulk/aggressive
+    # less). The service surcharge is the LOST fraction only — replacing the old flat 1.04 that made
+    # migration strictly dominated (the moved replica preserves most of its cache, it is not recooled).
+    preserved = MIGRATION_KV_PRESERVED_BY_MODE.get(policy, MIGRATION_KV_PRESERVED_FRAC)
+    cache_factor = 1.0 + MIGRATION_CACHE_PENALTY * (1.0 - preserved) * (1.0 if n else 0.0)
     return {"n_migrations": n, "capacity_loss_frac": round(cap_loss, 4),
             "migration_cost": round(MIGRATION_COST_PER_REPLICA * n, 4),
-            "cache_factor": 1.0 + MIGRATION_CACHE_PENALTY * (1.0 if n else 0.0),
+            "cache_factor": round(cache_factor, 5), "kv_preserved_frac": preserved,
             "targets": [r.replica_id for r in targets], "target_rack": best_rack}
 
 
@@ -379,7 +394,9 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
     carries a warm pool it isn't paying off — that is what makes ``off`` the no-warm-hold baseline.
     Proactive prewarming holds the larger forecast-sized pool warm (and pays for it)."""
     # land any migrations that have now completed — the moved replica adopts its target rack (its
-    # locality benefit turns on for subsequent periods).
+    # locality benefit turns on for subsequent periods). It is the SAME replica object (identity moves,
+    # never duplicated): weights stay resident and it lands WARM; KV warmth is kept per the move mode
+    # (pipelined ≈ 0.9, bulk less) — that is what makes a migrated replica cheaper than a cold-start.
     for m in ws.migrations:
         if m.status == "in_flight" and m.end_period <= ws.period:
             rep = ws.replicas.get(m.replica_id)
@@ -387,6 +404,9 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
                 rep.rack_id = (m.target_server_id.split(":")[0]
                                if ":" in m.target_server_id else rep.rack_id)
                 rep.migrating = False
+                rep.warm = True                          # lands warm — not re-cold-started
+                rep.weights_loaded = True                # weights moved with the replica
+                rep.kv_warm_frac = round(rep.kv_warm_frac * m.kv_preserved_frac, 5)  # KV partly kept
             m.status = "completed"
     # warm the replicas that served (or were prewarmed); the rest cool down AFTER the idle timeout.
     # Persistence is TIME-based: a replica idle for less than WARM_IDLE_TIMEOUT_S stays warm. At a
@@ -403,14 +423,19 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
         held_by_timeout = r.warm and idle_s < WARM_IDLE_TIMEOUT_S
         if i < warm_target:
             r.warm = True
+            r.weights_loaded = True            # warm ⇒ weights resident in HBM
+            r.warm_until_period = ws.period + max(1, int(WARM_IDLE_TIMEOUT_S / max(dt_seconds, 1e-9)))
             r.active = i < peak_c
             if i < peak_c:
                 r.last_used_period = ws.period
+                r.kv_warm_frac = 1.0           # served this step ⇒ its cache is hot
         elif held_by_timeout:
             r.warm = True                     # still within the idle timeout → not cooled yet
             r.active = False
         else:
-            r.warm = False
+            r.warm = False                     # cooled past the idle timeout → weights unloaded, cache gone
+            r.weights_loaded = False
+            r.kv_warm_frac = 0.0
             r.active = False
     # start migrations: withhold those replicas and schedule their landing.
     for rid in mg.get("targets", []):
@@ -423,7 +448,8 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
             target_server_id=f"{mg.get('target_rack', r.rack_id)}:srv", start_period=ws.period,
             end_period=ws.period + MIGRATION_DURATION_PERIODS,
             migration_cost=MIGRATION_COST_PER_REPLICA, capacity_loss=1,
-            cache_invalidation_cost=MIGRATION_CACHE_PENALTY))
+            cache_invalidation_cost=MIGRATION_CACHE_PENALTY * (1.0 - mg.get("kv_preserved_frac", 1.0)),
+            kv_preserved_frac=mg.get("kv_preserved_frac", 1.0)))
     # accumulate ledgers.
     ws.warm_state.warm_replicas = ws.warm_count()
     ws.warm_state.cold_start_events += cold_started
