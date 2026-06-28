@@ -26,6 +26,8 @@ import copy
 import random
 from dataclasses import dataclass, field
 
+from .deferrable import DeferrableWorkState
+from .electricity import ElectricityState
 from .ingestion import v2026_artifacts
 
 # Fidelity tags (kept as strings so they serialize into the manifest verbatim).
@@ -176,6 +178,8 @@ class CanonicalWorldState:
     queue_state: QueueState = field(default_factory=QueueState)
     network_state: NetworkPressureState = field(default_factory=NetworkPressureState)
     cost_state: CostState = field(default_factory=CostState)
+    electricity_state: ElectricityState = field(default_factory=ElectricityState)  # per-period price/percentile
+    deferrable_state: DeferrableWorkState = field(default_factory=DeferrableWorkState)  # shiftable work pool
     metrics: dict = field(default_factory=dict)         # per-period accumulator (last simulate())
     fidelity: dict = field(default_factory=dict)        # provenance manifest references
 

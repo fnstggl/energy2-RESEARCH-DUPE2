@@ -67,7 +67,8 @@ DEFAULT_BASELINES = {
 def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
                      processed_dir: str | None = None, hourly_stride: int = 24,
                      sim_seconds: float = 240.0, use_world_state: bool = False,
-                     control_dt_seconds: float | None = None) -> dict | None:
+                     control_dt_seconds: float | None = None,
+                     electricity_market: str | None = None) -> dict | None:
     """Build the (frames, per-period real trace, fleet state, cost model, common) inputs
     from the canonical sources.
 
@@ -137,9 +138,21 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
     kv_factor = kv_by_routing.get("round_robin", float(kv.stats(1000).get("mean_ttft_factor", 1.0)))
     anchors = {"gpu_utilization": fleet.util_target, "gpu_memory_pressure": fleet.mem_pressure,
                "network_pressure": fleet.net_pressure, "kv_reuse": kv.warm_hit_rate()}
+    # electricity prices (this PR): a real market name builds the diurnal price PATH (TRACE_DERIVED), so the
+    # frames — and therefore the electricity_price forecast — vary diurnally. None reproduces the constant
+    # fleet price EXACTLY (flat-price baseline unchanged). `electricity_prices` is the per-period realized
+    # price the eval harness applies to each period's cost.
+    from .electricity import build_price_profile
+    price_profile = build_price_profile(electricity_market, cycle_len,
+                                        flat_price=fleet.energy_price_per_kwh)
+    price_by_cycle = dict(price_profile.by_cycle)
     frames = build_frames(per, period_seconds=period_seconds, cycle_len=cycle_len,
-                          price_by_cycle={c: fleet.energy_price_per_kwh for c in range(cycle_len)},
-                          anchors=anchors)
+                          price_by_cycle=price_by_cycle, anchors=anchors)
+    electricity = {"market": price_profile.market, "region": price_profile.region, "cycle_len": cycle_len,
+                   "prices": {p: price_profile.price_at(p, cycle_len) for p in per},
+                   "provenance": price_profile.provenance, "profile": price_profile}
+    # `common` keeps ONLY its original keys (it is splatted into run_period_episode); electricity is returned
+    # separately so existing callers are unaffected and electricity callers pass `electricity_prices` explicitly.
     common = {"sla_s": 10.0, "period_seconds": period_seconds, "tick_seconds": 10.0,
               "kv_service_factor": kv_factor, "cost_scenario": "owned",
               "sim_seconds": (min(sim_seconds, period_seconds) if week_path else None),
@@ -150,7 +163,7 @@ def build_mpc_inputs(*, limit: int = 8000, bin_seconds: float = 60.0,
         common["world_state_params"] = {"n_servers": 24, "n_racks": 4, "seed": 0, "warm": 8,
                                         "processed_dir": processed_dir}
     return {"frames": frames, "per": per, "fleet_state": fleet, "cost_model": CostModel(),
-            "common": common, "coverage": coverage, "kv_routing": rmap}
+            "common": common, "coverage": coverage, "kv_routing": rmap, "electricity": electricity}
 
 
 def split_cuts(n: int, train: float = 0.5, val: float = 0.25) -> tuple:

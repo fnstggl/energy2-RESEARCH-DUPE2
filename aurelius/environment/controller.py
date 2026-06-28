@@ -143,7 +143,11 @@ class ModelPredictiveEconomicController:
     planning_kv_cost_mode: str | None = None
     planning_capacity_blocks: int = 512
     planning_prompt_tokens: int | None = None   # representative prompt length for the planning workload
-    # scenario forecaster (this PR): plan across a small trace-derived workload ENSEMBLE (incl. SLA-pressure
+    # electricity (this PR): when True the horizon rollout prices each step at the FORECAST electricity price
+    # path (traj.point("electricity_price", k)) so the controller chooses clock/DVFS against real diurnal
+    # prices. Default False → every step uses the constant fleet price (today's behaviour, flat-price-identical).
+    electricity_price_aware: bool = False
+    # scenario forecaster (PR #113): plan across a small trace-derived workload ENSEMBLE (incl. SLA-pressure
     # futures) instead of one median, so the planning score is an expectation over realistic demand. Opt-in.
     planning_scenarios: bool = False
     scenario_tail_weight: float = 0.25          # risk-averse penalty on the worst-scenario SLA violation
@@ -210,6 +214,12 @@ class ModelPredictiveEconomicController:
                                    "interarrival_cv"))
             fc_k = {"arrival_rate": ar.mean, "arrival_p90": ar.p90,
                     "mean_service_s": max(_service_time_s(int(tm.mean)), 1e-3)}
+            # price-aware planning: each horizon step is priced at the FORECAST electricity price for that step
+            # (causal — day-ahead prices are published ahead). None → constant fleet price (flat-price-identical).
+            pr_k = None
+            if self.electricity_price_aware:
+                _pk = traj.point("electricity_price", k) or traj.point("electricity_price", 0)
+                pr_k = _pk.value if _pk is not None else None
             rkw = bundle_k.replay_kwargs()
             if self.planning_scenarios or (self.planning_oracle_records is not None and k == 0):
                 # plan across the scenario ensemble (or the exact future, in oracle mode)
@@ -232,9 +242,11 @@ class ModelPredictiveEconomicController:
                            "routing": bundle_k.routing_policy, "capacity_blocks": _cb, "cost_mode": _cm}
                     kvr = {**kvp, "hash_seq": [(f"plkr{k}_{i}",) for i in range(len(risk))]}
                 risk_viol = simulate_period(clone, bundle_k, risk, fc_k, replay_kwargs=rkw,
-                                            mutate=False, kv_state=kvr, **common0).sla_violation_rate
+                                            mutate=False, kv_state=kvr,
+                                            energy_price_per_kwh=pr_k, **common0).sla_violation_rate
                 out = simulate_period(clone, bundle_k, point, fc_k, replay_kwargs=rkw,
-                                      mutate=True, kv_state=kvp, **common0)   # advance the cloned world one step
+                                      mutate=True, kv_state=kvp,
+                                      energy_price_per_kwh=pr_k, **common0)   # advance the cloned world one step
                 exp_gpd = out.goodput_per_dollar
                 reward = exp_gpd - self.risk_weight * risk_viol * exp_gpd
             cumulative += (self.gamma ** k) * reward
@@ -545,7 +557,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                        period_seconds=60.0, kv_service_factor=1.0, cost_scenario="owned",
                        sim_seconds=None, kv_service_factor_by_routing=None, world_state=None,
                        world_state_params=None, kv_state_pool=None, kv_capacity_blocks=512,
-                       kv_model_seq=None, kv_cost_mode=None):
+                       kv_model_seq=None, kv_cost_mode=None, electricity_prices=None):
     """Run ``decide_fn(history_frames)`` over the REAL eval periods (causal: the action
     for period p is chosen from frames[:p], then applied to the real requests of p).
 
@@ -662,7 +674,9 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                              replay_kwargs=replay_kw, cost_model=cost_model, fleet_state=fleet_state,
                              cost_scenario=cost_scenario, best_effort_fraction=be,
                              period_hours=period_hours, dt_seconds=period_seconds,
-                             kv_state=kv_state, mutate=True)
+                             kv_state=kv_state,
+                             energy_price_per_kwh=(electricity_prices.get(p) if electricity_prices else None),
+                             mutate=True)
             kpi = oc.kpi
             tot_cost += oc.operator_cost
             cold_starts += oc.cold_start_events
