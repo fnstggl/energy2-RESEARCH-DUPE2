@@ -81,6 +81,7 @@ class PeriodOutcome:
     migrations_started: int = 0
     queue_delay_p95: float = 0.0
     queue_delay_p99: float = 0.0
+    kv_diag: dict | None = None               # per-replica KV/model residency diagnostics (PR #106)
     metrics: dict = field(default_factory=dict)
 
     @property
@@ -277,7 +278,7 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
                     replay_kwargs: dict | None = None, cost_model=None, fleet_state=None,
                     cost_scenario: str = "owned", best_effort_fraction: float = 0.0,
                     period_hours: float = 1.0, dt_seconds: float | None = None,
-                    mutate: bool = False) -> PeriodOutcome:
+                    kv_state: dict | None = None, mutate: bool = False) -> PeriodOutcome:
     """Simulate one period under ``bundle`` on the world state.
 
     ``recs`` are the period's raw ``(arrival_s, tokens, ctx)`` request records. ``forecast`` carries
@@ -315,8 +316,42 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     be_stride = max(1, round(1.0 / best_effort_fraction)) if best_effort_fraction > 0 else 0
     recs_sorted = sorted(recs, key=lambda r: r[0])
     t0 = recs_sorted[0][0] if recs_sorted else 0.0
+    # 5b) PER-REPLICA KV / model residency (PR #106) → per-request service factor. When kv_state is
+    # given, routing over the warm replicas' PERSISTENT caches replaces the offline KV scalar AND the
+    # macro topology scalar (the residency sim applies per-replica topology): a prefix hit skips that
+    # request's prefill, a model match avoids a switch cold-start. Causal in request order; mutates the
+    # replicas' caches (the persistence prewarm/migration/placement act through). See world_serving.py.
+    res_diag = None
+    per_req_factor = per_req_cold = None
+    if kv_state and recs_sorted:
+        from .world_serving import (
+            build_request_signatures,
+            replica_residency_view,
+            simulate_residency_serving,
+        )
+        rview = replica_residency_view(ws, capacity_blocks=int(kv_state.get("capacity_blocks", 512)),
+                                       commit=mutate)
+        sigs = build_request_signatures(recs_sorted, kv_state.get("hash_seq") or [],
+                                        model_ids=tuple(kv_state.get("model_ids", ("llama-8b-gqa",))),
+                                        model_seq=kv_state.get("model_seq"))
+        rr = simulate_residency_serving(
+            rview, sigs, policy=str(rkw.get("routing_policy", kv_state.get("routing", "kv_aware"))),
+            model_load_s=_CAL.base("cold_start_model_load_s"),
+            topology_max_discount=TOPOLOGY_MAX_DISCOUNT)
+        per_req_factor = rr.service_factor
+        per_req_cold = rr.model_switch_s
+        res_diag = rr.summary(len(sigs))
+
+    def _svc(i, r):
+        base = _service_time_s(int(r[1]))
+        if per_req_factor is not None and i < len(per_req_factor):
+            # residency factor REPLACES base_service_factor + topology (subsumed); migration KV penalty
+            # (mg.cache_factor) still applies; model-switch cold-start adds seconds.
+            return base * per_req_factor[i] * mg["cache_factor"] + (per_req_cold[i] if per_req_cold else 0.0)
+        return base * service_factor
+
     jobs = [Job(idx=i, arrival_s=(r[0] - t0), actual_tokens=int(r[1]), predicted_tokens=float(r[1]),
-                service_s=_service_time_s(int(r[1])) * service_factor,
+                service_s=_svc(i, r),
                 cls=(CLASS_BEST_EFFORT if (be_stride and i % be_stride == 0) else CLASS_LATENCY))
             for i, r in enumerate(recs_sorted)]
     warmup_c = max(1, min(int(getattr(fleet_state, "capacity_envelope", 4) or 4), 4)) if fleet_state else 4
@@ -372,7 +407,7 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         topology_factor=pl["topology_factor"], locality_score=pl["locality_score"],
         rack_spread=pl["rack_spread"], cold_start_events=cold_started,
         wasted_prewarm_hours=round(warm_hold_gpu_hours, 5), migrations_started=mg["n_migrations"],
-        queue_delay_p95=round(q_p95, 4), queue_delay_p99=round(q_p99, 4),
+        queue_delay_p95=round(q_p95, 4), queue_delay_p99=round(q_p99, 4), kv_diag=res_diag,
         metrics={"prewarm_policy": prewarm, "placement_policy": placement,
                  "migration_policy": migration, "warm_capacity": warm_capacity,
                  "peak_c": peak_c, "topology_factor": pl["topology_factor"],
