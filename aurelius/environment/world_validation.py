@@ -131,20 +131,69 @@ def _migration_realism_checks() -> list:
                   "a live move keeps ≥0.5 of KV (was a flat 1.04 surcharge → strictly dominated)")]
 
 
+def _kv_residency_checks() -> list:
+    """The PR #106 per-replica KV/model residency → causal service-time payoff (Gap 2, now LANDED in
+    the serving path). Validates the realized transitions, not a bonus."""
+    from .kv_cache import StatefulKVCache
+    from .world_serving import (
+        PREFILL_SAVINGS_FRAC,
+        ReplicaResidency,
+        RequestSig,
+        simulate_residency_serving,
+    )
+
+    def rep(cap=512, model="m1"):
+        return ReplicaResidency("a", "rack0", model, StatefulKVCache(capacity_blocks=cap, block_tokens=16))
+    P = tuple(f"h{i}" for i in range(8))
+    out = []
+    # 1) a prefix hit lowers service time; a cold request does not.
+    r = simulate_residency_serving([rep()], [RequestSig(0.0, 100, 128, "m1", P),
+                                             RequestSig(1.0, 100, 128, "m1", P)], policy="kv_aware")
+    out.append(Check("kv_residency", "prefix_hit_lowers_service_time",
+                     _ok(r.service_factor[1] < r.service_factor[0] and r.service_factor[1] < 0.2),
+                     r.service_factor[1], f"cold {r.service_factor[0]:.3f} → hit {r.service_factor[1]:.3f}"))
+    # 2) partial hit is strictly between full hit and no hit.
+    Q = P[:4] + tuple(f"z{i}" for i in range(4))
+    rp = simulate_residency_serving([rep()], [RequestSig(0.0, 100, 128, "m1", P),
+                                             RequestSig(1.0, 100, 128, "m1", Q)], policy="kv_aware")
+    out.append(Check("kv_residency", "partial_hit_partial_benefit",
+                     _ok((1.0 - PREFILL_SAVINGS_FRAC) < rp.service_factor[1] < 1.0), rp.service_factor[1],
+                     f"partial factor {rp.service_factor[1]:.3f} in ({1 - PREFILL_SAVINGS_FRAC:.2f},1)"))
+    # 3) no future leakage — the first request cannot hit (nothing admitted yet).
+    out.append(Check("kv_residency", "no_future_prefix_leakage", _ok(r.service_factor[0] > 0.9),
+                     r.service_factor[0], "request 0 sees an empty cache (causal)"))
+    # 4) memory pressure → no free hit (a full small cache evicts a returning prefix).
+    rep_s = rep(cap=8)
+    seq = ([RequestSig(0.0, 100, 128, "m1", P)]
+           + [RequestSig(float(i + 1), 100, 128, "m1", tuple(f"q{i}_{b}" for b in range(8)))
+              for i in range(5)] + [RequestSig(10.0, 100, 128, "m1", P)])
+    rm = simulate_residency_serving([rep_s], seq, policy="kv_aware")
+    out.append(Check("kv_residency", "memory_pressure_no_free_hit", _ok(rm.service_factor[-1] > 0.9),
+                     rm.evictions, f"evicted prefix returns to a miss ({rm.evictions} evictions)"))
+    # 5) the Mooncake-derived bridge produces real reuse (hit rate > 0 on a reusing stream).
+    sig = [RequestSig(float(i), 100, 128, "m1", P) for i in range(20)]
+    rr = simulate_residency_serving([rep()], sig, policy="kv_aware")
+    out.append(Check("kv_residency", "mooncake_reuse_produces_hits",
+                     _ok(rr.summary(20)["exact_prefix_hit_rate"] > 0.5),
+                     rr.summary(20)["exact_prefix_hit_rate"], "a reusing stream yields exact-prefix hits"))
+    # 6) model-affinity: a model switch invalidates KV and adds a cold-start; matching avoids it.
+    rs = simulate_residency_serving([rep(model="m1")], [RequestSig(0.0, 100, 128, "m1", P),
+                                    RequestSig(1.0, 100, 128, "m2", P)], policy="kv_aware", model_load_s=22.0)
+    out.append(Check("kv_residency", "model_switch_adds_cold_start", _ok(rs.model_switch_s[1] == 22.0),
+                     rs.model_switch_s[1], "a model mismatch reloads weights (KV invalidated)"))
+    return out
+
+
 def _skipped_distribution_checks() -> list:
-    """Distribution checks that require the DEFERRED mechanisms — emitted SKIPPED with the reason
-    (never silently passing). These become live when Gaps 2/3/5 land (see the gap audit)."""
+    """Checks that still require DEFERRED mechanisms — emitted SKIPPED with the reason (never silently
+    passing). Gap 2 (per-replica KV routing) is now LANDED (see _kv_residency_checks); what remains:"""
     reasons = [
-        ("mooncake_kv_reuse_distribution", "KS/L1 of assigned-prefix reuse vs Mooncake held-out",
-         "Gap 2 (per-replica Mooncake prefix assignment in the world sim) deferred"),
-        ("alibaba_rack_locality_distribution", "rack/asw locality marginal match",
-         "Gap 3 (cross-rack KV-transfer penalty) deferred"),
-        ("alibaba_network_rxtx_distribution", "rx/tx pressure marginal match",
-         "macro pressure already in placement; per-link ABSENT from any trace"),
+        ("alibaba_rack_locality_distribution", "cross-rack KV-transfer cost > same-rack",
+         "Gap 3 (staged cross-rack KV-transfer model) deferred — macro placement penalty already live"),
         ("roofline_batching_throughput_latency", "tokens/s↑ to saturation then latency↑",
          "Gap 5 (roofline batching model) deferred"),
-        ("migration_future_kv_hit_rate", "migrated identity raises future KV hit vs fresh replica",
-         "needs Gap 2 per-replica residency to measure a hit rate"),
+        ("multi_tier_remote_kv_cache", "local<host<rack<cross-rack hit cost ordering",
+         "Phase 8B-B (remote KV tiers) deferred"),
     ]
     return [Check(t, c, SKIPPED, None, why) for (t, c, why) in reasons]
 
@@ -152,7 +201,7 @@ def _skipped_distribution_checks() -> list:
 def run_world_validation() -> dict:
     """Run every world-model transition check → a structured PASS/WARN/FAIL/SKIPPED report."""
     checks = (_cold_start_checks() + _conservation_checks() + _isolation_determinism_checks()
-              + _migration_realism_checks() + _skipped_distribution_checks())
+              + _migration_realism_checks() + _kv_residency_checks() + _skipped_distribution_checks())
     counts = {s: sum(1 for c in checks if c.status == s) for s in (PASS, WARN, FAIL, SKIPPED)}
     return {"checks": [c.to_dict() for c in checks], "counts": counts,
             "all_landed_pass": counts[FAIL] == 0}

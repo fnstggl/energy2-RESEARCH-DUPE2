@@ -1,0 +1,117 @@
+{
+  "eval_periods": 360,
+  "control_dt_seconds": 60.0,
+  "capacity_blocks": 256,
+  "mooncake_pool_size": 12031,
+  "fair_baseline": "fair_kv_routing_no_residency",
+  "rows": {
+    "fair_round_robin_no_residency": {
+      "goodput_per_dollar": 65088.7,
+      "sla_violation_rate": 0.019,
+      "queue_delay_p95": 1.44,
+      "queue_delay_p99": 1.486,
+      "gpu_hours": 10.28,
+      "mean_kv_prefix_hit_rate": 0.0,
+      "prefill_tokens_saved": 0,
+      "model_switch_events": 0,
+      "routing_mix": {
+        "round_robin": 360
+      }
+    },
+    "fair_kv_routing_no_residency": {
+      "goodput_per_dollar": 69210.8,
+      "sla_violation_rate": 0.0124,
+      "queue_delay_p95": 1.162,
+      "queue_delay_p99": 1.207,
+      "gpu_hours": 10.04,
+      "mean_kv_prefix_hit_rate": 0.0,
+      "prefill_tokens_saved": 0,
+      "model_switch_events": 0,
+      "routing_mix": {
+        "kv_aware": 360
+      }
+    },
+    "kv_routing_residency": {
+      "goodput_per_dollar": 65021.4,
+      "sla_violation_rate": 0.0207,
+      "queue_delay_p95": 1.65,
+      "queue_delay_p99": 1.688,
+      "gpu_hours": 10.24,
+      "mean_kv_prefix_hit_rate": 0.9994,
+      "prefill_tokens_saved": 108560,
+      "model_switch_events": 0,
+      "routing_mix": {
+        "kv_aware": 360
+      }
+    },
+    "kv_routing_residency_prewarm": {
+      "goodput_per_dollar": 10274.5,
+      "sla_violation_rate": 0.0208,
+      "queue_delay_p95": 1.683,
+      "queue_delay_p99": 1.722,
+      "gpu_hours": 10.24,
+      "mean_kv_prefix_hit_rate": 0.9993,
+      "prefill_tokens_saved": 116784,
+      "model_switch_events": 0,
+      "routing_mix": {
+        "kv_aware": 360
+      }
+    },
+    "kv_routing_residency_placement": {
+      "goodput_per_dollar": 65021.4,
+      "sla_violation_rate": 0.0207,
+      "queue_delay_p95": 1.65,
+      "queue_delay_p99": 1.688,
+      "gpu_hours": 10.24,
+      "mean_kv_prefix_hit_rate": 0.9994,
+      "prefill_tokens_saved": 108560,
+      "model_switch_events": 0,
+      "routing_mix": {
+        "kv_aware": 360
+      }
+    },
+    "kv_routing_residency_migration": {
+      "goodput_per_dollar": 64829.8,
+      "sla_violation_rate": 0.0207,
+      "queue_delay_p95": 1.65,
+      "queue_delay_p99": 1.688,
+      "gpu_hours": 10.24,
+      "mean_kv_prefix_hit_rate": 0.9994,
+      "prefill_tokens_saved": 108560,
+      "model_switch_events": 0,
+      "routing_mix": {
+        "kv_aware": 360
+      }
+    }
+  },
+  "gates": {
+    "kv_routing_residency": {
+      "beats_fair": false,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false,
+      "vs": "fair_kv_routing_no_residency",
+      "delta_pct": -6.053
+    },
+    "kv_routing_residency_prewarm": {
+      "beats_fair": false,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false,
+      "vs": "fair_kv_routing_no_residency",
+      "delta_pct": -85.155
+    },
+    "kv_routing_residency_placement": {
+      "beats_fair": false,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false,
+      "vs": "fair_kv_routing_no_residency",
+      "delta_pct": -6.053
+    },
+    "kv_routing_residency_migration": {
+      "beats_fair": false,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false,
+      "vs": "fair_kv_routing_no_residency",
+      "delta_pct": -6.33
+    }
+  }
+}

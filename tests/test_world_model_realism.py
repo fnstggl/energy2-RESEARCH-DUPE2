@@ -138,6 +138,6 @@ def test_world_validation_suite_has_no_failures_and_marks_deferred_skipped():
     rep = run_world_validation()
     assert rep["counts"]["FAIL"] == 0 and rep["all_landed_pass"]
     assert rep["counts"]["PASS"] >= 12
-    assert rep["counts"]["SKIPPED"] >= 4                             # deferred gaps honestly skipped
+    assert rep["counts"]["SKIPPED"] >= 3                             # remaining deferred gaps honestly skipped
     skipped = [c for c in rep["checks"] if c["status"] == "SKIPPED"]
     assert all(c["detail"] for c in skipped)                        # every SKIP carries a reason
