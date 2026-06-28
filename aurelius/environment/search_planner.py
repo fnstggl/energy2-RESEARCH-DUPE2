@@ -128,6 +128,7 @@ class AdaptiveSearchPlanner:
     """Strategy chosen by the raw candidate count; regret measured when an exhaustive comparison fits."""
     exhaustive_max: int = 4096          # exhaustive cartesian at/below this raw count
     beam_width: int = 6
+    beam_local_improve: bool = True     # coordinate polish on the final beam (local improvement step)
     coordinate_passes: int = 3
     regret_audit_max: int = 20000       # run the exhaustive comparison for regret when raw count ≤ this
     ce_iters: int = 6
@@ -252,6 +253,11 @@ class AdaptiveSearchPlanner:
             strategy = large_strategy
             if strategy == "beam_search":
                 best, best_s, evaluated = self._beam(surfaces, base, score_fn)
+                if self.beam_local_improve:                         # coordinate polish on the beam winner
+                    bl, sl, el = self._coordinate(surfaces, base, score_fn, start=best)
+                    evaluated += el
+                    if sl > best_s:
+                        best, best_s, strategy = bl, sl, "beam_search+local"
             elif strategy == "cross_entropy":
                 best, best_s, evaluated = self._cross_entropy(surfaces, base, score_fn)
             elif strategy == "random_restart":
