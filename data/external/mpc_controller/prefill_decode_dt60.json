@@ -1,0 +1,109 @@
+{
+  "eval_periods": 360,
+  "control_dt_seconds": 60.0,
+  "mooncake_pool_size": 12031,
+  "fair_baseline": "fair_phase_no_cache",
+  "rows": {
+    "fair_oldmodel_no_cache": {
+      "label": "old_constant_prefill_reference",
+      "cost_mode": null,
+      "goodput_per_dollar": 65088.7,
+      "sla_violation_rate": 0.019,
+      "queue_delay_p95": 1.44,
+      "gpu_hours": 10.28,
+      "realized_gpu_seconds": 0.0,
+      "mean_ttft_p95": 0.0,
+      "kv_hit_rate": 0.0,
+      "prefill_tokens_saved": 0,
+      "prefill_tokens_remaining": 0
+    },
+    "fair_phase_no_cache": {
+      "label": "fair_realistic_prefill",
+      "cost_mode": "hybrid_capacity_work",
+      "goodput_per_dollar": 112540.6,
+      "sla_violation_rate": 0.0333,
+      "queue_delay_p95": 1.649,
+      "gpu_hours": 10.93,
+      "realized_gpu_seconds": 14789.1,
+      "mean_ttft_p95": 0.893,
+      "kv_hit_rate": 0.0,
+      "prefill_tokens_saved": 0,
+      "prefill_tokens_remaining": 10149187
+    },
+    "legacy_kv_scalar_optimistic": {
+      "label": "optimistic_reference",
+      "cost_mode": null,
+      "goodput_per_dollar": 69210.8,
+      "sla_violation_rate": 0.0124,
+      "queue_delay_p95": 1.162,
+      "gpu_hours": 10.04,
+      "realized_gpu_seconds": 0.0,
+      "mean_ttft_p95": 0.0,
+      "kv_hit_rate": 0.0,
+      "prefill_tokens_saved": 0,
+      "prefill_tokens_remaining": 0
+    },
+    "residency_provisioned": {
+      "label": "reproduces_#106",
+      "cost_mode": "provisioned_capacity",
+      "goodput_per_dollar": 56738.9,
+      "sla_violation_rate": 0.0333,
+      "queue_delay_p95": 1.647,
+      "gpu_hours": 10.93,
+      "realized_gpu_seconds": 14773.0,
+      "mean_ttft_p95": 0.8906,
+      "kv_hit_rate": 0.9994,
+      "prefill_tokens_saved": 107554,
+      "prefill_tokens_remaining": 10041633
+    },
+    "residency_hybrid": {
+      "label": "defensible",
+      "cost_mode": "hybrid_capacity_work",
+      "goodput_per_dollar": 112577.5,
+      "sla_violation_rate": 0.0333,
+      "queue_delay_p95": 1.647,
+      "gpu_hours": 10.93,
+      "realized_gpu_seconds": 14773.0,
+      "mean_ttft_p95": 0.8906,
+      "kv_hit_rate": 0.9994,
+      "prefill_tokens_saved": 107554,
+      "prefill_tokens_remaining": 10041633
+    },
+    "residency_realized": {
+      "label": "upper_bound_counterfactual",
+      "cost_mode": "realized_serving_work",
+      "goodput_per_dollar": 151055.4,
+      "sla_violation_rate": 0.0333,
+      "queue_delay_p95": 1.647,
+      "gpu_hours": 10.93,
+      "realized_gpu_seconds": 14773.0,
+      "mean_ttft_p95": 0.8906,
+      "kv_hit_rate": 0.9994,
+      "prefill_tokens_saved": 107554,
+      "prefill_tokens_remaining": 10041633
+    }
+  },
+  "gates": {
+    "residency_provisioned": {
+      "beats_fair": false,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": false,
+      "delta_pct": -49.584,
+      "claim_safety": "defensible"
+    },
+    "residency_hybrid": {
+      "beats_fair": true,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "delta_pct": 0.033,
+      "claim_safety": "defensible"
+    },
+    "residency_realized": {
+      "beats_fair": true,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": false,
+      "delta_pct": 34.223,
+      "claim_safety": "upper_bound_counterfactual"
+    }
+  }
+}

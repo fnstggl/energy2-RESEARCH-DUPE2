@@ -184,6 +184,42 @@ def _kv_residency_checks() -> list:
     return out
 
 
+def _prefill_decode_checks() -> list:
+    """PR #107 prefill/decode model + service-time-sensitive cost modes. Each effect flows through
+    prefill work / realized GPU-seconds, never a bonus."""
+    from .prefill_decode import compute_phase_serving, effective_gpu_hours
+    recs = [(float(i), 100, 1000) for i in range(8)]
+    cold = compute_phase_serving(recs, [0] * 8)
+    hit = compute_phase_serving(recs, [1000] * 8)             # full prompt cached
+    out = []
+    out.append(Check("prefill_decode", "prefix_hit_reduces_prefill_only",
+                     _ok(hit.prefill_gpu_seconds < cold.prefill_gpu_seconds
+                         and hit.decode_gpu_seconds == cold.decode_gpu_seconds),
+                     None, "KV reuse cuts prefill; decode (output-token) is unchanged"))
+    out.append(Check("prefill_decode", "token_conservation",
+                     _ok(cold.prefill_tokens_remaining == cold.prefill_tokens_total
+                         and hit.prefill_tokens_remaining == 0), None,
+                     "prefill_remaining = prompt − saved; decode tokens unaffected"))
+    out.append(Check("prefill_decode", "ttft_falls_with_hit",
+                     _ok(hit.summary()["ttft_p95"] < cold.summary()["ttft_p95"]),
+                     hit.summary()["ttft_p95"], "a prefix hit lowers TTFT"))
+    # decode-bound workload barely monetizes; cost-mode ordering holds; no free cost.
+    dheavy_c = compute_phase_serving([(float(i), 2000, 64) for i in range(8)], [0] * 8)
+    dheavy_h = compute_phase_serving([(float(i), 2000, 64) for i in range(8)], [64] * 8)
+    rel = (dheavy_c.realized_gpu_seconds - dheavy_h.realized_gpu_seconds) / dheavy_c.realized_gpu_seconds
+    out.append(Check("prefill_decode", "decode_bound_barely_monetizes",
+                     _ok(dheavy_c.summary()["phase_bottleneck"] == "decode_bound" and rel < 0.05),
+                     round(rel, 4), "decode-bound work: KV reuse cuts <5% of realized GPU-seconds"))
+    prov = effective_gpu_hours("provisioned_capacity", provisioned_gpu_seconds=1000, realized_gpu_seconds=300)
+    hyb = effective_gpu_hours("hybrid_capacity_work", provisioned_gpu_seconds=1000, realized_gpu_seconds=300)
+    real = effective_gpu_hours("realized_serving_work", provisioned_gpu_seconds=1000, realized_gpu_seconds=300)
+    out.append(Check("prefill_decode", "cost_mode_ordering_realized_le_hybrid_le_provisioned",
+                     _ok(real <= hyb <= prov), None, f"realized {real:.3f} ≤ hybrid {hyb:.3f} ≤ prov {prov:.3f}"))
+    out.append(Check("prefill_decode", "no_free_cost_warm_idle_floor",
+                     _ok(real > 0.0 and hyb >= 0.5 * prov), None, "no mode is free; hybrid keeps a warm-idle floor"))
+    return out
+
+
 def _skipped_distribution_checks() -> list:
     """Checks that still require DEFERRED mechanisms — emitted SKIPPED with the reason (never silently
     passing). Gap 2 (per-replica KV routing) is now LANDED (see _kv_residency_checks); what remains:"""
@@ -201,7 +237,8 @@ def _skipped_distribution_checks() -> list:
 def run_world_validation() -> dict:
     """Run every world-model transition check → a structured PASS/WARN/FAIL/SKIPPED report."""
     checks = (_cold_start_checks() + _conservation_checks() + _isolation_determinism_checks()
-              + _migration_realism_checks() + _kv_residency_checks() + _skipped_distribution_checks())
+              + _migration_realism_checks() + _kv_residency_checks() + _prefill_decode_checks()
+              + _skipped_distribution_checks())
     counts = {s: sum(1 for c in checks if c.status == s) for s in (PASS, WARN, FAIL, SKIPPED)}
     return {"checks": [c.to_dict() for c in checks], "counts": counts,
             "all_landed_pass": counts[FAIL] == 0}

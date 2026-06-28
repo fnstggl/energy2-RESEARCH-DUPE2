@@ -342,7 +342,24 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         per_req_cold = rr.model_switch_s
         res_diag = rr.summary(len(sigs))
 
+    # 5c) PREFILL/DECODE phase model (PR #107). When kv_state carries a cost_mode, a KV hit reduces
+    # PREFILL ONLY (prompt-token-driven), decode stays output-token-driven — fixing the PR #106 bug
+    # where the residency factor scaled the whole (decode-dominated) service. realized_gpu_seconds then
+    # drives the cost mode. Default off → the PR #106 residency-factor path above is unchanged.
+    phase = None
+    cost_mode = (kv_state or {}).get("cost_mode")
+    if cost_mode and per_req_factor is not None:
+        from .prefill_decode import compute_phase_serving
+        phase = compute_phase_serving(
+            recs_sorted, rr.saved_tokens, model_cold_s=rr.model_switch_s,
+            batching=str(getattr(bundle, "batching_policy", "balanced")),
+            period_seconds=max(period_hours * 3600.0, 1.0))
+        if res_diag is not None:
+            res_diag = {**res_diag, **phase.summary()}
+
     def _svc(i, r):
+        if phase is not None and i < len(phase.service_s):
+            return phase.service_s[i] * mg["cache_factor"]   # phase service (prefill cut, decode intact)
         base = _service_time_s(int(r[1]))
         if per_req_factor is not None and i < len(per_req_factor):
             # residency factor REPLACES base_service_factor + topology (subsumed); migration KV penalty
@@ -384,11 +401,21 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     warm_hold_gpu_hours = prewarmed_idle * WARM_HOLD_GPU_FRACTION * warm_hold_hours
     warm_hold_cost = warm_hold_gpu_hours * _gpu_hour_usd()
     cold_started = max(0, peak_c - pw["reactive_warm"]) if prewarm == "off" else max(0, peak_c - warm_capacity)
+    # COST MODE (PR #107): the provisioned-capacity GPU-hours are the period's billing baseline. When a
+    # cost_mode + phase model is active, faster serving (KV-saved prefill → fewer realized GPU-seconds)
+    # can reduce billable GPU-hours under realized_serving_work (upper bound) / hybrid (bounded, with a
+    # warm-idle floor). provisioned_capacity reproduces the existing (PR #106) behaviour exactly.
+    billable_gpu_hours = kpi.gpu_hours
+    if phase is not None and cost_mode and cost_mode != "provisioned_capacity":
+        from .prefill_decode import effective_gpu_hours
+        billable_gpu_hours = effective_gpu_hours(
+            cost_mode, provisioned_gpu_seconds=kpi.gpu_hours * 3600.0,
+            realized_gpu_seconds=phase.realized_gpu_seconds)
     if cost_model is not None and fleet_state is not None:
         gpu_type = (max(fleet_state.gpu_type_mix, key=fleet_state.gpu_type_mix.get)
                     if getattr(fleet_state, "gpu_type_mix", None) else "H100")
         cb = cost_model.operator_cost(
-            gpu_hours=kpi.gpu_hours, gpu_type=gpu_type,
+            gpu_hours=billable_gpu_hours, gpu_type=gpu_type,
             energy_price_per_kwh=fleet_state.energy_price_per_kwh, utilization=fleet_state.util_target,
             scenario=cost_scenario, sla_violations=kpi.sla_violations)   # migration priced below, once
         base_cost = cb.total_operator_cost
