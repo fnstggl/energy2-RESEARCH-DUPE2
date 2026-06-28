@@ -121,6 +121,44 @@ def world_calibration() -> WorldCalibrationReport:
         "storage is the 40-60s high. base=30s = typical container+NVMe load. NOT tuned to results.",
         "medium", "serving startup; not from our trace (Alibaba ready_delay conflates batch queues)",
         BENCHMARK_DERIVED, (_S_SERVERLESS, _S_VLLM_START, _S_MODELLOAD, _S_SLEEPMODE))
+    # cold-start DECOMPOSITION — the same 8/30/60 band split into the components different actions
+    # avoid differently (a warm replica skips engine+model+ready; a MIGRATED replica keeps weights
+    # loaded so it skips engine+model but may pay kv_warmup; prewarm pays warm-hold to skip the
+    # future engine+model). Bases sum to cold_start_s base (30s) — a fidelity decomposition, NOT a
+    # reduction. Sources are the same already-cited startup decompositions.
+    p["cold_start_engine_init_s"] = CalibratedParameter(
+        "cold_start_engine_init_s", 2.0, 3.0, 5.0, "seconds",
+        "vLLM/SGLang engine + CUDA context init, independent of model size (2-5s). A warm or migrated "
+        "replica has a live engine and skips this.",
+        "medium", "framework/version dependent", BENCHMARK_DERIVED, (_S_VLLM_START,))
+    p["cold_start_model_load_s"] = CalibratedParameter(
+        "cold_start_model_load_s", 10.0, 22.0, 60.0, "seconds",
+        "model-weight load into HBM — the DOMINANT term (10s NVMe .. 60-72s remote/SATA; 8-32B ~60s on "
+        "A100). base=22s = container+NVMe. A migrated replica keeps weights resident and AVOIDS this; "
+        "prewarming pays warm-hold to avoid it on the forecast period's cold replicas. NOT tuned down.",
+        "medium", "storage tier dominates; the single biggest cold-start component",
+        BENCHMARK_DERIVED, (_S_MODELLOAD, _S_VLLM_START))
+    p["cold_start_kv_warmup_s"] = CalibratedParameter(
+        "cold_start_kv_warmup_s", 0.0, 3.0, 8.0, "seconds",
+        "KV/first-token warm-up: a freshly loaded (or non-pipelined-migrated) replica starts with an "
+        "empty cache and pays first-batch prefill before steady state. A pipelined (Llumnix) migration "
+        "moves the KV and avoids most of this; a bulk move pays it.",
+        "low", "depends on prefix locality; overlaps the KV reuse model", SIMULATOR_INFERENCE,
+        (_S_SLEEPMODE, _S_LLUMNIX))
+    p["cold_start_ready_delay_s"] = CalibratedParameter(
+        "cold_start_ready_delay_s", 0.0, 2.0, 4.0, "seconds",
+        "scheduler/orchestrator readiness: k8s readiness probe + endpoint registration before traffic. "
+        "Independent of model; a warm replica is already registered.",
+        "low", "orchestrator-config dependent (Alibaba ready_delay is an upper-bound sanity, not "
+        "serving cold-start)", SIMULATOR_INFERENCE, (_S_SERVERLESS,))
+    p["migration_kv_preserved_frac"] = CalibratedParameter(
+        "migration_kv_preserved_frac", 0.5, 0.9, 1.0, "fraction of KV warmth kept across a move",
+        "Llumnix pipelines the KV to the destination (append-only, near-zero downtime), so a live "
+        "(conservative/pipelined) migration KEEPS most KV warmth — the moved replica does NOT re-pay "
+        "kv_warmup. base=0.9 kept. A bulk (aggressive) move keeps less. This REPLACES the unrealistic "
+        "flat KV surcharge that made migration strictly dominated.",
+        "low", "append-only KV + recompute make loss small; pipelining quality varies",
+        PUBLIC_PAPER, (_S_LLUMNIX, _S_KVBW))
     p["warm_idle_timeout_s"] = CalibratedParameter(
         "warm_idle_timeout_s", 120.0, 300.0, 3600.0, "seconds",
         "an idle warm replica is held then cooled after the autoscaler scale-down delay; default "
@@ -175,9 +213,34 @@ def world_calibration() -> WorldCalibrationReport:
         "normaliser mapping v2026 macro rx+tx (mean 0.13/0.07 GiB/s, hotspots ~900) into 0..1 rack "
         "pressure. base=1.0 GiB/s reference link.",
         "low", "documented assumption, not a measured link rate", SIMULATOR_INFERENCE, (_S_V2026,))
-    return WorldCalibrationReport(parameters=p)
+    # reconcile the cold-start decomposition to the aggregate band (fidelity, not a reduction).
+    comp_base = sum(p[k].base for k in COLD_START_COMPONENTS)
+    v = [TransitionValidationResult(
+        "cold_start_decomposition", "components_sum_to_aggregate_base",
+        abs(comp_base - p["cold_start_s"].base) <= 1.0,
+        f"sum(components.base)={comp_base:.1f}s vs cold_start_s.base={p['cold_start_s'].base:.1f}s")]
+    return WorldCalibrationReport(parameters=p, validations=v)
+
+
+# the components a full cold start decomposes into (order = serving startup sequence).
+COLD_START_COMPONENTS = ("cold_start_engine_init_s", "cold_start_model_load_s",
+                         "cold_start_kv_warmup_s", "cold_start_ready_delay_s")
+
+
+def cold_start_components(report: "WorldCalibrationReport | None" = None) -> dict:
+    """``{component: base_seconds}`` for the cold-start decomposition + the reconciled total.
+
+    Used by the world simulator to value what each action AVOIDS: a warm replica skips
+    engine+model+ready; a pipelined-migrated replica skips engine+model (weights move) and keeps
+    ``migration_kv_preserved_frac`` of kv_warmup; prewarming pays warm-hold to skip the cold replicas'
+    engine+model on the forecast period."""
+    r = report or world_calibration()
+    comp = {k: r.base(k) for k in COLD_START_COMPONENTS}
+    comp["total_s"] = sum(comp.values())
+    return comp
 
 
 __all__ = ["CalibrationSource", "CalibratedParameter", "TransitionValidationResult",
-           "WorldCalibrationReport", "world_calibration", "TRACE_DERIVED", "PUBLIC_PAPER",
+           "WorldCalibrationReport", "world_calibration", "cold_start_components",
+           "COLD_START_COMPONENTS", "TRACE_DERIVED", "PUBLIC_PAPER",
            "BENCHMARK_DERIVED", "SIMULATOR_INFERENCE"]

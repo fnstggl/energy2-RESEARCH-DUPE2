@@ -384,6 +384,12 @@ class EpisodeReport:
     warm_hold_gpu_hours: float = 0.0                    # total GPU-hours held warm (prewarm cost)
     migration_cost: float = 0.0                         # total $ spent on live moves
     mean_topology_factor: float = 1.0                   # mean placement service-time factor
+    mean_kv_prefix_hit_rate: float = 0.0                # per-replica KV residency (PR #106)
+    prefill_tokens_saved: int = 0                       # prefill skipped by prefix hits
+    model_switch_events: int = 0                        # model-load cold-starts incurred (affinity)
+    realized_gpu_seconds: float = 0.0                   # PR #107 phase economics
+    mean_ttft_p95: float = 0.0                          # mean per-period TTFT p95 (service-only)
+    prefill_tokens_remaining: int = 0                   # prefill tokens NOT saved (paid)
 
     def to_dict(self) -> dict:
         return {k: (round(v, 5) if isinstance(v, float) else v) for k, v in self.__dict__.items()}
@@ -393,7 +399,8 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                        fleet_state, cost_model, sla_s=10.0, tick_seconds=60.0,
                        period_seconds=60.0, kv_service_factor=1.0, cost_scenario="owned",
                        sim_seconds=None, kv_service_factor_by_routing=None, world_state=None,
-                       world_state_params=None):
+                       world_state_params=None, kv_state_pool=None, kv_capacity_blocks=512,
+                       kv_model_seq=None, kv_cost_mode=None):
     """Run ``decide_fn(history_frames)`` over the REAL eval periods (causal: the action
     for period p is chosen from frames[:p], then applied to the real requests of p).
 
@@ -425,6 +432,9 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
     migration_mix: dict = {}
     cold_starts = mig_cost = warm_hold = topo_sum = topo_n = 0.0
     factor_sum, factor_n = 0.0, 0
+    kv_cursor = 0                                       # cumulative request index into the KV prefix pool
+    kv_hit_sum = kv_saved_sum = kv_switch_sum = 0.0
+    kv_realized_gpu_s = kv_ttft_sum = kv_prefill_rem = 0.0   # PR #107 phase economics
     period_hours = max(period_seconds, 1.0) / 3600.0
     for p in eval_indices:
         out = decide_fn(frames[:p])
@@ -467,12 +477,26 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
             from types import SimpleNamespace
             pol = SimpleNamespace(prewarm_policy=_pw, placement_policy=_pl, migration_policy=_mg)
             t0 = recs[0][0]
+            # per-replica KV/model residency (PR #106): assign this period's requests a causal slice
+            # of the Mooncake-derived prefix pool (TRACE_DERIVED_REUSE_MODEL); routing over the warm
+            # replicas' persistent caches then sets per-request service time. Cursor advances so reuse
+            # distance is preserved across periods (the cache persists; conversations recur).
+            kv_state = None
+            if kv_state_pool:
+                m = len(kv_state_pool)
+                hseq = [kv_state_pool[(kv_cursor + i) % m] for i in range(len(recs))]
+                mseq = ([kv_model_seq[(kv_cursor + i) % len(kv_model_seq)] for i in range(len(recs))]
+                        if kv_model_seq else None)
+                kv_cursor += len(recs)
+                kv_state = {"hash_seq": hseq, "routing": routing, "model_seq": mseq,
+                            "capacity_blocks": kv_capacity_blocks, "cost_mode": kv_cost_mode}
             oc = _sim_period(world_state, pol, [(r[0] - t0, int(r[1]), r[2] if len(r) > 2 else r[1])
                                                 for r in recs], fcast, sla_s=sla_s,
                              tick_seconds=tick_seconds, base_service_factor=factor,
                              replay_kwargs=replay_kw, cost_model=cost_model, fleet_state=fleet_state,
                              cost_scenario=cost_scenario, best_effort_fraction=be,
-                             period_hours=period_hours, dt_seconds=period_seconds, mutate=True)
+                             period_hours=period_hours, dt_seconds=period_seconds,
+                             kv_state=kv_state, mutate=True)
             kpi = oc.kpi
             tot_cost += oc.operator_cost
             cold_starts += oc.cold_start_events
@@ -483,6 +507,13 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
             if oc.queue_delay_p95 > 0:
                 waits_p95.append(oc.queue_delay_p95)
                 waits_p99.append(oc.queue_delay_p99)
+            if oc.kv_diag:
+                kv_hit_sum += oc.kv_diag.get("exact_prefix_hit_rate", 0.0)
+                kv_saved_sum += oc.kv_diag.get("prefill_tokens_saved", 0)
+                kv_switch_sum += oc.kv_diag.get("model_switch_events", 0)
+                kv_realized_gpu_s += oc.kv_diag.get("realized_gpu_seconds", 0.0)
+                kv_ttft_sum += oc.kv_diag.get("ttft_p95", 0.0)
+                kv_prefill_rem += oc.kv_diag.get("prefill_tokens_remaining", 0)
             tot_g += kpi.sla_safe_goodput
             tot_gpu_h += kpi.gpu_hours
             tot_viol += kpi.sla_violations
@@ -527,7 +558,12 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         capacity_multiplier_mix=cap_mult_mix, batching_mix=batch_mix,
         prewarm_mix=prewarm_mix, placement_mix=placement_mix, migration_mix=migration_mix,
         cold_start_events=int(cold_starts), warm_hold_gpu_hours=warm_hold, migration_cost=mig_cost,
-        mean_topology_factor=(topo_sum / topo_n if topo_n else 1.0))
+        mean_topology_factor=(topo_sum / topo_n if topo_n else 1.0),
+        mean_kv_prefix_hit_rate=(kv_hit_sum / topo_n if topo_n else 0.0),
+        prefill_tokens_saved=int(kv_saved_sum), model_switch_events=int(kv_switch_sum),
+        realized_gpu_seconds=round(kv_realized_gpu_s, 2),
+        mean_ttft_p95=round(kv_ttft_sum / topo_n, 4) if topo_n else 0.0,
+        prefill_tokens_remaining=int(kv_prefill_rem))
 
 
 __all__ = [

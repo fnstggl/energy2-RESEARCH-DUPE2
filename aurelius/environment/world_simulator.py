@@ -50,8 +50,12 @@ COLD_START_RAMP = _CAL.base("cold_start_ramp")                 # 1.0 — progres
 TOPOLOGY_MAX_DISCOUNT = _CAL.base("topology_max_discount")     # 0.08 macro locality relief (no per-link)
 MIGRATION_COST_PER_REPLICA = _CAL.base("migration_cost_per_replica")    # $0.40 per live move
 MIGRATION_CAPACITY_LOSS_FRAC = _CAL.base("migration_capacity_loss_frac")  # 0.10 withheld while moving
-MIGRATION_CACHE_PENALTY = _CAL.base("migration_cache_penalty")  # 0.04 KV-warmth-lost surcharge
+MIGRATION_CACHE_PENALTY = _CAL.base("migration_cache_penalty")  # 0.04 KV-warmth-lost surcharge (bulk move)
+MIGRATION_KV_PRESERVED_FRAC = _CAL.base("migration_kv_preserved_frac")  # 0.90 KV kept by a pipelined move
 MIGRATION_DURATION_PERIODS = int(_CAL.base("migration_duration_periods"))  # lands next period
+# share of KV warmth a move KEEPS, by mode: conservative ≈ pipelined (Llumnix), aggressive ≈ bulk.
+MIGRATION_KV_PRESERVED_BY_MODE = {"conservative": MIGRATION_KV_PRESERVED_FRAC,
+                                  "aggressive": max(0.0, MIGRATION_KV_PRESERVED_FRAC - 0.3)}
 PREWARM_MARGIN = {"off": 0.0, "conservative": 0.15, "aggressive": 0.45}  # headroom over forecast
 
 PREWARM_OPTIONS = ("off", "conservative", "aggressive")
@@ -77,6 +81,7 @@ class PeriodOutcome:
     migrations_started: int = 0
     queue_delay_p95: float = 0.0
     queue_delay_p99: float = 0.0
+    kv_diag: dict | None = None               # per-replica KV/model residency diagnostics (PR #106)
     metrics: dict = field(default_factory=dict)
 
     @property
@@ -110,9 +115,12 @@ def warm_seed(ws: CanonicalWorldState, n_warm: int) -> None:
     condition under which ``off`` reproduces the stateless path on stable load."""
     n = max(0, min(n_warm, ws.total_replicas()))
     for i, rid in enumerate(ws.replicas):
-        ws.replicas[rid].warm = i < n
+        r = ws.replicas[rid]
+        r.warm = i < n
         if i < n:
-            ws.replicas[rid].last_used_period = ws.period
+            r.last_used_period = ws.period
+            r.weights_loaded = True            # a warm replica has its weights resident…
+            r.kv_warm_frac = 1.0               # …and a hot cache (it has been serving)
     ws.warm_state.warm_replicas = ws.warm_count()
 
 
@@ -124,6 +132,9 @@ def reset_world_state(ws: CanonicalWorldState) -> None:
         r.migrating = False
         r.last_used_period = -1
         r.cold_start_remaining_s = 0.0
+        r.weights_loaded = False
+        r.kv_warm_frac = 0.0
+        r.warm_until_period = -1
     ws.migrations = []
     ws.period = 0
 
@@ -247,9 +258,14 @@ def _migration_plan(ws: CanonicalWorldState, policy: str, *, placement: dict) ->
     n = max(1, int(round(len(candidates) * frac)))
     targets = sorted(candidates, key=lambda r: -ws.racks[r.rack_id].macro_network_pressure)[:n]
     cap_loss = min(0.5, MIGRATION_CAPACITY_LOSS_FRAC * n / max(1, ws.warm_count()))
+    # KV warmth KEPT across the move (Llumnix pipelined → conservative keeps ~0.9; bulk/aggressive
+    # less). The service surcharge is the LOST fraction only — replacing the old flat 1.04 that made
+    # migration strictly dominated (the moved replica preserves most of its cache, it is not recooled).
+    preserved = MIGRATION_KV_PRESERVED_BY_MODE.get(policy, MIGRATION_KV_PRESERVED_FRAC)
+    cache_factor = 1.0 + MIGRATION_CACHE_PENALTY * (1.0 - preserved) * (1.0 if n else 0.0)
     return {"n_migrations": n, "capacity_loss_frac": round(cap_loss, 4),
             "migration_cost": round(MIGRATION_COST_PER_REPLICA * n, 4),
-            "cache_factor": 1.0 + MIGRATION_CACHE_PENALTY * (1.0 if n else 0.0),
+            "cache_factor": round(cache_factor, 5), "kv_preserved_frac": preserved,
             "targets": [r.replica_id for r in targets], "target_rack": best_rack}
 
 
@@ -262,7 +278,7 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
                     replay_kwargs: dict | None = None, cost_model=None, fleet_state=None,
                     cost_scenario: str = "owned", best_effort_fraction: float = 0.0,
                     period_hours: float = 1.0, dt_seconds: float | None = None,
-                    mutate: bool = False) -> PeriodOutcome:
+                    kv_state: dict | None = None, mutate: bool = False) -> PeriodOutcome:
     """Simulate one period under ``bundle`` on the world state.
 
     ``recs`` are the period's raw ``(arrival_s, tokens, ctx)`` request records. ``forecast`` carries
@@ -300,8 +316,59 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     be_stride = max(1, round(1.0 / best_effort_fraction)) if best_effort_fraction > 0 else 0
     recs_sorted = sorted(recs, key=lambda r: r[0])
     t0 = recs_sorted[0][0] if recs_sorted else 0.0
+    # 5b) PER-REPLICA KV / model residency (PR #106) → per-request service factor. When kv_state is
+    # given, routing over the warm replicas' PERSISTENT caches replaces the offline KV scalar AND the
+    # macro topology scalar (the residency sim applies per-replica topology): a prefix hit skips that
+    # request's prefill, a model match avoids a switch cold-start. Causal in request order; mutates the
+    # replicas' caches (the persistence prewarm/migration/placement act through). See world_serving.py.
+    res_diag = None
+    per_req_factor = per_req_cold = None
+    if kv_state and recs_sorted:
+        from .world_serving import (
+            build_request_signatures,
+            replica_residency_view,
+            simulate_residency_serving,
+        )
+        rview = replica_residency_view(ws, capacity_blocks=int(kv_state.get("capacity_blocks", 512)),
+                                       commit=mutate)
+        sigs = build_request_signatures(recs_sorted, kv_state.get("hash_seq") or [],
+                                        model_ids=tuple(kv_state.get("model_ids", ("llama-8b-gqa",))),
+                                        model_seq=kv_state.get("model_seq"))
+        rr = simulate_residency_serving(
+            rview, sigs, policy=str(rkw.get("routing_policy", kv_state.get("routing", "kv_aware"))),
+            model_load_s=_CAL.base("cold_start_model_load_s"),
+            topology_max_discount=TOPOLOGY_MAX_DISCOUNT)
+        per_req_factor = rr.service_factor
+        per_req_cold = rr.model_switch_s
+        res_diag = rr.summary(len(sigs))
+
+    # 5c) PREFILL/DECODE phase model (PR #107). When kv_state carries a cost_mode, a KV hit reduces
+    # PREFILL ONLY (prompt-token-driven), decode stays output-token-driven — fixing the PR #106 bug
+    # where the residency factor scaled the whole (decode-dominated) service. realized_gpu_seconds then
+    # drives the cost mode. Default off → the PR #106 residency-factor path above is unchanged.
+    phase = None
+    cost_mode = (kv_state or {}).get("cost_mode")
+    if cost_mode and per_req_factor is not None:
+        from .prefill_decode import compute_phase_serving
+        phase = compute_phase_serving(
+            recs_sorted, rr.saved_tokens, model_cold_s=rr.model_switch_s,
+            batching=str(getattr(bundle, "batching_policy", "balanced")),
+            period_seconds=max(period_hours * 3600.0, 1.0))
+        if res_diag is not None:
+            res_diag = {**res_diag, **phase.summary()}
+
+    def _svc(i, r):
+        if phase is not None and i < len(phase.service_s):
+            return phase.service_s[i] * mg["cache_factor"]   # phase service (prefill cut, decode intact)
+        base = _service_time_s(int(r[1]))
+        if per_req_factor is not None and i < len(per_req_factor):
+            # residency factor REPLACES base_service_factor + topology (subsumed); migration KV penalty
+            # (mg.cache_factor) still applies; model-switch cold-start adds seconds.
+            return base * per_req_factor[i] * mg["cache_factor"] + (per_req_cold[i] if per_req_cold else 0.0)
+        return base * service_factor
+
     jobs = [Job(idx=i, arrival_s=(r[0] - t0), actual_tokens=int(r[1]), predicted_tokens=float(r[1]),
-                service_s=_service_time_s(int(r[1])) * service_factor,
+                service_s=_svc(i, r),
                 cls=(CLASS_BEST_EFFORT if (be_stride and i % be_stride == 0) else CLASS_LATENCY))
             for i, r in enumerate(recs_sorted)]
     warmup_c = max(1, min(int(getattr(fleet_state, "capacity_envelope", 4) or 4), 4)) if fleet_state else 4
@@ -334,11 +401,21 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     warm_hold_gpu_hours = prewarmed_idle * WARM_HOLD_GPU_FRACTION * warm_hold_hours
     warm_hold_cost = warm_hold_gpu_hours * _gpu_hour_usd()
     cold_started = max(0, peak_c - pw["reactive_warm"]) if prewarm == "off" else max(0, peak_c - warm_capacity)
+    # COST MODE (PR #107): the provisioned-capacity GPU-hours are the period's billing baseline. When a
+    # cost_mode + phase model is active, faster serving (KV-saved prefill → fewer realized GPU-seconds)
+    # can reduce billable GPU-hours under realized_serving_work (upper bound) / hybrid (bounded, with a
+    # warm-idle floor). provisioned_capacity reproduces the existing (PR #106) behaviour exactly.
+    billable_gpu_hours = kpi.gpu_hours
+    if phase is not None and cost_mode and cost_mode != "provisioned_capacity":
+        from .prefill_decode import effective_gpu_hours
+        billable_gpu_hours = effective_gpu_hours(
+            cost_mode, provisioned_gpu_seconds=kpi.gpu_hours * 3600.0,
+            realized_gpu_seconds=phase.realized_gpu_seconds)
     if cost_model is not None and fleet_state is not None:
         gpu_type = (max(fleet_state.gpu_type_mix, key=fleet_state.gpu_type_mix.get)
                     if getattr(fleet_state, "gpu_type_mix", None) else "H100")
         cb = cost_model.operator_cost(
-            gpu_hours=kpi.gpu_hours, gpu_type=gpu_type,
+            gpu_hours=billable_gpu_hours, gpu_type=gpu_type,
             energy_price_per_kwh=fleet_state.energy_price_per_kwh, utilization=fleet_state.util_target,
             scenario=cost_scenario, sla_violations=kpi.sla_violations)   # migration priced below, once
         base_cost = cb.total_operator_cost
@@ -357,7 +434,7 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         topology_factor=pl["topology_factor"], locality_score=pl["locality_score"],
         rack_spread=pl["rack_spread"], cold_start_events=cold_started,
         wasted_prewarm_hours=round(warm_hold_gpu_hours, 5), migrations_started=mg["n_migrations"],
-        queue_delay_p95=round(q_p95, 4), queue_delay_p99=round(q_p99, 4),
+        queue_delay_p95=round(q_p95, 4), queue_delay_p99=round(q_p99, 4), kv_diag=res_diag,
         metrics={"prewarm_policy": prewarm, "placement_policy": placement,
                  "migration_policy": migration, "warm_capacity": warm_capacity,
                  "peak_c": peak_c, "topology_factor": pl["topology_factor"],
@@ -379,7 +456,9 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
     carries a warm pool it isn't paying off — that is what makes ``off`` the no-warm-hold baseline.
     Proactive prewarming holds the larger forecast-sized pool warm (and pays for it)."""
     # land any migrations that have now completed — the moved replica adopts its target rack (its
-    # locality benefit turns on for subsequent periods).
+    # locality benefit turns on for subsequent periods). It is the SAME replica object (identity moves,
+    # never duplicated): weights stay resident and it lands WARM; KV warmth is kept per the move mode
+    # (pipelined ≈ 0.9, bulk less) — that is what makes a migrated replica cheaper than a cold-start.
     for m in ws.migrations:
         if m.status == "in_flight" and m.end_period <= ws.period:
             rep = ws.replicas.get(m.replica_id)
@@ -387,6 +466,9 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
                 rep.rack_id = (m.target_server_id.split(":")[0]
                                if ":" in m.target_server_id else rep.rack_id)
                 rep.migrating = False
+                rep.warm = True                          # lands warm — not re-cold-started
+                rep.weights_loaded = True                # weights moved with the replica
+                rep.kv_warm_frac = round(rep.kv_warm_frac * m.kv_preserved_frac, 5)  # KV partly kept
             m.status = "completed"
     # warm the replicas that served (or were prewarmed); the rest cool down AFTER the idle timeout.
     # Persistence is TIME-based: a replica idle for less than WARM_IDLE_TIMEOUT_S stays warm. At a
@@ -403,14 +485,19 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
         held_by_timeout = r.warm and idle_s < WARM_IDLE_TIMEOUT_S
         if i < warm_target:
             r.warm = True
+            r.weights_loaded = True            # warm ⇒ weights resident in HBM
+            r.warm_until_period = ws.period + max(1, int(WARM_IDLE_TIMEOUT_S / max(dt_seconds, 1e-9)))
             r.active = i < peak_c
             if i < peak_c:
                 r.last_used_period = ws.period
+                r.kv_warm_frac = 1.0           # served this step ⇒ its cache is hot
         elif held_by_timeout:
             r.warm = True                     # still within the idle timeout → not cooled yet
             r.active = False
         else:
-            r.warm = False
+            r.warm = False                     # cooled past the idle timeout → weights unloaded, cache gone
+            r.weights_loaded = False
+            r.kv_warm_frac = 0.0
             r.active = False
     # start migrations: withhold those replicas and schedule their landing.
     for rid in mg.get("targets", []):
@@ -423,7 +510,8 @@ def _advance(ws: CanonicalWorldState, *, peak_c: int, warm_capacity: int, prewar
             target_server_id=f"{mg.get('target_rack', r.rack_id)}:srv", start_period=ws.period,
             end_period=ws.period + MIGRATION_DURATION_PERIODS,
             migration_cost=MIGRATION_COST_PER_REPLICA, capacity_loss=1,
-            cache_invalidation_cost=MIGRATION_CACHE_PENALTY))
+            cache_invalidation_cost=MIGRATION_CACHE_PENALTY * (1.0 - mg.get("kv_preserved_frac", 1.0)),
+            kv_preserved_frac=mg.get("kv_preserved_frac", 1.0)))
     # accumulate ledgers.
     ws.warm_state.warm_replicas = ws.warm_count()
     ws.warm_state.cold_start_events += cold_started
