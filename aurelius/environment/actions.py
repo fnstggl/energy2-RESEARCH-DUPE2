@@ -142,7 +142,50 @@ ACTION_SPECS: dict = {
         "period, locality benefit only AFTER the move lands next period (persistent MigrationState)",
         "BENCHMARK_DERIVED move cost / duration; real operator migration reasons ABSENT (pilot)",
         roadmap="N6", reward_channel="world_simulator"),
-    # ---- SIMULATED_ONLY (opt in with an explicit flag) ----
+    # ---- CONNECTED roofline actions (PR roofline-economic): each maps to a roofline.ServingConfig and
+    # reaches reward through roofline_actions.roofline_action_factors → per-request prefill/decode service
+    # times + realized GPU-seconds + power (no bonus). No-op at default → today's behaviour reproduced. ----
+    "precision_policy": ActionSpec(
+        "precision_policy", "precision / quantization", CONNECTED,
+        ("bf16", "fp8", "int4"), None,
+        "roofline: lower precision cuts weight+KV bytes → less HBM/bandwidth pressure → higher tokens/s in "
+        "the memory-bandwidth-bound regime (faster + cheaper). fp8 ~lossless; int4 carries quality risk",
+        "SIMULATOR_INFERENCE magnitude; int4 quality/SLA risk is INFERRED (no quality model) so int4 wins "
+        "are labelled unsafe/diagnostic — applied via roofline_actions modulation",
+        roadmap="N5", reward_channel="roofline_serving"),
+    "spec_decode_policy": ActionSpec(
+        "spec_decode_policy", "speculative decoding depth", CONNECTED,
+        ("off", "shallow", "medium", "aggressive"), None,
+        "roofline: a draft proposes k tokens / target verifies in one pass — accepted tokens skip serial "
+        "decode steps. Helps latency ONLY when decode is memory-bandwidth-bound (spare compute) AND "
+        "acceptance is high; extra draft+verify FLOPs raise GPU-seconds → never a cost win; hurts compute-bound",
+        "SIMULATOR_INFERENCE acceptance/overhead bands — applied via roofline_actions modulation",
+        roadmap="N7", reward_channel="roofline_serving"),
+    "clock_policy": ActionSpec(
+        "clock_policy", "clock / DVFS / power shaping", CONNECTED,
+        ("base", "low", "high"), None,
+        "roofline DVFS: compute throughput scales with clock (bandwidth ~flat), power ~clock^2.4 — low "
+        "clock saves energy in the memory-bandwidth-bound regime, costs latency/SLA when compute-bound",
+        "SIMULATOR_INFERENCE conservative DVFS band; energy effect reported as a diagnostic (not booked as "
+        "GPU-hour savings) — applied via roofline_actions modulation",
+        roadmap="N2", reward_channel="roofline_serving"),
+    # ---- SIMULATED_ONLY (modelled in the same roofline physics, but NOT a live reward action; opt in
+    # explicitly. Swept diagnostically; the candidate generator freezes them with a recorded reason). ----
+    "colocation_policy": ActionSpec(
+        "colocation_policy", "co-location of background work on idle SMs", SIMULATED_ONLY,
+        ("off", "conservative", "aggressive"), None,
+        "roofline: background compute work uses idle SMs ONLY in the memory-bandwidth-bound decode regime; "
+        "it adds memory pressure → a foreground latency penalty (modelled in serving_point)",
+        "NO background-work trace exists (Azure is all latency-critical; ReplicaState.workload_class is "
+        "unused) → co-location credits NO background goodput and can only HURT foreground SLA here; the "
+        "generator prunes it off with this recorded reason", roadmap="N3"),
+    "prefill_decode_policy": ActionSpec(
+        "prefill_decode_policy", "prefill/decode disaggregation allocation", SIMULATED_ONLY,
+        ("shared", "p40_d60", "p60_d40"), None,
+        "roofline: split capacity between prefill and decode pools (DistServe/Splitwise); a wrong split "
+        "queues one phase; handoff overhead on disaggregation (modelled in serving_point)",
+        "the live cluster replay has NO disaggregated prefill/decode capacity pools — only roofline models "
+        "the split analytically → SIMULATED_ONLY (diagnostic), not a structurally-live action", roadmap="N4"),
     "kv_routing_policy": ActionSpec(
         "kv_routing_policy", "per-request KV prefix routing (finer than routing_policy)",
         SIMULATED_ONLY, ("off", "prefix_affinity"), None,
@@ -160,18 +203,6 @@ ACTION_SPECS: dict = {
         "kv_placement_policy", "KV placement / eviction", PLANNED,
         ("lru", "reuse_aware"), None, "StatefulKVCache LRU is simulated STATE, not an action",
         "needs an eviction/placement lever + counterfactual sim"),
-    "clock_policy": ActionSpec(
-        "clock_policy", "clock / DVFS / power shaping", PLANNED,
-        ("nominal", "low", "high"), None, "service time is fixed (TTFT + tokens·TPOT)",
-        "needs a power-vs-performance curve + clock action", roadmap="N2"),
-    "precision_policy": ActionSpec(
-        "precision_policy", "precision / model routing", PLANNED,
-        ("full", "fp8", "int8"), None, "service time is precision-agnostic; no quality model",
-        "needs a quality/difficulty proxy + per-precision service/quality model", roadmap="N5"),
-    "spec_decode_policy": ActionSpec(
-        "spec_decode_policy", "speculative decoding control", PLANNED,
-        ("off", "on"), None, "no speculative branch / draft-model overhead",
-        "needs a roofline (mem/compute-bound) indicator + draft model", roadmap="N7"),
     "energy_policy": ActionSpec(
         "energy_policy", "energy / price-aware shifting", PLANNED,
         ("off", "defer_to_cheap"), None,
@@ -206,9 +237,11 @@ class ActionBundle:
     prewarm_policy: str = "off"
     placement_policy: str = "topology_blind"
     migration_policy: str = "off"
-    clock_policy: str = "nominal"
-    precision_policy: str = "full"
+    precision_policy: str = "bf16"
     spec_decode_policy: str = "off"
+    clock_policy: str = "base"
+    colocation_policy: str = "off"
+    prefill_decode_policy: str = "shared"
     energy_policy: str = "off"
 
     def connected_kwargs(self) -> dict:

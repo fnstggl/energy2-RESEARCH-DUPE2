@@ -1,0 +1,326 @@
+{
+  "control_dt_seconds": 60.0,
+  "eval_periods": 120,
+  "mpc_periods": 24,
+  "mooncake_pool_size": 12031,
+  "cost_mode": "hybrid_capacity_work",
+  "ladder": {
+    "A_pre_roofline": {
+      "goodput_per_dollar": 103583.5,
+      "sla_violation_rate": 0.038,
+      "mean_ttft_p95": 0.892,
+      "queue_delay_p95": 1.552,
+      "queue_delay_p99": 1.552,
+      "gpu_hours": 3.52,
+      "realized_gpu_seconds": 4460.8,
+      "total_energy_j": 0.0,
+      "mean_power_w": 0.0,
+      "decode_regime_mix": {},
+      "mean_decode_arithmetic_intensity": 0.0,
+      "mean_ridge_point": 0.0,
+      "quality_sla_risk_mean": 0.0,
+      "precision_mix": {
+        "bf16": 120
+      },
+      "spec_decode_mix": {
+        "off": 120
+      },
+      "clock_mix": {
+        "base": 120
+      },
+      "colocation_mix": {
+        "off": 120
+      },
+      "batching_mix": {
+        "balanced": 120
+      }
+    },
+    "B_precision_fp8": {
+      "goodput_per_dollar": 143137.2,
+      "sla_violation_rate": 0.0037,
+      "mean_ttft_p95": 0.892,
+      "queue_delay_p95": 1.39,
+      "queue_delay_p99": 1.39,
+      "gpu_hours": 3.1,
+      "realized_gpu_seconds": 3359.0,
+      "total_energy_j": 2351269.0,
+      "mean_power_w": 700.0,
+      "decode_regime_mix": {
+        "memory_bandwidth_bound": 120
+      },
+      "mean_decode_arithmetic_intensity": 27.7918,
+      "mean_ridge_point": 295.22,
+      "quality_sla_risk_mean": 0.0,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_decode_mix": {
+        "off": 120
+      },
+      "clock_mix": {
+        "base": 120
+      },
+      "colocation_mix": {
+        "off": 120
+      },
+      "batching_mix": {
+        "balanced": 120
+      }
+    },
+    "C_plus_roofline_batching": {
+      "goodput_per_dollar": 142343.6,
+      "sla_violation_rate": 0.0047,
+      "mean_ttft_p95": 0.892,
+      "queue_delay_p95": 0.0,
+      "queue_delay_p99": 0.0,
+      "gpu_hours": 3.09,
+      "realized_gpu_seconds": 3313.1,
+      "total_energy_j": 2319186.0,
+      "mean_power_w": 700.0,
+      "decode_regime_mix": {
+        "memory_bandwidth_bound": 120
+      },
+      "mean_decode_arithmetic_intensity": 49.4077,
+      "mean_ridge_point": 295.22,
+      "quality_sla_risk_mean": 0.0,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_decode_mix": {
+        "off": 120
+      },
+      "clock_mix": {
+        "base": 120
+      },
+      "colocation_mix": {
+        "off": 120
+      },
+      "batching_mix": {
+        "aggressive": 120
+      }
+    },
+    "D_plus_spec_decode": {
+      "goodput_per_dollar": 149646.1,
+      "sla_violation_rate": 0.0,
+      "mean_ttft_p95": 0.892,
+      "queue_delay_p95": 0.0,
+      "queue_delay_p99": 0.0,
+      "gpu_hours": 3.02,
+      "realized_gpu_seconds": 4083.5,
+      "total_energy_j": 2858434.0,
+      "mean_power_w": 700.0,
+      "decode_regime_mix": {
+        "memory_bandwidth_bound": 120
+      },
+      "mean_decode_arithmetic_intensity": 49.4077,
+      "mean_ridge_point": 295.22,
+      "quality_sla_risk_mean": 0.0,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_decode_mix": {
+        "medium": 120
+      },
+      "clock_mix": {
+        "base": 120
+      },
+      "colocation_mix": {
+        "off": 120
+      },
+      "batching_mix": {
+        "aggressive": 120
+      }
+    },
+    "E_plus_clock_low": {
+      "goodput_per_dollar": 145110.4,
+      "sla_violation_rate": 0.0,
+      "mean_ttft_p95": 1.023,
+      "queue_delay_p95": 0.0,
+      "queue_delay_p99": 0.0,
+      "gpu_hours": 3.02,
+      "realized_gpu_seconds": 4707.2,
+      "total_energy_j": 2656737.0,
+      "mean_power_w": 564.4,
+      "decode_regime_mix": {
+        "memory_bandwidth_bound": 120
+      },
+      "mean_decode_arithmetic_intensity": 49.4077,
+      "mean_ridge_point": 295.22,
+      "quality_sla_risk_mean": 0.0,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_decode_mix": {
+        "medium": 120
+      },
+      "clock_mix": {
+        "low": 120
+      },
+      "colocation_mix": {
+        "off": 120
+      },
+      "batching_mix": {
+        "aggressive": 120
+      }
+    },
+    "F_plus_colocation": {
+      "goodput_per_dollar": 143310.9,
+      "sla_violation_rate": 0.0,
+      "mean_ttft_p95": 1.0613,
+      "queue_delay_p95": 0.0,
+      "queue_delay_p99": 0.0,
+      "gpu_hours": 3.02,
+      "realized_gpu_seconds": 4883.7,
+      "total_energy_j": 2756366.0,
+      "mean_power_w": 564.4,
+      "decode_regime_mix": {
+        "memory_bandwidth_bound": 120
+      },
+      "mean_decode_arithmetic_intensity": 49.4077,
+      "mean_ridge_point": 295.22,
+      "quality_sla_risk_mean": 0.0,
+      "precision_mix": {
+        "fp8": 120
+      },
+      "spec_decode_mix": {
+        "medium": 120
+      },
+      "clock_mix": {
+        "low": 120
+      },
+      "colocation_mix": {
+        "conservative": 120
+      },
+      "batching_mix": {
+        "aggressive": 120
+      }
+    }
+  },
+  "ladder_gates": {
+    "B_precision_fp8": {
+      "beats_fair": true,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "delta_pct": 38.185
+    },
+    "C_plus_roofline_batching": {
+      "beats_fair": true,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "delta_pct": 37.419
+    },
+    "D_plus_spec_decode": {
+      "beats_fair": true,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "delta_pct": 44.469
+    },
+    "E_plus_clock_low": {
+      "beats_fair": true,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "delta_pct": 40.09
+    },
+    "F_plus_colocation": {
+      "beats_fair": true,
+      "pareto_sla_not_worse": true,
+      "headline_allowed": true,
+      "delta_pct": 38.353
+    }
+  },
+  "best_static_stack": "D_plus_spec_decode",
+  "mpc_arm": {
+    "goodput_per_dollar": 138386.6,
+    "sla_violation_rate": 0.0056,
+    "mean_ttft_p95": 1.0416,
+    "queue_delay_p95": 8.825,
+    "queue_delay_p99": 8.825,
+    "gpu_hours": 0.54,
+    "realized_gpu_seconds": 1075.6,
+    "total_energy_j": 607075.0,
+    "mean_power_w": 564.4,
+    "decode_regime_mix": {
+      "memory_bandwidth_bound": 24
+    },
+    "mean_decode_arithmetic_intensity": 24.6813,
+    "mean_ridge_point": 295.22,
+    "quality_sla_risk_mean": 0.0,
+    "precision_mix": {
+      "bf16": 24
+    },
+    "spec_decode_mix": {
+      "aggressive": 24
+    },
+    "clock_mix": {
+      "low": 24
+    },
+    "colocation_mix": {
+      "off": 24
+    },
+    "batching_mix": {
+      "aggressive": 24
+    },
+    "vs_best_static": {
+      "baseline": "D_plus_spec_decode",
+      "beats": false,
+      "pareto_sla_not_worse": false,
+      "headline_allowed": false,
+      "delta_pct": -7.524
+    },
+    "vs_pre_roofline": {
+      "beats": true,
+      "pareto_sla_not_worse": true,
+      "delta_pct": 33.599
+    },
+    "last_search_plan": {
+      "raw_candidate_count": 209952,
+      "pruned_candidate_count": 209952,
+      "strategy": "beam_search",
+      "candidates_evaluated": 183,
+      "best_reward": 108273.9151,
+      "best_bundle": {
+        "capacity_policy": "backlog_aware",
+        "ordering_policy": "abs_conformal",
+        "admission_policy": "class_aware",
+        "routing_policy": "kv_aware",
+        "capacity_multiplier": 0.75,
+        "batching_policy": "aggressive",
+        "placement_policy": "network_aware",
+        "spec_decode_policy": "aggressive",
+        "clock_policy": "low"
+      },
+      "estimated_regret": null,
+      "regret_audited": false,
+      "exhaustive_reward": null,
+      "runtime_s": 0.3083,
+      "surfaces": [
+        "capacity_policy",
+        "ordering_policy",
+        "admission_policy",
+        "routing_policy",
+        "capacity_multiplier",
+        "batching_policy",
+        "prewarm_policy",
+        "placement_policy",
+        "migration_policy",
+        "precision_policy",
+        "spec_decode_policy",
+        "clock_policy"
+      ],
+      "frozen_reasons": {
+        "colocation_policy": "no background-work trace (Azure is all latency-critical; ReplicaState.workload_class unused) \u2192 co-location can only hurt foreground SLA",
+        "prefill_decode_policy": "the live cluster replay has no disaggregated prefill/decode capacity pools (only roofline models the split analytically)"
+      },
+      "pruned_reason_counts": {
+        "regime_pruned": 3,
+        "full": 9
+      }
+    }
+  },
+  "claim_safety": {
+    "ladder": "trace_derived_workload + simulator_inferred_mechanism_magnitudes",
+    "headline": "only if Pareto gate passes vs the strong (best-static) baseline",
+    "int4": "never stacked (quality-unsafe without a quality model)",
+    "colocation": "stack F only, to SHOW it hurts with no background-work trace"
+  }
+}

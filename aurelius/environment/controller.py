@@ -73,6 +73,11 @@ class Decision:
             d["prewarm_policy"] = self.bundle.prewarm_policy   # connected via world_simulator
             d["placement_policy"] = self.bundle.placement_policy
             d["migration_policy"] = self.bundle.migration_policy
+            d["precision_policy"] = self.bundle.precision_policy   # connected via roofline_serving
+            d["spec_decode_policy"] = self.bundle.spec_decode_policy
+            d["clock_policy"] = self.bundle.clock_policy
+            d["colocation_policy"] = self.bundle.colocation_policy
+            d["prefill_decode_policy"] = self.bundle.prefill_decode_policy
         return d
 
 
@@ -129,6 +134,8 @@ class ModelPredictiveEconomicController:
     candidates: list | None = None     # explicit candidate bundles; else generator-enumerated
     candidate_generator: object = None  # CandidateBundleGenerator (else a default exhaustive one)
     search_budget: int = 256           # exhaustive at/below this many bundles, else coordinate descent
+    use_adaptive_search: bool = True   # adaptive planner (beam/CE + regret audit) over the fixed-256 cap
+    search_planner_obj: object = None  # AdaptiveSearchPlanner instance (else a default one is built)
     world_state: object = None         # CanonicalWorldState — when set, the stateful actions
     #                                    (prewarm/placement/migration) are scored through the
     #                                    world_simulator on a READ-ONLY (mutate=False) candidate sim
@@ -208,6 +215,21 @@ class ModelPredictiveEconomicController:
                           "topology_factor": out.topology_factor})
         return cumulative, steps
 
+    def _decode_regime_hint(self, tm) -> str | None:
+        """The instantaneous decode roofline regime (memory-bandwidth-bound vs compute-bound) for the
+        period — used by the adaptive planner to PRUNE the roofline action options to the regime where
+        each can help. A hint for the SEARCH only; the reward is unaffected (a pruned candidate would
+        still score through the physics)."""
+        try:
+            from .roofline import ServingConfig, Workload, roofline_regime
+            gpu = (max(self.fleet_state.gpu_type_mix, key=self.fleet_state.gpu_type_mix.get)
+                   if getattr(self.fleet_state, "gpu_type_mix", None) else "A100")
+            wl = Workload(prompt_tokens=512, decode_tokens=max(1, int(tm.mean)) if tm else 128,
+                          context_len=640)
+            return roofline_regime("decode", ServingConfig(gpu=gpu, batch_size=16), wl)["roofline_regime"]
+        except Exception:
+            return None
+
     def decide(self, history: list) -> Decision:
         """Choose the action for the next period from the causal forecast only."""
         if not self.forecasters.fitted or len(history) < 3:
@@ -285,9 +307,20 @@ class ModelPredictiveEconomicController:
                 return -1e18                       # freeze the search; keep best-so-far
             return _eval(b)[0]
 
+        search_plan = None
         if self.candidates is not None:
             method, theoretical = "explicit", len(self.candidates)
             best_cand = max(self.candidates, key=_score)
+        elif self.use_adaptive_search and world is not None:
+            # adaptive planner over the roofline-pruned connected space (beam/CE + a regret audit that
+            # MEASURES what an approximate search lost vs exhaustive — never a silent cap).
+            from .search_planner import AdaptiveSearchPlanner, roofline_pruned_options
+            dreg = self._decode_regime_hint(tm)
+            surfaces = roofline_pruned_options(decode_regime=dreg,
+                                               include_simulated=self.optimize_simulated)
+            planner = self.search_planner_obj or AdaptiveSearchPlanner()
+            best_cand, search_plan = planner.plan(_score, surfaces=surfaces, decode_regime=dreg)
+            method, theoretical = search_plan.strategy, search_plan.raw_candidate_count
         else:
             gen = self.candidate_generator or CandidateBundleGenerator(
                 include_simulated=self.optimize_simulated)
@@ -302,6 +335,7 @@ class ModelPredictiveEconomicController:
             "world_steps_simulated": eval_count[0] * H, "search_method": method,
             "runtime_s": round(_time.monotonic() - t_start[0], 4), "timed_out": timed_out[0],
             "cumulative_return": round(cumulative, 2), "rollout": win_steps,
+            "search_plan": search_plan.to_dict() if search_plan is not None else None,
             "trajectory": traj.to_dict() if traj is not None else None} if world is not None else {}
         return Decision(act, exp_gpd, risk_gpd, score, False, confidence,
                         forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
@@ -390,6 +424,18 @@ class EpisodeReport:
     realized_gpu_seconds: float = 0.0                   # PR #107 phase economics
     mean_ttft_p95: float = 0.0                          # mean per-period TTFT p95 (service-only)
     prefill_tokens_remaining: int = 0                   # prefill tokens NOT saved (paid)
+    # roofline action mixes + diagnostics (PR roofline-economic MPC actions)
+    precision_mix: dict = field(default_factory=dict)   # precision_policy → periods chosen
+    spec_decode_mix: dict = field(default_factory=dict)  # spec_decode_policy → periods
+    clock_mix: dict = field(default_factory=dict)       # clock_policy → periods
+    colocation_mix: dict = field(default_factory=dict)  # colocation_policy → periods (SIMULATED, pruned off)
+    prefill_decode_mix: dict = field(default_factory=dict)  # prefill_decode_policy → periods (SIMULATED)
+    decode_regime_mix: dict = field(default_factory=dict)   # roofline decode regime → periods
+    mean_decode_arithmetic_intensity: float = 0.0       # mean decode FLOP/byte (roofline x-axis)
+    mean_ridge_point: float = 0.0                       # mean GPU ridge point (peak_flops/mem_bw)
+    mean_power_w: float = 0.0                           # mean GPU power under the clock action (diagnostic)
+    total_energy_j: float = 0.0                         # serving energy under the actions (diagnostic)
+    quality_sla_risk_mean: float = 0.0                  # mean precision quality-failure fraction (int4)
 
     def to_dict(self) -> dict:
         return {k: (round(v, 5) if isinstance(v, float) else v) for k, v in self.__dict__.items()}
@@ -430,6 +476,13 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
     prewarm_mix: dict = {}
     placement_mix: dict = {}
     migration_mix: dict = {}
+    precision_mix: dict = {}
+    spec_mix: dict = {}
+    clock_mix: dict = {}
+    coloc_mix: dict = {}
+    pd_mix: dict = {}
+    rl_regime_mix: dict = {}
+    rl_ai_sum = rl_ridge_sum = rl_power_sum = rl_energy_sum = rl_q_sum = rl_n = 0.0
     cold_starts = mig_cost = warm_hold = topo_sum = topo_n = 0.0
     factor_sum, factor_n = 0.0, 0
     kv_cursor = 0                                       # cumulative request index into the KV prefix pool
@@ -445,7 +498,9 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         merged = dict(action) if isinstance(action, dict) else {}
         if isinstance(out, dict):
             for _k in ("routing_policy", "capacity_multiplier", "batching_policy",
-                       "prewarm_policy", "placement_policy", "migration_policy"):
+                       "prewarm_policy", "placement_policy", "migration_policy",
+                       "precision_policy", "spec_decode_policy", "clock_policy",
+                       "colocation_policy", "prefill_decode_policy"):
                 if _k in out:
                     merged[_k] = out[_k]
         routing = merged.get("routing_policy", "round_robin")
@@ -462,6 +517,16 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         prewarm_mix[_pw] = prewarm_mix.get(_pw, 0) + 1
         placement_mix[_pl] = placement_mix.get(_pl, 0) + 1
         migration_mix[_mg] = migration_mix.get(_mg, 0) + 1
+        _pc = merged.get("precision_policy", "bf16")
+        _sd = merged.get("spec_decode_policy", "off")
+        _ck = merged.get("clock_policy", "base")
+        _co = merged.get("colocation_policy", "off")
+        _pd = merged.get("prefill_decode_policy", "shared")
+        precision_mix[_pc] = precision_mix.get(_pc, 0) + 1
+        spec_mix[_sd] = spec_mix.get(_sd, 0) + 1
+        clock_mix[_ck] = clock_mix.get(_ck, 0) + 1
+        coloc_mix[_co] = coloc_mix.get(_co, 0) + 1
+        pd_mix[_pd] = pd_mix.get(_pd, 0) + 1
         factor_sum += factor
         factor_n += 1
         recs = sorted(real_per_period.get(p, []), key=lambda r: r[0])
@@ -475,7 +540,9 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                      "mean_service_s": (statistics.mean(_service_time_s(int(r[1])) for r in prev)
                                         if prev else 1.0)}
             from types import SimpleNamespace
-            pol = SimpleNamespace(prewarm_policy=_pw, placement_policy=_pl, migration_policy=_mg)
+            pol = SimpleNamespace(prewarm_policy=_pw, placement_policy=_pl, migration_policy=_mg,
+                                  batching_policy=_bp, precision_policy=_pc, spec_decode_policy=_sd,
+                                  clock_policy=_ck, colocation_policy=_co, prefill_decode_policy=_pd)
             t0 = recs[0][0]
             # per-replica KV/model residency (PR #106): assign this period's requests a causal slice
             # of the Mooncake-derived prefix pool (TRACE_DERIVED_REUSE_MODEL); routing over the warm
@@ -514,11 +581,22 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                 kv_realized_gpu_s += oc.kv_diag.get("realized_gpu_seconds", 0.0)
                 kv_ttft_sum += oc.kv_diag.get("ttft_p95", 0.0)
                 kv_prefill_rem += oc.kv_diag.get("prefill_tokens_remaining", 0)
-            tot_g += kpi.sla_safe_goodput
+            _q = float(getattr(oc, "quality_sla_risk", 0.0))
+            tot_g += kpi.sla_safe_goodput * (1.0 - _q)        # quality failures are not sla-safe goodput
             tot_gpu_h += kpi.gpu_hours
-            tot_viol += kpi.sla_violations
+            tot_viol += kpi.sla_violations + _q * kpi.n_total  # …and count as SLA failures (int4 risk)
             tot_n += kpi.n_total
             tot_safe += kpi.n_sla_safe
+            if oc.roofline_diag:
+                rd = oc.roofline_diag
+                _reg = rd.get("decode_regime", "?")
+                rl_regime_mix[_reg] = rl_regime_mix.get(_reg, 0) + 1
+                rl_ai_sum += rd.get("decode_arithmetic_intensity", 0.0)
+                rl_ridge_sum += rd.get("ridge_point", 0.0)
+                rl_power_sum += oc.power_w
+                rl_energy_sum += oc.energy_j
+                rl_q_sum += _q
+                rl_n += 1
             continue
         t0 = recs[0][0]
         pred = _causal_pred(recs)
@@ -563,7 +641,14 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         prefill_tokens_saved=int(kv_saved_sum), model_switch_events=int(kv_switch_sum),
         realized_gpu_seconds=round(kv_realized_gpu_s, 2),
         mean_ttft_p95=round(kv_ttft_sum / topo_n, 4) if topo_n else 0.0,
-        prefill_tokens_remaining=int(kv_prefill_rem))
+        prefill_tokens_remaining=int(kv_prefill_rem),
+        precision_mix=precision_mix, spec_decode_mix=spec_mix, clock_mix=clock_mix,
+        colocation_mix=coloc_mix, prefill_decode_mix=pd_mix, decode_regime_mix=rl_regime_mix,
+        mean_decode_arithmetic_intensity=round(rl_ai_sum / rl_n, 4) if rl_n else 0.0,
+        mean_ridge_point=round(rl_ridge_sum / rl_n, 2) if rl_n else 0.0,
+        mean_power_w=round(rl_power_sum / rl_n, 1) if rl_n else 0.0,
+        total_energy_j=round(rl_energy_sum, 1),
+        quality_sla_risk_mean=round(rl_q_sum / rl_n, 4) if rl_n else 0.0)
 
 
 __all__ = [

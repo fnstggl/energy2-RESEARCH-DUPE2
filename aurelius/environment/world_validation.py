@@ -261,11 +261,98 @@ def _roofline_checks() -> list:
     full = all(len(c["curve"]) >= 3 and "completion_s" in c["help_hurt_neutral"] for c in curves.values())
     out.append(Check("roofline", "all_mechanisms_fully_simulated_with_curves", _ok(full and len(curves) == 6),
                      len(curves), "batching/alloc/spec/clock/precision/coloc each fully simulated + swept"))
-    # 6) only batching is a LIVE mpc action; the rest are fully-simulated diagnostic sweeps.
-    out.append(Check("roofline", "only_existing_action_surfaces_are_live",
+    # 6) precision/spec/clock are now LIVE mpc actions (this PR, via roofline_actions); co-location stays
+    # a fully-simulated diagnostic sweep (frozen off — no background-work trace).
+    out.append(Check("roofline", "live_surfaces_match_connected_actions",
                      _ok(curves["batching"]["action_surface"] == "live_mpc_action"
-                         and curves["speculative_decoding"]["action_surface"] == "diagnostic_sweep_only"),
-                     None, "diagnostic = fully simulated, not controller-selected (no fake live knob)"))
+                         and curves["precision"]["action_surface"] == "live_mpc_action"
+                         and curves["co_location"]["action_surface"] == "diagnostic_sweep_only"),
+                     None, "precision/spec/clock live via roofline_actions; co-location frozen off"))
+    return out
+
+
+def _roofline_action_checks() -> list:
+    """Roofline-economic MPC actions: precision/spec/clock are LIVE (reward via roofline_serving);
+    co-location + prefill/decode are SIMULATED and frozen off. Each helps/hurts in the correct regime
+    through serving_point physics; neutral defaults reproduce; int4 carries a quality risk; co-location
+    credits no background goodput; the Pareto gate still blocks SLA-shedding. No direct reward bonus."""
+    from types import SimpleNamespace
+
+    from .actions import ACTION_SPECS, ActionBundle
+    from .roofline import Workload
+    from .roofline_actions import roofline_action_factors
+    from .search_planner import FROZEN_OFF, AdaptiveSearchPlanner, roofline_pruned_options
+    from .training import claim_gate
+    out = []
+    mem = Workload(prompt_tokens=512, decode_tokens=256, context_len=2048)
+    comp = Workload(prompt_tokens=512, decode_tokens=64, context_len=512)
+    # 1) neutral defaults reproduce — every factor exactly 1.0, no quality risk.
+    f0 = roofline_action_factors(ActionBundle(), mem, gpu="H100", batch_size=8)
+    out.append(Check("roofline_action", "neutral_defaults_reproduce",
+                     _ok(all(abs(f0[k] - 1.0) < 1e-9 for k in ("prefill_factor", "decode_factor",
+                         "gpu_seconds_factor", "power_factor")) and f0["quality_sla_risk"] == 0.0),
+                     None, "all factors 1.0 at default policies → live path bit-for-bit unchanged"))
+    # 2) precision fp8 helps memory-bound (faster decode AND cheaper).
+    f8 = roofline_action_factors(ActionBundle(precision_policy="fp8"), mem, gpu="H100", batch_size=8)
+    out.append(Check("roofline_action", "precision_helps_memory_bound",
+                     _ok(f8["decode_factor"] < 1.0 and f8["gpu_seconds_factor"] < 1.0),
+                     round(f8["decode_factor"], 3), "fp8 fewer bytes → faster + cheaper decode"))
+    # 3) spec helps latency but pays a compute tax (GPU-seconds fall LESS than wall-clock).
+    fs = roofline_action_factors(ActionBundle(spec_decode_policy="medium"), mem, gpu="H100", batch_size=8)
+    out.append(Check("roofline_action", "spec_latency_win_pays_compute_tax",
+                     _ok(fs["decode_factor"] < 1.0 and fs["gpu_seconds_factor"] > fs["decode_factor"]),
+                     round(fs["gpu_seconds_factor"], 3), "draft+verify FLOPs → spec is a latency lever, not a free cost win"))
+    # 4) spec hurts compute-bound (FLOP-limited).
+    fsc = roofline_action_factors(ActionBundle(spec_decode_policy="aggressive"), comp, gpu="H20", batch_size=128)
+    out.append(Check("roofline_action", "spec_hurts_compute_bound", _ok(fsc["decode_factor"] >= 1.0 - 1e-9),
+                     round(fsc["decode_factor"], 3), "compute-bound: extra FLOPs cannot speed a FLOP-limited decode"))
+    # 5) clock changes power (DVFS) without faking memory-bandwidth throughput.
+    fl = roofline_action_factors(ActionBundle(clock_policy="low"), mem, gpu="H100", batch_size=8)
+    fh = roofline_action_factors(ActionBundle(clock_policy="high"), mem, gpu="H100", batch_size=8)
+    out.append(Check("roofline_action", "clock_changes_power_not_memory_bw",
+                     _ok(fl["power_factor"] < 1.0 < fh["power_factor"] and fl["decode_factor"] <= 1.0 + 1e-9),
+                     None, "low clock saves power; memory-bandwidth-bound decode throughput is unmoved by clock"))
+    # 6) co-location credits NO background goodput without a trace (no imaginary work).
+    fco = roofline_action_factors(ActionBundle(colocation_policy="aggressive"), mem, gpu="H100",
+                                  batch_size=8, background_work=False)
+    out.append(Check("roofline_action", "no_imaginary_background_goodput",
+                     _ok(fco["coloc_useful_gpu_seconds"] == 0.0 and fco["interference_factor"] >= 1.0),
+                     None, "no background-work trace → co-location only adds interference, credits nothing"))
+    # 7) int4 carries a quality/SLA risk (no free precision).
+    fi = roofline_action_factors(ActionBundle(precision_policy="int4"), mem, gpu="H100", batch_size=8)
+    out.append(Check("roofline_action", "int4_carries_quality_risk", _ok(fi["quality_sla_risk"] > 0.0),
+                     fi["quality_sla_risk"], "int4 quality-failure fraction counts as SLA failures"))
+    # 8) status split: precision/spec/clock CONNECTED via roofline_serving; co-location/pd frozen w/ reasons.
+    conn = all(ACTION_SPECS[s].status == "CONNECTED" and ACTION_SPECS[s].reward_channel == "roofline_serving"
+               for s in ("precision_policy", "spec_decode_policy", "clock_policy"))
+    frozen = set(FROZEN_OFF) == {"colocation_policy", "prefill_decode_policy"} and all(FROZEN_OFF[s][1] for s in FROZEN_OFF)
+    out.append(Check("roofline_action", "connected_live_simulated_frozen_split", _ok(conn and frozen),
+                     None, "precision/spec/clock live; co-location + prefill/decode frozen with recorded reasons"))
+    # 9) no direct reward bonus: affects_reward ⇔ CONNECTED (every effect flows through physics).
+    out.append(Check("roofline_action", "no_direct_reward_bonus",
+                     _ok(all((ACTION_SPECS[s].status == "CONNECTED") == ACTION_SPECS[s].affects_reward for s in ACTION_SPECS)),
+                     None, "no surface adds a scalar reward bonus"))
+    # 10) candidate pruning is regime-aware (int4/spec proposed only where they can help).
+    mp = roofline_pruned_options(decode_regime="memory_bandwidth_bound")
+    cp = roofline_pruned_options(decode_regime="compute_bound")
+    out.append(Check("roofline_action", "candidate_pruning_is_regime_aware",
+                     _ok("int4" in mp["precision_policy"] and "int4" not in cp["precision_policy"]
+                         and cp["spec_decode_policy"] == ("off",)),
+                     None, "int4/spec are search candidates only in the regime that can use them"))
+    # 11) the adaptive planner MEASURES search regret vs exhaustive (never a silent cap).
+    _b, plan = AdaptiveSearchPlanner(exhaustive_max=10).plan(
+        lambda b: 100.0 + (5 if b.precision_policy == "fp8" else 0),
+        surfaces={"precision_policy": ("bf16", "fp8", "int4"), "clock_policy": ("base", "low", "high")},
+        frozen_reasons={}, regret_audit=True)
+    out.append(Check("roofline_action", "search_regret_is_measured",
+                     _ok(plan.regret_audited and plan.estimated_regret is not None and plan.estimated_regret <= 1e-9),
+                     plan.estimated_regret, f"{plan.strategy}: regret vs exhaustive reported, not hidden"))
+    # 12) the Pareto gate still blocks SLA-shedding (a cheaper-but-less-safe arm is not a headline).
+    g = claim_gate({"mpc_controller": SimpleNamespace(goodput_per_dollar=150.0, sla_violation_rate=0.05),
+                    "fair": SimpleNamespace(goodput_per_dollar=140.0, sla_violation_rate=0.02)})
+    out.append(Check("roofline_action", "pareto_gate_blocks_sla_shedding",
+                     _ok(g["beats_fair_baseline"] and not g["pareto_sla_not_worse"] and not g["headline_claim_allowed"]),
+                     None, "higher gp/$ with worse SLA (e.g. int4) → headline blocked"))
     return out
 
 
@@ -287,7 +374,7 @@ def run_world_validation() -> dict:
     """Run every world-model transition check → a structured PASS/WARN/FAIL/SKIPPED report."""
     checks = (_cold_start_checks() + _conservation_checks() + _isolation_determinism_checks()
               + _migration_realism_checks() + _kv_residency_checks() + _prefill_decode_checks() + _roofline_checks()
-              + _skipped_distribution_checks())
+              + _roofline_action_checks() + _skipped_distribution_checks())
     counts = {s: sum(1 for c in checks if c.status == s) for s in (PASS, WARN, FAIL, SKIPPED)}
     return {"checks": [c.to_dict() for c in checks], "counts": counts,
             "all_landed_pass": counts[FAIL] == 0}

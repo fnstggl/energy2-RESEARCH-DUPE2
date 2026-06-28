@@ -134,11 +134,20 @@ def test_runtime_scales_with_horizon_and_world_steps_reported():
 
 
 def test_candidate_budget_is_respected():
-    c, _f, frames = _ctrl(2, max_candidate_bundles=20)
+    c, _f, frames = _ctrl(2)
     c.decide(frames[:24])
-    # coordinate descent over the connected space, capped — far below the 8748 theoretical bundles
-    assert c.last_decision_diag["candidate_bundles_evaluated"] <= 200
-    assert c.last_decision_diag["theoretical_bundles"] == 8748
+    d = c.last_decision_diag
+    sp = d["search_plan"]
+    # the adaptive planner REPORTS the raw count, strategy, evaluations and regret — it never silently
+    # caps at a fixed budget (the hard rule). The raw connected space is ≥ the 8748 stateful space.
+    assert sp is not None
+    assert sp["raw_candidate_count"] >= 8748
+    assert sp["strategy"] in ("exhaustive_cartesian", "beam_search", "coordinate_descent",
+                              "cross_entropy", "random_restart")
+    assert sp["candidates_evaluated"] >= 1
+    assert d["candidate_bundles_evaluated"] <= d["theoretical_bundles"]
+    # co-location + prefill/decode are frozen off with a recorded reason (no background work / no pools)
+    assert set(sp["frozen_reasons"]) == {"colocation_policy", "prefill_decode_policy"}
 
 
 # --- sub-hour control: dt is the CONTROL INTERVAL, threaded into the eval replay ---------------
