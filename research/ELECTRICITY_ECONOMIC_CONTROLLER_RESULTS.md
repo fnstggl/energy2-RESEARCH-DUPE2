@@ -54,6 +54,10 @@ P3 is a fixture-level proof that the gp/$-optimal clock is **price-dependent** (
 win whose advantage scales with price), so a gp/$-maximising price-aware planner downclocks more when power is
 expensive. The independent full-MPC confirmation is PR #115 Track D/E (downclock fraction 0.0→0.5 at PJM p90).
 
+**All three markets pass** (`electricity_smoke_{pjm,ercot,caiso}.json`); the P3 downclock gp/$ gain scales with
+each market's price spread: **PJM +3281** (p90 $0.281) > **ERCOT +690** (p90 $0.045) > **CAISO +626** (p90
+$0.041) — the spikier the market, the larger the price-aware downclock advantage.
+
 ## Honest bottom line
 
 - **Infrastructure is complete and causal:** real prices flow into planner frames and per-period cost; the
