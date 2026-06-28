@@ -56,7 +56,7 @@ def test_decode_heavy_stays_decode_bound_despite_reuse():
     recs = _recs(20, out=2000, prompt=128)
     cold = compute_phase_serving(recs, [0] * 20)
     hit = compute_phase_serving(recs, [128] * 20)              # full prompt cached
-    assert cold.summary()["phase_bottleneck"] == "decode_bound"
+    assert cold.summary()["phase_bottleneck"] == "decode_phase_bound"
     rel = (cold.realized_gpu_seconds - hit.realized_gpu_seconds) / cold.realized_gpu_seconds
     assert rel < 0.05                                          # <5% realized-work reduction (decode-bound)
 
@@ -125,4 +125,4 @@ def test_provisioned_mode_reproduces_no_gp_dollar_gain_realized_does():
     prov, real = run("provisioned_capacity"), run("realized_serving_work")
     assert real.goodput_per_dollar > prov.goodput_per_dollar  # realized-work monetizes the prefill saving
     assert prov.kv_diag["prefill_tokens_saved"] > 0           # the channel fired in both
-    assert prov.kv_diag["phase_bottleneck"] in ("prefill_bound", "mixed", "decode_bound")
+    assert prov.kv_diag["phase_bottleneck"] in ("prefill_phase_bound", "mixed_phase_bound", "decode_phase_bound")
