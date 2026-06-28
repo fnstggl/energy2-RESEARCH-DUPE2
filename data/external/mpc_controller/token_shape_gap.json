@@ -1,0 +1,109 @@
+{
+  "mpc_periods": 6,
+  "fit_window": 24,
+  "ewma_half_life": 6.0,
+  "median_output": 45,
+  "median_prompt": 828,
+  "arms": {
+    "current": {
+      "gp_per_dollar": 163336.4,
+      "gap_to_oracle": 19815.8,
+      "pct_of_current_oracle_gap_closed": 0.0
+    },
+    "scenario": {
+      "gp_per_dollar": 182503.8,
+      "gap_to_oracle": 648.4,
+      "pct_of_current_oracle_gap_closed": 96.7
+    },
+    "tokenshape": {
+      "gp_per_dollar": 174933.4,
+      "gap_to_oracle": 8218.8,
+      "pct_of_current_oracle_gap_closed": 58.5
+    },
+    "oracle": {
+      "gp_per_dollar": 183152.2,
+      "gap_to_oracle": 0.0,
+      "pct_of_current_oracle_gap_closed": 100.0
+    }
+  },
+  "attribution_before": {
+    "method": "leave_one_out",
+    "contributions_pct": {
+      "arrival_rate": 0.3,
+      "output_length": 62.8,
+      "prompt_length": 24.7,
+      "interarrival_cv": 12.3,
+      "kv_reuse": 0.0,
+      "queue_pressure": 0.0,
+      "sla_pressure": 0.0,
+      "carbon": 0.0,
+      "weather": 0.0,
+      "congestion": 0.0,
+      "electricity_price": 0.0
+    },
+    "oracle_gp_per_dollar": 183152.2,
+    "raw_drops": {
+      "arrival_rate": 166.7,
+      "output_length": 37549.8,
+      "prompt_length": 14757.5,
+      "interarrival_cv": 7338.9
+    },
+    "absent": {
+      "kv_reuse": "planning uses synthetic UNIQUE prefixes (PR #112) \u2192 no KV-reuse prediction is consumed",
+      "queue_pressure": "emergent from arrival+service, not a planner input forecast",
+      "sla_pressure": "emergent from arrival+service+SLA, not a planner input forecast",
+      "carbon": "not wired into the MPC objective or world model",
+      "weather": "not wired into the MPC objective or world model",
+      "congestion": "no live network-congestion model in the serving replay (ABSENT since PR #98)"
+    }
+  },
+  "attribution_after": {
+    "method": "leave_one_out",
+    "contributions_pct": {
+      "arrival_rate": 0.3,
+      "output_length": 69.0,
+      "prompt_length": 17.3,
+      "interarrival_cv": 13.5,
+      "kv_reuse": 0.0,
+      "queue_pressure": 0.0,
+      "sla_pressure": 0.0,
+      "carbon": 0.0,
+      "weather": 0.0,
+      "congestion": 0.0,
+      "electricity_price": 0.0
+    },
+    "oracle_gp_per_dollar": 183152.2,
+    "raw_drops": {
+      "arrival_rate": 166.7,
+      "output_length": 37549.8,
+      "prompt_length": 9399.7,
+      "interarrival_cv": 7338.9
+    },
+    "absent": {
+      "kv_reuse": "planning uses synthetic UNIQUE prefixes (PR #112) \u2192 no KV-reuse prediction is consumed",
+      "queue_pressure": "emergent from arrival+service, not a planner input forecast",
+      "sla_pressure": "emergent from arrival+service+SLA, not a planner input forecast",
+      "carbon": "not wired into the MPC objective or world model",
+      "weather": "not wired into the MPC objective or world model",
+      "congestion": "no live network-congestion model in the serving replay (ABSENT since PR #98)"
+    }
+  },
+  "shift": {
+    "output_length": 6.2,
+    "prompt_length": -7.4,
+    "interarrival_cv": 1.2,
+    "arrival_rate": 0.0
+  },
+  "raw_drop_before": {
+    "arrival_rate": 166.7,
+    "output_length": 37549.8,
+    "prompt_length": 14757.5,
+    "interarrival_cv": 7338.9
+  },
+  "raw_drop_after": {
+    "arrival_rate": 166.7,
+    "output_length": 37549.8,
+    "prompt_length": 9399.7,
+    "interarrival_cv": 7338.9
+  }
+}
