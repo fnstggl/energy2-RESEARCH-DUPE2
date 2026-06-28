@@ -68,3 +68,22 @@ Every closure-phase mechanism, with status and the honest reason. **No UNKNOWN.*
 multi-tier transfer (needs per-tier bandwidth telemetry), cancellation (needs a cancellation trace),
 fragmentation (inference-on-inference). Each SKIP states the minimum telemetry that unblocks it. No
 other simulator path silently depends on these (validated: cost modes + phase model run without them).
+
+---
+
+## V2 update — roofline-live timing + provisioned-cost economics (full serving-physics integration PR)
+
+The V2 serving world model (`aurelius/environment/v2/`, built beside V1, V1 unchanged) replaces the scalar
+`PREFILL_S_PER_TOKEN` / `TPOT_S` as the **primary** timing with the live FLOP/bandwidth roofline
+(`roofline_external`, ported from InferSim/llm-analysis/LLM-Viewer); the scalar path is preserved as
+`timing_model="legacy_scalar"` (V1-equivalent baseline) and the fallback when inputs are missing.
+
+Key economic finding, reaffirmed and quantified by V2 (`DT60_FULL_SERVING_PHYSICS_DIAGNOSTIC.md`): operator
+cost is **provisioned-capacity-dominated** — you pay for the GPU-seconds you run, not for realized work — so
+faster service cuts **latency / realized GPU-seconds / energy**, NOT cost, within a period. V2's billing
+deliberately bills `max(provisioned − coloc_reclaim, idle_floor·provisioned)` and never bills
+`realized > provisioned` (which would manufacture a fake "faster is cheaper" win — hard rule #4). The honest
+gp/$ channels are: (a) **SLA-relief** (removing V1's phantom violations from the L40S-class scalar — A→B in
+dt60, gp/$ 123→142 k), (b) **energy** (down-clock memory-bound decode, −37 %), and (c) **co-location** of real
+background work (reclaim idle, −28 % GPU-h). Disaggregation and tiered KV are Pareto-neutral on a feasible,
+slack-SLA window — stated plainly, not papered over.

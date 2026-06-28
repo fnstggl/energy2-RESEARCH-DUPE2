@@ -73,3 +73,21 @@ offline value; `model_load_s` is the existing cold-start band; `TOPOLOGY_MAX_DIS
 TRACE_DERIVED cap. The held-out diagnostic shows **no Pareto-safe gain** (results doc) — the realistic
 per-replica model in fact *lowers* the headline vs the optimistic uniform scalar, which is a fidelity
 gain, not a tuned win.
+
+---
+
+## V2 update — tiered KV hierarchy (full serving-physics integration PR)
+
+The V2 world model (`aurelius/environment/v2/tiered_kv.py`, beside V1) extends V1's single per-replica LRU
+cache into a four-tier hierarchy `GPU_HBM → CPU_DRAM → REMOTE_KV → SSD_NVME` (ports vLLM PagedAttention block
+model, LMCache tier hierarchy + LRU, Mooncake disaggregated remote KV, Splitwise `transfer = bytes/bandwidth`).
+For every prefix the cache picks the **cheapest causal path** among the tiers and recompute by net prefill
+saving: `net = saved_prefill_s − (lookup + tier_latency + bytes/eff_bw)`, with `eff_bw(REMOTE_KV) = base·(1−
+network_pressure)`. Eviction cascades down the tiers so capacity changes future hit rates.
+
+Calibrated tier bands (BENCHMARK_DERIVED, `compare_kv_tier_fixture.py`): HBM (resident, lookup only) < CPU_DRAM
+(PCIe 64 GB/s) < REMOTE_KV (RDMA 50 GB/s, pressure-scaled) < SSD_NVME (5 GB/s). Verified physics: HBM beats CPU
+beats remote at equal pressure; remote beats recompute for long prefixes at low load (net +0.0061 s); recompute
+beats remote under high network pressure (≥0.9). Cache sharing is tenant-safe (domain-keyed; no cross-domain
+reuse). Real per-replica residency, measured hit rates, and production transfer bandwidth remain ABSENT (PROP,
+pilot-only) — the tier mechanics are SIMULATOR_INFERENCE bounded by public bands, never measured.
