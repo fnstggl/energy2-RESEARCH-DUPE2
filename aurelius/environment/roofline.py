@@ -199,7 +199,8 @@ def serving_point(wl: Workload, cfg: ServingConfig) -> dict:
         "ridge_point": round(_ridge_point(cfg.gpu), 2),
         "energy_j": round(energy_j, 3), "cost_usd": round(cost_usd, 8),
         "tokens_per_s_decode": round(dc_tps_eff, 1), "tokens_per_s_prefill": round(pf_tps, 1),
-        "spec_speedup": round(spec_speedup, 4), "power_w": round(_power_w(cfg), 1)}
+        "spec_speedup": round(spec_speedup, 4), "power_w": round(_power_w(cfg), 1),
+        "coloc_penalty": round(coloc_penalty, 5)}
 
 
 def _set(cfg: ServingConfig, **kw) -> ServingConfig:
@@ -222,6 +223,10 @@ def sweep_mechanism(mechanism: str, wl: Workload, base: ServingConfig | None = N
     region where it helps / hurts / is neutral (vs the neutral baseline). Diagnostic — the MPC only
     selects mechanisms whose action surface already exists (batching)."""
     base = base or ServingConfig()
+    # mechanisms now wired as LIVE MPC actions via roofline_actions.py (this PR). co_location +
+    # prefill_decode_allocation remain diagnostic (SIMULATED_ONLY, frozen off — no background-work trace /
+    # no disaggregated capacity pools). Batching was the only live one at PR #109.
+    live_mechanisms = ("batching", "precision", "speculative_decoding", "clock_dvfs")
     grids = {
         "batching": ("batch_size", [1, 2, 4, 8, 16, 32, 64, 128]),
         "prefill_decode_allocation": ("prefill_decode_ratio", [0.2, 0.4, 0.5, 0.6, 0.8]),
@@ -242,8 +247,8 @@ def sweep_mechanism(mechanism: str, wl: Workload, base: ServingConfig | None = N
         curve.append(pt)
     base_idx = next((i for i, v in enumerate(values) if v in (0.0, 1.0, "fp16", 16, 0.5)), 0)
     verdict = {k: _classify(curve, k, base_idx) for k in ("completion_s", "gpu_seconds", "cost_usd", "energy_j")}
-    # the action-surface status of this mechanism (only batching is a live MPC action).
-    live = mechanism == "batching"
+    # the action-surface status of this mechanism (precision/spec/clock are live via roofline_actions).
+    live = mechanism in live_mechanisms
     return {"mechanism": mechanism, "field": field_name, "settings": values, "baseline_index": base_idx,
             "curve": curve, "help_hurt_neutral": verdict,
             "action_surface": "live_mpc_action" if live else "diagnostic_sweep_only",

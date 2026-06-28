@@ -135,7 +135,9 @@ def test_every_mechanism_produces_a_sensitivity_curve():
         assert c["action_surface"] in ("live_mpc_action", "diagnostic_sweep_only")
     # only batching is a live MPC action; the rest are diagnostic sweeps
     assert curves["batching"]["action_surface"] == "live_mpc_action"
-    assert curves["speculative_decoding"]["action_surface"] == "diagnostic_sweep_only"
+    assert curves["precision"]["action_surface"] == "live_mpc_action"          # now live (this PR)
+    assert curves["speculative_decoding"]["action_surface"] == "live_mpc_action"
+    assert curves["co_location"]["action_surface"] == "diagnostic_sweep_only"  # SIMULATED, frozen off
 
 
 def test_determinism():

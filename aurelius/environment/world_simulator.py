@@ -82,15 +82,21 @@ class PeriodOutcome:
     queue_delay_p95: float = 0.0
     queue_delay_p99: float = 0.0
     kv_diag: dict | None = None               # per-replica KV/model residency diagnostics (PR #106)
+    roofline_diag: dict | None = None         # roofline action modulation (precision/spec/clock) diagnostics
+    quality_sla_risk: float = 0.0             # precision quality-failure fraction (int4) → counts as SLA fails
+    power_w: float = 0.0                       # mean GPU power under the clock/DVFS action (diagnostic)
+    energy_j: float = 0.0                      # serving energy under the action (diagnostic)
     metrics: dict = field(default_factory=dict)
 
     @property
     def goodput_per_dollar(self) -> float:
-        return self.kpi.sla_safe_goodput / max(self.operator_cost, 1e-9)
+        # a precision quality failure is NOT sla-safe goodput (a wrong answer is worse than a slow one);
+        # quality_sla_risk is 0 for bf16/fp8, conservative for int4. No bonus — only a penalty channel.
+        return (self.kpi.sla_safe_goodput * (1.0 - self.quality_sla_risk)) / max(self.operator_cost, 1e-9)
 
     @property
     def sla_violation_rate(self) -> float:
-        return self.kpi.sla_violations / max(self.kpi.n_total, 1)
+        return (self.kpi.sla_violations + self.quality_sla_risk * self.kpi.n_total) / max(self.kpi.n_total, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +322,15 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     be_stride = max(1, round(1.0 / best_effort_fraction)) if best_effort_fraction > 0 else 0
     recs_sorted = sorted(recs, key=lambda r: r[0])
     t0 = recs_sorted[0][0] if recs_sorted else 0.0
+    # roofline action modulation (precision / speculative-decoding / clock / ...). None when every
+    # roofline action is at its no-op default → the live path below is bit-for-bit unchanged. Built from
+    # the period's representative workload + the fleet's dominant GPU; reaches reward ONLY through service
+    # time + realized GPU-seconds + power (no bonus). rl_svc is the latency factor for the non-phase path.
+    from .roofline_actions import period_action_modulation
+    _gpu_t = (max(fleet_state.gpu_type_mix, key=fleet_state.gpu_type_mix.get)
+              if (fleet_state is not None and getattr(fleet_state, "gpu_type_mix", None)) else "A100")
+    rl_mod = period_action_modulation(bundle, recs_sorted, gpu=_gpu_t)
+    rl_svc = float(rl_mod["completion_factor"]) if rl_mod else 1.0
     # 5b) PER-REPLICA KV / model residency (PR #106) → per-request service factor. When kv_state is
     # given, routing over the warm replicas' PERSISTENT caches replaces the offline KV scalar AND the
     # macro topology scalar (the residency sim applies per-replica topology): a prefix hit skips that
@@ -353,19 +368,20 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         phase = compute_phase_serving(
             recs_sorted, rr.saved_tokens, model_cold_s=rr.model_switch_s,
             batching=str(getattr(bundle, "batching_policy", "balanced")),
-            period_seconds=max(period_hours * 3600.0, 1.0))
+            period_seconds=max(period_hours * 3600.0, 1.0), roofline_factors=rl_mod)
         if res_diag is not None:
             res_diag = {**res_diag, **phase.summary()}
 
     def _svc(i, r):
         if phase is not None and i < len(phase.service_s):
-            return phase.service_s[i] * mg["cache_factor"]   # phase service (prefill cut, decode intact)
+            return phase.service_s[i] * mg["cache_factor"]   # phase service (roofline factors applied inside)
         base = _service_time_s(int(r[1]))
         if per_req_factor is not None and i < len(per_req_factor):
             # residency factor REPLACES base_service_factor + topology (subsumed); migration KV penalty
-            # (mg.cache_factor) still applies; model-switch cold-start adds seconds.
-            return base * per_req_factor[i] * mg["cache_factor"] + (per_req_cold[i] if per_req_cold else 0.0)
-        return base * service_factor
+            # (mg.cache_factor) still applies; model-switch cold-start adds seconds. The roofline action
+            # latency factor (rl_svc; 1.0 at neutral) scales the served time when no phase model is active.
+            return base * per_req_factor[i] * mg["cache_factor"] * rl_svc + (per_req_cold[i] if per_req_cold else 0.0)
+        return base * service_factor * rl_svc
 
     jobs = [Job(idx=i, arrival_s=(r[0] - t0), actual_tokens=int(r[1]), predicted_tokens=float(r[1]),
                 service_s=_svc(i, r),
@@ -417,7 +433,8 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         cb = cost_model.operator_cost(
             gpu_hours=billable_gpu_hours, gpu_type=gpu_type,
             energy_price_per_kwh=fleet_state.energy_price_per_kwh, utilization=fleet_state.util_target,
-            scenario=cost_scenario, sla_violations=kpi.sla_violations)   # migration priced below, once
+            scenario=cost_scenario, sla_violations=kpi.sla_violations,
+            power_scale=(float(rl_mod["power_factor"]) if rl_mod else 1.0))   # clock/DVFS energy only (no GPU-hour fake)
         base_cost = cb.total_operator_cost
     else:
         base_cost = kpi.cost_usd
@@ -427,6 +444,9 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     migration_cost = mg["migration_cost"] * max(period_hours, 1e-6)
     total_cost = base_cost + warm_hold_cost + migration_cost
 
+    rl_power_w = float(rl_mod["power_w"]) if rl_mod else 0.0
+    rl_gpu_s = phase.realized_gpu_seconds if phase is not None else billable_gpu_hours * 3600.0
+
     outcome = PeriodOutcome(
         kpi=kpi, operator_cost=total_cost, warm_hold_cost=round(warm_hold_cost, 5),
         migration_cost=mg["migration_cost"], service_factor=round(service_factor, 5),
@@ -435,6 +455,8 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         rack_spread=pl["rack_spread"], cold_start_events=cold_started,
         wasted_prewarm_hours=round(warm_hold_gpu_hours, 5), migrations_started=mg["n_migrations"],
         queue_delay_p95=round(q_p95, 4), queue_delay_p99=round(q_p99, 4), kv_diag=res_diag,
+        roofline_diag=rl_mod, quality_sla_risk=(float(rl_mod["quality_sla_risk"]) if rl_mod else 0.0),
+        power_w=round(rl_power_w, 1), energy_j=round(rl_power_w * rl_gpu_s, 1),
         metrics={"prewarm_policy": prewarm, "placement_policy": placement,
                  "migration_policy": migration, "warm_capacity": warm_capacity,
                  "peak_c": peak_c, "topology_factor": pl["topology_factor"],

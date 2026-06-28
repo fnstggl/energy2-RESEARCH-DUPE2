@@ -84,24 +84,42 @@ class PhaseResult:
 
 
 def compute_phase_serving(reqs, saved_tokens, *, model_cold_s=None, batching="balanced",
-                          prefill_s_per_token=PREFILL_S_PER_TOKEN, period_seconds=60.0) -> PhaseResult:
+                          prefill_s_per_token=PREFILL_S_PER_TOKEN, period_seconds=60.0,
+                          roofline_factors=None) -> PhaseResult:
     """Per-request prefill/decode service times from ``reqs`` (arrival, out_tok, in_tok) and the PR #106
     per-request ``saved_tokens`` (matched prefix tokens). KV reuse cuts PREFILL only; decode is the
     output-token term, untouched. Returns the combined ``service_s`` (for the cluster replay) plus the
     realized GPU-seconds and TTFT/decode diagnostics. Causal: ``saved_tokens[i]`` came from residency
-    state admitted by requests < i (PR #106)."""
+    state admitted by requests < i (PR #106).
+
+    ``roofline_factors`` (from ``roofline_actions.roofline_action_factors``) modulates the TOKEN-DRIVEN
+    compute per the chosen precision/spec/clock actions — ``prefill_factor`` scales the prompt-token
+    prefill term, ``decode_factor`` scales the output-token decode term. Both are exactly ``1.0`` at the
+    neutral default policies, so the per-request times are bit-for-bit unchanged. The fixed first-token
+    overhead (``TTFT_BASE_S``) and the model cold-start are NOT precision/clock sensitive, so the factor
+    is applied only to the token-driven part — the calibrated absolute level is preserved; roofline
+    supplies only the relative mechanism delta. Never a reward bonus."""
     res = PhaseResult()
     bf = BATCH_DECODE_FACTOR.get(batching, 1.0)
     sat = BATCH_SATURATION_SEQS.get(batching, 48)
+    rf = roofline_factors or {}
+    pf_factor = max(0.0, float(rf.get("prefill_factor", 1.0)))      # prefill TIME factor (latency)
+    dc_factor = max(0.0, float(rf.get("decode_factor", 1.0)))       # decode TIME factor (latency)
+    gs_factor = max(0.0, float(rf.get("gpu_seconds_factor", 1.0)))  # realized GPU-seconds (COMPUTE cost)
+    intf = max(0.0, float(rf.get("interference_factor", 1.0)))      # co-location foreground penalty (≥1)
     model_cold_s = model_cold_s or [0.0] * len(reqs)
-    decode_work_sum = 0.0
+    decode_work_sum = realized_neutral = 0.0
     for i, r in enumerate(reqs):
         out = int(r[1])
         prompt = int(r[2]) if len(r) > 2 else out
         saved = min(int(saved_tokens[i]) if i < len(saved_tokens) else 0, prompt)
         remaining = max(prompt - saved, 0)
-        prefill = TTFT_BASE_S + remaining * prefill_s_per_token + (model_cold_s[i] if i < len(model_cold_s) else 0.0)
-        decode = out * TPOT_S * bf
+        cold = model_cold_s[i] if i < len(model_cold_s) else 0.0
+        base_prefill = TTFT_BASE_S + remaining * prefill_s_per_token + cold   # neutral compute work
+        base_decode = out * TPOT_S * bf
+        # latency = time factor (precision/spec/clock) × co-location interference penalty (foreground).
+        prefill = (TTFT_BASE_S + remaining * prefill_s_per_token * pf_factor + cold) * intf
+        decode = base_decode * dc_factor * intf
         res.prefill_work_s.append(round(prefill, 6))
         res.decode_work_s.append(round(decode, 6))
         res.service_s.append(round(prefill + decode, 6))
@@ -114,7 +132,12 @@ def compute_phase_serving(reqs, saved_tokens, *, model_cold_s=None, batching="ba
         res.prefill_gpu_seconds += prefill
         res.decode_gpu_seconds += decode
         decode_work_sum += decode
-    res.realized_gpu_seconds = res.prefill_gpu_seconds + res.decode_gpu_seconds
+        realized_neutral += base_prefill + base_decode
+    # Realized GPU-seconds for BILLING uses the roofline gpu_seconds factor (COMPUTE cost): speculative
+    # decoding's extra draft+verify FLOPs are counted even when it cuts wall-clock, so spec is a LATENCY
+    # win, not automatically a COST win; precision (fewer bytes) lowers it. gs_factor == 1 at neutral →
+    # realized == the time-based work (bit-for-bit unchanged).
+    res.realized_gpu_seconds = realized_neutral * gs_factor * intf
     # Little's law occupancy: mean concurrent decode sequences = decode-work / period (capped → tail).
     res.active_decode_sequences_mean = decode_work_sum / max(period_seconds, 1e-9)
     # aggressive batching past saturation pays a tail penalty on decode (memory/KV pressure).
