@@ -1,0 +1,118 @@
+{
+  "eval_periods": 120,
+  "mpc_periods": 6,
+  "median_output": 45,
+  "median_prompt": 828,
+  "validation": {
+    "fifo": 98842.5,
+    "greedy": 94054.4,
+    "sla_aware": 100555.3,
+    "current_mpc_full": 183152.2
+  },
+  "headline": {
+    "current_mpc": 183152.2,
+    "best_baseline": "sla_aware",
+    "best_baseline_gpd": 100555.3,
+    "delta_pct": 82.14
+  },
+  "forecast_attribution": {
+    "method": "leave_one_out",
+    "contributions_pct": {
+      "arrival_rate": 0.3,
+      "output_length": 62.8,
+      "prompt_length": 24.7,
+      "interarrival_cv": 12.3,
+      "kv_reuse": 0.0,
+      "queue_pressure": 0.0,
+      "sla_pressure": 0.0,
+      "carbon": 0.0,
+      "weather": 0.0,
+      "congestion": 0.0,
+      "electricity_price": 0.0
+    },
+    "oracle_gp_per_dollar": 183152.2,
+    "raw_drops": {
+      "arrival_rate": 166.7,
+      "output_length": 37549.8,
+      "prompt_length": 14757.5,
+      "interarrival_cv": 7338.9
+    },
+    "absent": {
+      "kv_reuse": "planning uses synthetic UNIQUE prefixes (PR #112) \u2192 no KV-reuse prediction is consumed",
+      "queue_pressure": "emergent from arrival+service, not a planner input forecast",
+      "sla_pressure": "emergent from arrival+service+SLA, not a planner input forecast",
+      "carbon": "not wired into the MPC objective or world model",
+      "weather": "not wired into the MPC objective or world model",
+      "congestion": "no live network-congestion model in the serving replay (ABSENT since PR #98)"
+    }
+  },
+  "consumed_forecasts": [
+    "arrival_rate",
+    "output_length",
+    "prompt_length",
+    "interarrival_cv",
+    "electricity_price"
+  ],
+  "absent_forecasts": {
+    "kv_reuse": "planning uses synthetic UNIQUE prefixes (PR #112) \u2192 no KV-reuse prediction is consumed",
+    "queue_pressure": "emergent from arrival+service, not a planner input forecast",
+    "sla_pressure": "emergent from arrival+service+SLA, not a planner input forecast",
+    "carbon": "not wired into the MPC objective or world model",
+    "weather": "not wired into the MPC objective or world model",
+    "congestion": "no live network-congestion model in the serving replay (ABSENT since PR #98)"
+  },
+  "regret_decomposition": {
+    "methodology": "Current/Scenario/Oracle vary ONLY the planning workload \u2192 the Current\u2192Oracle gap is forecast quality by construction; search measured separately; world-model fidelity is NOT isolable in pure simulation (shared simulator) and needs real telemetry.",
+    "total_planner_regret_gpd": 24897.2,
+    "forecast_quality_pct": 100.0,
+    "search_pct": 0.0,
+    "objective_pct": 0.0,
+    "world_model_fidelity_pct": "UNMEASURABLE_IN_SIMULATION (needs real serving telemetry)",
+    "within_forecast": {
+      "workload_model_gain_gpd": 22321.1,
+      "residual_forecast_gap_gpd": 2576.1
+    }
+  },
+  "roadmap": [
+    {
+      "rank": 1,
+      "improvement": "output_length forecaster",
+      "estimated_impact_pct_of_forecast_regret": 62.8,
+      "expected_effort": "low",
+      "confidence": "medium (leave-one-out, bounded window)",
+      "evidence": "62.8% of the measured forecast attribution"
+    },
+    {
+      "rank": 2,
+      "improvement": "prompt_length forecaster",
+      "estimated_impact_pct_of_forecast_regret": 24.7,
+      "expected_effort": "medium",
+      "confidence": "medium (leave-one-out, bounded window)",
+      "evidence": "24.7% of the measured forecast attribution"
+    },
+    {
+      "rank": 3,
+      "improvement": "interarrival_cv forecaster",
+      "estimated_impact_pct_of_forecast_regret": 12.3,
+      "expected_effort": "medium",
+      "confidence": "medium (leave-one-out, bounded window)",
+      "evidence": "12.3% of the measured forecast attribution"
+    },
+    {
+      "rank": 4,
+      "improvement": "arrival_rate forecaster",
+      "estimated_impact_pct_of_forecast_regret": 0.3,
+      "expected_effort": "low",
+      "confidence": "medium (leave-one-out, bounded window)",
+      "evidence": "0.3% of the measured forecast attribution"
+    },
+    {
+      "rank": 5,
+      "improvement": "real serving telemetry (to attribute world-model fidelity)",
+      "estimated_impact_pct_of_forecast_regret": null,
+      "expected_effort": "high",
+      "confidence": "high (it is the only way to isolate simulator error)",
+      "evidence": "world-model fidelity is UNMEASURABLE in pure simulation"
+    }
+  ]
+}

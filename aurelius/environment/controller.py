@@ -148,6 +148,10 @@ class ModelPredictiveEconomicController:
     planning_scenarios: bool = False
     scenario_tail_weight: float = 0.25          # risk-averse penalty on the worst-scenario SLA violation
     planning_oracle_records: list | None = None  # ORACLE diagnostic: plan against the EXACT future workload
+    # online Decision Diagnostics (permanent, negligible overhead — exposes already-computed search values;
+    # no leave-one-out / oracle / extra solves online). The controller never produces an action without one.
+    emit_diagnostics: bool = True
+    _decision_count: int = 0
     world_state: object = None         # CanonicalWorldState — when set, the stateful actions
     #                                    (prewarm/placement/migration) are scored through the
     #                                    world_simulator on a READ-ONLY (mutate=False) candidate sim
@@ -370,11 +374,15 @@ class ModelPredictiveEconomicController:
         budget = min(int(self.search_budget), int(self.max_candidate_bundles))
         timed_out = [False]
 
+        scored_for_diag = []                       # (bundle, score) capture for ONLINE diagnostics (no resolves)
         def _score(b):
             if self.decision_timeout_s > 0 and (_time.monotonic() - t_start[0]) > self.decision_timeout_s:
                 timed_out[0] = True
                 return -1e18                       # freeze the search; keep best-so-far
-            return _eval(b)[0]
+            s = _eval(b)[0]
+            if self.emit_diagnostics and world is not None:
+                scored_for_diag.append((b, s))     # cheap: just remembers the runners-up the search scored
+            return s
 
         search_plan = None
         if self.candidates is not None:
@@ -406,6 +414,28 @@ class ModelPredictiveEconomicController:
             "cumulative_return": round(cumulative, 2), "rollout": win_steps,
             "search_plan": search_plan.to_dict() if search_plan is not None else None,
             "trajectory": traj.to_dict() if traj is not None else None} if world is not None else {}
+        # ONLINE Decision Diagnostics (permanent, negligible overhead): expose ONLY values the search
+        # already computed — no leave-one-out / oracle / extra solves (those are OFFLINE, in the benchmark
+        # script). Never changes which action is chosen.
+        if self.emit_diagnostics and world is not None:
+            try:
+                from .decision_diagnostics import explain_decision
+                expl = explain_decision(
+                    self._decision_count, ab, scored_for_diag, expected_gpd=exp_gpd,
+                    expected_sla=(win_steps[0]["risk_viol"] if win_steps else 0.0), expected_cost=0.0,
+                    expected_reward=score, forecast_confidence=confidence, n_evaluated=eval_count[0],
+                    planning_horizon=H, forecast_horizon=H, search_strategy=method,
+                    planning_latency_s=(_time.monotonic() - t_start[0]),
+                    forecast_snapshot={"arrival_rate": round(ar.mean, 3),
+                                       "output_token_mean": round(tm.mean, 1), "electricity_price": pr.value})
+                if win_steps:
+                    expl.reward_decomposition = {k: win_steps[0].get(k) for k in
+                        ("gp_per_dollar", "risk_viol", "warm_hold_cost", "migration_cost",
+                         "cold_start_events", "peak_c", "topology_factor") if k in win_steps[0]}
+                self.last_decision_diag["diagnostics"] = expl.to_dict()
+            except Exception:                      # diagnostics must NEVER break a decision
+                pass
+            self._decision_count += 1
         return Decision(act, exp_gpd, risk_gpd, score, False, confidence,
                         forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
                                   "routing_policy": routing}, bundle=ab)
