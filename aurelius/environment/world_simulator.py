@@ -475,6 +475,13 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         _advance(ws, peak_c=peak_c, warm_capacity=warm_capacity, prewarm_events=pw["prewarm_events"],
                  cold_started=cold_started, warm_hold_gpu_hours=warm_hold_gpu_hours, mg=mg,
                  prewarm=prewarm, dt_seconds=(dt_seconds if dt_seconds is not None else 3600.0))
+        # persist the electricity/power ledgers (DVFS energy economics) on the real timeline
+        if getattr(ws, "power_state", None) is not None:
+            ws.power_state.accumulate(power_w=rl_power_w, energy_j=outcome.energy_j,
+                                      price_per_kwh=outcome.electricity_price_per_kwh,
+                                      clock_state=getattr(bundle, "clock_policy", "base"))
+        if getattr(ws, "electricity_state", None) is not None:
+            ws.electricity_state.current_price = outcome.electricity_price_per_kwh
     return outcome
 
 

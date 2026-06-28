@@ -43,6 +43,35 @@ class ElectricityState:
 
 
 @dataclass
+class PowerState:
+    """Persistent power/energy ledger (clones with CanonicalWorldState). Formalises the per-period power/energy
+    the world simulator already computes (`PeriodOutcome.power_w` / `energy_j` from the DVFS roofline action):
+
+        clock_state → compute throughput factor → phase latency → watts → joules → kWh → × price → $.
+
+    The DVFS power curve (power_w = TDP·(0.4 + 0.6·clock^2.4)) is SIMULATOR_INFERENCE; cumulative energy is an
+    accumulation of the real per-period outcomes. Distinguishes the modelled lever (clock-locking, which shapes
+    memory-bound decode energy) from power-capping (NOT modelled — see ELECTRICITY_PRODUCTION_REALISM_AUDIT.md:
+    a cap below the decode draw never engages, so it would book phantom savings).
+    """
+    mean_power_w: float = 0.0            # last period's mean GPU power under the clock action
+    clock_state: str = "base"            # last applied clock policy (base/low/high)
+    cumulative_energy_kwh: float = 0.0   # serving energy accumulated across periods
+    cumulative_energy_cost: float = 0.0  # $ accumulated (energy_kwh × price)
+    lever: str = "clock_locking"         # the modelled DVFS lever (NOT power_cap — see audit)
+
+    def accumulate(self, *, power_w: float, energy_j: float, price_per_kwh: float, clock_state: str) -> None:
+        kwh = max(0.0, energy_j) / 3.6e6
+        self.mean_power_w = round(power_w, 1)
+        self.clock_state = clock_state
+        self.cumulative_energy_kwh = round(self.cumulative_energy_kwh + kwh, 6)
+        self.cumulative_energy_cost = round(self.cumulative_energy_cost + kwh * price_per_kwh, 6)
+
+    def to_dict(self) -> dict:
+        return {k: (round(v, 6) if isinstance(v, float) else v) for k, v in self.__dict__.items()}
+
+
+@dataclass
 class PriceProfile:
     """A real (or flat) diurnal price path + its distribution stats, aligned to the trace's cycle position."""
     market: str

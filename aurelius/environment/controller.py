@@ -448,9 +448,16 @@ class ModelPredictiveEconomicController:
             except Exception:                      # diagnostics must NEVER break a decision
                 pass
             self._decision_count += 1
+        # Phase 8 — electricity visibility: every decision records the price it saw, the clock it picked, and
+        # whether it was price-aware (so attribution can see whether electricity drove the clock choice).
+        electricity_diag = {"forecast_price_per_kwh": round(pr.value, 6) if pr else None,
+                            "selected_clock": ab.clock_policy, "price_aware": self.electricity_price_aware,
+                            "why": ("price-aware: clock chosen against the forecast price path"
+                                    if self.electricity_price_aware else
+                                    "not price-aware: clock chosen on roofline/SLA only (constant price)")}
         return Decision(act, exp_gpd, risk_gpd, score, False, confidence,
                         forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
-                                  "routing_policy": routing}, bundle=ab)
+                                  "routing_policy": routing, "electricity": electricity_diag}, bundle=ab)
 
     def understood_but_unavailable(self) -> list:
         """Action surfaces the controller REPRESENTS but does not optimize today
