@@ -76,6 +76,7 @@ class PeriodOutcome:
     wasted_prewarm_hours: float = 0.0
     migrations_started: int = 0
     queue_delay_p95: float = 0.0
+    queue_delay_p99: float = 0.0
     metrics: dict = field(default_factory=dict)
 
     @property
@@ -319,6 +320,7 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     # queue-delay p95 (jobs carry start_s set by the replay) — the world path's latency signal.
     waits = sorted(max(0.0, j.start_s - j.arrival_s) for j in jobs if j.start_s >= 0)
     q_p95 = waits[min(len(waits) - 1, int(len(waits) * 0.95))] if waits else 0.0
+    q_p99 = waits[min(len(waits) - 1, int(len(waits) * 0.99))] if waits else 0.0
 
     # 7) cost = serving operator cost + warm-hold + migration.
     peak_c = kpi.c_max
@@ -355,7 +357,7 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
         topology_factor=pl["topology_factor"], locality_score=pl["locality_score"],
         rack_spread=pl["rack_spread"], cold_start_events=cold_started,
         wasted_prewarm_hours=round(warm_hold_gpu_hours, 5), migrations_started=mg["n_migrations"],
-        queue_delay_p95=round(q_p95, 4),
+        queue_delay_p95=round(q_p95, 4), queue_delay_p99=round(q_p99, 4),
         metrics={"prewarm_policy": prewarm, "placement_policy": placement,
                  "migration_policy": migration, "warm_capacity": warm_capacity,
                  "peak_c": peak_c, "topology_factor": pl["topology_factor"],
