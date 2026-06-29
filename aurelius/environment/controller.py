@@ -254,7 +254,8 @@ class ModelPredictiveEconomicController:
                           "risk_viol": round(risk_viol, 4), "warm_hold_cost": round(out.warm_hold_cost, 3),
                           "migration_cost": round(out.migration_cost, 3),
                           "cold_start_events": out.cold_start_events, "peak_c": out.kpi.c_max,
-                          "topology_factor": out.topology_factor})
+                          "topology_factor": out.topology_factor,
+                          "sla_slack_ms": out.sla_slack_ms})   # N2: SLA headroom the chosen clock leaves (diagnostic)
         return cumulative, steps
 
     def _rollout_ensemble(self, clone, bundle_k, k, ar, tm, tp, cv, be, win, fc_k, rkw, common0):
@@ -443,7 +444,7 @@ class ModelPredictiveEconomicController:
                 if win_steps:
                     expl.reward_decomposition = {k: win_steps[0].get(k) for k in
                         ("gp_per_dollar", "risk_viol", "warm_hold_cost", "migration_cost",
-                         "cold_start_events", "peak_c", "topology_factor") if k in win_steps[0]}
+                         "cold_start_events", "peak_c", "topology_factor", "sla_slack_ms") if k in win_steps[0]}
                 self.last_decision_diag["diagnostics"] = expl.to_dict()
             except Exception:                      # diagnostics must NEVER break a decision
                 pass
@@ -452,6 +453,11 @@ class ModelPredictiveEconomicController:
         # whether it was price-aware (so attribution can see whether electricity drove the clock choice).
         electricity_diag = {"forecast_price_per_kwh": round(pr.value, 6) if pr else None,
                             "selected_clock": ab.clock_policy, "price_aware": self.electricity_price_aware,
+                            # N2 SLA-slack arbitrage diagnostic: how much SLA headroom the chosen clock leaves
+                            # (online serving — never time-shifted). Deferrable shifting is a SEPARATE ledger.
+                            "sla_slack_ms": win_steps[0].get("sla_slack_ms") if win_steps else None,
+                            "serving_time_shifted": False,   # N2 invariant: online serving is never delayed
+                            "deferrable_shifted": False,     # the online controller runs no deferrable work
                             "why": ("price-aware: clock chosen against the forecast price path"
                                     if self.electricity_price_aware else
                                     "not price-aware: clock chosen on roofline/SLA only (constant price)")}

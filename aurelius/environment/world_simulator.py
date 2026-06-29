@@ -99,6 +99,28 @@ class PeriodOutcome:
     def sla_violation_rate(self) -> float:
         return (self.kpi.sla_violations + self.quality_sla_risk * self.kpi.n_total) / max(self.kpi.n_total, 1)
 
+    # N2 SLA-slack (latency-class completion tail vs the SLA target; from the serving replay). Diagnostic:
+    # sla_slack_s > 0 ⇒ headroom an N2 downclock could spend; ≤ 0 ⇒ tail at/over target (no slack to spend).
+    @property
+    def sla_target_s(self) -> float:
+        return float(getattr(self.kpi, "sla_target_s", 0.0))
+
+    @property
+    def predicted_tail_latency_s(self) -> float:
+        return float(getattr(self.kpi, "completion_p95_s", 0.0))
+
+    @property
+    def sla_slack_s(self) -> float:
+        return float(getattr(self.kpi, "sla_slack_s", 0.0))
+
+    @property
+    def sla_slack_ms(self) -> float:
+        return round(1000.0 * float(getattr(self.kpi, "sla_slack_s", 0.0)), 2)
+
+    @property
+    def sla_slack_pct(self) -> float:
+        return float(getattr(self.kpi, "sla_slack_pct", 0.0))
+
 
 # ---------------------------------------------------------------------------
 # lifecycle
