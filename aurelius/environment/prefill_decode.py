@@ -35,6 +35,54 @@ HYBRID_IDLE_FLOOR_FRAC = 0.5        # ≥ half of provisioned GPU-seconds is bil
 BATCH_DECODE_FACTOR = {"conservative": 1.0, "balanced": 0.92, "aggressive": 0.82}
 BATCH_SATURATION_SEQS = {"conservative": 64, "balanced": 48, "aggressive": 32}
 
+# --- timing model selector (V2→V1 promotion) --------------------------------
+# ``legacy_scalar`` keeps the existing fleet-wide constants (BENCHMARK_DERIVED, L40S-class — see
+# ROOFLINE_REUSE_DECISION.md); it is the DEFAULT so every existing benchmark/caller is bit-for-bit
+# unchanged. ``roofline`` resolves the per-request BASE prefill/decode rate from the GPU type + model
+# architecture using the on-repo ported roofline (``roofline_external``), so an H100 is no longer priced
+# with an L40S-class decode constant. The relative roofline ACTION factors (precision/spec/clock, via
+# ``roofline_actions``) compose unchanged on top of whichever base is selected.
+TIMING_MODELS = ("legacy_scalar", "roofline")
+DEFAULT_TIMING_MODEL = "legacy_scalar"          # default keeps public benchmark semantics
+DEFAULT_TIMING_GPU = "H100"                     # conservative fleet default when a caller doesn't resolve one
+DEFAULT_TIMING_MODEL_ARCH = "llama-8b-gqa"
+# provenance for the resolved rates (consumed by diagnostics / docs; never touches reward).
+TIMING_PROVENANCE = {
+    "legacy_scalar": "BENCHMARK_DERIVED (fleet-wide scalar; L40S-class decode constant)",
+    "roofline": "BENCHMARK_DERIVED (per-(GPU,model) FLOP/bandwidth roofline; public specs + arch)",
+}
+
+
+def env_timing_model(default: str = DEFAULT_TIMING_MODEL) -> str:
+    """Optional env selector ``AURELIUS_TIMING_MODEL`` (``legacy_scalar``/``roofline``). Callers that do NOT
+    consult this stay on the default — benchmarks are never silently changed by the environment."""
+    import os
+    m = os.environ.get("AURELIUS_TIMING_MODEL", "").strip().lower()
+    return m if m in TIMING_MODELS else default
+
+
+def resolve_serving_rates(gpu_type: str, model: str, prompt_tokens: int, output_tokens: int) -> tuple:
+    """Roofline-resolved ``(prefill_s_per_token, decode_s_per_token)`` for one request — GPU/model aware.
+
+    Reuses the ported ``roofline_external`` formulas (InferSim/llm-analysis/LLM-Viewer). Lazy import avoids
+    the ``prefill_decode ↔ roofline_external`` cycle (``roofline_external`` imports the scalar constants from
+    this module). Conservative fallbacks: an unknown ``gpu_type``/``model`` resolves to the documented
+    defaults rather than guessing. Provenance: BENCHMARK_DERIVED (public GPU specs + public model arch)."""
+    from .roofline_external import (
+        ARCHS,
+        DEFAULT_ARCH,
+        DEFAULT_GPU,
+        GPU_SPECS,
+        decode_estimate,
+        prefill_estimate,
+    )
+    gpu = GPU_SPECS.get(gpu_type, GPU_SPECS[DEFAULT_GPU])
+    arch = ARCHS.get(model, ARCHS[DEFAULT_ARCH])
+    prefill_rate = prefill_estimate(arch, gpu, prompt_tokens=max(1, int(prompt_tokens))).seconds_per_token
+    ctx = max(1, int(prompt_tokens) + int(output_tokens) // 2)
+    decode_rate = decode_estimate(arch, gpu, context_tokens=ctx, batch=1).seconds_per_token
+    return prefill_rate, decode_rate
+
 
 @dataclass
 class PhaseResult:
@@ -52,6 +100,8 @@ class PhaseResult:
     prefill_gpu_seconds: float = 0.0
     decode_gpu_seconds: float = 0.0
     active_decode_sequences_mean: float = 0.0
+    timing_model: str = DEFAULT_TIMING_MODEL
+    timing_provenance: str = ""
 
     def _pct(self, xs, q):
         if not xs:
@@ -80,12 +130,13 @@ class PhaseResult:
                 "completion_p95": round(self._pct(self.completion_s, 0.95), 4),
                 "completion_p99": round(self._pct(self.completion_s, 0.99), 4),
                 "active_decode_sequences_mean": round(self.active_decode_sequences_mean, 3),
-                "phase_bottleneck": bottleneck}
+                "phase_bottleneck": bottleneck, "timing_model": self.timing_model}
 
 
 def compute_phase_serving(reqs, saved_tokens, *, model_cold_s=None, batching="balanced",
                           prefill_s_per_token=PREFILL_S_PER_TOKEN, period_seconds=60.0,
-                          roofline_factors=None) -> PhaseResult:
+                          roofline_factors=None, timing_model=DEFAULT_TIMING_MODEL,
+                          gpu_type=DEFAULT_TIMING_GPU, model=DEFAULT_TIMING_MODEL_ARCH) -> PhaseResult:
     """Per-request prefill/decode service times from ``reqs`` (arrival, out_tok, in_tok) and the PR #106
     per-request ``saved_tokens`` (matched prefix tokens). KV reuse cuts PREFILL only; decode is the
     output-token term, untouched. Returns the combined ``service_s`` (for the cluster replay) plus the
@@ -98,8 +149,19 @@ def compute_phase_serving(reqs, saved_tokens, *, model_cold_s=None, batching="ba
     neutral default policies, so the per-request times are bit-for-bit unchanged. The fixed first-token
     overhead (``TTFT_BASE_S``) and the model cold-start are NOT precision/clock sensitive, so the factor
     is applied only to the token-driven part — the calibrated absolute level is preserved; roofline
-    supplies only the relative mechanism delta. Never a reward bonus."""
+    supplies only the relative mechanism delta. Never a reward bonus.
+
+    ``timing_model`` selects the per-request BASE rate (V2→V1 promotion): ``legacy_scalar`` (default) uses the
+    fleet-wide ``prefill_s_per_token`` / ``TPOT_S`` constants and is BIT-FOR-BIT the prior behaviour;
+    ``roofline`` resolves the base rate per (``gpu_type``, ``model``, prompt, context) from
+    ``resolve_serving_rates`` so an H100 is not priced with an L40S-class decode constant. The
+    ``roofline_factors`` (precision/spec/clock) compose unchanged on top of either base. Still never a reward
+    bonus — only TTFT / service time / GPU-seconds / SLA / cost move."""
+    if timing_model not in TIMING_MODELS:
+        raise ValueError(f"unknown timing_model {timing_model!r}; expected one of {TIMING_MODELS}")
     res = PhaseResult()
+    res.timing_model = timing_model
+    res.timing_provenance = TIMING_PROVENANCE[timing_model]
     bf = BATCH_DECODE_FACTOR.get(batching, 1.0)
     sat = BATCH_SATURATION_SEQS.get(batching, 48)
     rf = roofline_factors or {}
@@ -107,6 +169,7 @@ def compute_phase_serving(reqs, saved_tokens, *, model_cold_s=None, batching="ba
     dc_factor = max(0.0, float(rf.get("decode_factor", 1.0)))       # decode TIME factor (latency)
     gs_factor = max(0.0, float(rf.get("gpu_seconds_factor", 1.0)))  # realized GPU-seconds (COMPUTE cost)
     intf = max(0.0, float(rf.get("interference_factor", 1.0)))      # co-location foreground penalty (≥1)
+    use_roofline = timing_model == "roofline"
     model_cold_s = model_cold_s or [0.0] * len(reqs)
     decode_work_sum = realized_neutral = 0.0
     for i, r in enumerate(reqs):
@@ -115,10 +178,15 @@ def compute_phase_serving(reqs, saved_tokens, *, model_cold_s=None, batching="ba
         saved = min(int(saved_tokens[i]) if i < len(saved_tokens) else 0, prompt)
         remaining = max(prompt - saved, 0)
         cold = model_cold_s[i] if i < len(model_cold_s) else 0.0
-        base_prefill = TTFT_BASE_S + remaining * prefill_s_per_token + cold   # neutral compute work
-        base_decode = out * TPOT_S * bf
+        # BASE per-token rates: legacy fleet-wide scalar (default, exact) or GPU/model-resolved roofline.
+        if use_roofline:
+            pf_rate, dc_rate = resolve_serving_rates(gpu_type, model, prompt, out)
+        else:
+            pf_rate, dc_rate = prefill_s_per_token, TPOT_S
+        base_prefill = TTFT_BASE_S + remaining * pf_rate + cold   # neutral compute work
+        base_decode = out * dc_rate * bf
         # latency = time factor (precision/spec/clock) × co-location interference penalty (foreground).
-        prefill = (TTFT_BASE_S + remaining * prefill_s_per_token * pf_factor + cold) * intf
+        prefill = (TTFT_BASE_S + remaining * pf_rate * pf_factor + cold) * intf
         decode = base_decode * dc_factor * intf
         res.prefill_work_s.append(round(prefill, 6))
         res.decode_work_s.append(round(decode, 6))
@@ -172,4 +240,6 @@ def effective_gpu_hours(cost_mode, *, provisioned_gpu_seconds, realized_gpu_seco
 
 
 __all__ = ["PhaseResult", "compute_phase_serving", "effective_gpu_hours", "COST_MODES",
-           "TTFT_BASE_S", "TPOT_S", "PREFILL_S_PER_TOKEN", "GPU_HOUR_USD", "HYBRID_IDLE_FLOOR_FRAC"]
+           "TTFT_BASE_S", "TPOT_S", "PREFILL_S_PER_TOKEN", "GPU_HOUR_USD", "HYBRID_IDLE_FLOOR_FRAC",
+           "TIMING_MODELS", "DEFAULT_TIMING_MODEL", "DEFAULT_TIMING_GPU", "DEFAULT_TIMING_MODEL_ARCH",
+           "TIMING_PROVENANCE", "env_timing_model", "resolve_serving_rates"]

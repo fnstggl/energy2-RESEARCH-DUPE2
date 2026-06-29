@@ -280,6 +280,19 @@ def _migration_plan(ws: CanonicalWorldState, policy: str, *, placement: dict) ->
 # the period simulation
 # ---------------------------------------------------------------------------
 
+def _dominant_gpu_type(ws) -> str | None:
+    """Most common GPU type across the world's servers — the conservative default for roofline timing
+    when a caller doesn't pin one. Returns None if no server GPU types are available (caller falls back to
+    the documented default). Unknown v2026 GPU types resolve to the roofline default inside
+    ``resolve_serving_rates`` (BENCHMARK_DERIVED, explicit)."""
+    from collections import Counter
+    servers = getattr(ws, "servers", None)
+    if not servers:
+        return None
+    counts = Counter(getattr(s, "gpu_type", None) for s in servers.values() if getattr(s, "gpu_type", None))
+    return counts.most_common(1)[0][0] if counts else None
+
+
 def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict, *,
                     sla_s: float, tick_seconds: float, base_service_factor: float = 1.0,
                     replay_kwargs: dict | None = None, cost_model=None, fleet_state=None,
@@ -366,11 +379,24 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
     phase = None
     cost_mode = (kv_state or {}).get("cost_mode")
     if cost_mode and per_req_factor is not None:
-        from .prefill_decode import compute_phase_serving
+        from .prefill_decode import (
+            DEFAULT_TIMING_GPU,
+            DEFAULT_TIMING_MODEL_ARCH,
+            compute_phase_serving,
+            env_timing_model,
+        )
+        # V2→V1 promotion: timing model is selectable via kv_state (config) or the AURELIUS_TIMING_MODEL
+        # env (default legacy_scalar → unchanged). In roofline mode the BASE rate is resolved per
+        # (gpu_type, model): gpu_type defaults to the fleet's DOMINANT replica GPU (conservative resolver)
+        # so an H100 fleet is no longer priced with an L40S-class decode constant.
+        timing_model = (kv_state or {}).get("timing_model") or env_timing_model()
+        gpu_type = (kv_state or {}).get("gpu_type") or _dominant_gpu_type(ws) or DEFAULT_TIMING_GPU
+        model = ((kv_state or {}).get("model_ids") or (DEFAULT_TIMING_MODEL_ARCH,))[0]
         phase = compute_phase_serving(
             recs_sorted, rr.saved_tokens, model_cold_s=rr.model_switch_s,
             batching=str(getattr(bundle, "batching_policy", "balanced")),
-            period_seconds=max(period_hours * 3600.0, 1.0), roofline_factors=rl_mod)
+            period_seconds=max(period_hours * 3600.0, 1.0), roofline_factors=rl_mod,
+            timing_model=timing_model, gpu_type=gpu_type, model=model)
         if res_diag is not None:
             res_diag = {**res_diag, **phase.summary()}
 
