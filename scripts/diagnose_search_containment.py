@@ -42,7 +42,7 @@ def _clock_candidates():
     return [ActionBundle(clock_policy=c) for c in ("base", "low", "high")]
 
 
-def run(market, window, decisions, req_cap):
+def run(market, window, decisions, req_cap, modes):
     from aurelius.environment.controller import SLA_AWARE_FALLBACK, run_period_episode
     from aurelius.environment.training import _controller as build_controller
     from aurelius.environment.training import make_world_state
@@ -103,7 +103,7 @@ def run(market, window, decisions, req_cap):
                                   **common, **kv)
     baseline = {"mode": "sla_aware_baseline", "gp_per_dollar": round(base_rep.goodput_per_dollar, 1),
                 "sla_violation_rate": round(base_rep.sla_violation_rate, 5)}
-    arms = [episode(m) for m in ("clock_only", "grid_multi_knob", "adaptive")]
+    arms = [episode(m) for m in modes]
     best_gp = max(a["gp_per_dollar"] for a in arms)
     for a in arms:
         a["search_regret_gp$"] = round(best_gp - a["gp_per_dollar"], 1)
@@ -122,8 +122,11 @@ def main() -> None:
     ap.add_argument("--window", default="expensive")
     ap.add_argument("--decisions", type=int, default=2)
     ap.add_argument("--req-cap", type=int, default=80)
+    ap.add_argument("--modes", default="clock_only,grid_multi_knob,adaptive",
+                    help="subset of clock_only,grid_multi_knob,adaptive (adaptive is heavy at hourly cadence)")
     args = ap.parse_args()
-    res = run(args.market, args.window, args.decisions, args.req_cap)
+    modes = [m for m in args.modes.split(",") if m in ("clock_only", "grid_multi_knob", "adaptive")]
+    res = run(args.market, args.window, args.decisions, args.req_cap, modes)
     os.makedirs(_OUT, exist_ok=True)
     with open(_ARTIFACT, "w") as f:
         json.dump(res, f, indent=2)
