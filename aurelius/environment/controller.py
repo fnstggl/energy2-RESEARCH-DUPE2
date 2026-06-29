@@ -709,13 +709,17 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
             # this runs AFTER the period is simulated, so error is never computed from the future. No-op
             # unless a ForecastState is attached. Belief-vs-realized only; never a reward term.
             if forecast_state is not None and recs:
+                # Record realized ONLY for the variables whose unit is unambiguously comparable to the belief:
+                # output-token mean/p95 (both are token counts of the same period's requests). Arrival rate is
+                # NOT recorded here because the backtest caps requests/period (the realized count is the capped
+                # count, not the true rate) and electricity_price is arm-dependent (flat vs forecast) — recording
+                # either would fabricate a misleading "forecast error". Output length is the dominant regret
+                # driver (PR #118), so it is the meaningful signal anyway.
                 _toks = sorted(int(r[1]) for r in recs)
                 _p95 = _toks[min(len(_toks) - 1, int(len(_toks) * 0.95))] if _toks else 0.0
                 forecast_state.record_realized(p, {
-                    "arrival_rate": len(recs) / max(period_seconds, 1e-9),
                     "output_token_mean": (sum(_toks) / len(_toks)) if _toks else 0.0,
-                    "output_token_p95": float(_p95),
-                    "electricity_price": oc.electricity_price_per_kwh}, at_period=p)
+                    "output_token_p95": float(_p95)}, at_period=p)
             tot_cost += oc.operator_cost
             cold_starts += oc.cold_start_events
             mig_cost += oc.migration_cost
