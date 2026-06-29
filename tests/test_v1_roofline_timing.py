@@ -25,15 +25,21 @@ def _recs(n=8, out=256, prompt=512):
     return [(float(i), out, prompt) for i in range(n)]
 
 
-# --- legacy preserved exactly ------------------------------------------------
-def test_legacy_scalar_is_default_and_bit_for_bit():
+# --- roofline is now the default; legacy is explicit-only --------------------
+def test_default_is_roofline_now():
+    # production-default flip: a caller with no timing_model now gets ROOFLINE (was legacy_scalar pre-PR).
+    default = compute_phase_serving(_recs(), [0] * 8)
+    assert default.summary()["timing_model"] == "roofline"
+
+
+def test_explicit_legacy_is_bit_for_bit_scalar():
+    # legacy remains available as an explicit regression mode and reproduces the old scalar EXACTLY.
     recs = _recs()
-    default = compute_phase_serving(recs, [0] * 8)
-    explicit = compute_phase_serving(recs, [0] * 8, timing_model="legacy_scalar")
-    assert default.summary() == explicit.summary()
-    assert default.summary()["timing_model"] == "legacy_scalar"
-    # exact scalar formula (balanced batch factor 0.92)
-    assert abs(default.decode_work_s[0] - 256 * TPOT_S * 0.92) < 1e-9
+    legacy = compute_phase_serving(recs, [0] * 8, timing_model="legacy_scalar")
+    assert legacy.summary()["timing_model"] == "legacy_scalar"
+    assert abs(legacy.decode_work_s[0] - 256 * TPOT_S * 0.92) < 1e-9          # exact scalar formula
+    # and it differs from the new default (roofline on H100 prices decode lower)
+    assert compute_phase_serving(recs, [0] * 8).decode_work_s[0] != legacy.decode_work_s[0]
 
 
 def test_unknown_timing_model_raises():
@@ -56,7 +62,7 @@ def test_roofline_h100_decode_faster_than_l40s_same_request():
 def test_roofline_corrects_l40s_class_scalar_on_h100():
     # the headline: the legacy scalar (~L40S-class) overstates H100 decode; roofline prices it lower.
     recs = _recs()
-    legacy = compute_phase_serving(recs, [0] * 8)
+    legacy = compute_phase_serving(recs, [0] * 8, timing_model="legacy_scalar")
     h100 = compute_phase_serving(recs, [0] * 8, timing_model="roofline", gpu_type="H100")
     l40s = compute_phase_serving(recs, [0] * 8, timing_model="roofline", gpu_type="L40S")
     assert h100.decode_work_s[0] < legacy.decode_work_s[0]              # H100 cheaper than the scalar
@@ -92,11 +98,11 @@ def test_env_timing_model_opt_in_only():
     saved = os.environ.get("AURELIUS_TIMING_MODEL")
     try:
         os.environ.pop("AURELIUS_TIMING_MODEL", None)
-        assert env_timing_model() == "legacy_scalar"            # default when unset
-        os.environ["AURELIUS_TIMING_MODEL"] = "roofline"
-        assert env_timing_model() == "roofline"
+        assert env_timing_model() == "roofline"                 # default is now roofline (production path)
+        os.environ["AURELIUS_TIMING_MODEL"] = "legacy_scalar"
+        assert env_timing_model() == "legacy_scalar"            # explicit legacy reproduces old benchmarks
         os.environ["AURELIUS_TIMING_MODEL"] = "garbage"
-        assert env_timing_model() == "legacy_scalar"            # invalid -> safe default
+        assert env_timing_model() == "roofline"                 # invalid -> safe production default
     finally:
         if saved is None:
             os.environ.pop("AURELIUS_TIMING_MODEL", None)
@@ -124,13 +130,14 @@ def _run(kv_extra, *, mutate=False, gpu_type=None):
     return ws, out
 
 
-def test_simulate_period_legacy_matches_no_flag_benchmark_stability():
-    # a caller that does NOT set timing_model must be identical to explicit legacy_scalar (no silent change).
+def test_simulate_period_default_is_roofline_legacy_is_explicit():
+    # the canonical path now defaults to ROOFLINE; a no-flag run equals explicit roofline, and the explicit
+    # LEGACY run differs (the intentional production-physics correction, documented).
     _, base = _run({})
+    _, roof = _run({"timing_model": "roofline"})
     _, legacy = _run({"timing_model": "legacy_scalar"})
-    assert base.goodput_per_dollar == legacy.goodput_per_dollar
-    assert base.kpi.sla_violations == legacy.kpi.sla_violations
-    assert base.operator_cost == legacy.operator_cost
+    assert base.goodput_per_dollar == roof.goodput_per_dollar          # default == roofline
+    assert base.goodput_per_dollar != legacy.goodput_per_dollar        # default != legacy (corrected physics)
 
 
 def test_simulate_period_roofline_changes_service_through_physical_channel():
