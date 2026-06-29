@@ -1,0 +1,2072 @@
+{
+  "cells": {
+    "pjm|volatile|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 370365.0,
+        "sla_violation_rate": 0.175,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03116,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 0,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": null,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|current_main_all_knobs_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 15.2,
+      "result": {
+        "arm": "current_main_all_knobs_flat_price",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 377339.8,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -13733.5,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|all_knobs_real_price_no_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 15.0,
+      "result": {
+        "arm": "all_knobs_real_price_no_n2",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 355632.5,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03116,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -13733.5,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|all_knobs_real_price_n2_dvfs": {
+      "status": "COMPLETED",
+      "runtime_s": 15.1,
+      "result": {
+        "arm": "all_knobs_real_price_n2_dvfs",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 361416.9,
+        "sla_violation_rate": 0.3875,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.094,
+        "operator_cost": 0.03065,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 3,
+          "n_decisions": 3,
+          "downclock_fraction": 1.0,
+          "mean_sla_slack_ms": -13744.0,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|all_knobs_real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 15.1,
+      "result": {
+        "arm": "all_knobs_real_price_deferrable_only",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 355632.5,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03116,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -13733.5,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 1.02496,
+          "asap_cost": 1.02496,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|all_knobs_real_price_n2_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 15.5,
+      "result": {
+        "arm": "all_knobs_real_price_n2_plus_deferrable",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 361416.9,
+        "sla_violation_rate": 0.3875,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.094,
+        "operator_cost": 0.03065,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 3,
+          "n_decisions": 3,
+          "downclock_fraction": 1.0,
+          "mean_sla_slack_ms": -13744.0,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 1.02496,
+          "asap_cost": 1.02496,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 360148.0,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0652,
+        "operator_cost": 0.03077,
+        "clock_mix": {
+          "low": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 2,
+          "n_decisions": 3,
+          "downclock_fraction": 0.667,
+          "mean_sla_slack_ms": -19756.5,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|scenario_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 43.3,
+      "result": {
+        "arm": "scenario_forecast_all_knobs",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 358474.9,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.1043,
+        "operator_cost": 0.03091,
+        "clock_mix": {
+          "low": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 665.4,
+        "avg_price_paid": 0.13328,
+        "n2": {
+          "downclock_decisions": 2,
+          "n_decisions": 3,
+          "downclock_fraction": 0.667,
+          "mean_sla_slack_ms": -13731.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 336410.4,
+        "sla_violation_rate": 0.275,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03077,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 0,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": null,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|current_main_all_knobs_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "current_main_all_knobs_flat_price",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 344725.8,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14499.6,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|all_knobs_real_price_no_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 11.0,
+      "result": {
+        "arm": "all_knobs_real_price_no_n2",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 328114.4,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.03092,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14499.6,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|all_knobs_real_price_n2_dvfs": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "all_knobs_real_price_n2_dvfs",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 332973.6,
+        "sla_violation_rate": 0.52917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0989,
+        "operator_cost": 0.03034,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 3,
+          "n_decisions": 3,
+          "downclock_fraction": 1.0,
+          "mean_sla_slack_ms": -14497.3,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|all_knobs_real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 10.7,
+      "result": {
+        "arm": "all_knobs_real_price_deferrable_only",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 328114.4,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.03092,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14499.6,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.0,
+          "asap_cost": 0.60468,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|all_knobs_real_price_n2_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 10.7,
+      "result": {
+        "arm": "all_knobs_real_price_n2_plus_deferrable",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 332973.6,
+        "sla_violation_rate": 0.52917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0989,
+        "operator_cost": 0.03034,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 3,
+          "n_decisions": 3,
+          "downclock_fraction": 1.0,
+          "mean_sla_slack_ms": -14497.3,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.0,
+          "asap_cost": 0.60468,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 333075.7,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0642,
+        "operator_cost": 0.03046,
+        "clock_mix": {
+          "base": 1,
+          "low": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 2,
+          "n_decisions": 3,
+          "downclock_fraction": 0.667,
+          "mean_sla_slack_ms": -22396.6,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|scenario_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 30.4,
+      "result": {
+        "arm": "scenario_forecast_all_knobs",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 324021.5,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.1339,
+        "operator_cost": 0.03131,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.11389,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14497.5,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "ercot|volatile|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 383468.9,
+        "sla_violation_rate": 0.225,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 0,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": null,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|current_main_all_knobs_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 9.8,
+      "result": {
+        "arm": "current_main_all_knobs_flat_price",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 393005.5,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|all_knobs_real_price_no_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 9.7,
+      "result": {
+        "arm": "all_knobs_real_price_no_n2",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|all_knobs_real_price_n2_dvfs": {
+      "status": "COMPLETED",
+      "runtime_s": 9.5,
+      "result": {
+        "arm": "all_knobs_real_price_n2_dvfs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|all_knobs_real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 9.5,
+      "result": {
+        "arm": "all_knobs_real_price_deferrable_only",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.34189,
+          "asap_cost": 0.34189,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|all_knobs_real_price_n2_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 9.5,
+      "result": {
+        "arm": "all_knobs_real_price_n2_plus_deferrable",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.34189,
+          "asap_cost": 0.34189,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.3,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 393055.7,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.1097,
+        "operator_cost": 0.02957,
+        "clock_mix": {
+          "low": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 665.4,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 2,
+          "n_decisions": 3,
+          "downclock_fraction": 0.667,
+          "mean_sla_slack_ms": -21356.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|scenario_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 26.0,
+      "result": {
+        "arm": "scenario_forecast_all_knobs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 388779.0,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.1358,
+        "operator_cost": 0.02989,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.05568,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14605.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 394097.5,
+        "sla_violation_rate": 0.20417,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02953,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 0,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": null,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|current_main_all_knobs_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 7.2,
+      "result": {
+        "arm": "current_main_all_knobs_flat_price",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 377074.6,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14999.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|all_knobs_real_price_no_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 6.9,
+      "result": {
+        "arm": "all_knobs_real_price_no_n2",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 374565.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14999.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|all_knobs_real_price_n2_dvfs": {
+      "status": "COMPLETED",
+      "runtime_s": 6.9,
+      "result": {
+        "arm": "all_knobs_real_price_n2_dvfs",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 375745.4,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02953,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -15175.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|all_knobs_real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 7.0,
+      "result": {
+        "arm": "all_knobs_real_price_deferrable_only",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 374565.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02963,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14999.9,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.0,
+          "asap_cost": 0.25594,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|all_knobs_real_price_n2_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 7.0,
+      "result": {
+        "arm": "all_knobs_real_price_n2_plus_deferrable",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 375745.4,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02953,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -15175.9,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.0,
+          "asap_cost": 0.25594,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.4,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 383266.1,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0809,
+        "operator_cost": 0.02953,
+        "clock_mix": {
+          "base": 1,
+          "high": 1,
+          "low": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 715.9,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 1,
+          "n_decisions": 3,
+          "downclock_fraction": 0.333,
+          "mean_sla_slack_ms": -23455.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|scenario_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 19.3,
+      "result": {
+        "arm": "scenario_forecast_all_knobs",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 381092.4,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0954,
+        "operator_cost": 0.0297,
+        "clock_mix": {
+          "base": 1,
+          "high": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.05065,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -15022.5,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "caiso|volatile|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 364862.1,
+        "sla_violation_rate": 0.22917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 0,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": null,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|current_main_all_knobs_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 10.8,
+      "result": {
+        "arm": "current_main_all_knobs_flat_price",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 345643.2,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02943,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14576.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|all_knobs_real_price_no_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "all_knobs_real_price_no_n2",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14576.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|all_knobs_real_price_n2_dvfs": {
+      "status": "COMPLETED",
+      "runtime_s": 10.7,
+      "result": {
+        "arm": "all_knobs_real_price_n2_dvfs",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14576.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|all_knobs_real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 10.8,
+      "result": {
+        "arm": "all_knobs_real_price_deferrable_only",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14576.9,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.17739,
+          "asap_cost": 0.17739,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|all_knobs_real_price_n2_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "all_knobs_real_price_n2_plus_deferrable",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348558.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0471,
+        "operator_cost": 0.02918,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14576.9,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.17739,
+          "asap_cost": 0.17739,
+          "deadlines_respected": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.2,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 350053.5,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0626,
+        "operator_cost": 0.02906,
+        "clock_mix": {
+          "low": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 2,
+          "n_decisions": 3,
+          "downclock_fraction": 0.667,
+          "mean_sla_slack_ms": -22504.0,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|volatile|scenario_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 30.7,
+      "result": {
+        "arm": "scenario_forecast_all_knobs",
+        "periods": [
+          79,
+          81
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 348022.8,
+        "sla_violation_rate": 0.44583,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0866,
+        "operator_cost": 0.02923,
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03033,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14516.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.02808,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 390060.3,
+        "sla_violation_rate": 0.225,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 0,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": null,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|current_main_all_knobs_flat_price": {
+      "status": "COMPLETED",
+      "runtime_s": 9.2,
+      "result": {
+        "arm": "current_main_all_knobs_flat_price",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 393005.5,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|all_knobs_real_price_no_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 9.3,
+      "result": {
+        "arm": "all_knobs_real_price_no_n2",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 396136.2,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|all_knobs_real_price_n2_dvfs": {
+      "status": "COMPLETED",
+      "runtime_s": 9.2,
+      "result": {
+        "arm": "all_knobs_real_price_n2_dvfs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 397675.6,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0923,
+        "operator_cost": 0.02922,
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14613.3,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|all_knobs_real_price_deferrable_only": {
+      "status": "COMPLETED",
+      "runtime_s": 9.5,
+      "result": {
+        "arm": "all_knobs_real_price_deferrable_only",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 396136.2,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02913,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -16039.2,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.0,
+          "asap_cost": 0.16899,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|all_knobs_real_price_n2_plus_deferrable": {
+      "status": "COMPLETED",
+      "runtime_s": 9.3,
+      "result": {
+        "arm": "all_knobs_real_price_n2_plus_deferrable",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 397675.6,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0923,
+        "operator_cost": 0.02922,
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14613.3,
+          "serving_time_shifted": false
+        },
+        "deferrable": {
+          "shifting_saving": 0.0,
+          "asap_cost": 0.16899,
+          "deadlines_respected": true
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.2,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 399347.8,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.1097,
+        "operator_cost": 0.0291,
+        "clock_mix": {
+          "low": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 665.4,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 2,
+          "n_decisions": 3,
+          "downclock_fraction": 0.667,
+          "mean_sla_slack_ms": -21356.2,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    },
+    "caiso|expensive|scenario_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 26.2,
+      "result": {
+        "arm": "scenario_forecast_all_knobs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 397019.7,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.1358,
+        "operator_cost": 0.02927,
+        "clock_mix": {
+          "high": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.03018,
+        "n2": {
+          "downclock_decisions": 0,
+          "n_decisions": 3,
+          "downclock_fraction": 0.0,
+          "mean_sla_slack_ms": -14605.9,
+          "serving_time_shifted": false
+        }
+      },
+      "price_stats": {
+        "min": 0.029,
+        "max": 0.03113
+      }
+    }
+  },
+  "config": {
+    "max_decisions": 3,
+    "req_cap": 80,
+    "cell_timeout_s": 150,
+    "win_len": 6,
+    "search": "clock",
+    "quick": false,
+    "deterministic": "seed=0 fixed world-state; no RNG"
+  },
+  "summary": {
+    "pjm|volatile": {
+      "baseline": 370365.0,
+      "all_knobs_real_price_no_n2": 355632.5,
+      "n2_value_gp$": 5784.4,
+      "deferrable_serving_gp$_delta": 0.0,
+      "n2_plus_deferrable_gp$": 5784.4,
+      "interaction_gp$": 0.0,
+      "oracle_gap_gp$": -1268.9,
+      "scenario_value_gp$": -2942.0,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "n2_downclock_fraction": 1.0,
+      "n2_mean_sla_slack_ms": -13744.0,
+      "deferrable_shifting_saving_$": 1.02496,
+      "deferrable_deadlines_respected": false
+    },
+    "pjm|expensive": {
+      "baseline": 336410.4,
+      "all_knobs_real_price_no_n2": 328114.4,
+      "n2_value_gp$": 4859.2,
+      "deferrable_serving_gp$_delta": 0.0,
+      "n2_plus_deferrable_gp$": 4859.2,
+      "interaction_gp$": 0.0,
+      "oracle_gap_gp$": 102.1,
+      "scenario_value_gp$": -8952.1,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "n2_downclock_fraction": 1.0,
+      "n2_mean_sla_slack_ms": -14497.3,
+      "deferrable_shifting_saving_$": 0.0,
+      "deferrable_deadlines_respected": true
+    },
+    "ercot|volatile": {
+      "baseline": 383468.9,
+      "all_knobs_real_price_no_n2": 389442.1,
+      "n2_value_gp$": 0.0,
+      "deferrable_serving_gp$_delta": 0.0,
+      "n2_plus_deferrable_gp$": 0.0,
+      "interaction_gp$": 0.0,
+      "oracle_gap_gp$": 3613.6,
+      "scenario_value_gp$": -663.1,
+      "pareto_beats_baseline": true,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "n2_downclock_fraction": 0.0,
+      "n2_mean_sla_slack_ms": -16039.2,
+      "deferrable_shifting_saving_$": 0.34189,
+      "deferrable_deadlines_respected": false
+    },
+    "ercot|expensive": {
+      "baseline": 394097.5,
+      "all_knobs_real_price_no_n2": 374565.1,
+      "n2_value_gp$": 1180.3,
+      "deferrable_serving_gp$_delta": 0.0,
+      "n2_plus_deferrable_gp$": 1180.3,
+      "interaction_gp$": 0.0,
+      "oracle_gap_gp$": 7520.7,
+      "scenario_value_gp$": 5347.0,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "n2_downclock_fraction": 0.0,
+      "n2_mean_sla_slack_ms": -15175.9,
+      "deferrable_shifting_saving_$": 0.0,
+      "deferrable_deadlines_respected": true
+    },
+    "caiso|volatile": {
+      "baseline": 364862.1,
+      "all_knobs_real_price_no_n2": 348558.8,
+      "n2_value_gp$": 0.0,
+      "deferrable_serving_gp$_delta": 0.0,
+      "n2_plus_deferrable_gp$": 0.0,
+      "interaction_gp$": 0.0,
+      "oracle_gap_gp$": 1494.7,
+      "scenario_value_gp$": -536.0,
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "n2_downclock_fraction": 0.0,
+      "n2_mean_sla_slack_ms": -14576.9,
+      "deferrable_shifting_saving_$": 0.17739,
+      "deferrable_deadlines_respected": false
+    },
+    "caiso|expensive": {
+      "baseline": 390060.3,
+      "all_knobs_real_price_no_n2": 396136.2,
+      "n2_value_gp$": 1539.4,
+      "deferrable_serving_gp$_delta": 0.0,
+      "n2_plus_deferrable_gp$": 1539.4,
+      "interaction_gp$": 0.0,
+      "oracle_gap_gp$": 1672.2,
+      "scenario_value_gp$": -655.9,
+      "pareto_beats_baseline": true,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "n2_downclock_fraction": 0.0,
+      "n2_mean_sla_slack_ms": -14613.3,
+      "deferrable_shifting_saving_$": 0.0,
+      "deferrable_deadlines_respected": true
+    }
+  }
+}

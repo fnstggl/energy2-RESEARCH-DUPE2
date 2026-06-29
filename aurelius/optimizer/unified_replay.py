@@ -291,6 +291,17 @@ class UnifiedKPI:
     n_deferred: int
     backlog_peak: int
     c_trace: tuple = ()      # per-tick c (proof the loop actually coupled)
+    # N2 SLA-slack diagnostics (latency-class completion tail vs the SLA target). Purely diagnostic —
+    # goodput / violations / cost above are unchanged. sla_slack_s > 0 ⇒ headroom an N2 power-arbitrage
+    # decision could spend by downclocking; ≤ 0 ⇒ the tail is at/over the SLA target (no slack to spend).
+    sla_target_s: float = 0.0
+    completion_p95_s: float = 0.0
+    completion_p99_s: float = 0.0
+    sla_slack_s: float = 0.0
+
+    @property
+    def sla_slack_pct(self) -> float:
+        return (self.sla_slack_s / self.sla_target_s) if self.sla_target_s > 0 else 0.0
 
     @property
     def label(self) -> str:
@@ -316,6 +327,11 @@ class UnifiedKPI:
             "sla_violations": self.sla_violations,
             "n_deferred": self.n_deferred,
             "backlog_peak": self.backlog_peak,
+            "sla_target_s": round(self.sla_target_s, 4),
+            "completion_p95_s": round(self.completion_p95_s, 4),
+            "completion_p99_s": round(self.completion_p99_s, 4),
+            "sla_slack_s": round(self.sla_slack_s, 4),
+            "sla_slack_pct": round(self.sla_slack_pct, 4),
         }
 
 
@@ -548,6 +564,13 @@ def run_unified_replay(
     n_total = len(jobs)
     n_deferred = sum(1 for j in jobs if j.deferred_ticks > 0)
 
+    # N2 SLA-slack diagnostic: completion-latency tail of LATENCY-class jobs vs their SLA target. A job that
+    # never completed counts as a large finite latency (10× target) so it shows as NO slack, not as rosy
+    # headroom. Diagnostic only — does not touch goodput / violations / cost.
+    _lat = sorted(response.get(j.idx, sla_s * 10.0) for j in jobs if j.cls == CLASS_LATENCY)
+    cp95 = _lat[min(len(_lat) - 1, int(len(_lat) * 0.95))] if _lat else 0.0
+    cp99 = _lat[min(len(_lat) - 1, int(len(_lat) * 0.99))] if _lat else 0.0
+
     levers = tuple(x for x, on in (
         ("C", capacity == "forecasted_mcs" or capacity == "backlog_aware"),
         ("O", ordering == "abs_conformal"),
@@ -563,6 +586,7 @@ def run_unified_replay(
         goodput_per_dollar=goodput / cost, n_total=n_total, n_sla_safe=n_sla_safe,
         sla_violations=n_total - n_sla_safe, n_deferred=n_deferred,
         backlog_peak=backlog_peak, c_trace=tuple(c_per_tick),
+        sla_target_s=sla_s, completion_p95_s=cp95, completion_p99_s=cp99, sla_slack_s=(sla_s - cp95),
     )
 
 
