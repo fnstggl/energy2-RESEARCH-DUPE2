@@ -1,0 +1,184 @@
+{
+  "budget": 100,
+  "methods": [
+    "physics_guided_grid",
+    "hierarchical_search",
+    "exhaustive_small"
+  ],
+  "per_fixture": {
+    "memory_bound_decode": {
+      "expected_regime": "memory_bound",
+      "active_regimes": [
+        "SLA_slack",
+        "memory_bound"
+      ],
+      "reference_kind": "TRUE_EXHAUSTIVE",
+      "baseline_gp": 1138190.97,
+      "methods": {
+        "physics_guided_grid": {
+          "gp_per_dollar": 1963835.63,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": true,
+          "candidates_evaluated": 56,
+          "anchors_evaluated": true
+        },
+        "hierarchical_search": {
+          "gp_per_dollar": 1963835.63,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": false,
+          "candidates_evaluated": 79,
+          "anchors_evaluated": true
+        },
+        "exhaustive_small": {
+          "gp_per_dollar": 1963835.63,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": true,
+          "candidates_evaluated": 55,
+          "anchors_evaluated": true
+        }
+      },
+      "anchor_contract_violations": []
+    },
+    "compute_bound_prefill": {
+      "expected_regime": "compute_bound",
+      "active_regimes": [
+        "SLA_tight",
+        "memory_bound",
+        "queue_bound"
+      ],
+      "reference_kind": "TRUE_EXHAUSTIVE",
+      "baseline_gp": 140918.88,
+      "methods": {
+        "physics_guided_grid": {
+          "gp_per_dollar": 189110.1,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": true,
+          "candidates_evaluated": 56,
+          "anchors_evaluated": true
+        },
+        "hierarchical_search": {
+          "gp_per_dollar": 189110.1,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": false,
+          "candidates_evaluated": 79,
+          "anchors_evaluated": true
+        },
+        "exhaustive_small": {
+          "gp_per_dollar": 189110.1,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": true,
+          "candidates_evaluated": 55,
+          "anchors_evaluated": true
+        }
+      },
+      "anchor_contract_violations": []
+    },
+    "sla_tight": {
+      "expected_regime": "SLA_tight",
+      "active_regimes": [
+        "SLA_tight",
+        "memory_bound"
+      ],
+      "reference_kind": "TRUE_EXHAUSTIVE",
+      "baseline_gp": 557578.08,
+      "methods": {
+        "physics_guided_grid": {
+          "gp_per_dollar": 1384799.01,
+          "regret_abs": 8978.7775,
+          "regret_pct": 0.6442,
+          "true_opt_contained": false,
+          "true_opt_evaluated": false,
+          "candidates_evaluated": 56,
+          "anchors_evaluated": true
+        },
+        "hierarchical_search": {
+          "gp_per_dollar": 1393777.79,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": false,
+          "true_opt_evaluated": true,
+          "candidates_evaluated": 79,
+          "anchors_evaluated": true
+        },
+        "exhaustive_small": {
+          "gp_per_dollar": 1384799.01,
+          "regret_abs": 8978.7775,
+          "regret_pct": 0.6442,
+          "true_opt_contained": false,
+          "true_opt_evaluated": false,
+          "candidates_evaluated": 55,
+          "anchors_evaluated": true
+        }
+      },
+      "anchor_contract_violations": []
+    },
+    "queue_bound": {
+      "expected_regime": "queue_bound",
+      "active_regimes": [
+        "SLA_tight",
+        "capacity_pressure",
+        "memory_bound",
+        "queue_bound"
+      ],
+      "reference_kind": "TRUE_EXHAUSTIVE",
+      "baseline_gp": 794023.7,
+      "methods": {
+        "physics_guided_grid": {
+          "gp_per_dollar": 2305688.5,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": true,
+          "candidates_evaluated": 56,
+          "anchors_evaluated": true
+        },
+        "hierarchical_search": {
+          "gp_per_dollar": 2305688.5,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": false,
+          "candidates_evaluated": 79,
+          "anchors_evaluated": true
+        },
+        "exhaustive_small": {
+          "gp_per_dollar": 2305688.5,
+          "regret_abs": 0.0,
+          "regret_pct": 0.0,
+          "true_opt_contained": true,
+          "true_opt_evaluated": true,
+          "candidates_evaluated": 55,
+          "anchors_evaluated": true
+        }
+      },
+      "anchor_contract_violations": []
+    }
+  },
+  "summary": {
+    "named_anchors": [
+      "(('admission_policy', 'off'), ('batching_policy', 'aggressive'), ('capacity_multiplier', 1.0), ('capacity_policy', 'reactive_lag1'), ('clock_policy', 'base'), ('colocation_policy', 'off'), ('energy_policy', 'off'), ('kv_placement_policy', 'lru'), ('kv_routing_policy', 'off'), ('migration_policy', 'off'), ('ordering_policy', 'fifo'), ('placement_policy', 'topology_blind'), ('precision_policy', 'fp8'), ('prefill_decode_policy', 'shared'), ('prewarm_policy', 'off'), ('routing_policy', 'round_robin'), ('spec_decode_policy', 'off'), ('topology_policy', 'off'))",
+      "(('admission_policy', 'off'), ('batching_policy', 'aggressive'), ('capacity_multiplier', 1.0), ('capacity_policy', 'reactive_lag1'), ('clock_policy', 'high'), ('colocation_policy', 'off'), ('energy_policy', 'off'), ('kv_placement_policy', 'lru'), ('kv_routing_policy', 'off'), ('migration_policy', 'off'), ('ordering_policy', 'fifo'), ('placement_policy', 'topology_blind'), ('precision_policy', 'fp8'), ('prefill_decode_policy', 'shared'), ('prewarm_policy', 'off'), ('routing_policy', 'round_robin'), ('spec_decode_policy', 'off'), ('topology_policy', 'off'))",
+      "(('admission_policy', 'off'), ('batching_policy', 'conservative'), ('capacity_multiplier', 1.0), ('capacity_policy', 'backlog_aware'), ('clock_policy', 'base'), ('colocation_policy', 'off'), ('energy_policy', 'off'), ('kv_placement_policy', 'lru'), ('kv_routing_policy', 'off'), ('migration_policy', 'off'), ('ordering_policy', 'abs_conformal'), ('placement_policy', 'topology_blind'), ('precision_policy', 'bf16'), ('prefill_decode_policy', 'shared'), ('prewarm_policy', 'off'), ('routing_policy', 'round_robin'), ('spec_decode_policy', 'off'), ('topology_policy', 'off'))",
+      "(('admission_policy', 'off'), ('batching_policy', 'conservative'), ('capacity_multiplier', 1.0), ('capacity_policy', 'reactive_lag1'), ('clock_policy', 'base'), ('colocation_policy', 'off'), ('energy_policy', 'off'), ('kv_placement_policy', 'lru'), ('kv_routing_policy', 'off'), ('migration_policy', 'off'), ('ordering_policy', 'fifo'), ('placement_policy', 'topology_blind'), ('precision_policy', 'bf16'), ('prefill_decode_policy', 'shared'), ('prewarm_policy', 'off'), ('routing_policy', 'round_robin'), ('spec_decode_policy', 'off'), ('topology_policy', 'off'))"
+    ],
+    "hierarchical_max_regret_pct": 0.0,
+    "current_default_max_regret_pct": 0.6442,
+    "hierarchical_contains_true_opt_everywhere": false,
+    "hierarchical_evaluates_true_opt_everywhere": false,
+    "hierarchical_regret_not_higher_than_default": true,
+    "anchors_held_everywhere": true,
+    "note": "TRUE regret (exhaustive reference) on synthetic exhaustive-able fixtures; SIMULATED magnitudes."
+  }
+}

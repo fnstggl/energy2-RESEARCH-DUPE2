@@ -193,7 +193,10 @@ def make_world_state(params: dict | None):
     return ws
 
 
-def _controller(fm, fleet_state, cost_model, cfg, common, world_state=None):
+def _controller(fm, fleet_state, cost_model, cfg, common, world_state=None, planner_mode=None):
+    """Build the benchmark MPC controller. `planner_mode` defaults to None (behaviour-preserving for every
+    existing caller); pass `controller.DEFAULT_BENCHMARK_PLANNER_MODE` to use the PR #124 gate-promoted default
+    benchmark planner (hierarchical_search) for standard-MPC reporting."""
     return ModelPredictiveEconomicController(
         forecasters=fm, fleet_state=fleet_state, cost_model=cost_model,
         horizon=cfg["horizon"], risk_weight=cfg["risk_weight"],
@@ -202,7 +205,7 @@ def _controller(fm, fleet_state, cost_model, cfg, common, world_state=None):
         kv_service_factor=common.get("kv_service_factor", 1.0),
         kv_service_factor_by_routing=common.get("kv_service_factor_by_routing"),
         cost_scenario=common.get("cost_scenario", "owned"),
-        sim_seconds=common.get("sim_seconds"), world_state=world_state)
+        sim_seconds=common.get("sim_seconds"), world_state=world_state, planner_mode=planner_mode)
 
 
 def tune_controller(fm, frames, per, val_idx, *, fleet_state, cost_model,
