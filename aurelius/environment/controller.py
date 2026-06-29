@@ -461,6 +461,20 @@ class ModelPredictiveEconomicController:
                             "why": ("price-aware: clock chosen against the forecast price path"
                                     if self.electricity_price_aware else
                                     "not price-aware: clock chosen on roofline/SLA only (constant price)")}
+        # ForecastState (opt-in, canonical planner belief): record WHAT the planner believed about the next
+        # period, BEFORE it runs. Realized + error are filled later by run_period_episode (causal — no leakage).
+        # Belief-only; never a reward term. No-op unless a ForecastState is attached.
+        fs = getattr(self, "forecast_state", None)
+        if fs is not None:
+            p_now = len(history)
+            fs.horizon_steps = H
+            fs.record_belief(decision_index=fs.n_decisions, target_period=p_now, made_at_period=p_now,
+                             horizon_index=0, confidence=confidence, provenance="FORECAST_DERIVED",
+                             belief={"arrival_rate": ar.mean, "interarrival_cv": cv.mean,
+                                     "output_token_mean": tm.mean, "output_token_p95": tp.value if tp else 0.0,
+                                     "electricity_price": pr.value if pr else 0.0},
+                             uncertainty={"arrival_rate": {"p10": ar.p10, "p90": ar.p90}})
+            fs.n_decisions += 1
         return Decision(act, exp_gpd, risk_gpd, score, False, confidence,
                         forecast={"arrival_rate": ar.to_dict(), "price": pr.value,
                                   "routing_policy": routing, "electricity": electricity_diag}, bundle=ab)
@@ -570,7 +584,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                        period_seconds=60.0, kv_service_factor=1.0, cost_scenario="owned",
                        sim_seconds=None, kv_service_factor_by_routing=None, world_state=None,
                        world_state_params=None, kv_state_pool=None, kv_capacity_blocks=512,
-                       kv_model_seq=None, kv_cost_mode=None, electricity_prices=None):
+                       kv_model_seq=None, kv_cost_mode=None, electricity_prices=None, forecast_state=None):
     """Run ``decide_fn(history_frames)`` over the REAL eval periods (causal: the action
     for period p is chosen from frames[:p], then applied to the real requests of p).
 
@@ -691,6 +705,21 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
                              energy_price_per_kwh=(electricity_prices.get(p) if electricity_prices else None),
                              mutate=True)
             kpi = oc.kpi
+            # ForecastState (opt-in): record the REALIZED outcome for period p + the forecast error. Causal —
+            # this runs AFTER the period is simulated, so error is never computed from the future. No-op
+            # unless a ForecastState is attached. Belief-vs-realized only; never a reward term.
+            if forecast_state is not None and recs:
+                # Record realized ONLY for the variables whose unit is unambiguously comparable to the belief:
+                # output-token mean/p95 (both are token counts of the same period's requests). Arrival rate is
+                # NOT recorded here because the backtest caps requests/period (the realized count is the capped
+                # count, not the true rate) and electricity_price is arm-dependent (flat vs forecast) — recording
+                # either would fabricate a misleading "forecast error". Output length is the dominant regret
+                # driver (PR #118), so it is the meaningful signal anyway.
+                _toks = sorted(int(r[1]) for r in recs)
+                _p95 = _toks[min(len(_toks) - 1, int(len(_toks) * 0.95))] if _toks else 0.0
+                forecast_state.record_realized(p, {
+                    "output_token_mean": (sum(_toks) / len(_toks)) if _toks else 0.0,
+                    "output_token_p95": float(_p95)}, at_period=p)
             tot_cost += oc.operator_cost
             cold_starts += oc.cold_start_events
             mig_cost += oc.migration_cost

@@ -1,0 +1,1702 @@
+{
+  "cells": {
+    "pjm|volatile|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 392971.5,
+        "sla_violation_rate": 0.175,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 564.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.13328,
+        "forecast_error": {},
+        "request_state": {
+          "arrived": 240,
+          "completed": 198,
+          "missed_sla": 42,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 198,
+            "missed_sla": 42,
+            "dropped": 42,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.825
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|deployable_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 15.2,
+      "result": {
+        "arm": "deployable_all_knobs",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 377339.8,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 564.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.13328,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 11.03644,
+            "n": 3,
+            "mape_pct": 10.933
+          },
+          "output_token_p95": {
+            "mae": 49.44444,
+            "n": 3,
+            "mape_pct": 12.192
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 147,
+          "missed_sla": 93,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 147,
+            "missed_sla": 93,
+            "dropped": 93,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.6125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|all_knobs_roofline_timing": {
+      "status": "COMPLETED",
+      "runtime_s": 15.8,
+      "result": {
+        "arm": "all_knobs_roofline_timing",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 338005.0,
+        "sla_violation_rate": 0.4625,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 855.2,
+        "energy_kwh": 0.1341,
+        "operator_cost": 0.0292,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.13328,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 11.03644,
+            "n": 3,
+            "mape_pct": 10.933
+          },
+          "output_token_p95": {
+            "mae": 49.44444,
+            "n": 3,
+            "mape_pct": 12.192
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 129,
+          "missed_sla": 111,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 129,
+            "missed_sla": 111,
+            "dropped": 111,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.5375
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|all_knobs_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 15.1,
+      "result": {
+        "arm": "all_knobs_real_price",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 355632.5,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 564.1,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.03116,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.13328,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 11.03644,
+            "n": 3,
+            "mape_pct": 10.933
+          },
+          "output_token_p95": {
+            "mae": 49.44444,
+            "n": 3,
+            "mape_pct": 12.192
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 147,
+          "missed_sla": 93,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 147,
+            "missed_sla": 93,
+            "dropped": 93,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.6125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|all_knobs_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 15.1,
+      "result": {
+        "arm": "all_knobs_n2",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 361416.9,
+        "sla_violation_rate": 0.3875,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 599.3,
+        "energy_kwh": 0.094,
+        "operator_cost": 0.03065,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.13328,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 11.03644,
+            "n": 3,
+            "mape_pct": 10.933
+          },
+          "output_token_p95": {
+            "mae": 49.44444,
+            "n": 3,
+            "mape_pct": 12.192
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 147,
+          "missed_sla": 93,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 147,
+            "missed_sla": 93,
+            "dropped": 93,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.6125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          84,
+          86
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 360148.0,
+        "sla_violation_rate": 0.38333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 587.3,
+        "energy_kwh": 0.0652,
+        "operator_cost": 0.03077,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "low": 2,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.13328,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 11.03644,
+            "n": 3,
+            "mape_pct": 10.933
+          },
+          "output_token_p95": {
+            "mae": 49.44444,
+            "n": 3,
+            "mape_pct": 12.192
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 147,
+          "missed_sla": 93,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 147,
+            "missed_sla": 93,
+            "dropped": 93,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.6125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|volatile|v2_reference_all_knobs": {
+      "status": "SKIPPED_TOO_HEAVY",
+      "runtime_s": 0.0,
+      "result": {
+        "reason": "no tractable V2 serving path on this branch (V2 is audit-doc only)"
+      },
+      "price_stats": {
+        "min": 0.07586,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 352581.1,
+        "sla_violation_rate": 0.275,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 587.7,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.11389,
+        "forecast_error": {},
+        "request_state": {
+          "arrived": 240,
+          "completed": 174,
+          "missed_sla": 66,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 174,
+            "missed_sla": 66,
+            "dropped": 66,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.725
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|deployable_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 10.9,
+      "result": {
+        "arm": "deployable_all_knobs",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 344725.8,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 576.8,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.02943,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.11389,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 7.42715,
+            "n": 3,
+            "mape_pct": 7.779
+          },
+          "output_token_p95": {
+            "mae": 102.11111,
+            "n": 3,
+            "mape_pct": 17.46
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 114,
+          "missed_sla": 126,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 114,
+            "missed_sla": 126,
+            "dropped": 126,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.475
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|all_knobs_roofline_timing": {
+      "status": "COMPLETED",
+      "runtime_s": 11.7,
+      "result": {
+        "arm": "all_knobs_roofline_timing",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 298772.7,
+        "sla_violation_rate": 0.57083,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 842.3,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.11389,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 7.42715,
+            "n": 3,
+            "mape_pct": 7.779
+          },
+          "output_token_p95": {
+            "mae": 102.11111,
+            "n": 3,
+            "mape_pct": 17.46
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 102,
+          "missed_sla": 138,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 102,
+            "missed_sla": 138,
+            "dropped": 138,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.425
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|all_knobs_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 10.8,
+      "result": {
+        "arm": "all_knobs_real_price",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 328114.4,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 576.8,
+        "energy_kwh": 0.0472,
+        "operator_cost": 0.03092,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.11389,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 7.42715,
+            "n": 3,
+            "mape_pct": 7.779
+          },
+          "output_token_p95": {
+            "mae": 102.11111,
+            "n": 3,
+            "mape_pct": 17.46
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 114,
+          "missed_sla": 126,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 114,
+            "missed_sla": 126,
+            "dropped": 126,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.475
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|all_knobs_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 10.6,
+      "result": {
+        "arm": "all_knobs_n2",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 332973.6,
+        "sla_violation_rate": 0.52917,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 630.8,
+        "energy_kwh": 0.0989,
+        "operator_cost": 0.03034,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "low": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.11389,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 7.42715,
+            "n": 3,
+            "mape_pct": 7.779
+          },
+          "output_token_p95": {
+            "mae": 102.11111,
+            "n": 3,
+            "mape_pct": 17.46
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 114,
+          "missed_sla": 126,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 114,
+            "missed_sla": 126,
+            "dropped": 126,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.475
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 333075.7,
+        "sla_violation_rate": 0.525,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 616.1,
+        "energy_kwh": 0.0642,
+        "operator_cost": 0.03046,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 1,
+          "low": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.11389,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 7.42715,
+            "n": 3,
+            "mape_pct": 7.779
+          },
+          "output_token_p95": {
+            "mae": 102.11111,
+            "n": 3,
+            "mape_pct": 17.46
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 114,
+          "missed_sla": 126,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 114,
+            "missed_sla": 126,
+            "dropped": 126,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.475
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "pjm|expensive|v2_reference_all_knobs": {
+      "status": "SKIPPED_TOO_HEAVY",
+      "runtime_s": 0.0,
+      "result": {
+        "reason": "no tractable V2 serving path on this branch (V2 is audit-doc only)"
+      },
+      "price_stats": {
+        "min": 0.09174,
+        "max": 0.17825
+      }
+    },
+    "ercot|volatile|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 386977.6,
+        "sla_violation_rate": 0.225,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "forecast_error": {},
+        "request_state": {
+          "arrived": 240,
+          "completed": 186,
+          "missed_sla": 54,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 186,
+            "missed_sla": 54,
+            "dropped": 54,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.775
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|deployable_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 9.2,
+      "result": {
+        "arm": "deployable_all_knobs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 393005.5,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 17.79545,
+            "n": 3,
+            "mape_pct": 18.912
+          },
+          "output_token_p95": {
+            "mae": 74.33333,
+            "n": 3,
+            "mape_pct": 19.957
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 123,
+          "missed_sla": 117,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 123,
+            "missed_sla": 117,
+            "dropped": 117,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.5125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|all_knobs_roofline_timing": {
+      "status": "COMPLETED",
+      "runtime_s": 10.0,
+      "result": {
+        "arm": "all_knobs_roofline_timing",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 318796.0,
+        "sla_violation_rate": 0.55417,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 880.6,
+        "energy_kwh": 0.0854,
+        "operator_cost": 0.02926,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 1,
+          "low": 2
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.05568,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 17.79545,
+            "n": 3,
+            "mape_pct": 18.912
+          },
+          "output_token_p95": {
+            "mae": 74.33333,
+            "n": 3,
+            "mape_pct": 19.957
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 108,
+          "missed_sla": 132,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 108,
+            "missed_sla": 132,
+            "dropped": 132,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.45
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|all_knobs_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 9.2,
+      "result": {
+        "arm": "all_knobs_real_price",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 17.79545,
+            "n": 3,
+            "mape_pct": 18.912
+          },
+          "output_token_p95": {
+            "mae": 74.33333,
+            "n": 3,
+            "mape_pct": 19.957
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 123,
+          "missed_sla": 117,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 123,
+            "missed_sla": 117,
+            "dropped": 117,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.5125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|all_knobs_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 9.2,
+      "result": {
+        "arm": "all_knobs_n2",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 389442.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 591.5,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02963,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05568,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 17.79545,
+            "n": 3,
+            "mape_pct": 18.912
+          },
+          "output_token_p95": {
+            "mae": 74.33333,
+            "n": 3,
+            "mape_pct": 19.957
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 123,
+          "missed_sla": 117,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 123,
+            "missed_sla": 117,
+            "dropped": 117,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.5125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.3,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 393055.7,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 613.1,
+        "energy_kwh": 0.1097,
+        "operator_cost": 0.02957,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "low": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 665.4,
+        "avg_price_paid": 0.05568,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 17.79545,
+            "n": 3,
+            "mape_pct": 18.912
+          },
+          "output_token_p95": {
+            "mae": 74.33333,
+            "n": 3,
+            "mape_pct": 19.957
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 126,
+          "missed_sla": 114,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 126,
+            "missed_sla": 114,
+            "dropped": 114,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.525
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|volatile|v2_reference_all_knobs": {
+      "status": "SKIPPED_TOO_HEAVY",
+      "runtime_s": 0.0,
+      "result": {
+        "reason": "no tractable V2 serving path on this branch (V2 is audit-doc only)"
+      },
+      "price_stats": {
+        "min": 0.0321,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 396377.1,
+        "sla_violation_rate": 0.20417,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 628.7,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02936,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05065,
+        "forecast_error": {},
+        "request_state": {
+          "arrived": 240,
+          "completed": 192,
+          "missed_sla": 48,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 192,
+            "missed_sla": 48,
+            "dropped": 48,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.8
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|deployable_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 6.9,
+      "result": {
+        "arm": "deployable_all_knobs",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 377074.6,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 617.6,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02943,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.05065,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 10.07511,
+            "n": 3,
+            "mape_pct": 9.36
+          },
+          "output_token_p95": {
+            "mae": 31.66667,
+            "n": 3,
+            "mape_pct": 6.013
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 123,
+          "missed_sla": 117,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 123,
+            "missed_sla": 117,
+            "dropped": 117,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.5125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|all_knobs_roofline_timing": {
+      "status": "COMPLETED",
+      "runtime_s": 7.5,
+      "result": {
+        "arm": "all_knobs_roofline_timing",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 328793.3,
+        "sla_violation_rate": 0.52917,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 924.7,
+        "energy_kwh": 0.0561,
+        "operator_cost": 0.02931,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 2,
+          "low": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 564.4,
+        "avg_price_paid": 0.05065,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 10.07511,
+            "n": 3,
+            "mape_pct": 9.36
+          },
+          "output_token_p95": {
+            "mae": 31.66667,
+            "n": 3,
+            "mape_pct": 6.013
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 114,
+          "missed_sla": 126,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 114,
+            "missed_sla": 126,
+            "dropped": 126,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.475
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|all_knobs_real_price": {
+      "status": "COMPLETED",
+      "runtime_s": 7.5,
+      "result": {
+        "arm": "all_knobs_real_price",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 374565.1,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 617.6,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.02963,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 867.4,
+        "avg_price_paid": 0.05065,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 10.07511,
+            "n": 3,
+            "mape_pct": 9.36
+          },
+          "output_token_p95": {
+            "mae": 31.66667,
+            "n": 3,
+            "mape_pct": 6.013
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 123,
+          "missed_sla": 117,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 123,
+            "missed_sla": 117,
+            "dropped": 117,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.5125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|all_knobs_n2": {
+      "status": "COMPLETED",
+      "runtime_s": 7.7,
+      "result": {
+        "arm": "all_knobs_n2",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 375745.4,
+        "sla_violation_rate": 0.48333,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 628.7,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02953,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 0.0,
+        "avg_price_paid": 0.05065,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 10.07511,
+            "n": 3,
+            "mape_pct": 9.36
+          },
+          "output_token_p95": {
+            "mae": 31.66667,
+            "n": 3,
+            "mape_pct": 6.013
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 123,
+          "missed_sla": 117,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 123,
+            "missed_sla": 117,
+            "dropped": 117,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.5125
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|oracle_forecast_all_knobs": {
+      "status": "COMPLETED",
+      "runtime_s": 0.3,
+      "result": {
+        "arm": "oracle_forecast_all_knobs",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 383266.1,
+        "sla_violation_rate": 0.47917,
+        "gpu_hours": 0.0333,
+        "gpu_seconds": 634.3,
+        "energy_kwh": 0.0809,
+        "operator_cost": 0.02953,
+        "queue_p95": 0.0,
+        "clock_mix": {
+          "base": 1,
+          "high": 1,
+          "low": 1
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "mean_power_w": 715.9,
+        "avg_price_paid": 0.05065,
+        "forecast_error": {
+          "output_token_mean": {
+            "mae": 10.07511,
+            "n": 3,
+            "mape_pct": 9.36
+          },
+          "output_token_p95": {
+            "mae": 31.66667,
+            "n": 3,
+            "mape_pct": 6.013
+          }
+        },
+        "request_state": {
+          "arrived": 240,
+          "completed": 126,
+          "missed_sla": 114,
+          "conserved": true,
+          "queue_summary": {
+            "backlog": 0,
+            "arrived": 240,
+            "completed": 126,
+            "missed_sla": 114,
+            "dropped": 114,
+            "class_mix": {
+              "latency_critical": 240
+            },
+            "completion_rate": 0.525
+          }
+        }
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    },
+    "ercot|expensive|v2_reference_all_knobs": {
+      "status": "SKIPPED_TOO_HEAVY",
+      "runtime_s": 0.0,
+      "result": {
+        "reason": "no tractable V2 serving path on this branch (V2 is audit-doc only)"
+      },
+      "price_stats": {
+        "min": 0.04451,
+        "max": 0.05946
+      }
+    }
+  },
+  "config": {
+    "max_decisions": 3,
+    "req_cap": 80,
+    "cell_timeout_s": 150,
+    "win_len": 6,
+    "search": "clock",
+    "quick": false,
+    "deterministic": "seed=0 fixed world-state; no RNG"
+  },
+  "summary": {
+    "pjm|volatile": {
+      "gp_per_dollar": {
+        "baseline": 392971.5,
+        "new": 377339.8,
+        "abs": -15631.7,
+        "rel_pct": -3.978,
+        "better": "higher",
+        "approx_unchanged": false
+      },
+      "sla_violation_rate": {
+        "baseline": 0.175,
+        "new": 0.38333,
+        "abs": 0.2083,
+        "rel_pct": 119.046,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "gpu_hours": {
+        "baseline": 0.0333,
+        "new": 0.0333,
+        "abs": 0.0,
+        "rel_pct": 0.0,
+        "better": "lower",
+        "approx_unchanged": true
+      },
+      "energy_kwh": {
+        "baseline": 0.0,
+        "new": 0.0,
+        "abs": 0.0,
+        "rel_pct": null,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "operator_cost": {
+        "baseline": 0.02936,
+        "new": 0.02936,
+        "abs": 0.0,
+        "rel_pct": 0.0,
+        "better": "lower",
+        "approx_unchanged": true
+      },
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "oracle_gap_gp$": -1268.9,
+      "deployable_forecast_error": {
+        "output_token_mean": {
+          "mae": 11.03644,
+          "n": 3,
+          "mape_pct": 10.933
+        },
+        "output_token_p95": {
+          "mae": 49.44444,
+          "n": 3,
+          "mape_pct": 12.192
+        }
+      },
+      "deployable_request_conserved": true
+    },
+    "pjm|expensive": {
+      "gp_per_dollar": {
+        "baseline": 352581.1,
+        "new": 344725.8,
+        "abs": -7855.3,
+        "rel_pct": -2.228,
+        "better": "higher",
+        "approx_unchanged": false
+      },
+      "sla_violation_rate": {
+        "baseline": 0.275,
+        "new": 0.525,
+        "abs": 0.25,
+        "rel_pct": 90.909,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "gpu_hours": {
+        "baseline": 0.0333,
+        "new": 0.0333,
+        "abs": 0.0,
+        "rel_pct": 0.0,
+        "better": "lower",
+        "approx_unchanged": true
+      },
+      "energy_kwh": {
+        "baseline": 0.0,
+        "new": 0.0472,
+        "abs": 0.0472,
+        "rel_pct": null,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "operator_cost": {
+        "baseline": 0.02936,
+        "new": 0.02943,
+        "abs": 0.0001,
+        "rel_pct": 0.238,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "oracle_gap_gp$": 102.1,
+      "deployable_forecast_error": {
+        "output_token_mean": {
+          "mae": 7.42715,
+          "n": 3,
+          "mape_pct": 7.779
+        },
+        "output_token_p95": {
+          "mae": 102.11111,
+          "n": 3,
+          "mape_pct": 17.46
+        }
+      },
+      "deployable_request_conserved": true
+    },
+    "ercot|volatile": {
+      "gp_per_dollar": {
+        "baseline": 386977.6,
+        "new": 393005.5,
+        "abs": 6027.9,
+        "rel_pct": 1.558,
+        "better": "higher",
+        "approx_unchanged": false
+      },
+      "sla_violation_rate": {
+        "baseline": 0.225,
+        "new": 0.48333,
+        "abs": 0.2583,
+        "rel_pct": 114.813,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "gpu_hours": {
+        "baseline": 0.0333,
+        "new": 0.0333,
+        "abs": 0.0,
+        "rel_pct": 0.0,
+        "better": "lower",
+        "approx_unchanged": true
+      },
+      "energy_kwh": {
+        "baseline": 0.0,
+        "new": 0.0,
+        "abs": 0.0,
+        "rel_pct": null,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "operator_cost": {
+        "baseline": 0.02936,
+        "new": 0.02936,
+        "abs": 0.0,
+        "rel_pct": 0.0,
+        "better": "lower",
+        "approx_unchanged": true
+      },
+      "pareto_beats_baseline": true,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "oracle_gap_gp$": 3613.6,
+      "deployable_forecast_error": {
+        "output_token_mean": {
+          "mae": 17.79545,
+          "n": 3,
+          "mape_pct": 18.912
+        },
+        "output_token_p95": {
+          "mae": 74.33333,
+          "n": 3,
+          "mape_pct": 19.957
+        }
+      },
+      "deployable_request_conserved": true
+    },
+    "ercot|expensive": {
+      "gp_per_dollar": {
+        "baseline": 396377.1,
+        "new": 377074.6,
+        "abs": -19302.5,
+        "rel_pct": -4.87,
+        "better": "higher",
+        "approx_unchanged": false
+      },
+      "sla_violation_rate": {
+        "baseline": 0.20417,
+        "new": 0.48333,
+        "abs": 0.2792,
+        "rel_pct": 136.729,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "gpu_hours": {
+        "baseline": 0.0333,
+        "new": 0.0333,
+        "abs": 0.0,
+        "rel_pct": 0.0,
+        "better": "lower",
+        "approx_unchanged": true
+      },
+      "energy_kwh": {
+        "baseline": 0.0,
+        "new": 0.0533,
+        "abs": 0.0533,
+        "rel_pct": null,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "operator_cost": {
+        "baseline": 0.02936,
+        "new": 0.02943,
+        "abs": 0.0001,
+        "rel_pct": 0.238,
+        "better": "lower",
+        "approx_unchanged": false
+      },
+      "pareto_beats_baseline": false,
+      "pareto_sla_not_worse": false,
+      "headline_safe": false,
+      "oracle_gap_gp$": 7520.7,
+      "deployable_forecast_error": {
+        "output_token_mean": {
+          "mae": 10.07511,
+          "n": 3,
+          "mape_pct": 9.36
+        },
+        "output_token_p95": {
+          "mae": 31.66667,
+          "n": 3,
+          "mape_pct": 6.013
+        }
+      },
+      "deployable_request_conserved": true
+    }
+  }
+}

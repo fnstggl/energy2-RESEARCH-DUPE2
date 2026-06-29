@@ -1,0 +1,64 @@
+{
+  "market": "pjm",
+  "window": "expensive",
+  "decisions": 2,
+  "req_cap": 80,
+  "periods": [
+    81,
+    82
+  ],
+  "baseline": {
+    "mode": "sla_aware_baseline",
+    "gp_per_dollar": 311659.1,
+    "sla_violation_rate": 0.3375
+  },
+  "arms": [
+    {
+      "mode": "clock_only",
+      "raw_candidates": 3,
+      "evaluated": 4,
+      "gp_per_dollar": 297733.2,
+      "sla_violation_rate": 0.5625,
+      "clock_mix": {
+        "high": 2
+      },
+      "precision_mix": {
+        "bf16": 2
+      },
+      "capacity_mix": {
+        "1.0": 2
+      },
+      "batching_mix": {
+        "conservative": 2
+      },
+      "search_regret_gp$": 327065.4,
+      "vs_baseline_abs": -13925.9,
+      "vs_baseline_rel_pct": -4.468,
+      "sla_delta_vs_baseline": 0.225
+    },
+    {
+      "mode": "grid_multi_knob",
+      "raw_candidates": 24,
+      "evaluated": 25,
+      "gp_per_dollar": 624798.6,
+      "sla_violation_rate": 0.0375,
+      "clock_mix": {
+        "high": 2
+      },
+      "precision_mix": {
+        "fp8": 2
+      },
+      "capacity_mix": {
+        "1.0": 2
+      },
+      "batching_mix": {
+        "aggressive": 2
+      },
+      "search_regret_gp$": 0.0,
+      "vs_baseline_abs": 313139.5,
+      "vs_baseline_rel_pct": 100.475,
+      "sla_delta_vs_baseline": -0.3
+    }
+  ],
+  "best_known_gp$": 624798.6
+}
