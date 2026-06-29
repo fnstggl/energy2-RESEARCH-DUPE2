@@ -1,0 +1,2791 @@
+{
+  "cells": {
+    "pjm|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 311659.1,
+        "sla_violation_rate": 0.3375,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 414.8,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.02032,
+        "energy_cost": 0.0,
+        "queue_p95": 42.43,
+        "clock_mix": {
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 2
+        },
+        "batching_mix": {
+          "conservative": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 0.0,
+        "candidates_generated_mean": null,
+        "candidates_evaluated_mean": null,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "pjm|expensive|clock_only": {
+      "status": "COMPLETED",
+      "runtime_s": 7.6,
+      "result": {
+        "arm": "clock_only",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 297733.2,
+        "sla_violation_rate": 0.5625,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 391.6,
+        "energy_kwh": 0.0944,
+        "operator_cost": 0.02063,
+        "energy_cost": 0.0,
+        "queue_p95": 46.5188,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "bf16": 2
+        },
+        "batching_mix": {
+          "conservative": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 3,
+        "candidates_evaluated_mean": 4,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "pjm|expensive|fixed_24_grid": {
+      "status": "COMPLETED",
+      "runtime_s": 35.7,
+      "result": {
+        "arm": "fixed_24_grid",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 624798.6,
+        "sla_violation_rate": 0.0375,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 268.0,
+        "energy_kwh": 0.0646,
+        "operator_cost": 0.02063,
+        "energy_cost": 0.0,
+        "queue_p95": 5.6507,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 24,
+        "candidates_evaluated_mean": 25,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "pjm|expensive|physics_guided_candidates": {
+      "status": "COMPLETED",
+      "runtime_s": 30.2,
+      "result": {
+        "arm": "physics_guided_candidates",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 624798.6,
+        "sla_violation_rate": 0.0375,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 268.0,
+        "energy_kwh": 0.0646,
+        "operator_cost": 0.02063,
+        "energy_cost": 0.0,
+        "queue_p95": 5.6507,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 18,
+        "candidates_evaluated_mean": 18,
+        "decision_margin_mean": 0.0149,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "pjm|expensive|physics_guided_beam": {
+      "status": "COMPLETED",
+      "runtime_s": 65.9,
+      "result": {
+        "arm": "physics_guided_beam",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 814382.7,
+        "sla_violation_rate": 0.04375,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 268.0,
+        "energy_kwh": 0.0646,
+        "operator_cost": 0.01547,
+        "energy_cost": 0.0,
+        "queue_p95": 8.5609,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 18.5,
+        "candidates_evaluated_mean": 40.5,
+        "decision_margin_mean": 0.1183,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "pjm|expensive|physics_guided_widening": {
+      "status": "COMPLETED",
+      "runtime_s": 73.7,
+      "result": {
+        "arm": "physics_guided_widening",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 814382.7,
+        "sla_violation_rate": 0.04375,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 268.0,
+        "energy_kwh": 0.0646,
+        "operator_cost": 0.01547,
+        "energy_cost": 0.0,
+        "queue_p95": 8.5609,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 24.5,
+        "candidates_evaluated_mean": 46,
+        "decision_margin_mean": 0.1157,
+        "widening_rounds_mean": 1,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "pjm|expensive|oracle_forecast": {
+      "status": "COMPLETED",
+      "runtime_s": 0.4,
+      "result": {
+        "arm": "oracle_forecast",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 852522.5,
+        "sla_violation_rate": 0.0625,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 272.8,
+        "energy_kwh": 0.0657,
+        "operator_cost": 0.01547,
+        "energy_cost": 0.0,
+        "queue_p95": 13.4071,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 1,
+          "balanced": 1
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 18.5,
+        "candidates_evaluated_mean": 41.5,
+        "decision_margin_mean": 0.1348,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "pjm|expensive|exhaustive_default4": {
+      "status": "COMPLETED",
+      "runtime_s": 81.7,
+      "result": {
+        "arm": "exhaustive_default4",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 814382.7,
+        "sla_violation_rate": 0.04375,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 268.0,
+        "energy_kwh": 0.0646,
+        "operator_cost": 0.01547,
+        "energy_cost": 0.0,
+        "queue_p95": 8.5609,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 54,
+        "candidates_evaluated_mean": 55,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "pjm|expensive|exhaustive_int4_diagnostic": {
+      "status": "COMPLETED",
+      "runtime_s": 120.1,
+      "result": {
+        "arm": "exhaustive_int4_diagnostic",
+        "periods": [
+          81,
+          82
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1018757.3,
+        "sla_violation_rate": 0.05625,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 242.4,
+        "energy_kwh": 0.0584,
+        "operator_cost": 0.01547,
+        "energy_cost": 0.0,
+        "queue_p95": 5.4619,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "int4": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 81,
+        "candidates_evaluated_mean": 82,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "ercot|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 373537.9,
+        "sla_violation_rate": 0.20625,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 396.2,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.01963,
+        "energy_cost": 0.0,
+        "queue_p95": 38.5875,
+        "clock_mix": {
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 2
+        },
+        "batching_mix": {
+          "conservative": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 0.0,
+        "candidates_generated_mean": null,
+        "candidates_evaluated_mean": null,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "ercot|expensive|clock_only": {
+      "status": "COMPLETED",
+      "runtime_s": 4.3,
+      "result": {
+        "arm": "clock_only",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 335027.8,
+        "sla_violation_rate": 0.475,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 396.2,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.01963,
+        "energy_cost": 0.0,
+        "queue_p95": 43.1833,
+        "clock_mix": {
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 2
+        },
+        "batching_mix": {
+          "conservative": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 0.0,
+        "candidates_generated_mean": 3,
+        "candidates_evaluated_mean": 4,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "ercot|expensive|fixed_24_grid": {
+      "status": "COMPLETED",
+      "runtime_s": 19.8,
+      "result": {
+        "arm": "fixed_24_grid",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 843801.9,
+        "sla_violation_rate": 0.0,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 247.3,
+        "energy_kwh": 0.0596,
+        "operator_cost": 0.01978,
+        "energy_cost": 0.0,
+        "queue_p95": 4.9096,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 24,
+        "candidates_evaluated_mean": 25,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "ercot|expensive|physics_guided_candidates": {
+      "status": "COMPLETED",
+      "runtime_s": 16.7,
+      "result": {
+        "arm": "physics_guided_candidates",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 843801.9,
+        "sla_violation_rate": 0.0,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 247.3,
+        "energy_kwh": 0.0596,
+        "operator_cost": 0.01978,
+        "energy_cost": 0.0,
+        "queue_p95": 4.9096,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 18,
+        "candidates_evaluated_mean": 18,
+        "decision_margin_mean": 0.0125,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "ercot|expensive|physics_guided_beam": {
+      "status": "COMPLETED",
+      "runtime_s": 35.3,
+      "result": {
+        "arm": "physics_guided_beam",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1088526.5,
+        "sla_violation_rate": 0.00625,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 247.3,
+        "energy_kwh": 0.0596,
+        "operator_cost": 0.01483,
+        "energy_cost": 0.0,
+        "queue_p95": 7.7588,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 18.5,
+        "candidates_evaluated_mean": 40.5,
+        "decision_margin_mean": 0.1203,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "ercot|expensive|physics_guided_widening": {
+      "status": "COMPLETED",
+      "runtime_s": 39.0,
+      "result": {
+        "arm": "physics_guided_widening",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1088526.5,
+        "sla_violation_rate": 0.00625,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 247.3,
+        "energy_kwh": 0.0596,
+        "operator_cost": 0.01483,
+        "energy_cost": 0.0,
+        "queue_p95": 7.7588,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 24.5,
+        "candidates_evaluated_mean": 46.5,
+        "decision_margin_mean": 0.1168,
+        "widening_rounds_mean": 1,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "ercot|expensive|oracle_forecast": {
+      "status": "COMPLETED",
+      "runtime_s": 0.4,
+      "result": {
+        "arm": "oracle_forecast",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1095511.8,
+        "sla_violation_rate": 0.00625,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 279.9,
+        "energy_kwh": 0.0538,
+        "operator_cost": 0.01474,
+        "energy_cost": 0.0,
+        "queue_p95": 8.0839,
+        "clock_mix": {
+          "low": 1,
+          "high": 1
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 715.9,
+        "candidates_generated_mean": 18.5,
+        "candidates_evaluated_mean": 40.5,
+        "decision_margin_mean": 0.1594,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "ercot|expensive|exhaustive_default4": {
+      "status": "COMPLETED",
+      "runtime_s": 44.3,
+      "result": {
+        "arm": "exhaustive_default4",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1088526.5,
+        "sla_violation_rate": 0.00625,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 247.3,
+        "energy_kwh": 0.0596,
+        "operator_cost": 0.01483,
+        "energy_cost": 0.0,
+        "queue_p95": 7.7588,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 54,
+        "candidates_evaluated_mean": 55,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "ercot|expensive|exhaustive_int4_diagnostic": {
+      "status": "COMPLETED",
+      "runtime_s": 64.6,
+      "result": {
+        "arm": "exhaustive_int4_diagnostic",
+        "periods": [
+          75,
+          76
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1072889.8,
+        "sla_violation_rate": 0.05,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 231.0,
+        "energy_kwh": 0.0501,
+        "operator_cost": 0.01478,
+        "energy_cost": 0.0,
+        "queue_p95": 4.836,
+        "clock_mix": {
+          "high": 1,
+          "base": 1
+        },
+        "precision_mix": {
+          "int4": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 783.7,
+        "candidates_generated_mean": 81,
+        "candidates_evaluated_mean": 82,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "caiso|expensive|strongest_sla_aware_baseline": {
+      "status": "COMPLETED",
+      "runtime_s": 0.1,
+      "result": {
+        "arm": "strongest_sla_aware_baseline",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 406766.5,
+        "sla_violation_rate": 0.225,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 400.9,
+        "energy_kwh": 0.0,
+        "operator_cost": 0.01942,
+        "energy_cost": 0.0,
+        "queue_p95": 36.388,
+        "clock_mix": {
+          "base": 2
+        },
+        "precision_mix": {
+          "bf16": 2
+        },
+        "batching_mix": {
+          "conservative": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 0.0,
+        "candidates_generated_mean": null,
+        "candidates_evaluated_mean": null,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "caiso|expensive|clock_only": {
+      "status": "COMPLETED",
+      "runtime_s": 5.6,
+      "result": {
+        "arm": "clock_only",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 408785.2,
+        "sla_violation_rate": 0.5125,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 389.8,
+        "energy_kwh": 0.0533,
+        "operator_cost": 0.01946,
+        "energy_cost": 0.0,
+        "queue_p95": 42.1923,
+        "clock_mix": {
+          "high": 1,
+          "base": 1
+        },
+        "precision_mix": {
+          "bf16": 2
+        },
+        "batching_mix": {
+          "conservative": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 3,
+        "candidates_evaluated_mean": 4,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "caiso|expensive|fixed_24_grid": {
+      "status": "COMPLETED",
+      "runtime_s": 26.2,
+      "result": {
+        "arm": "fixed_24_grid",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 806412.9,
+        "sla_violation_rate": 0.00625,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 268.7,
+        "energy_kwh": 0.0571,
+        "operator_cost": 0.01946,
+        "energy_cost": 0.0,
+        "queue_p95": 4.6774,
+        "clock_mix": {
+          "base": 1,
+          "high": 1
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 783.7,
+        "candidates_generated_mean": 24,
+        "candidates_evaluated_mean": 25,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "caiso|expensive|physics_guided_candidates": {
+      "status": "COMPLETED",
+      "runtime_s": 22.0,
+      "result": {
+        "arm": "physics_guided_candidates",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 806412.9,
+        "sla_violation_rate": 0.00625,
+        "gpu_hours": 0.0222,
+        "gpu_seconds": 268.7,
+        "energy_kwh": 0.0571,
+        "operator_cost": 0.01946,
+        "energy_cost": 0.0,
+        "queue_p95": 4.6774,
+        "clock_mix": {
+          "base": 1,
+          "high": 1
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 2
+        },
+        "mean_power_w": 783.7,
+        "candidates_generated_mean": 18,
+        "candidates_evaluated_mean": 18,
+        "decision_margin_mean": 0.0072,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "caiso|expensive|physics_guided_beam": {
+      "status": "COMPLETED",
+      "runtime_s": 48.6,
+      "result": {
+        "arm": "physics_guided_beam",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1008168.2,
+        "sla_violation_rate": 0.01875,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 251.6,
+        "energy_kwh": 0.0606,
+        "operator_cost": 0.01463,
+        "energy_cost": 0.0,
+        "queue_p95": 7.4289,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 18.5,
+        "candidates_evaluated_mean": 41,
+        "decision_margin_mean": 0.1217,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "caiso|expensive|physics_guided_widening": {
+      "status": "COMPLETED",
+      "runtime_s": 54.2,
+      "result": {
+        "arm": "physics_guided_widening",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1008168.2,
+        "sla_violation_rate": 0.01875,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 251.6,
+        "energy_kwh": 0.0606,
+        "operator_cost": 0.01463,
+        "energy_cost": 0.0,
+        "queue_p95": 7.4289,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 24.5,
+        "candidates_evaluated_mean": 46.5,
+        "decision_margin_mean": 0.1146,
+        "widening_rounds_mean": 1,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "caiso|expensive|oracle_forecast": {
+      "status": "COMPLETED",
+      "runtime_s": 0.6,
+      "result": {
+        "arm": "oracle_forecast",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1015027.6,
+        "sla_violation_rate": 0.01875,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 296.0,
+        "energy_kwh": 0.0526,
+        "operator_cost": 0.01453,
+        "energy_cost": 0.0,
+        "queue_p95": 7.9224,
+        "clock_mix": {
+          "base": 1,
+          "low": 1
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 632.2,
+        "candidates_generated_mean": 18.5,
+        "candidates_evaluated_mean": 40,
+        "decision_margin_mean": 0.0762,
+        "widening_rounds_mean": 0,
+        "known_strong_contained": true,
+        "anchors_first": {
+          "neutral": true,
+          "baseline_safe": true,
+          "previous_best": false,
+          "known_strong": true,
+          "capacity_adjusted": true,
+          "clock_low_base_high": true
+        }
+      }
+    },
+    "caiso|expensive|exhaustive_default4": {
+      "status": "COMPLETED",
+      "runtime_s": 58.9,
+      "result": {
+        "arm": "exhaustive_default4",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1008168.2,
+        "sla_violation_rate": 0.01875,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 251.6,
+        "energy_kwh": 0.0606,
+        "operator_cost": 0.01463,
+        "energy_cost": 0.0,
+        "queue_p95": 7.4289,
+        "clock_mix": {
+          "high": 2
+        },
+        "precision_mix": {
+          "fp8": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 867.4,
+        "candidates_generated_mean": 54,
+        "candidates_evaluated_mean": 55,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    },
+    "caiso|expensive|exhaustive_int4_diagnostic": {
+      "status": "COMPLETED",
+      "runtime_s": 87.5,
+      "result": {
+        "arm": "exhaustive_int4_diagnostic",
+        "periods": [
+          77,
+          78
+        ],
+        "n_decisions": 2,
+        "gp_per_dollar": 1085492.6,
+        "sla_violation_rate": 0.05,
+        "gpu_hours": 0.0167,
+        "gpu_seconds": 238.4,
+        "energy_kwh": 0.0506,
+        "operator_cost": 0.0146,
+        "energy_cost": 0.0,
+        "queue_p95": 4.7207,
+        "clock_mix": {
+          "base": 1,
+          "high": 1
+        },
+        "precision_mix": {
+          "int4": 2
+        },
+        "batching_mix": {
+          "aggressive": 2
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 2
+        },
+        "mean_power_w": 783.7,
+        "candidates_generated_mean": 81,
+        "candidates_evaluated_mean": 82,
+        "decision_margin_mean": null,
+        "widening_rounds_mean": null,
+        "known_strong_contained": null,
+        "anchors_first": null
+      }
+    }
+  },
+  "config": {
+    "max_decisions": 2,
+    "req_cap": 80,
+    "cell_timeout_s": 240,
+    "win_len": 6,
+    "deterministic": "seed=0 fixed world-state; no RNG",
+    "search_regret_reference": "exhaustive_default4"
+  },
+  "summary": {
+    "pjm|expensive": {
+      "arms": {
+        "strongest_sla_aware_baseline": {
+          "gp_per_dollar": 311659.1,
+          "sla_violation_rate": 0.3375,
+          "candidates_generated_mean": null,
+          "candidates_evaluated_mean": null,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 311659.1,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "higher",
+              "approx_unchanged": true
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.3375,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0,
+              "abs": 0.0,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.02032,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            }
+          },
+          "headline_safe": false,
+          "search_regret_vs_exhaustive": {
+            "baseline": 311659.1,
+            "new": 814382.7,
+            "abs": 502723.6,
+            "rel_pct": 161.306,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "clock_only": {
+          "gp_per_dollar": 297733.2,
+          "sla_violation_rate": 0.5625,
+          "candidates_generated_mean": 3,
+          "candidates_evaluated_mean": 4,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 297733.2,
+              "abs": -13925.9,
+              "rel_pct": -4.468,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.5625,
+              "abs": 0.225,
+              "rel_pct": 66.667,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0944,
+              "abs": 0.0944,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.02063,
+              "abs": 0.0003,
+              "rel_pct": 1.526,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": false,
+          "search_regret_vs_exhaustive": {
+            "baseline": 297733.2,
+            "new": 814382.7,
+            "abs": 516649.5,
+            "rel_pct": 173.528,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "fixed_24_grid": {
+          "gp_per_dollar": 624798.6,
+          "sla_violation_rate": 0.0375,
+          "candidates_generated_mean": 24,
+          "candidates_evaluated_mean": 25,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 624798.6,
+              "abs": 313139.5,
+              "rel_pct": 100.475,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.0375,
+              "abs": -0.3,
+              "rel_pct": -88.889,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0646,
+              "abs": 0.0646,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.02063,
+              "abs": 0.0003,
+              "rel_pct": 1.526,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 624798.6,
+            "new": 814382.7,
+            "abs": 189584.1,
+            "rel_pct": 30.343,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "physics_guided_candidates": {
+          "gp_per_dollar": 624798.6,
+          "sla_violation_rate": 0.0375,
+          "candidates_generated_mean": 18,
+          "candidates_evaluated_mean": 18,
+          "decision_margin_mean": 0.0149,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 624798.6,
+              "abs": 313139.5,
+              "rel_pct": 100.475,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.0375,
+              "abs": -0.3,
+              "rel_pct": -88.889,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0646,
+              "abs": 0.0646,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.02063,
+              "abs": 0.0003,
+              "rel_pct": 1.526,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 624798.6,
+            "new": 814382.7,
+            "abs": 189584.1,
+            "rel_pct": 30.343,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "physics_guided_beam": {
+          "gp_per_dollar": 814382.7,
+          "sla_violation_rate": 0.04375,
+          "candidates_generated_mean": 18.5,
+          "candidates_evaluated_mean": 40.5,
+          "decision_margin_mean": 0.1183,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 814382.7,
+              "abs": 502723.6,
+              "rel_pct": 161.306,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.04375,
+              "abs": -0.2938,
+              "rel_pct": -87.037,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0646,
+              "abs": 0.0646,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.01547,
+              "abs": -0.0049,
+              "rel_pct": -23.868,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 814382.7,
+            "new": 814382.7,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "physics_guided_widening": {
+          "gp_per_dollar": 814382.7,
+          "sla_violation_rate": 0.04375,
+          "candidates_generated_mean": 24.5,
+          "candidates_evaluated_mean": 46,
+          "decision_margin_mean": 0.1157,
+          "widening_rounds_mean": 1,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 814382.7,
+              "abs": 502723.6,
+              "rel_pct": 161.306,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.04375,
+              "abs": -0.2938,
+              "rel_pct": -87.037,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0646,
+              "abs": 0.0646,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.01547,
+              "abs": -0.0049,
+              "rel_pct": -23.868,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 814382.7,
+            "new": 814382.7,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "oracle_forecast": {
+          "gp_per_dollar": 852522.5,
+          "sla_violation_rate": 0.0625,
+          "candidates_generated_mean": 18.5,
+          "candidates_evaluated_mean": 41.5,
+          "decision_margin_mean": 0.1348,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 852522.5,
+              "abs": 540863.4,
+              "rel_pct": 173.543,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.0625,
+              "abs": -0.275,
+              "rel_pct": -81.481,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0657,
+              "abs": 0.0657,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.01547,
+              "abs": -0.0049,
+              "rel_pct": -23.868,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 852522.5,
+            "new": 814382.7,
+            "abs": -38139.8,
+            "rel_pct": -4.474,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "exhaustive_default4": {
+          "gp_per_dollar": 814382.7,
+          "sla_violation_rate": 0.04375,
+          "candidates_generated_mean": 54,
+          "candidates_evaluated_mean": 55,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 814382.7,
+              "abs": 502723.6,
+              "rel_pct": 161.306,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.04375,
+              "abs": -0.2938,
+              "rel_pct": -87.037,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0646,
+              "abs": 0.0646,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.01547,
+              "abs": -0.0049,
+              "rel_pct": -23.868,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 814382.7,
+            "new": 814382.7,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "exhaustive_int4_diagnostic": {
+          "gp_per_dollar": 1018757.3,
+          "sla_violation_rate": 0.05625,
+          "candidates_generated_mean": 81,
+          "candidates_evaluated_mean": 82,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 311659.1,
+              "new": 1018757.3,
+              "abs": 707098.2,
+              "rel_pct": 226.882,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.3375,
+              "new": 0.05625,
+              "abs": -0.2812,
+              "rel_pct": -83.333,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0584,
+              "abs": 0.0584,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.02032,
+              "new": 0.01547,
+              "abs": -0.0049,
+              "rel_pct": -23.868,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1018757.3,
+            "new": 814382.7,
+            "abs": -204374.6,
+            "rel_pct": -20.061,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        }
+      }
+    },
+    "ercot|expensive": {
+      "arms": {
+        "strongest_sla_aware_baseline": {
+          "gp_per_dollar": 373537.9,
+          "sla_violation_rate": 0.20625,
+          "candidates_generated_mean": null,
+          "candidates_evaluated_mean": null,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 373537.9,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "higher",
+              "approx_unchanged": true
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.20625,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0,
+              "abs": 0.0,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01963,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            }
+          },
+          "headline_safe": false,
+          "search_regret_vs_exhaustive": {
+            "baseline": 373537.9,
+            "new": 1088526.5,
+            "abs": 714988.6,
+            "rel_pct": 191.41,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "clock_only": {
+          "gp_per_dollar": 335027.8,
+          "sla_violation_rate": 0.475,
+          "candidates_generated_mean": 3,
+          "candidates_evaluated_mean": 4,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 335027.8,
+              "abs": -38510.1,
+              "rel_pct": -10.31,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.475,
+              "abs": 0.2687,
+              "rel_pct": 130.303,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0,
+              "abs": 0.0,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01963,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            }
+          },
+          "headline_safe": false,
+          "search_regret_vs_exhaustive": {
+            "baseline": 335027.8,
+            "new": 1088526.5,
+            "abs": 753498.7,
+            "rel_pct": 224.906,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "fixed_24_grid": {
+          "gp_per_dollar": 843801.9,
+          "sla_violation_rate": 0.0,
+          "candidates_generated_mean": 24,
+          "candidates_evaluated_mean": 25,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 843801.9,
+              "abs": 470264.0,
+              "rel_pct": 125.895,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.0,
+              "abs": -0.2062,
+              "rel_pct": -100.0,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0596,
+              "abs": 0.0596,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01978,
+              "abs": 0.0001,
+              "rel_pct": 0.764,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 843801.9,
+            "new": 1088526.5,
+            "abs": 244724.6,
+            "rel_pct": 29.003,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "physics_guided_candidates": {
+          "gp_per_dollar": 843801.9,
+          "sla_violation_rate": 0.0,
+          "candidates_generated_mean": 18,
+          "candidates_evaluated_mean": 18,
+          "decision_margin_mean": 0.0125,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 843801.9,
+              "abs": 470264.0,
+              "rel_pct": 125.895,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.0,
+              "abs": -0.2062,
+              "rel_pct": -100.0,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0596,
+              "abs": 0.0596,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01978,
+              "abs": 0.0001,
+              "rel_pct": 0.764,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 843801.9,
+            "new": 1088526.5,
+            "abs": 244724.6,
+            "rel_pct": 29.003,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "physics_guided_beam": {
+          "gp_per_dollar": 1088526.5,
+          "sla_violation_rate": 0.00625,
+          "candidates_generated_mean": 18.5,
+          "candidates_evaluated_mean": 40.5,
+          "decision_margin_mean": 0.1203,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 1088526.5,
+              "abs": 714988.6,
+              "rel_pct": 191.41,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.00625,
+              "abs": -0.2,
+              "rel_pct": -96.97,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0596,
+              "abs": 0.0596,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01483,
+              "abs": -0.0048,
+              "rel_pct": -24.452,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1088526.5,
+            "new": 1088526.5,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "physics_guided_widening": {
+          "gp_per_dollar": 1088526.5,
+          "sla_violation_rate": 0.00625,
+          "candidates_generated_mean": 24.5,
+          "candidates_evaluated_mean": 46.5,
+          "decision_margin_mean": 0.1168,
+          "widening_rounds_mean": 1,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 1088526.5,
+              "abs": 714988.6,
+              "rel_pct": 191.41,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.00625,
+              "abs": -0.2,
+              "rel_pct": -96.97,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0596,
+              "abs": 0.0596,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01483,
+              "abs": -0.0048,
+              "rel_pct": -24.452,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1088526.5,
+            "new": 1088526.5,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "oracle_forecast": {
+          "gp_per_dollar": 1095511.8,
+          "sla_violation_rate": 0.00625,
+          "candidates_generated_mean": 18.5,
+          "candidates_evaluated_mean": 40.5,
+          "decision_margin_mean": 0.1594,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 1095511.8,
+              "abs": 721973.9,
+              "rel_pct": 193.28,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.00625,
+              "abs": -0.2,
+              "rel_pct": -96.97,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0538,
+              "abs": 0.0538,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01474,
+              "abs": -0.0049,
+              "rel_pct": -24.911,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1095511.8,
+            "new": 1088526.5,
+            "abs": -6985.3,
+            "rel_pct": -0.638,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "exhaustive_default4": {
+          "gp_per_dollar": 1088526.5,
+          "sla_violation_rate": 0.00625,
+          "candidates_generated_mean": 54,
+          "candidates_evaluated_mean": 55,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 1088526.5,
+              "abs": 714988.6,
+              "rel_pct": 191.41,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.00625,
+              "abs": -0.2,
+              "rel_pct": -96.97,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0596,
+              "abs": 0.0596,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01483,
+              "abs": -0.0048,
+              "rel_pct": -24.452,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1088526.5,
+            "new": 1088526.5,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "exhaustive_int4_diagnostic": {
+          "gp_per_dollar": 1072889.8,
+          "sla_violation_rate": 0.05,
+          "candidates_generated_mean": 81,
+          "candidates_evaluated_mean": 82,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 373537.9,
+              "new": 1072889.8,
+              "abs": 699351.9,
+              "rel_pct": 187.224,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.20625,
+              "new": 0.05,
+              "abs": -0.1562,
+              "rel_pct": -75.758,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0501,
+              "abs": 0.0501,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01963,
+              "new": 0.01478,
+              "abs": -0.0049,
+              "rel_pct": -24.707,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1072889.8,
+            "new": 1088526.5,
+            "abs": 15636.7,
+            "rel_pct": 1.457,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        }
+      }
+    },
+    "caiso|expensive": {
+      "arms": {
+        "strongest_sla_aware_baseline": {
+          "gp_per_dollar": 406766.5,
+          "sla_violation_rate": 0.225,
+          "candidates_generated_mean": null,
+          "candidates_evaluated_mean": null,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 406766.5,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "higher",
+              "approx_unchanged": true
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.225,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0,
+              "abs": 0.0,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01942,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            }
+          },
+          "headline_safe": false,
+          "search_regret_vs_exhaustive": {
+            "baseline": 406766.5,
+            "new": 1008168.2,
+            "abs": 601401.7,
+            "rel_pct": 147.849,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "clock_only": {
+          "gp_per_dollar": 408785.2,
+          "sla_violation_rate": 0.5125,
+          "candidates_generated_mean": 3,
+          "candidates_evaluated_mean": 4,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 408785.2,
+              "abs": 2018.7,
+              "rel_pct": 0.496,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.5125,
+              "abs": 0.2875,
+              "rel_pct": 127.778,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0533,
+              "abs": 0.0533,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01946,
+              "abs": 0.0,
+              "rel_pct": 0.206,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": false,
+          "search_regret_vs_exhaustive": {
+            "baseline": 408785.2,
+            "new": 1008168.2,
+            "abs": 599383.0,
+            "rel_pct": 146.625,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "fixed_24_grid": {
+          "gp_per_dollar": 806412.9,
+          "sla_violation_rate": 0.00625,
+          "candidates_generated_mean": 24,
+          "candidates_evaluated_mean": 25,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 806412.9,
+              "abs": 399646.4,
+              "rel_pct": 98.25,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.00625,
+              "abs": -0.2188,
+              "rel_pct": -97.222,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0571,
+              "abs": 0.0571,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01946,
+              "abs": 0.0,
+              "rel_pct": 0.206,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 806412.9,
+            "new": 1008168.2,
+            "abs": 201755.3,
+            "rel_pct": 25.019,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "physics_guided_candidates": {
+          "gp_per_dollar": 806412.9,
+          "sla_violation_rate": 0.00625,
+          "candidates_generated_mean": 18,
+          "candidates_evaluated_mean": 18,
+          "decision_margin_mean": 0.0072,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 806412.9,
+              "abs": 399646.4,
+              "rel_pct": 98.25,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.00625,
+              "abs": -0.2188,
+              "rel_pct": -97.222,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0222,
+              "abs": 0.0,
+              "rel_pct": 0.0,
+              "better": "lower",
+              "approx_unchanged": true
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0571,
+              "abs": 0.0571,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01946,
+              "abs": 0.0,
+              "rel_pct": 0.206,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 806412.9,
+            "new": 1008168.2,
+            "abs": 201755.3,
+            "rel_pct": 25.019,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "physics_guided_beam": {
+          "gp_per_dollar": 1008168.2,
+          "sla_violation_rate": 0.01875,
+          "candidates_generated_mean": 18.5,
+          "candidates_evaluated_mean": 41,
+          "decision_margin_mean": 0.1217,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 1008168.2,
+              "abs": 601401.7,
+              "rel_pct": 147.849,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.01875,
+              "abs": -0.2063,
+              "rel_pct": -91.667,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0606,
+              "abs": 0.0606,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01463,
+              "abs": -0.0048,
+              "rel_pct": -24.665,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1008168.2,
+            "new": 1008168.2,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "physics_guided_widening": {
+          "gp_per_dollar": 1008168.2,
+          "sla_violation_rate": 0.01875,
+          "candidates_generated_mean": 24.5,
+          "candidates_evaluated_mean": 46.5,
+          "decision_margin_mean": 0.1146,
+          "widening_rounds_mean": 1,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 1008168.2,
+              "abs": 601401.7,
+              "rel_pct": 147.849,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.01875,
+              "abs": -0.2063,
+              "rel_pct": -91.667,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0606,
+              "abs": 0.0606,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01463,
+              "abs": -0.0048,
+              "rel_pct": -24.665,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1008168.2,
+            "new": 1008168.2,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "oracle_forecast": {
+          "gp_per_dollar": 1015027.6,
+          "sla_violation_rate": 0.01875,
+          "candidates_generated_mean": 18.5,
+          "candidates_evaluated_mean": 40,
+          "decision_margin_mean": 0.0762,
+          "widening_rounds_mean": 0,
+          "known_strong_contained": true,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 1015027.6,
+              "abs": 608261.1,
+              "rel_pct": 149.536,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.01875,
+              "abs": -0.2063,
+              "rel_pct": -91.667,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0526,
+              "abs": 0.0526,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01453,
+              "abs": -0.0049,
+              "rel_pct": -25.18,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1015027.6,
+            "new": 1008168.2,
+            "abs": -6859.4,
+            "rel_pct": -0.676,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        },
+        "exhaustive_default4": {
+          "gp_per_dollar": 1008168.2,
+          "sla_violation_rate": 0.01875,
+          "candidates_generated_mean": 54,
+          "candidates_evaluated_mean": 55,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 1008168.2,
+              "abs": 601401.7,
+              "rel_pct": 147.849,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.01875,
+              "abs": -0.2063,
+              "rel_pct": -91.667,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0606,
+              "abs": 0.0606,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.01463,
+              "abs": -0.0048,
+              "rel_pct": -24.665,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1008168.2,
+            "new": 1008168.2,
+            "abs": 0.0,
+            "rel_pct": 0.0,
+            "better": "higher",
+            "approx_unchanged": true
+          }
+        },
+        "exhaustive_int4_diagnostic": {
+          "gp_per_dollar": 1085492.6,
+          "sla_violation_rate": 0.05,
+          "candidates_generated_mean": 81,
+          "candidates_evaluated_mean": 82,
+          "decision_margin_mean": null,
+          "widening_rounds_mean": null,
+          "known_strong_contained": null,
+          "vs_baseline": {
+            "gp_per_dollar": {
+              "baseline": 406766.5,
+              "new": 1085492.6,
+              "abs": 678726.1,
+              "rel_pct": 166.859,
+              "better": "higher",
+              "approx_unchanged": false
+            },
+            "sla_violation_rate": {
+              "baseline": 0.225,
+              "new": 0.05,
+              "abs": -0.175,
+              "rel_pct": -77.778,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "gpu_hours": {
+              "baseline": 0.0222,
+              "new": 0.0167,
+              "abs": -0.0055,
+              "rel_pct": -24.775,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "energy_kwh": {
+              "baseline": 0.0,
+              "new": 0.0506,
+              "abs": 0.0506,
+              "rel_pct": null,
+              "better": "lower",
+              "approx_unchanged": false
+            },
+            "operator_cost": {
+              "baseline": 0.01942,
+              "new": 0.0146,
+              "abs": -0.0048,
+              "rel_pct": -24.82,
+              "better": "lower",
+              "approx_unchanged": false
+            }
+          },
+          "headline_safe": true,
+          "search_regret_vs_exhaustive": {
+            "baseline": 1085492.6,
+            "new": 1008168.2,
+            "abs": -77324.4,
+            "rel_pct": -7.123,
+            "better": "higher",
+            "approx_unchanged": false
+          }
+        }
+      }
+    }
+  }
+}

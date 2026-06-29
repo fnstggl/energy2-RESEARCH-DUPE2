@@ -168,6 +168,13 @@ class ModelPredictiveEconomicController:
     max_horizon_steps: int = 48        # hard cap on H (runtime safety)
     decision_timeout_s: float = 0.0    # >0 → abort the search after this wall-time, keep best so far
     last_decision_diag: dict = field(default_factory=dict)   # rollout/credit-assignment diagnostics
+    # physics-guided planner (opt-in): bounded-beam MPC over a physics-guided, anchor-guaranteed candidate
+    # set + progressive widening (physics_guided_planner.py). Replaces clock-only / full-space search; the
+    # known-good bundles are ALWAYS contained. Default False → behaviour unchanged.
+    physics_guided: bool = False
+    physics_planner_obj: object = None  # BoundedBeamPlanner instance (else a default one is built)
+    current_price_percentile: float | None = None   # electricity price percentile for this decision (soft prior)
+    _prev_best_bundle: object = None    # previous decision's winning bundle (continuity anchor)
 
     def _gpd(self, jobs: list, replay_kw: dict, price: float) -> tuple:
         if not jobs:
@@ -316,6 +323,22 @@ class ModelPredictiveEconomicController:
         except Exception:
             return None
 
+    def _planner_state(self, ar, tm, tp, cv, pr, confidence):
+        """Build the cheap pre-search regime snapshot the physics-guided priors read (a SOFT prior — these
+        signals decide which candidates are GENERATED, never the reward). Unknown signals stay None so the
+        prior degrades gracefully and the anchors still cover the space."""
+        from .physics_guided_candidates import PlannerRegimeState
+        # capacity pressure proxy: forecast burstiness (p90/mean − 1), a cheap causal signal (no world read).
+        cap_press = 0.0
+        if ar is not None and ar.mean > 1e-9:
+            cap_press = max(0.0, min(1.0, (ar.p90 / ar.mean) - 1.0))
+        return PlannerRegimeState(
+            decode_regime=self._decode_regime_hint(tm), sla_slack=None,
+            queue_pressure=0.0, capacity_pressure=cap_press,
+            price_percentile=self.current_price_percentile,
+            output_token_mean=(tm.mean if tm else None), hbm_pressure=None,
+            confidence=confidence, prev_bundle=self._prev_best_bundle)
+
     def decide(self, history: list) -> Decision:
         """Choose the action for the next period from the causal forecast only."""
         if not self.forecasters.fitted or len(history) < 3:
@@ -401,6 +424,14 @@ class ModelPredictiveEconomicController:
         if self.candidates is not None:
             method, theoretical = "explicit", len(self.candidates)
             best_cand = max(self.candidates, key=_score)
+        elif self.physics_guided and world is not None:
+            # physics-guided bounded-beam planner + progressive widening over an anchor-guaranteed candidate
+            # set (the known-good bundles are always searched; no clock-only / full-space fallback).
+            from .physics_guided_planner import BoundedBeamPlanner
+            pstate = self._planner_state(ar, tm, tp, cv, pr, confidence)
+            planner = self.physics_planner_obj or BoundedBeamPlanner()
+            best_cand, search_plan = planner.plan(pstate, _score, prev_best=self._prev_best_bundle)
+            method, theoretical = search_plan.strategy, search_plan.raw_candidates
         elif self.use_adaptive_search and world is not None:
             # adaptive planner over the roofline-pruned connected space (beam/CE + a regret audit that
             # MEASURES what an approximate search lost vs exhaustive — never a silent cap).
@@ -417,6 +448,8 @@ class ModelPredictiveEconomicController:
             theoretical = gen.theoretical_combinations()
             best_cand, _n, method = gen.search(_score, budget=budget)
         ab, act, _rkw, _routing = _resolve(best_cand)
+        if ab is not None:
+            self._prev_best_bundle = ab          # continuity anchor for the next decision's physics-guided set
         score, exp_gpd, risk_gpd, routing = _eval(best_cand)
         cumulative, win_steps = rollout_cache.get(id(ab), (score, []))
         self.last_decision_diag = {
@@ -452,7 +485,9 @@ class ModelPredictiveEconomicController:
         # Phase 8 — electricity visibility: every decision records the price it saw, the clock it picked, and
         # whether it was price-aware (so attribution can see whether electricity drove the clock choice).
         electricity_diag = {"forecast_price_per_kwh": round(pr.value, 6) if pr else None,
-                            "selected_clock": ab.clock_policy, "price_aware": self.electricity_price_aware,
+                            # legacy dict candidates resolve to no ActionBundle (ab=None) → no clock action (base)
+                            "selected_clock": (ab.clock_policy if ab is not None else "base"),
+                            "price_aware": self.electricity_price_aware,
                             # N2 SLA-slack arbitrage diagnostic: how much SLA headroom the chosen clock leaves
                             # (online serving — never time-shifted). Deferrable shifting is a SEPARATE ledger.
                             "sla_slack_ms": win_steps[0].get("sla_slack_ms") if win_steps else None,
