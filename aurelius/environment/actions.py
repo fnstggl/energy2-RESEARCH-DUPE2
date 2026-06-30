@@ -153,6 +153,20 @@ ACTION_SPECS: dict = {
         "SIMULATOR_INFERENCE magnitude; int4 quality/SLA risk is INFERRED (no quality model) so int4 wins "
         "are labelled unsafe/diagnostic — applied via roofline_actions modulation",
         roadmap="N5", reward_channel="roofline_serving"),
+    # KV-cache precision — SEPARATE dtype from the model weights (vLLM ships fp8/int8 KV independent of the
+    # weight precision). It sets KV bytes/token → decode-bandwidth roofline (memory-bound regime only) and
+    # the KV-budget-in-HBM (active-sequence capacity / eviction). The no-op `inherit_weight_precision`
+    # reproduces today's behaviour exactly. fp8/int8 KV ≈ lossless (headline-eligible); int4 KV is
+    # diagnostic-only (no quality model → quality-risk channel + excluded from the headline planner).
+    "kv_cache_precision_policy": ActionSpec(
+        "kv_cache_precision_policy", "KV-cache precision (separate from weights)", CONNECTED,
+        ("inherit_weight_precision", "kv_bf16", "kv_fp8", "kv_int8", "kv_int4_diagnostic_only"), None,
+        "roofline: KV dtype sets KV bytes/token → higher decode tokens/s in the memory-bandwidth-bound "
+        "regime (faster + cheaper) AND more active-sequence capacity / less HBM eviction (kv_precision.py)",
+        "SIMULATOR_INFERENCE latency magnitude; fp8/int8 KV ≈ lossless (PUBLIC_BENCHMARK_DERIVED, "
+        "headline-eligible); int4 KV quality risk is UNMODELLED → unsafe/diagnostic-only "
+        "(excluded from the headline planner, gated by allow_quality_risk)",
+        roadmap="PR-1", reward_channel="roofline_serving"),
     "spec_decode_policy": ActionSpec(
         "spec_decode_policy", "speculative decoding depth", CONNECTED,
         ("off", "shallow", "medium", "aggressive"), None,
@@ -179,13 +193,36 @@ ACTION_SPECS: dict = {
         "NO background-work trace exists (Azure is all latency-critical; ReplicaState.workload_class is "
         "unused) → co-location credits NO background goodput and can only HURT foreground SLA here; the "
         "generator prunes it off with this recorded reason", roadmap="N3"),
+    # prefill/decode disaggregation — promoted to CONNECTED (Batch-1 Phase 4). The roofline already models
+    # the split causally (serving_point disaggregated_static: a wrong split inflates one phase's work + a KV
+    # handoff cost); pd_disaggregation.py adds the conservative phase-pool QUEUE approximation (idle
+    # GPU-seconds by pool, handoff bytes/latency, allocation efficiency). Reaches reward only through the
+    # roofline service-time / GPU-seconds channel. "shared" is the no-op (no disaggregation, no handoff).
     "prefill_decode_policy": ActionSpec(
-        "prefill_decode_policy", "prefill/decode disaggregation allocation", SIMULATED_ONLY,
+        "prefill_decode_policy", "prefill/decode disaggregation allocation", CONNECTED,
         ("shared", "p40_d60", "p60_d40"), None,
-        "roofline: split capacity between prefill and decode pools (DistServe/Splitwise); a wrong split "
-        "queues one phase; handoff overhead on disaggregation (modelled in serving_point)",
-        "the live cluster replay has NO disaggregated prefill/decode capacity pools — only roofline models "
-        "the split analytically → SIMULATED_ONLY (diagnostic), not a structurally-live action", roadmap="N4"),
+        "roofline + pd_disaggregation: split capacity into prefill/decode pools (DistServe/Splitwise/Dynamo); "
+        "a wrong split queues one phase; KV handoff overhead on disaggregation. Reaches reward via service "
+        "time + GPU-seconds (no live persistent phase queues → conservative causal approximation)",
+        "SIMULATOR_INFERENCE: the live cluster replay has NO persistent disaggregated capacity pools; the "
+        "split + handoff + phase-queue effects are a conservative roofline/queueing approximation labelled "
+        "directional until pilot disaggregated-pool telemetry", roadmap="N4", reward_channel="roofline_serving"),
+    # heterogeneous GPU-type assignment — route work to GPU classes (H100/A100/L40S/…) by their FLOPs /
+    # bandwidth / HBM / power / cost. SIMULATED_ONLY: the production benchmark's reward path costs the whole
+    # period at ONE dominant GPU type (gpu_type is constant per server, never a per-workload decision), so a
+    # heterogeneous-assignment ACTION is NOT_APPLICABLE there → it cannot fake a benefit on a homogeneous-cost
+    # fleet. It is a real causal lever in controlled fixtures (gpu_assignment.py: an explicit GPU mix + a
+    # per-workload assignment simulator) and turns CONNECTED once the fleet/cost path exposes per-replica
+    # GPU-type assignment. "homogeneous_default" is the no-op (everything on the dominant type).
+    "gpu_assignment_policy": ActionSpec(
+        "gpu_assignment_policy", "heterogeneous GPU-type assignment (workload → GPU class)", SIMULATED_ONLY,
+        ("homogeneous_default", "fastest_for_latency_sensitive", "cheapest_for_batch",
+         "memory_heavy_to_high_hbm", "balanced_heterogeneous", "diagnostic_oracle_assignment"), None,
+        "gpu_assignment.py: per-GPU-type roofline (FLOPs/bandwidth/HBM) + per-type cost (cost_model "
+        "OWNED_ECONOMICS / LEASE) route latency-sensitive→fast, batch→cheap, memory-heavy→high-HBM",
+        "NOT_APPLICABLE to the production benchmark (single dominant GPU type in the cost path; GPU type is "
+        "constant per server) → fixture-only until the fleet/cost path exposes per-replica assignment; "
+        "diagnostic_oracle_assignment is NON-deployable (labelled)", roadmap="PR-2"),
     "kv_routing_policy": ActionSpec(
         "kv_routing_policy", "per-request KV prefix routing (finer than routing_policy)",
         SIMULATED_ONLY, ("off", "prefix_affinity"), None,
@@ -238,10 +275,12 @@ class ActionBundle:
     placement_policy: str = "topology_blind"
     migration_policy: str = "off"
     precision_policy: str = "bf16"
+    kv_cache_precision_policy: str = "inherit_weight_precision"
     spec_decode_policy: str = "off"
     clock_policy: str = "base"
     colocation_policy: str = "off"
     prefill_decode_policy: str = "shared"
+    gpu_assignment_policy: str = "homogeneous_default"
     energy_policy: str = "off"
 
     def connected_kwargs(self) -> dict:

@@ -78,6 +78,11 @@ class PlannerRegimeState:
     hbm_pressure: float | None = None       # 0..1  HBM / KV residency pressure (None = unavailable)
     confidence: float = 1.0                 # forecast confidence (low → widen / uncertain regime)
     prev_bundle: object = None              # the previously selected ActionBundle (continuity anchor)
+    # Batch-1 new-knob gates (soft priors; a knob frozen off here is recorded in pruned_reasons):
+    pd_divergence: bool = False             # prefill/decode pressures diverge → disaggregation candidate
+    prefill_heavy: bool | None = None       # True → prefill-heavy split; False → decode-heavy; None → neutral
+    heterogeneous_fleet: bool = False       # fleet exposes per-workload GPU-type assignment (else NOT_APPLICABLE)
+    allowed_new_knobs: frozenset | None = None   # ablation mask: which Batch-1 knobs may vary (None = all)
 
     @property
     def sla_tight(self) -> bool:
@@ -181,10 +186,50 @@ def regime_surface_options(state: PlannerRegimeState, *, optional_surfaces: tupl
     if slack_pos and price_lo or (slack_pos and not qhi and price_hi):
         capacity.append(0.75)                     # under-provision only when there is real slack
 
+    # ---- kv_cache_precision (Batch-1): separate KV dtype. inherit + kv_fp8 always (both lossless-safe);
+    # kv_int8 when memory-bound or HBM-pressed (its win regime); kv_int4 OPT-IN only (no quality model).
+    # Frozen to inherit (no-op) when neither memory-bound nor HBM-pressed (KV bytes don't bind there).
+    kv_precision = ["inherit_weight_precision", "kv_fp8"]
+    if mem or hbm_hi:
+        kv_precision.append("kv_int8")
+        if allow_quality_risk:
+            kv_precision.append("kv_int4_diagnostic_only")   # diagnostic only; never a headline
+        else:
+            reasons["kv_int4_excluded"] = "int4 KV quality/SLA risk with no quality model → headline-unsafe (opt-in)"
+    elif comp:
+        kv_precision = ["inherit_weight_precision"]
+        reasons["kv_precision_frozen"] = "compute-bound: KV bytes don't bind decode bandwidth (no-op)"
+
+    # ---- prefill_decode (Batch-1): disaggregation only when prefill/decode pressures DIVERGE (else the
+    # shared pool's statistical multiplexing wins and the KV handoff is pure overhead — no free disaggregation).
+    pd = ["shared"]
+    if state.pd_divergence:
+        if state.prefill_heavy is True:
+            pd.append("p60_d40")                             # prefill-heavy → more prefill capacity
+        elif state.prefill_heavy is False:
+            pd.append("p40_d60")                             # decode-heavy → more decode capacity
+        else:
+            pd.extend(["p40_d60", "p60_d40"])
+    else:
+        reasons["prefill_decode_frozen"] = "prefill/decode pressures not diverging → shared pool optimal (handoff is overhead)"
+
     surfaces = {"precision_policy": tuple(dict.fromkeys(precision)),
+                "kv_cache_precision_policy": tuple(dict.fromkeys(kv_precision)),
                 "clock_policy": tuple(dict.fromkeys(clock)),
                 "batching_policy": tuple(dict.fromkeys(batching)),
-                "capacity_multiplier": tuple(dict.fromkeys(capacity))}
+                "capacity_multiplier": tuple(dict.fromkeys(capacity)),
+                "prefill_decode_policy": tuple(dict.fromkeys(pd))}
+
+    # ---- gpu_assignment (Batch-1): heterogeneous GPU-type assignment is NOT_APPLICABLE to the production
+    # benchmark (one dominant GPU type in the cost path; gpu_type constant per server). Frozen off unless the
+    # fleet exposes per-workload assignment — it can only fake a benefit otherwise. Fixture-only today.
+    if state.heterogeneous_fleet:
+        surfaces["gpu_assignment_policy"] = ("homogeneous_default", "fastest_for_latency_sensitive",
+                                             "cheapest_for_batch", "memory_heavy_to_high_hbm",
+                                             "balanced_heterogeneous")
+    else:
+        reasons["gpu_assignment_frozen"] = ("homogeneous-cost production fleet (single dominant GPU type; "
+                                            "gpu_type constant per server) → NOT_APPLICABLE, fixture-only")
 
     # ---- optional surfaces (progressive widening only) -----------------------------------------------
     for s in optional_surfaces:
@@ -209,6 +254,16 @@ def regime_surface_options(state: PlannerRegimeState, *, optional_surfaces: tupl
 
     if not background_work:
         reasons.setdefault("colocation_excluded", "no background-work trace (co-location can only hurt SLA)")
+
+    # ablation mask: freeze any Batch-1 knob not in `allowed_new_knobs` to its no-op (records the reason).
+    allowed = state.allowed_new_knobs
+    if allowed is not None:
+        for knob, noop in (("kv_cache_precision_policy", "inherit_weight_precision"),
+                           ("prefill_decode_policy", "shared"),
+                           ("gpu_assignment_policy", "homogeneous_default")):
+            if knob not in allowed and knob in surfaces and len(surfaces[knob]) > 1:
+                surfaces[knob] = (noop,)
+                reasons[f"{knob}_ablation_disabled"] = "ablation arm: knob held at no-op"
     return surfaces, reasons
 
 
@@ -224,6 +279,22 @@ def _anchor_bundles(state: PlannerRegimeState) -> list:
     # clock anchors (low / base / high always searchable — base == neutral, deduped later)
     anchors.append((ActionBundle(clock_policy="low"), "clock_anchor:low"))
     anchors.append((ActionBundle(clock_policy="high"), "clock_anchor:high"))
+    # Batch-1 new-knob anchors (only in their active regime, so they are never strided out of the grid).
+    # The ablation mask gates them too — an anchor must not reintroduce a knob the arm disabled.
+    allowed = state.allowed_new_knobs
+    def _on(knob):
+        return allowed is None or knob in allowed
+    mem = state.decode_regime == "memory_bandwidth_bound"
+    hbm_hi = state.hbm_pressure is not None and state.hbm_pressure >= _PRESSURE_HI
+    if (mem or hbm_hi) and _on("kv_cache_precision_policy"):
+        anchors.append((ActionBundle(kv_cache_precision_policy="kv_fp8"), "kv_precision_anchor:fp8"))
+        anchors.append((ActionBundle(precision_policy="fp8", kv_cache_precision_policy="kv_fp8"),
+                        "kv_precision_anchor:weight_fp8_kv_fp8"))
+    if state.pd_divergence and _on("prefill_decode_policy"):
+        split = "p60_d40" if state.prefill_heavy else "p40_d60"
+        anchors.append((ActionBundle(prefill_decode_policy=split), f"pd_anchor:{split}"))
+    if state.heterogeneous_fleet and _on("gpu_assignment_policy"):
+        anchors.append((ActionBundle(gpu_assignment_policy="balanced_heterogeneous"), "gpu_assign_anchor:balanced"))
     return anchors
 
 

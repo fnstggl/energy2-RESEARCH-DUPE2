@@ -38,6 +38,9 @@ MODEL_SPECS = {
 }
 DEFAULT_MODEL = "llama-8b-gqa"
 PRECISION_BYTES = {"fp16": 2, "bf16": 2, "fp8": 1, "int8": 1, "int4": 0.5}
+# KV-cache precision is a SEPARATE dtype from the model weights (vLLM ships fp8/int8 KV independent of the
+# weight precision). "inherit" follows the weight precision (the no-op: KV bytes == today's behaviour).
+KV_PRECISION_BYTES = {"inherit": None, "bf16": 2, "fp16": 2, "fp8": 1, "int8": 1, "int4": 0.5}
 GPU_HOUR_USD = 2.0
 ENERGY_USD_PER_KWH = 0.06
 
@@ -57,6 +60,7 @@ class ServingConfig:
     gpu: str = DEFAULT_GPU
     model: str = DEFAULT_MODEL
     precision: str = "fp16"
+    kv_precision: str = "inherit"       # KV-cache dtype, SEPARATE from weights; "inherit" = follow `precision`
     batch_size: int = 16
     prefill_decode_ratio: float = 0.5   # share of replicas given to PREFILL (disaggregated); 0.5 = balanced
     serving_mode: str = "shared_gpu"    # shared_gpu | disaggregated_static
@@ -72,6 +76,17 @@ def _ridge_point(gpu: str) -> float:
     return g["peak_flops"] / g["mem_bw"]
 
 
+def _kv_bytes_per_token(cfg: "ServingConfig", m: dict) -> float:
+    """KV bytes/token at the config's KV precision. The footprint number is fp16 (2 B/elem); scale it by the
+    KV dtype's bytes. ``kv_precision='inherit'`` follows the WEIGHT precision (the no-op: identical to the
+    historical ``kv_bytes = kv_bytes_per_token·(weight_pb/2)``). An explicit KV dtype decouples KV from
+    weights — the whole point of the kv_cache_precision knob (fp8/int8 KV with bf16 weights)."""
+    kv_pb = KV_PRECISION_BYTES.get(cfg.kv_precision)
+    if kv_pb is None:                                  # "inherit" (or unknown) → follow the weight precision
+        kv_pb = PRECISION_BYTES.get(cfg.precision, 2)
+    return m["kv_bytes_per_token"] * (kv_pb / 2.0)
+
+
 def arithmetic_intensity(phase: str, cfg: ServingConfig, wl: Workload) -> float:
     """FLOPs per byte for one phase (the roofline x-axis). Decode at low batch is memory-bound (weights
     streamed per token); batching amortises weight bytes over the batch → AI rises. Prefill processes
@@ -79,7 +94,7 @@ def arithmetic_intensity(phase: str, cfg: ServingConfig, wl: Workload) -> float:
     m = MODEL_SPECS.get(cfg.model, MODEL_SPECS[DEFAULT_MODEL])
     pb = PRECISION_BYTES.get(cfg.precision, 2)
     weight_bytes = m["params"] * pb
-    kv_bytes = m["kv_bytes_per_token"] * (pb / 2)
+    kv_bytes = _kv_bytes_per_token(cfg, m)               # KV dtype is separate from weights (inherit = follow)
     flops_per_token = 2 * m["params"]                    # 1 MAC/param/token ≈ 2 FLOPs
     b = max(1, cfg.batch_size)
     if phase == "prefill":
@@ -110,7 +125,7 @@ def _tokens_per_s(phase: str, cfg: ServingConfig, wl: Workload) -> float:
     flops_per_token = 2 * m["params"]
     compute = g["peak_flops"] * cfg.clock_factor / flops_per_token            # tokens/s if compute-bound
     weight_bytes = m["params"] * pb
-    kv_bytes = m["kv_bytes_per_token"] * (pb / 2)
+    kv_bytes = _kv_bytes_per_token(cfg, m)               # KV dtype is separate from weights (inherit = follow)
     b = max(1, cfg.batch_size)
     if phase == "prefill":
         bw_tokens = g["mem_bw"] / max(weight_bytes / (wl.prompt_tokens * b) + kv_bytes, 1.0)
@@ -185,6 +200,8 @@ def serving_point(wl: Workload, cfg: ServingConfig) -> dict:
     energy_j = gpu_seconds * _power_w(cfg)
     cost_usd = gpu_seconds * GPU_HOUR_USD / 3600.0 + (energy_j / 3.6e6) * ENERGY_USD_PER_KWH
     pf_gpu_s, dc_gpu_s = prefill_work_s, decode_work_s
+    _m = MODEL_SPECS.get(cfg.model, MODEL_SPECS[DEFAULT_MODEL])
+    kv_bpt = _kv_bytes_per_token(cfg, _m)                 # KV bytes/token at the config's KV precision
     share = dc_gpu_s / max(pf_gpu_s + dc_gpu_s, 1e-9)
     phase_bottleneck = ("decode_phase_bound" if share > 0.66 else
                         ("prefill_phase_bound" if share < 0.34 else "mixed_phase_bound"))
@@ -200,7 +217,7 @@ def serving_point(wl: Workload, cfg: ServingConfig) -> dict:
         "energy_j": round(energy_j, 3), "cost_usd": round(cost_usd, 8),
         "tokens_per_s_decode": round(dc_tps_eff, 1), "tokens_per_s_prefill": round(pf_tps, 1),
         "spec_speedup": round(spec_speedup, 4), "power_w": round(_power_w(cfg), 1),
-        "coloc_penalty": round(coloc_penalty, 5)}
+        "coloc_penalty": round(coloc_penalty, 5), "kv_bytes_per_token": round(kv_bpt, 1)}
 
 
 def _set(cfg: ServingConfig, **kw) -> ServingConfig:
@@ -262,6 +279,6 @@ def all_sensitivity_curves(wl: Workload, base: ServingConfig | None = None) -> d
              "precision", "co_location")}
 
 
-__all__ = ["Workload", "ServingConfig", "GPU_SPECS", "MODEL_SPECS", "arithmetic_intensity",
-           "roofline_regime", "serving_point", "sweep_mechanism", "all_sensitivity_curves",
-           "DEFAULT_GPU", "DEFAULT_MODEL"]
+__all__ = ["Workload", "ServingConfig", "GPU_SPECS", "MODEL_SPECS", "PRECISION_BYTES",
+           "KV_PRECISION_BYTES", "arithmetic_intensity", "roofline_regime", "serving_point",
+           "sweep_mechanism", "all_sensitivity_curves", "DEFAULT_GPU", "DEFAULT_MODEL"]
