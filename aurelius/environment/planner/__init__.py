@@ -14,12 +14,15 @@ from .candidate_generators import (
     classify_regimes,
     core_grid,
     expanded_grid,
+    named_anchor_keys,
     physics_guided_candidates,
     random_candidates,
     required_anchors,
 )
+from .default_change_gate import ArmSummary, default_change_gate
 
 __all__ = [
     "REGIMES", "DIAGNOSTIC_WINNER", "CORE_GRID_SURFACES", "classify_regimes", "core_grid",
     "expanded_grid", "physics_guided_candidates", "random_candidates", "required_anchors",
+    "named_anchor_keys", "ArmSummary", "default_change_gate",
 ]

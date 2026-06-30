@@ -1,0 +1,203 @@
+{
+  "setup_a_pr123_tournament": {
+    "harness": "single_decision_forecast_rollout (_rollout_world, horizon_steps=1)",
+    "req_cap": 80,
+    "n_decisions": 1,
+    "dt_seconds": 3600.0,
+    "window": "pjm|expensive",
+    "period": 81,
+    "median_prompt": 1181,
+    "budget": 100,
+    "named_anchor_count": 4,
+    "rows": {
+      "sla_aware": {
+        "gp_per_dollar": 105924.1,
+        "sla_violation_rate": 0.3738,
+        "selected_bundle": {
+          "capacity_policy": "backlog_aware",
+          "ordering_policy": "abs_conformal"
+        },
+        "candidates_evaluated": 1,
+        "is_baseline": true
+      },
+      "production_scheduler": {
+        "gp_per_dollar": 150030.7,
+        "sla_violation_rate": 0.3135,
+        "selected_bundle": {
+          "capacity_policy": "backlog_aware",
+          "ordering_policy": "abs_conformal",
+          "admission_policy": "class_aware",
+          "routing_policy": "kv_aware",
+          "capacity_multiplier": 1.25,
+          "batching_policy": "balanced",
+          "placement_policy": "rack_local"
+        },
+        "candidates_evaluated": 1,
+        "vs_sla_aware": {
+          "abs": 44106.6,
+          "pct": 41.64,
+          "sla_not_worse": true
+        }
+      },
+      "aurelius_mpc_hierarchical_search": {
+        "gp_per_dollar": 1454635.9,
+        "sla_violation_rate": 0.2883,
+        "selected_bundle": {
+          "capacity_policy": "forecasted_mcs",
+          "ordering_policy": "abs_conformal",
+          "admission_policy": "class_aware",
+          "routing_policy": "kv_aware",
+          "capacity_multiplier": 0.75,
+          "batching_policy": "aggressive",
+          "placement_policy": "network_aware",
+          "precision_policy": "fp8",
+          "spec_decode_policy": "aggressive",
+          "clock_policy": "high"
+        },
+        "candidates_evaluated": 80,
+        "cpu_time_s": 37.24178,
+        "regret_pct": 0.0,
+        "anchors_evaluated": true,
+        "vs_sla_aware": {
+          "abs": 1348711.8,
+          "pct": 1273.28,
+          "sla_not_worse": true
+        },
+        "vs_production_scheduler": {
+          "abs": 1304605.2,
+          "pct": 869.56,
+          "sla_not_worse": true
+        }
+      }
+    },
+    "anchors_note": "anchors evaluated; regret reference may lie outside the static core-grid set"
+  },
+  "setup_b_pr124_ladder": {
+    "harness": "multi_period_episode (run_period_episode, persistent world simulator)",
+    "req_cap": 56,
+    "n_decisions": 3,
+    "dt_seconds": 3600.0,
+    "window": "pjm|expensive",
+    "rows": {
+      "sla_aware": {
+        "gp_per_dollar": 295338.01,
+        "sla_violation_rate": 0.22619,
+        "candidates_evaluated": null,
+        "cpu_time_s": 0.0,
+        "selected_bundle": {
+          "routing_policy": "round_robin",
+          "placement_policy": "topology_blind",
+          "precision_policy": "bf16",
+          "clock_policy": "base",
+          "batching_policy": "conservative",
+          "capacity_multiplier": "1.0",
+          "spec_decode_policy": "off"
+        }
+      },
+      "production_scheduler": {
+        "gp_per_dollar": 330710.98,
+        "sla_violation_rate": 0.06548,
+        "candidates_evaluated": null,
+        "cpu_time_s": 0.0,
+        "selected_bundle": {
+          "routing_policy": "kv_aware",
+          "placement_policy": "rack_local",
+          "precision_policy": "bf16",
+          "clock_policy": "base",
+          "batching_policy": "balanced",
+          "capacity_multiplier": "1.25",
+          "spec_decode_policy": "off"
+        },
+        "vs_sla_aware": {
+          "abs": 35373.0,
+          "pct": 11.98,
+          "sla_not_worse": true
+        }
+      },
+      "aurelius_mpc_current_default": {
+        "gp_per_dollar": 685113.49,
+        "sla_violation_rate": 0.01786,
+        "candidates_evaluated": 55,
+        "cpu_time_s": 92.7,
+        "selected_bundle": {
+          "routing_policy": "kv_aware",
+          "placement_policy": "topology_blind",
+          "precision_policy": "fp8",
+          "clock_policy": "high",
+          "batching_policy": "aggressive",
+          "capacity_multiplier": "0.75",
+          "spec_decode_policy": "off"
+        },
+        "vs_sla_aware": {
+          "abs": 389775.5,
+          "pct": 131.98,
+          "sla_not_worse": true
+        },
+        "vs_production_scheduler": {
+          "abs": 354402.5,
+          "pct": 107.16,
+          "sla_not_worse": true
+        }
+      },
+      "aurelius_mpc_hierarchical_search": {
+        "gp_per_dollar": 783862.38,
+        "sla_violation_rate": 0.0,
+        "candidates_evaluated": 75,
+        "cpu_time_s": 161.6,
+        "selected_bundle": {
+          "routing_policy": "kv_aware",
+          "placement_policy": "network_aware",
+          "precision_policy": "fp8",
+          "clock_policy": "high",
+          "batching_policy": "aggressive",
+          "capacity_multiplier": "0.75",
+          "spec_decode_policy": "aggressive"
+        },
+        "vs_sla_aware": {
+          "abs": 488524.4,
+          "pct": 165.41,
+          "sla_not_worse": true
+        },
+        "vs_production_scheduler": {
+          "abs": 453151.4,
+          "pct": 137.02,
+          "sla_not_worse": true
+        }
+      },
+      "oracle_diagnostic": {
+        "gp_per_dollar": 803030.07,
+        "sla_violation_rate": 0.0,
+        "candidates_evaluated": 82,
+        "cpu_time_s": 0.7,
+        "selected_bundle": {
+          "routing_policy": "round_robin",
+          "placement_policy": "topology_blind",
+          "precision_policy": "fp8",
+          "clock_policy": "low",
+          "batching_policy": "aggressive",
+          "capacity_multiplier": "0.75",
+          "spec_decode_policy": "aggressive"
+        },
+        "vs_sla_aware": {
+          "abs": 507692.1,
+          "pct": 171.9,
+          "sla_not_worse": true
+        },
+        "vs_production_scheduler": {
+          "abs": 472319.1,
+          "pct": 142.82,
+          "sla_not_worse": true
+        }
+      }
+    }
+  },
+  "decomposition": {
+    "setup_a_pct_vs_sla_aware": 1273.28,
+    "setup_b_pct_vs_sla_aware": 165.41,
+    "numerator_ratio_A_over_B": 1.856,
+    "denominator_ratio_B_over_A": 2.788,
+    "ratio_of_ratios": 5.174,
+    "explains": "the +1273% (A) vs +164% (B) gap = numerator_ratio \u00d7 denominator_ratio; the SAME sla_aware policy reads far LOWER in A's single forecast-rollout than in B's multi-period real-trace episode, and hierarchical reads HIGHER in A \u2014 both are harness effects (single idealized rollout @req_cap80 vs 3 real periods @req_cap56), not a method regression."
+  },
+  "note": "Diagnostic only. No physics/reward/gate/cost/action/baseline change. SIMULATED magnitudes."
+}

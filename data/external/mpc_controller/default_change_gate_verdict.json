@@ -1,0 +1,121 @@
+{
+  "verdict": {
+    "candidate": "aurelius_mpc_hierarchical_search",
+    "current_default": "aurelius_mpc_current_default",
+    "passed": true,
+    "verdict": "flip_benchmark_default",
+    "failed_conditions": [],
+    "conditions": {
+      "gp_per_dollar_higher_than_current_default": {
+        "passed": true,
+        "candidate": 772464.8267,
+        "current_default": 692066.54,
+        "abs_delta": 80398.2867,
+        "pct_delta": 11.617
+      },
+      "sla_not_worse_than_current_default": {
+        "passed": true,
+        "candidate_sla": 0.0,
+        "current_default_sla": 0.0139
+      },
+      "production_scheduler_pareto_pass": {
+        "passed": true,
+        "abs_delta": 460490.98,
+        "pct_delta": 147.606,
+        "candidate_sla": 0.0,
+        "production_scheduler_sla": 0.0675
+      },
+      "sla_aware_pareto_pass_or_documented": {
+        "passed": true,
+        "pareto_pass": true,
+        "documented_exception": false,
+        "abs_delta": 480024.2167,
+        "pct_delta": 164.144
+      },
+      "required_anchors_always_contained": {
+        "passed": true,
+        "anchors_contained": true
+      },
+      "search_regret_not_higher_than_current_default": {
+        "passed": true,
+        "measurable": true,
+        "candidate_regret": 0.0,
+        "current_default_regret": 0.6442
+      },
+      "runtime_bounded": {
+        "passed": true,
+        "max_evals_per_decision": 75,
+        "runtime_budget_evals": 120
+      },
+      "timeout_rate_acceptable": {
+        "passed": true,
+        "timeout_rate": 0.0,
+        "timeout_rate_max": 0.0
+      },
+      "no_oracle_data": {
+        "passed": true,
+        "uses_oracle": false
+      },
+      "no_quality_risked_action_in_headline": {
+        "passed": true,
+        "headline_uses_quality_risk": false
+      }
+    },
+    "headline_vs_sla_aware_allowed": true,
+    "headline_vs_production_scheduler_allowed": true,
+    "reason": "all 10 conditions pass \u2192 promote candidate to the benchmark default",
+    "note": "SIMULATED directional evidence (bounded simulator-inferred magnitudes), not production telemetry"
+  },
+  "inputs": {
+    "aurelius_mpc_hierarchical_search": {
+      "name": "aurelius_mpc_hierarchical_search",
+      "gp_per_dollar": 772464.8266666667,
+      "sla_violation_rate": 0.0,
+      "regret": 0.0,
+      "anchors_contained": true,
+      "max_evals_per_decision": 75,
+      "timeout_rate": 0.0,
+      "uses_oracle": false,
+      "headline_uses_quality_risk": false
+    },
+    "aurelius_mpc_current_default": {
+      "name": "aurelius_mpc_current_default",
+      "gp_per_dollar": 692066.54,
+      "sla_violation_rate": 0.013890000000000001,
+      "regret": 0.6442,
+      "anchors_contained": null,
+      "max_evals_per_decision": null,
+      "timeout_rate": null,
+      "uses_oracle": false,
+      "headline_uses_quality_risk": false
+    },
+    "production_scheduler": {
+      "name": "production_scheduler",
+      "gp_per_dollar": 311973.8466666667,
+      "sla_violation_rate": 0.06746333333333333,
+      "regret": null,
+      "anchors_contained": null,
+      "max_evals_per_decision": null,
+      "timeout_rate": null,
+      "uses_oracle": false,
+      "headline_uses_quality_risk": false
+    },
+    "sla_aware": {
+      "name": "sla_aware",
+      "gp_per_dollar": 292440.61,
+      "sla_violation_rate": 0.17262,
+      "regret": null,
+      "anchors_contained": null,
+      "max_evals_per_decision": null,
+      "timeout_rate": null,
+      "uses_oracle": false,
+      "headline_uses_quality_risk": false
+    }
+  },
+  "windows": [
+    "caiso|expensive",
+    "ercot|expensive",
+    "pjm|expensive"
+  ],
+  "note": "Aggregated across the Phase E ladder windows; regret from the Phase F exhaustive-able synthetic fixtures. SIMULATED directional evidence."
+}
