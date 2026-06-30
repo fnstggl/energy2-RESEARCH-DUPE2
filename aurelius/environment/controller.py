@@ -178,6 +178,11 @@ class ModelPredictiveEconomicController:
     planning_scenarios: bool = False
     scenario_tail_weight: float = 0.25          # risk-averse penalty on the worst-scenario SLA violation
     planning_oracle_records: list | None = None  # ORACLE diagnostic: plan against the EXACT future workload
+    # token-shape forecaster (this PR): opt-in callable(ar, tm, tp, cv, *, prompt_tokens) → [scenario dicts]
+    # that REPLACES build_scenarios in the planning ensemble, sourcing token shape from recent empirical
+    # quantiles. None = unchanged (PR #113 parametric ensemble). Changes the planning WORKLOAD only — never
+    # the reward function or which metrics are scored.
+    scenario_builder: object = None
     # online Decision Diagnostics (permanent, negligible overhead — exposes already-computed search values;
     # no leave-one-out / oracle / extra solves online). The controller never produces an action without one.
     emit_diagnostics: bool = True
@@ -309,7 +314,8 @@ class ModelPredictiveEconomicController:
             scen = [("oracle", [(r[0] - t0, int(r[1]), int(r[2]) if len(r) > 2 else int(r[1])) for r in recs], 1.0)]
         else:
             scen = []
-            for sc in build_scenarios(ar, tm, tp, cv, prompt_tokens=_pt):
+            _build = self.scenario_builder or build_scenarios
+            for sc in _build(ar, tm, tp, cv, prompt_tokens=_pt):
                 jobs = [(jb.arrival_s, jb.actual_tokens,
                          max(1, int((_pt or jb.actual_tokens) * sc["prompt_mult"])))
                         for jb in _synth_jobs(sc["arrival_rate"], sc["tm"], sc["tp"], sc["cv"],

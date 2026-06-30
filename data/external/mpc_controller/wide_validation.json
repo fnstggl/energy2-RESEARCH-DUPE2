@@ -1,0 +1,1173 @@
+{
+  "stride": 96,
+  "n_frames": 10080,
+  "mpc_periods": 6,
+  "window_len": 8,
+  "windows": {
+    "low_load": {
+      "periods": [
+        269,
+        276
+      ],
+      "n_periods": 8,
+      "window_stats": {
+        "arrival": 11.75,
+        "out": 46.875,
+        "prompt": 1101.5,
+        "cv": 0.09696845604559151
+      },
+      "fair_baseline": "fifo",
+      "delta_pct": 62.28,
+      "pareto_claim_allowed": true,
+      "pareto_sla_not_worse": true,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 69090.1,
+          "sla_violation_rate": 0.05319,
+          "gpu_hours": 0.231,
+          "gpu_seconds": 237.0,
+          "operator_cost": 0.1,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9217,
+          "completion_p95_s": 4.8073,
+          "completion_p99_s": 4.8073,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 66396.5,
+          "sla_violation_rate": 0.06383,
+          "gpu_hours": 0.225,
+          "gpu_seconds": 200.9,
+          "operator_cost": 0.1,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9214,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 68267.6,
+          "sla_violation_rate": 0.05319,
+          "gpu_hours": 0.233,
+          "gpu_seconds": 237.0,
+          "operator_cost": 0.1,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9217,
+          "completion_p95_s": 3.836,
+          "completion_p99_s": 3.836,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 112119.6,
+          "sla_violation_rate": 0.01064,
+          "gpu_hours": 0.186,
+          "gpu_seconds": 267.2,
+          "operator_cost": 0.08,
+          "energy_j": 153869.8,
+          "ttft_p95_s": 1.0366,
+          "completion_p95_s": 7.3337,
+          "completion_p99_s": 7.3337,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "aggressive": 8
+          },
+          "clock_mix": {
+            "base": 1,
+            "low": 7
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "0.75": 8
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 8
+          }
+        }
+      }
+    },
+    "bursty": {
+      "periods": [
+        8837,
+        8844
+      ],
+      "n_periods": 8,
+      "window_stats": {
+        "arrival": 13.875,
+        "out": 55.5,
+        "prompt": 1338.625,
+        "cv": 0.1611778930090632
+      },
+      "fair_baseline": "greedy",
+      "delta_pct": 38.84,
+      "pareto_claim_allowed": true,
+      "pareto_sla_not_worse": true,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 89991.3,
+          "sla_violation_rate": 0.04505,
+          "gpu_hours": 0.244,
+          "gpu_seconds": 301.9,
+          "operator_cost": 0.11,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9113,
+          "completion_p95_s": 2.5434,
+          "completion_p99_s": 2.5434,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 91168.2,
+          "sla_violation_rate": 0.05405,
+          "gpu_hours": 0.231,
+          "gpu_seconds": 256.0,
+          "operator_cost": 0.1,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.911,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 90734.6,
+          "sla_violation_rate": 0.05405,
+          "gpu_hours": 0.236,
+          "gpu_seconds": 301.9,
+          "operator_cost": 0.1,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9113,
+          "completion_p95_s": 4.6629,
+          "completion_p99_s": 4.6629,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 126575.8,
+          "sla_violation_rate": 0.01802,
+          "gpu_hours": 0.181,
+          "gpu_seconds": 310.4,
+          "operator_cost": 0.09,
+          "energy_j": 204670.9,
+          "ttft_p95_s": 0.9421,
+          "completion_p95_s": 8.3855,
+          "completion_p99_s": 8.3855,
+          "precision_mix": {
+            "fp8": 2,
+            "bf16": 6
+          },
+          "spec_decode_mix": {
+            "aggressive": 7,
+            "medium": 1
+          },
+          "clock_mix": {
+            "low": 2,
+            "base": 6
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "0.75": 8
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 8
+          }
+        }
+      }
+    },
+    "long_prompt": {
+      "periods": [
+        656,
+        663
+      ],
+      "n_periods": 8,
+      "window_stats": {
+        "arrival": 16.5,
+        "out": 43.625,
+        "prompt": 1982.75,
+        "cv": 0.1193308843107493
+      },
+      "fair_baseline": "sla_aware",
+      "delta_pct": 81.76,
+      "pareto_claim_allowed": true,
+      "pareto_sla_not_worse": true,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 106916.3,
+          "sla_violation_rate": 0.07576,
+          "gpu_hours": 0.256,
+          "gpu_seconds": 386.9,
+          "operator_cost": 0.11,
+          "energy_j": 0.0,
+          "ttft_p95_s": 1.0415,
+          "completion_p95_s": 7.2168,
+          "completion_p99_s": 7.2168,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 105075.0,
+          "sla_violation_rate": 0.06818,
+          "gpu_hours": 0.244,
+          "gpu_seconds": 328.5,
+          "operator_cost": 0.11,
+          "energy_j": 0.0,
+          "ttft_p95_s": 1.0415,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 108164.6,
+          "sla_violation_rate": 0.06818,
+          "gpu_hours": 0.256,
+          "gpu_seconds": 386.9,
+          "operator_cost": 0.11,
+          "energy_j": 0.0,
+          "ttft_p95_s": 1.0415,
+          "completion_p95_s": 8.4548,
+          "completion_p99_s": 8.4548,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 196603.8,
+          "sla_violation_rate": 0.0,
+          "gpu_hours": 0.181,
+          "gpu_seconds": 307.2,
+          "operator_cost": 0.08,
+          "energy_j": 193842.5,
+          "ttft_p95_s": 1.1265,
+          "completion_p95_s": 8.0666,
+          "completion_p99_s": 8.0666,
+          "precision_mix": {
+            "fp8": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 4,
+            "low": 4
+          },
+          "batching_mix": {
+            "aggressive": 7,
+            "conservative": 1
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "0.75": 8
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 8
+          }
+        }
+      }
+    },
+    "long_output": {
+      "periods": [
+        8902,
+        8909
+      ],
+      "n_periods": 8,
+      "window_stats": {
+        "arrival": 14.25,
+        "out": 95.625,
+        "prompt": 1280.25,
+        "cv": 0.11106428297012699
+      },
+      "fair_baseline": "greedy",
+      "delta_pct": 25.09,
+      "pareto_claim_allowed": true,
+      "pareto_sla_not_worse": true,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 118692.3,
+          "sla_violation_rate": 0.05263,
+          "gpu_hours": 0.256,
+          "gpu_seconds": 361.3,
+          "operator_cost": 0.12,
+          "energy_j": 0.0,
+          "ttft_p95_s": 1.0053,
+          "completion_p95_s": 6.0893,
+          "completion_p99_s": 6.0893,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 128068.5,
+          "sla_violation_rate": 0.02632,
+          "gpu_hours": 0.25,
+          "gpu_seconds": 304.7,
+          "operator_cost": 0.11,
+          "energy_j": 0.0,
+          "ttft_p95_s": 1.005,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 120980.0,
+          "sla_violation_rate": 0.03509,
+          "gpu_hours": 0.261,
+          "gpu_seconds": 361.3,
+          "operator_cost": 0.12,
+          "energy_j": 0.0,
+          "ttft_p95_s": 1.0053,
+          "completion_p95_s": 5.6742,
+          "completion_p99_s": 5.6742,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 160201.3,
+          "sla_violation_rate": 0.01754,
+          "gpu_hours": 0.194,
+          "gpu_seconds": 322.9,
+          "operator_cost": 0.09,
+          "energy_j": 108069.3,
+          "ttft_p95_s": 1.0408,
+          "completion_p95_s": 8.2875,
+          "completion_p99_s": 8.2875,
+          "precision_mix": {
+            "fp8": 2,
+            "bf16": 6
+          },
+          "spec_decode_mix": {
+            "medium": 3,
+            "aggressive": 1,
+            "off": 4
+          },
+          "clock_mix": {
+            "low": 2,
+            "base": 6
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "0.75": 8
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 4
+          }
+        }
+      }
+    },
+    "high_sla_pressure": {
+      "periods": [
+        6235,
+        6242
+      ],
+      "n_periods": 8,
+      "window_stats": {
+        "arrival": 40.375,
+        "out": 53.125,
+        "prompt": 1090.75,
+        "cv": 0.10838854539553502
+      },
+      "fair_baseline": "greedy",
+      "delta_pct": 144.04,
+      "pareto_claim_allowed": true,
+      "pareto_sla_not_worse": true,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 125966.3,
+          "sla_violation_rate": 0.09288,
+          "gpu_hours": 0.325,
+          "gpu_seconds": 910.3,
+          "operator_cost": 0.22,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9494,
+          "completion_p95_s": 15.4803,
+          "completion_p99_s": 18.822,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 136326.0,
+          "sla_violation_rate": 0.0774,
+          "gpu_hours": 0.378,
+          "gpu_seconds": 770.0,
+          "operator_cost": 0.19,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9494,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 130260.2,
+          "sla_violation_rate": 0.05573,
+          "gpu_hours": 0.361,
+          "gpu_seconds": 910.3,
+          "operator_cost": 0.22,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9494,
+          "completion_p95_s": 5.847,
+          "completion_p99_s": 10.1994,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 332695.0,
+          "sla_violation_rate": 0.05,
+          "gpu_hours": 0.183,
+          "gpu_seconds": 454.6,
+          "operator_cost": 0.11,
+          "energy_j": 318225.5,
+          "ttft_p95_s": 0.9494,
+          "completion_p95_s": 10.1978,
+          "completion_p99_s": 11.6448,
+          "precision_mix": {
+            "int4": 8
+          },
+          "spec_decode_mix": {
+            "off": 7,
+            "shallow": 1
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "0.75": 8
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 8
+          }
+        }
+      }
+    },
+    "mixed": {
+      "periods": [
+        1768,
+        1775
+      ],
+      "n_periods": 8,
+      "window_stats": {
+        "arrival": 27.875,
+        "out": 40.875,
+        "prompt": 1132.75,
+        "cv": 0.10951654489638886
+      },
+      "fair_baseline": "sla_aware",
+      "delta_pct": 80.33,
+      "pareto_claim_allowed": false,
+      "pareto_sla_not_worse": false,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 131467.2,
+          "sla_violation_rate": 0.03587,
+          "gpu_hours": 0.272,
+          "gpu_seconds": 551.2,
+          "operator_cost": 0.14,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9523,
+          "completion_p95_s": 7.372,
+          "completion_p99_s": 10.2746,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 122090.4,
+          "sla_violation_rate": 0.05381,
+          "gpu_hours": 0.278,
+          "gpu_seconds": 468.9,
+          "operator_cost": 0.13,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9526,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "aggressive": 8
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 132653.8,
+          "sla_violation_rate": 0.02691,
+          "gpu_hours": 0.278,
+          "gpu_seconds": 551.2,
+          "operator_cost": 0.14,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9523,
+          "completion_p95_s": 4.7106,
+          "completion_p99_s": 6.2192,
+          "precision_mix": {
+            "bf16": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 8
+          },
+          "batching_mix": {
+            "conservative": 8
+          },
+          "routing_mix": {
+            "round_robin": 8
+          },
+          "capacity_mix": {
+            "1.0": 8
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 239212.1,
+          "sla_violation_rate": 0.05,
+          "gpu_hours": 0.181,
+          "gpu_seconds": 350.8,
+          "operator_cost": 0.09,
+          "energy_j": 228957.8,
+          "ttft_p95_s": 1.0065,
+          "completion_p95_s": 7.9733,
+          "completion_p99_s": 9.4136,
+          "precision_mix": {
+            "int4": 8
+          },
+          "spec_decode_mix": {
+            "off": 8
+          },
+          "clock_mix": {
+            "base": 5,
+            "low": 3
+          },
+          "batching_mix": {
+            "aggressive": 5,
+            "conservative": 3
+          },
+          "routing_mix": {
+            "kv_aware": 8
+          },
+          "capacity_mix": {
+            "0.75": 8
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 8
+          }
+        }
+      }
+    },
+    "tail": {
+      "periods": [
+        10074,
+        10079
+      ],
+      "n_periods": 6,
+      "window_stats": {
+        "arrival": 15,
+        "out": 65.83333333333333,
+        "prompt": 1466.1666666666667,
+        "cv": 0.08870768772096319
+      },
+      "fair_baseline": "greedy",
+      "delta_pct": 58.62,
+      "pareto_claim_allowed": true,
+      "pareto_sla_not_worse": true,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 105187.5,
+          "sla_violation_rate": 0.05556,
+          "gpu_hours": 0.194,
+          "gpu_seconds": 253.6,
+          "operator_cost": 0.09,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9763,
+          "completion_p95_s": 5.3048,
+          "completion_p99_s": 5.3048,
+          "precision_mix": {
+            "bf16": 6
+          },
+          "spec_decode_mix": {
+            "off": 6
+          },
+          "clock_mix": {
+            "base": 6
+          },
+          "batching_mix": {
+            "conservative": 6
+          },
+          "routing_mix": {
+            "round_robin": 6
+          },
+          "capacity_mix": {
+            "1.0": 6
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 112161.7,
+          "sla_violation_rate": 0.04444,
+          "gpu_hours": 0.183,
+          "gpu_seconds": 214.6,
+          "operator_cost": 0.08,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9767,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 6
+          },
+          "spec_decode_mix": {
+            "off": 6
+          },
+          "clock_mix": {
+            "base": 6
+          },
+          "batching_mix": {
+            "aggressive": 6
+          },
+          "routing_mix": {
+            "kv_aware": 6
+          },
+          "capacity_mix": {
+            "1.0": 6
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 111091.4,
+          "sla_violation_rate": 0.02222,
+          "gpu_hours": 0.203,
+          "gpu_seconds": 253.6,
+          "operator_cost": 0.09,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9763,
+          "completion_p95_s": 3.4462,
+          "completion_p99_s": 3.4462,
+          "precision_mix": {
+            "bf16": 6
+          },
+          "spec_decode_mix": {
+            "off": 6
+          },
+          "clock_mix": {
+            "base": 6
+          },
+          "batching_mix": {
+            "conservative": 6
+          },
+          "routing_mix": {
+            "round_robin": 6
+          },
+          "capacity_mix": {
+            "1.0": 6
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 177915.9,
+          "sla_violation_rate": 0.0,
+          "gpu_hours": 0.136,
+          "gpu_seconds": 198.9,
+          "operator_cost": 0.06,
+          "energy_j": 112253.5,
+          "ttft_p95_s": 1.1226,
+          "completion_p95_s": 9.0144,
+          "completion_p99_s": 9.0144,
+          "precision_mix": {
+            "fp8": 6
+          },
+          "spec_decode_mix": {
+            "off": 6
+          },
+          "clock_mix": {
+            "low": 6
+          },
+          "batching_mix": {
+            "aggressive": 6
+          },
+          "routing_mix": {
+            "kv_aware": 6
+          },
+          "capacity_mix": {
+            "0.75": 6
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 6
+          }
+        }
+      }
+    },
+    "long_24p": {
+      "periods": [
+        10056,
+        10079
+      ],
+      "n_periods": 24,
+      "window_stats": {
+        "arrival": 15,
+        "out": 56.416666666666664,
+        "prompt": 1170.4166666666667,
+        "cv": 0.09710577712131306
+      },
+      "fair_baseline": "sla_aware",
+      "delta_pct": 53.75,
+      "pareto_claim_allowed": true,
+      "pareto_sla_not_worse": true,
+      "arms": {
+        "fifo": {
+          "gp_per_dollar": 93530.7,
+          "sla_violation_rate": 0.05278,
+          "gpu_hours": 0.761,
+          "gpu_seconds": 941.2,
+          "operator_cost": 0.34,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.908,
+          "completion_p95_s": 5.5297,
+          "completion_p99_s": 5.5297,
+          "precision_mix": {
+            "bf16": 24
+          },
+          "spec_decode_mix": {
+            "off": 24
+          },
+          "clock_mix": {
+            "base": 24
+          },
+          "batching_mix": {
+            "conservative": 24
+          },
+          "routing_mix": {
+            "round_robin": 24
+          },
+          "capacity_mix": {
+            "1.0": 24
+          },
+          "decode_regime_mix": {}
+        },
+        "greedy": {
+          "gp_per_dollar": 93308.6,
+          "sla_violation_rate": 0.05556,
+          "gpu_hours": 0.725,
+          "gpu_seconds": 797.0,
+          "operator_cost": 0.32,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.9079,
+          "completion_p95_s": 0.0,
+          "completion_p99_s": 0.0,
+          "precision_mix": {
+            "bf16": 24
+          },
+          "spec_decode_mix": {
+            "off": 24
+          },
+          "clock_mix": {
+            "base": 24
+          },
+          "batching_mix": {
+            "aggressive": 24
+          },
+          "routing_mix": {
+            "kv_aware": 24
+          },
+          "capacity_mix": {
+            "1.0": 24
+          },
+          "decode_regime_mix": {}
+        },
+        "sla_aware": {
+          "gp_per_dollar": 94487.7,
+          "sla_violation_rate": 0.03889,
+          "gpu_hours": 0.778,
+          "gpu_seconds": 941.2,
+          "operator_cost": 0.34,
+          "energy_j": 0.0,
+          "ttft_p95_s": 0.908,
+          "completion_p95_s": 4.2811,
+          "completion_p99_s": 4.2811,
+          "precision_mix": {
+            "bf16": 24
+          },
+          "spec_decode_mix": {
+            "off": 24
+          },
+          "clock_mix": {
+            "base": 24
+          },
+          "batching_mix": {
+            "conservative": 24
+          },
+          "routing_mix": {
+            "round_robin": 24
+          },
+          "capacity_mix": {
+            "1.0": 24
+          },
+          "decode_regime_mix": {}
+        },
+        "mpc_controller": {
+          "gp_per_dollar": 145275.7,
+          "sla_violation_rate": 0.00833,
+          "gpu_hours": 0.547,
+          "gpu_seconds": 961.3,
+          "operator_cost": 0.26,
+          "energy_j": 590235.3,
+          "ttft_p95_s": 0.989,
+          "completion_p95_s": 8.8527,
+          "completion_p99_s": 8.8527,
+          "precision_mix": {
+            "bf16": 18,
+            "fp8": 6
+          },
+          "spec_decode_mix": {
+            "aggressive": 17,
+            "off": 2,
+            "medium": 5
+          },
+          "clock_mix": {
+            "base": 10,
+            "low": 14
+          },
+          "batching_mix": {
+            "aggressive": 23,
+            "balanced": 1
+          },
+          "routing_mix": {
+            "kv_aware": 24
+          },
+          "capacity_mix": {
+            "0.75": 24
+          },
+          "decode_regime_mix": {
+            "memory_bandwidth_bound": 24
+          }
+        }
+      }
+    }
+  },
+  "summary": {
+    "n_windows": 8,
+    "deltas_pct": [
+      62.28,
+      38.84,
+      81.76,
+      25.09,
+      144.04,
+      80.33,
+      58.62,
+      53.75
+    ],
+    "delta_min": 25.09,
+    "delta_median": 60.45,
+    "delta_max": 144.04,
+    "all_pareto_safe": false,
+    "all_beat_baseline": true,
+    "headline_holds": false
+  }
+}

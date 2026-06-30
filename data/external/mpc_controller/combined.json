@@ -1,0 +1,101 @@
+{
+  "mpc_periods": 6,
+  "market": "pjm",
+  "arms": {
+    "A_sla_aware": {
+      "gp_per_dollar": 111091.4,
+      "sla_violation_rate": 0.02222,
+      "gpu_hours": 0.203,
+      "gpu_seconds": 253.6,
+      "operator_cost": 0.0893,
+      "energy_j": 0.0,
+      "precision_mix": {
+        "bf16": 6
+      },
+      "spec_decode_mix": {
+        "off": 6
+      },
+      "clock_mix": {
+        "base": 6
+      }
+    },
+    "B_current_mpc": {
+      "gp_per_dollar": 177915.9,
+      "sla_violation_rate": 0.0,
+      "gpu_hours": 0.136,
+      "gpu_seconds": 198.9,
+      "operator_cost": 0.0608,
+      "energy_j": 112253.5,
+      "precision_mix": {
+        "fp8": 6
+      },
+      "spec_decode_mix": {
+        "off": 6
+      },
+      "clock_mix": {
+        "low": 6
+      }
+    },
+    "C_tokenshape_mpc": {
+      "gp_per_dollar": 174933.4,
+      "sla_violation_rate": 0.05,
+      "gpu_hours": 0.133,
+      "gpu_seconds": 143.7,
+      "operator_cost": 0.0587,
+      "energy_j": 100608.1,
+      "precision_mix": {
+        "int4": 6
+      },
+      "spec_decode_mix": {
+        "shallow": 4,
+        "off": 2
+      },
+      "clock_mix": {
+        "base": 6
+      }
+    },
+    "D_tokenshape_mpc_p90": {
+      "gp_per_dollar": 153213.5,
+      "sla_violation_rate": 0.05,
+      "gpu_hours": 0.133,
+      "gpu_seconds": 150.4,
+      "operator_cost": 0.0671,
+      "energy_j": 96416.5,
+      "precision_mix": {
+        "int4": 6
+      },
+      "spec_decode_mix": {
+        "shallow": 4,
+        "off": 2
+      },
+      "clock_mix": {
+        "base": 3,
+        "low": 3
+      }
+    }
+  },
+  "summary": {
+    "C_vs_A_baseline_pct": 57.47,
+    "C_vs_B_current_pct": -1.68,
+    "C_pareto_sla_not_worse": false,
+    "clock_low_frac": {
+      "C_default_price": 0.0,
+      "D_p90_price": 0.5
+    },
+    "price_default": 0.042,
+    "price_p90": 0.28125
+  },
+  "forecast_attribution_after": {
+    "arrival_rate": 0.3,
+    "output_length": 69.0,
+    "prompt_length": 17.3,
+    "interarrival_cv": 13.5,
+    "kv_reuse": 0.0,
+    "queue_pressure": 0.0,
+    "sla_pressure": 0.0,
+    "carbon": 0.0,
+    "weather": 0.0,
+    "congestion": 0.0,
+    "electricity_price": 0.0
+  }
+}
