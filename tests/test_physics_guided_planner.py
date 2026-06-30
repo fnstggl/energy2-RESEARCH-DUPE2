@@ -163,8 +163,12 @@ def test_widening_stops_when_margin_large():
     st = PlannerRegimeState(decode_regime="memory_bandwidth_bound", sla_slack=0.3, confidence=0.9)
 
     def clear(b):
+        # pin the Batch-1 no-op knobs too, so the winner is UNIQUE (else the kv_fp8 anchor variant of the
+        # winning bundle ties it under a kv-agnostic scorer and the planner widens to break the tie).
         return 1000.0 if (b.precision_policy == "fp8" and b.batching_policy == "aggressive"
-                          and b.clock_policy == "high") else 50.0
+                          and b.clock_policy == "high"
+                          and b.kv_cache_precision_policy == "inherit_weight_precision"
+                          and b.prefill_decode_policy == "shared") else 50.0
     _, rep = pl.plan(st, clear)
     assert rep.widening_rounds == 0
     assert rep.decision_margin >= pl.margin_threshold

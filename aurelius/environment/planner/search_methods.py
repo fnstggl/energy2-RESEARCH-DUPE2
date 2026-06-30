@@ -47,7 +47,10 @@ from .candidate_generators import (
 _EPS = 1e-9
 # action-group decomposition for hierarchical search (by control timescale).
 SLOW_SURFACES = ("capacity_policy", "capacity_multiplier", "placement_policy", "migration_policy", "prewarm_policy")
-MEDIUM_SURFACES = ("precision_policy", "batching_policy", "spec_decode_policy", "clock_policy")
+# kv_cache_precision couples with weight precision (same roofline byte/bandwidth group); prefill_decode is a
+# medium-timescale capacity-shape knob. Both are regime-gated in `_hierarchical` so width stays ~constant.
+MEDIUM_SURFACES = ("precision_policy", "kv_cache_precision_policy", "batching_policy",
+                   "spec_decode_policy", "clock_policy", "prefill_decode_policy")
 FAST_SURFACES = ("routing_policy", "admission_policy", "ordering_policy")
 
 
@@ -306,6 +309,26 @@ def _hierarchical(score, *, budget, state, allow_quality_risk, named_keys):
             opts = {s: ACTION_SPECS[s].options for s in group}
             if not allow_quality_risk and "precision_policy" in opts:
                 opts["precision_policy"] = ("bf16", "fp8")
+            # Batch-1 regime gating (keep hierarchical width ~constant; new knobs only where they can help):
+            if "kv_cache_precision_policy" in opts:
+                kv_opts = ["inherit_weight_precision", "kv_fp8", "kv_int8"]
+                if allow_quality_risk:
+                    kv_opts.append("kv_int4_diagnostic_only")     # diagnostic only; never the headline
+                # freeze KV precision to the no-op outside the memory-bound / HBM-pressed regime
+                mem = state.decode_regime == "memory_bandwidth_bound"
+                hbm_hi = state.hbm_pressure is not None and state.hbm_pressure >= 0.60
+                opts["kv_cache_precision_policy"] = tuple(kv_opts) if (mem or hbm_hi) \
+                    else ("inherit_weight_precision",)
+            if "prefill_decode_policy" in opts:
+                opts["prefill_decode_policy"] = ("shared", "p40_d60", "p60_d40") \
+                    if getattr(state, "pd_divergence", False) else ("shared",)
+            # ablation mask: hold any disabled Batch-1 knob at its no-op.
+            allowed = getattr(state, "allowed_new_knobs", None)
+            if allowed is not None:
+                for knob, noop in (("kv_cache_precision_policy", "inherit_weight_precision"),
+                                   ("prefill_decode_policy", "shared")):
+                    if knob in opts and knob not in allowed:
+                        opts[knob] = (noop,)
             beam = [(incumbent, bs.cache[_key(incumbent)])]
             for nm in group:                            # build coupled combos WITHIN the group (small beam)
                 nxt = list(beam)

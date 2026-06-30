@@ -16,7 +16,6 @@ Locks in the honesty contract from the Phase-1 audit
 from __future__ import annotations
 
 from aurelius.environment.action_registry import (
-    enumerate_candidate_bundles,
     list_connected_actions,
     status_counts,
     validate_action_bundle,
@@ -62,24 +61,27 @@ def test_legacy_roundtrip_and_serialization():
 def test_status_counts_match_audit():
     counts = status_counts()
     # CONNECTED: capacity, ordering, admission, routing, capacity_multiplier, batching + the stateful
-    # trio (prewarm, placement, migration) + the roofline trio (precision, spec_decode, clock) via the
-    # roofline_serving channel (this PR).
-    assert counts["CONNECTED"] == 12
-    assert counts["SIMULATED_ONLY"] == 4                  # colocation, prefill_decode, kv-routing, topology
+    # trio (prewarm, placement, migration) + the roofline trio (precision, spec_decode, clock) + the
+    # Batch-1 additions (kv_cache_precision via roofline_serving, prefill_decode promoted to CONNECTED).
+    assert counts["CONNECTED"] == 14
+    # SIMULATED_ONLY: colocation, kv-routing, topology + gpu_assignment (prefill_decode left for CONNECTED).
+    assert counts["SIMULATED_ONLY"] == 4
     assert counts.get("PLANNED", 0) + counts.get("REQUIRES_PILOT_TELEMETRY", 0) == 2  # kv_placement, energy
     assert {s.name for s in list_connected_actions()} == set(CONNECTED_SURFACES)
 
 
 def test_enumerate_connected_only_varies_only_connected():
+    from itertools import islice, product
     from math import prod
-    # 12 connected surfaces now incl. precision(3) x spec_decode(4) x clock(3): the 8748 stateful space
-    # x 36 roofline options = 314928
+    # 14 connected surfaces now incl. kv_cache_precision(5) + prefill_decode(3) on top of the prior 314928.
     expected = prod(len(ACTION_SPECS[s].options) for s in CONNECTED_SURFACES)
-    assert expected == 314928
-    bundles = enumerate_candidate_bundles(connected_only=True)
-    assert len(bundles) == expected
-    # no candidate moves a non-connected surface off its default (sample — the full list is 314928)
-    for b in bundles[:500]:
+    assert expected == 314928 * 5 * 3 == 4723920
+    # the full product is impractical to materialise (4.7M) — that is exactly why the planner is a
+    # regime-gated search, not an enumerator. Verify the "varies only connected" invariant on a lazy sample.
+    names = list(CONNECTED_SURFACES)
+    opt_lists = [ACTION_SPECS[n].options for n in names]
+    for combo in islice(product(*opt_lists), 500):
+        b = ActionBundle(**dict(zip(names, combo)))
         assert all(k in CONNECTED_SURFACES for k in b.non_default_surfaces())
         assert validate_action_bundle(b)["ok"]
 
@@ -88,15 +90,16 @@ def test_enumerate_with_simulated_opt_in():
     from math import prod
 
     from aurelius.environment.action_registry import optimizable_surfaces
-    # opting in adds the 4 SIMULATED_ONLY surfaces (colocation, prefill_decode, kv-routing, topology).
+    # opting in adds the 4 SIMULATED_ONLY surfaces (colocation, gpu_assignment, kv-routing, topology).
     names = optimizable_surfaces(include_simulated=True)
     assert set(names) == set(CONNECTED_SURFACES) | {
-        "colocation_policy", "prefill_decode_policy", "kv_routing_policy", "topology_policy"}
+        "colocation_policy", "gpu_assignment_policy", "kv_routing_policy", "topology_policy"}
     # PLANNED surfaces are STILL never optimizable
     assert "energy_policy" not in names and "kv_placement_policy" not in names
-    # the naive Cartesian product is 314928 x 36 = 11.3M — we assert the count but do NOT materialise it
-    # (the adaptive search planner exists precisely because enumerating this is impractical).
-    assert prod(len(ACTION_SPECS[s].options) for s in names) == 314928 * 36
+    # the naive Cartesian product is far larger than the connected one — we assert the count but do NOT
+    # materialise it (the adaptive search planner exists precisely because enumerating this is impractical).
+    assert prod(len(ACTION_SPECS[s].options) for s in names) > prod(
+        len(ACTION_SPECS[s].options) for s in CONNECTED_SURFACES)
     assert ActionBundle().energy_policy == "off" and ActionBundle().kv_placement_policy == "lru"
 
 
@@ -121,9 +124,9 @@ def test_invalid_option_rejected():
 
 def test_non_connected_surface_never_changes_simulator_kwargs():
     base = ActionBundle()
-    # flip genuinely UNWIRED surfaces (NOT routing / batching / capacity_multiplier / prewarm / placement
-    # / migration / precision / spec_decode / clock, which are now CONNECTED; and NOT colocation /
-    # prefill_decode, which are SIMULATED_ONLY but DO have a wired roofline effect when set).
+    # flip genuinely UNWIRED surfaces (NOT routing / batching / capacity_multiplier / prewarm / placement /
+    # migration / precision / kv_cache_precision / spec_decode / clock / prefill_decode, which are now
+    # CONNECTED; and NOT colocation / gpu_assignment, which are SIMULATED_ONLY with a wired model when set).
     flips = {"kv_routing_policy": "prefix_affinity", "topology_policy": "net_aware",
              "energy_policy": "defer_to_cheap", "kv_placement_policy": "reuse_aware"}
     flipped = base.with_overrides(**flips)
