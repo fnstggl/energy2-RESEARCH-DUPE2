@@ -1,0 +1,1905 @@
+{
+  "cells": {
+    "pjm|uncapped|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.3,
+      "actual_requests": 576912,
+      "cap_binding": false
+    },
+    "pjm|uncapped|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 130538.91,
+        "sla_violation_rate": 0.03818,
+        "sla_safe_goodput": 48180589.0,
+        "operator_cost": 369.08986,
+        "gpu_hours": 399.878,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.66,
+        "queue_delay_p99": 9.8404,
+        "cold_start_events": 542,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "seconds": 38.7,
+      "actual_requests": 576912,
+      "cap_binding": false,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "pjm|uncapped|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1041842.01,
+        "sla_violation_rate": 0.00226,
+        "sla_safe_goodput": 60440545.0,
+        "operator_cost": 58.01316,
+        "gpu_hours": 62.217,
+        "energy_kwh": 286.7089,
+        "queue_delay_p95": 9.7457,
+        "queue_delay_p99": 12.801,
+        "cold_start_events": 19,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 1.0,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 75,
+          "theoretical_bundles": 74,
+          "runtime_s": 51.984,
+          "timed_out": false
+        }
+      },
+      "seconds": 186.2,
+      "actual_requests": 576912,
+      "cap_binding": false,
+      "candidates_evaluated": 75,
+      "planner_runtime_s": 51.984
+    },
+    "pjm|56|sla_aware": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "sla_aware",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 295338.01,
+        "sla_violation_rate": 0.22619,
+        "sla_safe_goodput": 9089.0,
+        "operator_cost": 0.03077,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 27.3509,
+        "queue_delay_p99": 28.825,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "seconds": 0.1,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "pjm|56|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 330710.98,
+        "sla_violation_rate": 0.06548,
+        "sla_safe_goodput": 12722.0,
+        "operator_cost": 0.03847,
+        "gpu_hours": 0.042,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 19.7307,
+        "queue_delay_p99": 20.0602,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 0.9707,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "seconds": 0.1,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "pjm|56|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 783862.38,
+        "sla_violation_rate": 0.0,
+        "sla_safe_goodput": 18274.0,
+        "operator_cost": 0.02331,
+        "gpu_hours": 0.025,
+        "energy_kwh": 0.0882,
+        "queue_delay_p95": 7.216,
+        "queue_delay_p99": 7.5832,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 0.9873,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 75,
+          "theoretical_bundles": 74,
+          "runtime_s": 48.989,
+          "timed_out": false
+        }
+      },
+      "seconds": 150.7,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": 75,
+      "planner_runtime_s": 48.989
+    },
+    "pjm|200000|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.7,
+      "actual_requests": 576912,
+      "cap_binding": false
+    },
+    "pjm|150000|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.6,
+      "actual_requests": 450000,
+      "cap_binding": true
+    },
+    "pjm|100000|sla_aware": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "sla_aware",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 110270.93,
+        "sla_violation_rate": 0.12395,
+        "sla_safe_goodput": 16961457.0,
+        "operator_cost": 153.81621,
+        "gpu_hours": 166.586,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 659.1115,
+        "queue_delay_p99": 1434.0483,
+        "cold_start_events": 138,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9997,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "seconds": 202.6,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "pjm|100000|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 137702.81,
+        "sla_violation_rate": 0.0401,
+        "sla_safe_goodput": 24931955.0,
+        "operator_cost": 181.05626,
+        "gpu_hours": 208.217,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.7687,
+        "queue_delay_p99": 10.0264,
+        "cold_start_events": 541,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9997,
+        "mean_topology_factor": 0.992,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "seconds": 23.8,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "pjm|100000|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1038886.72,
+        "sla_violation_rate": 0.00434,
+        "sla_safe_goodput": 31347061.0,
+        "operator_cost": 30.1737,
+        "gpu_hours": 32.356,
+        "energy_kwh": 149.538,
+        "queue_delay_p95": 9.9857,
+        "queue_delay_p99": 24.4268,
+        "cold_start_events": 17,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 75,
+          "theoretical_bundles": 74,
+          "runtime_s": 54.9959,
+          "timed_out": false
+        }
+      },
+      "seconds": 188.8,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": 75,
+      "planner_runtime_s": 54.9959
+    },
+    "ercot|uncapped|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.2,
+      "actual_requests": 442716,
+      "cap_binding": false
+    },
+    "ercot|uncapped|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 130178.26,
+        "sla_violation_rate": 0.04468,
+        "sla_safe_goodput": 36584518.0,
+        "operator_cost": 281.034,
+        "gpu_hours": 323.697,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.5898,
+        "queue_delay_p99": 9.7986,
+        "cold_start_events": 285,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9998,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "seconds": 29.9,
+      "actual_requests": 442716,
+      "cap_binding": false,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "ercot|uncapped|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1064601.79,
+        "sla_violation_rate": 0.00133,
+        "sla_safe_goodput": 48334595.0,
+        "operator_cost": 45.40157,
+        "gpu_hours": 50.953,
+        "energy_kwh": 227.8999,
+        "queue_delay_p95": 9.6782,
+        "queue_delay_p99": 11.9651,
+        "cold_start_events": 13,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 75,
+          "theoretical_bundles": 74,
+          "runtime_s": 38.5616,
+          "timed_out": false
+        }
+      },
+      "seconds": 116.8,
+      "actual_requests": 442716,
+      "cap_binding": false,
+      "candidates_evaluated": 75,
+      "planner_runtime_s": 38.5616
+    },
+    "ercot|56|sla_aware": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "sla_aware",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 293600.8,
+        "sla_violation_rate": 0.14286,
+        "sla_safe_goodput": 8671.0,
+        "operator_cost": 0.02953,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 25.1425,
+        "queue_delay_p99": 26.8078,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "seconds": 0.1,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "ercot|56|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 303982.3,
+        "sla_violation_rate": 0.07143,
+        "sla_safe_goodput": 11222.0,
+        "operator_cost": 0.03692,
+        "gpu_hours": 0.042,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 22.0792,
+        "queue_delay_p99": 22.5458,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 0.9707,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "seconds": 0.1,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "ercot|56|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 785951.78,
+        "sla_violation_rate": 0.0,
+        "sla_safe_goodput": 17549.0,
+        "operator_cost": 0.02233,
+        "gpu_hours": 0.025,
+        "energy_kwh": 0.0822,
+        "queue_delay_p95": 7.0841,
+        "queue_delay_p99": 7.4547,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 0.9873,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 72,
+          "theoretical_bundles": 71,
+          "runtime_s": 36.3777,
+          "timed_out": false
+        }
+      },
+      "seconds": 89.3,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": 72,
+      "planner_runtime_s": 36.3777
+    },
+    "ercot|200000|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.7,
+      "actual_requests": 442716,
+      "cap_binding": false
+    },
+    "ercot|150000|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.6,
+      "actual_requests": 436222,
+      "cap_binding": true
+    },
+    "ercot|100000|sla_aware": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "sla_aware",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 104497.08,
+        "sla_violation_rate": 0.12875,
+        "sla_safe_goodput": 16475321.0,
+        "operator_cost": 157.66298,
+        "gpu_hours": 177.958,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 660.4428,
+        "queue_delay_p99": 1570.2778,
+        "cold_start_events": 91,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9997,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "seconds": 160.6,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "ercot|100000|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 136507.17,
+        "sla_violation_rate": 0.04443,
+        "sla_safe_goodput": 24751613.0,
+        "operator_cost": 181.32097,
+        "gpu_hours": 218.286,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.6355,
+        "queue_delay_p99": 9.8338,
+        "cold_start_events": 281,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9997,
+        "mean_topology_factor": 0.996,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "seconds": 23.8,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "ercot|100000|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1081274.87,
+        "sla_violation_rate": 0.00191,
+        "sla_safe_goodput": 32577417.0,
+        "operator_cost": 30.12871,
+        "gpu_hours": 33.731,
+        "energy_kwh": 158.168,
+        "queue_delay_p95": 9.7369,
+        "queue_delay_p99": 12.5748,
+        "cold_start_events": 13,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 72,
+          "theoretical_bundles": 71,
+          "runtime_s": 39.614,
+          "timed_out": false
+        }
+      },
+      "seconds": 114.0,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": 72,
+      "planner_runtime_s": 39.614
+    },
+    "caiso|uncapped|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.2,
+      "actual_requests": 529621,
+      "cap_binding": false
+    },
+    "caiso|uncapped|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 130000.36,
+        "sla_violation_rate": 0.04584,
+        "sla_safe_goodput": 44359995.0,
+        "operator_cost": 341.22979,
+        "gpu_hours": 391.525,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.5885,
+        "queue_delay_p99": 9.8075,
+        "cold_start_events": 367,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9998,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "seconds": 35.4,
+      "actual_requests": 529621,
+      "cap_binding": false,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "caiso|uncapped|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1111915.47,
+        "sla_violation_rate": 0.00181,
+        "sla_safe_goodput": 58555438.0,
+        "operator_cost": 52.66177,
+        "gpu_hours": 59.964,
+        "energy_kwh": 286.4857,
+        "queue_delay_p95": 9.7006,
+        "queue_delay_p99": 12.2445,
+        "cold_start_events": 18,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 72,
+          "theoretical_bundles": 71,
+          "runtime_s": 53.1801,
+          "timed_out": false
+        }
+      },
+      "seconds": 153.8,
+      "actual_requests": 529621,
+      "cap_binding": false,
+      "candidates_evaluated": 72,
+      "planner_runtime_s": 53.1801
+    },
+    "caiso|56|sla_aware": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "sla_aware",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 288383.02,
+        "sla_violation_rate": 0.14881,
+        "sla_safe_goodput": 8401.0,
+        "operator_cost": 0.02913,
+        "gpu_hours": 0.033,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 23.4507,
+        "queue_delay_p99": 25.7885,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "seconds": 0.1,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "caiso|56|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 301228.26,
+        "sla_violation_rate": 0.06548,
+        "sla_safe_goodput": 10969.0,
+        "operator_cost": 0.03641,
+        "gpu_hours": 0.042,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 19.9442,
+        "queue_delay_p99": 20.2975,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 0.9707,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "seconds": 0.1,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "caiso|56|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 747580.32,
+        "sla_violation_rate": 0.0,
+        "sla_safe_goodput": 16413.0,
+        "operator_cost": 0.02195,
+        "gpu_hours": 0.025,
+        "energy_kwh": 0.0806,
+        "queue_delay_p95": 6.8382,
+        "queue_delay_p99": 7.091,
+        "cold_start_events": 0,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9524,
+        "mean_topology_factor": 0.9873,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 72,
+          "theoretical_bundles": 71,
+          "runtime_s": 53.0202,
+          "timed_out": false
+        }
+      },
+      "seconds": 125.6,
+      "actual_requests": 168,
+      "cap_binding": true,
+      "candidates_evaluated": 72,
+      "planner_runtime_s": 53.0202
+    },
+    "caiso|200000|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.7,
+      "actual_requests": 529621,
+      "cap_binding": false
+    },
+    "caiso|150000|sla_aware": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.6,
+      "actual_requests": 450000,
+      "cap_binding": true
+    },
+    "caiso|100000|sla_aware": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "sla_aware",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 107999.13,
+        "sla_violation_rate": 0.13357,
+        "sla_safe_goodput": 16592128.0,
+        "operator_cost": 153.63206,
+        "gpu_hours": 175.792,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 668.6774,
+        "queue_delay_p99": 1549.4557,
+        "cold_start_events": 135,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9997,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "seconds": 187.8,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "caiso|100000|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 137788.35,
+        "sla_violation_rate": 0.04695,
+        "sla_safe_goodput": 25110180.0,
+        "operator_cost": 182.23733,
+        "gpu_hours": 221.936,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.6858,
+        "queue_delay_p99": 9.8822,
+        "cold_start_events": 361,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9997,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "seconds": 23.8,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": null,
+      "planner_runtime_s": null
+    },
+    "caiso|100000|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1113472.04,
+        "sla_violation_rate": 0.00316,
+        "sla_safe_goodput": 33145950.0,
+        "operator_cost": 29.7681,
+        "gpu_hours": 33.897,
+        "energy_kwh": 162.1087,
+        "queue_delay_p95": 9.8959,
+        "queue_delay_p99": 18.4516,
+        "cold_start_events": 18,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 72,
+          "theoretical_bundles": 71,
+          "runtime_s": 57.7075,
+          "timed_out": false
+        }
+      },
+      "seconds": 154.6,
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "candidates_evaluated": 72,
+      "planner_runtime_s": 57.7075
+    }
+  },
+  "highest_stable_cap": {
+    "pjm": 100000,
+    "ercot": 100000,
+    "caiso": 100000
+  },
+  "config": {
+    "arms": [
+      "sla_aware",
+      "production_scheduler",
+      "aurelius_mpc_hierarchical_search"
+    ],
+    "max_decisions": 3,
+    "cell_timeout_s": 300,
+    "harness": "PR124_benchmark_v1 (run_period_episode, persistent world, real diurnal prices)",
+    "method": "uncapped first; descending probe gated on the binding (slowest-to-simulate) arm"
+  },
+  "recommended_benchmark_cap": 100000,
+  "summary": {
+    "pjm|uncapped": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": 130538.91,
+        "aurelius_mpc_hierarchical_search": 1041842.01
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": 0.03818,
+        "aurelius_mpc_hierarchical_search": 0.00226
+      },
+      "actual_requests": 576912,
+      "cap_binding": false,
+      "aurelius_vs_production_scheduler": {
+        "abs": 911303.1,
+        "pct": 698.11,
+        "pareto_pass": true
+      }
+    },
+    "pjm|56": {
+      "arms_status": {
+        "sla_aware": "COMPLETED",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": 295338.01,
+        "production_scheduler": 330710.98,
+        "aurelius_mpc_hierarchical_search": 783862.38
+      },
+      "sla_violation_rate": {
+        "sla_aware": 0.22619,
+        "production_scheduler": 0.06548,
+        "aurelius_mpc_hierarchical_search": 0.0
+      },
+      "actual_requests": 168,
+      "cap_binding": true,
+      "aurelius_vs_production_scheduler": {
+        "abs": 453151.4,
+        "pct": 137.02,
+        "pareto_pass": true
+      },
+      "aurelius_vs_sla_aware": {
+        "abs": 488524.4,
+        "pct": 165.41,
+        "pareto_pass": true
+      }
+    },
+    "pjm|200000": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "actual_requests": 576912,
+      "cap_binding": false
+    },
+    "pjm|150000": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "actual_requests": 450000,
+      "cap_binding": true
+    },
+    "pjm|100000": {
+      "arms_status": {
+        "sla_aware": "COMPLETED",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": 110270.93,
+        "production_scheduler": 137702.81,
+        "aurelius_mpc_hierarchical_search": 1038886.72
+      },
+      "sla_violation_rate": {
+        "sla_aware": 0.12395,
+        "production_scheduler": 0.0401,
+        "aurelius_mpc_hierarchical_search": 0.00434
+      },
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "aurelius_vs_production_scheduler": {
+        "abs": 901183.9,
+        "pct": 654.44,
+        "pareto_pass": true
+      },
+      "aurelius_vs_sla_aware": {
+        "abs": 928615.8,
+        "pct": 842.12,
+        "pareto_pass": true
+      }
+    },
+    "ercot|uncapped": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": 130178.26,
+        "aurelius_mpc_hierarchical_search": 1064601.79
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": 0.04468,
+        "aurelius_mpc_hierarchical_search": 0.00133
+      },
+      "actual_requests": 442716,
+      "cap_binding": false,
+      "aurelius_vs_production_scheduler": {
+        "abs": 934423.5,
+        "pct": 717.8,
+        "pareto_pass": true
+      }
+    },
+    "ercot|56": {
+      "arms_status": {
+        "sla_aware": "COMPLETED",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": 293600.8,
+        "production_scheduler": 303982.3,
+        "aurelius_mpc_hierarchical_search": 785951.78
+      },
+      "sla_violation_rate": {
+        "sla_aware": 0.14286,
+        "production_scheduler": 0.07143,
+        "aurelius_mpc_hierarchical_search": 0.0
+      },
+      "actual_requests": 168,
+      "cap_binding": true,
+      "aurelius_vs_production_scheduler": {
+        "abs": 481969.5,
+        "pct": 158.55,
+        "pareto_pass": true
+      },
+      "aurelius_vs_sla_aware": {
+        "abs": 492351.0,
+        "pct": 167.69,
+        "pareto_pass": true
+      }
+    },
+    "ercot|200000": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "actual_requests": 442716,
+      "cap_binding": false
+    },
+    "ercot|150000": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "actual_requests": 436222,
+      "cap_binding": true
+    },
+    "ercot|100000": {
+      "arms_status": {
+        "sla_aware": "COMPLETED",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": 104497.08,
+        "production_scheduler": 136507.17,
+        "aurelius_mpc_hierarchical_search": 1081274.87
+      },
+      "sla_violation_rate": {
+        "sla_aware": 0.12875,
+        "production_scheduler": 0.04443,
+        "aurelius_mpc_hierarchical_search": 0.00191
+      },
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "aurelius_vs_production_scheduler": {
+        "abs": 944767.7,
+        "pct": 692.1,
+        "pareto_pass": true
+      },
+      "aurelius_vs_sla_aware": {
+        "abs": 976777.8,
+        "pct": 934.74,
+        "pareto_pass": true
+      }
+    },
+    "caiso|uncapped": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": 130000.36,
+        "aurelius_mpc_hierarchical_search": 1111915.47
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": 0.04584,
+        "aurelius_mpc_hierarchical_search": 0.00181
+      },
+      "actual_requests": 529621,
+      "cap_binding": false,
+      "aurelius_vs_production_scheduler": {
+        "abs": 981915.1,
+        "pct": 755.32,
+        "pareto_pass": true
+      }
+    },
+    "caiso|56": {
+      "arms_status": {
+        "sla_aware": "COMPLETED",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": 288383.02,
+        "production_scheduler": 301228.26,
+        "aurelius_mpc_hierarchical_search": 747580.32
+      },
+      "sla_violation_rate": {
+        "sla_aware": 0.14881,
+        "production_scheduler": 0.06548,
+        "aurelius_mpc_hierarchical_search": 0.0
+      },
+      "actual_requests": 168,
+      "cap_binding": true,
+      "aurelius_vs_production_scheduler": {
+        "abs": 446352.1,
+        "pct": 148.18,
+        "pareto_pass": true
+      },
+      "aurelius_vs_sla_aware": {
+        "abs": 459197.3,
+        "pct": 159.23,
+        "pareto_pass": true
+      }
+    },
+    "caiso|200000": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "actual_requests": 529621,
+      "cap_binding": false
+    },
+    "caiso|150000": {
+      "arms_status": {
+        "sla_aware": "TIMEOUT",
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "gp_per_dollar": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "sla_violation_rate": {
+        "sla_aware": null,
+        "production_scheduler": null,
+        "aurelius_mpc_hierarchical_search": null
+      },
+      "actual_requests": 450000,
+      "cap_binding": true
+    },
+    "caiso|100000": {
+      "arms_status": {
+        "sla_aware": "COMPLETED",
+        "production_scheduler": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "sla_aware": 107999.13,
+        "production_scheduler": 137788.35,
+        "aurelius_mpc_hierarchical_search": 1113472.04
+      },
+      "sla_violation_rate": {
+        "sla_aware": 0.13357,
+        "production_scheduler": 0.04695,
+        "aurelius_mpc_hierarchical_search": 0.00316
+      },
+      "actual_requests": 300000,
+      "cap_binding": true,
+      "aurelius_vs_production_scheduler": {
+        "abs": 975683.7,
+        "pct": 708.1,
+        "pareto_pass": true
+      },
+      "aurelius_vs_sla_aware": {
+        "abs": 1005472.9,
+        "pct": 931.0,
+        "pareto_pass": true
+      }
+    }
+  }
+}
