@@ -8,6 +8,67 @@
 
 ---
 
+## Run 2026-06-25 — BurstGPT-as-BE Closed-Loop Compounding Validation (NULL RESULT / USEFUL RESEARCH)
+
+### Q1. What currently limits Aurelius most?
+
+**BE token-size sensitivity of the compounding result.** The compounding from PR #87 (C+O+A +9.0%, +2.15% over best single C) was validated only with synthetic Azure-resampled BE tokens (mean≈116 tok). This run confirms compounding is distribution-dependent: with BurstGPT BE tokens (mean≈340 tok, 3× heavier), the capacity lever hurts (−15.23%) and interaction is SUBSTITUTIVE.
+
+### Q2. What theoretically offers the largest gain beyond the current best?
+
+On multi-class data with similar LC/BE token sizes: C+O+A still compounds (+9.0%). On multi-class data with heavy BE tokens: O (SRPT ordering) alone dominates (+4.76%). The combination experiment should be parameterized by BE/LC token ratio to identify the compounding threshold.
+
+### Q3. Which forecasts are weakest?
+
+Unchanged from prior runs: EWMA burst-tick under-estimation on BurstGPT (15-request structural gap in replica-scaling domain).
+
+### Q4. Which optimizer decisions remain suboptimal?
+
+The BE token-size sensitivity of the capacity lever (C) under multi-class load. The CapacityController does not differentiate cost-per-token by class — it treats heavy BE jobs the same as light LC jobs when estimating needed capacity. This creates a misallocation when BE tokens are much heavier than LC tokens.
+
+### Q5. Which workloads benefit least?
+
+Multi-class workloads where BE jobs are significantly heavier than LC jobs (ratio ≥ 3×). In this regime, the capacity lever is counterproductive and compounding disappears.
+
+### Q6. Which research direction appears strongest?
+
+Parameterize the BE/LC token ratio to find the compounding threshold. This would tell us exactly when C+O+A beats O alone. If the threshold is at ratio=2× (estimated), most real batch API workloads would still benefit from compounding.
+
+### Q7. What is the shortest path to another gain?
+
+Under heavy BE load: SRPT ordering alone is the cheapest and most effective lever. No capacity scaling needed. For the product: the admission gate (A) provides marginal value (+0.49% standalone) but combining it with O reduces both to +1.16% — not worth the complexity.
+
+### Q8. What is the current north-star status?
+
+Unchanged. Multi-class compounding confirmed on same-sized LC/BE: C+O+A=75,224 gp/$ (+9.0% vs base). NOT confirmed when BE is 3× heavier. The compounding result has a token-size boundary condition.
+
+### Q9. What would need to be true to maintain north-star?
+
+The compounding result holds on workloads where BE/LC token ratio ≤ ~2×. Real-world batch API workloads at customers with mixed short (LC) and medium (BE) jobs would fall in the compounding zone.
+
+### Q10. Which assumptions might be wrong?
+
+The augment_with_best_effort's default token_multiplier=1.5 (synthetic Azure-resampled) may underestimate real batch job sizes. BurstGPT's 340-tok mean is a better proxy for real batch API jobs. The compounding result in PR #87 may be optimistic for production batch workloads.
+
+### Q11. Which benchmark weaknesses exist?
+
+The synthetic BE overlay (Azure-resampled, token_multiplier=1.5) is a convenience approximation. BurstGPT as the BE token source is more realistic for batch API workloads. A full sensitivity sweep over BE/LC token ratios (1.0×, 1.5×, 2×, 3×, 5×) would give a complete picture.
+
+### Q12. Which public datasets should be added?
+
+Unchanged. Full Azure 2024 dataset for production-scale validation.
+
+### Q13. What should be attempted next?
+
+**⛔ FIVE-FAILURE RULE STILL ACTIVE.** Options (ordered by expected value):
+1. **BE/LC token ratio sensitivity sweep** — run augment_with_best_effort at token_multiplier ∈ {1.0, 1.5, 2.0, 3.0, 5.0} to find the compounding threshold. Low complexity (parameterize existing script), high scientific value.
+2. **Phase 1b-A** — serving+replica-scaling loop unification (unblocked, enables cross-domain combination search).
+3. **Phase 1b-C** — energy overlay on serving traces.
+
+Results: `research/results/burstgpt_be_closed_loop_2026-06-27.{md,json}`
+
+---
+
 ## Run 2026-06-25 — Phase 1b-B: Unified ReplayEvaluationResult (ARCHITECTURE CONVERGENCE)
 
 ### Q1. What currently limits Aurelius most?
