@@ -1,6 +1,6 @@
 {
   "config": {
-    "cap": 120,
+    "cap": 100000,
     "market": "pjm",
     "window": "expensive",
     "max_decisions": 3,
@@ -19,7 +19,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.07,
+      "runtime_s": 0.88,
       "candidates_generated": 80,
       "candidates_evaluated": 81,
       "mask": []
@@ -36,7 +36,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.13,
+      "runtime_s": 0.94,
       "candidates_generated": 88,
       "candidates_evaluated": 89,
       "mask": [
@@ -55,7 +55,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.03,
+      "runtime_s": 0.87,
       "candidates_generated": 80,
       "candidates_evaluated": 81,
       "mask": [
@@ -74,7 +74,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.04,
+      "runtime_s": 0.86,
       "candidates_generated": 80,
       "candidates_evaluated": 81,
       "mask": [
@@ -93,7 +93,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.14,
+      "runtime_s": 0.93,
       "candidates_generated": 88,
       "candidates_evaluated": 89,
       "mask": [
@@ -113,7 +113,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.15,
+      "runtime_s": 0.92,
       "candidates_generated": 88,
       "candidates_evaluated": 89,
       "mask": [
@@ -133,7 +133,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.05,
+      "runtime_s": 0.84,
       "candidates_generated": 80,
       "candidates_evaluated": 81,
       "mask": [
@@ -153,7 +153,7 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 1.16,
+      "runtime_s": 0.93,
       "candidates_generated": 88,
       "candidates_evaluated": 89,
       "mask": [
@@ -202,9 +202,9 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 0.87,
-      "candidates_generated": 72,
-      "candidates_evaluated": 61
+      "runtime_s": 0.51,
+      "candidates_generated": 24,
+      "candidates_evaluated": 46
     },
     "oracle_diagnostic": {
       "gp_per_dollar": 602876.88,
@@ -218,9 +218,9 @@
       "precision_mix": {
         "fp8": 3
       },
-      "runtime_s": 0.8,
-      "candidates_generated": 89,
-      "candidates_evaluated": 90
+      "runtime_s": 0.61,
+      "candidates_generated": 81,
+      "candidates_evaluated": 82
     }
   },
   "summary": {
@@ -236,7 +236,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.07
+      "runtime_s": 0.88
     },
     "2_kv_only": {
       "gp_per_dollar": 551149.66,
@@ -250,7 +250,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.13
+      "runtime_s": 0.94
     },
     "3_gpu_assignment_only": {
       "gp_per_dollar": 551149.66,
@@ -264,7 +264,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.03
+      "runtime_s": 0.87
     },
     "4_pd_only": {
       "gp_per_dollar": 551149.66,
@@ -278,7 +278,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.04
+      "runtime_s": 0.86
     },
     "5_kv_plus_gpu": {
       "gp_per_dollar": 551149.66,
@@ -292,7 +292,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.14
+      "runtime_s": 0.93
     },
     "6_kv_plus_pd": {
       "gp_per_dollar": 551149.66,
@@ -306,7 +306,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.15
+      "runtime_s": 0.92
     },
     "7_gpu_plus_pd": {
       "gp_per_dollar": 551149.66,
@@ -320,7 +320,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.05
+      "runtime_s": 0.84
     },
     "8_all_three": {
       "gp_per_dollar": 551149.66,
@@ -334,7 +334,7 @@
       "pareto_vs_production": true,
       "kv_selected": {},
       "pd_selected": {},
-      "runtime_s": 1.16
+      "runtime_s": 0.93
     }
   },
   "comparators": {

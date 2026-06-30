@@ -44,23 +44,28 @@ requests (168 vs 180, ~7% dropped).
    percentage points (157.6 % vs 204.6 %), and hides the SLA-pressure regime that most distinguishes Aurelius.
    It is an artificially easy, sub-real workload.
 
-5. **Freeze at 56 / 80 / 120 / uncapped?** **Freeze at 120.** Caps ≥ 80 are provably uncapped-equivalent for
-   this window, complete instantly, and capture the full SLA-pressure regime. 120 is the smallest *round*
-   headroom cap that (a) is uncapped-equivalent here and (b) leaves margin for higher-volume windows/markets
-   without re-truncating, while staying bounded and reproducible. (Uncapped is equally valid and is reported
-   as feasible; 120 is its tractable, drift-resistant proxy and is the cap used for the Batch-1 ablation.)
+5. **Freeze at 56 / 80 / 120 / uncapped?** **Freeze at cap = 100,000 (uncapped).** > **CORRECTION (Batch-1
+   corrective PR):** an earlier draft of this doc recommended cap=120; that recommendation is **obsolete and
+   withdrawn.** The cap must not be chosen to size the headline. The correct V1 decision is the **highest
+   stable cap under the V1 timeout**: **100,000 requests/period (effectively uncapped)** — the
+   `aurelius_mpc_hierarchical_search` and `production_scheduler` arms complete uncapped; the operative reason
+   "uncapped" is bounded at 100,000 rather than ∞ is that `sla_aware` can time out under the full V1 harness
+   (longer windows / more decisions than this fast smoke). Caps ≥ 80 serve the full real per-period volume, so
+   100,000 = uncapped in volume terms here and never truncates a higher-volume window/market.
 
-6. **What cap should future public claims use?** **Uncapped (reported as cap=120 for reproducibility).** A
-   public gp/$ claim should be stated on the full real per-period volume, never on a truncating cap. If a
-   single number is needed, use the cap=120 = uncapped-equivalent result: **+204.6 % gp/$ vs
-   production_scheduler at equal-or-better SLA (0.0 vs 0.00556)**.
+6. **What cap should future public claims use?** **cap = 100,000 (uncapped).** A public gp/$ claim is stated
+   on the full real per-period volume. The number stands: **+204.6 % gp/$ vs production_scheduler at
+   equal-or-better SLA (0.0 vs 0.00556)** on the uncapped-equivalent workload. **Do not** quote a cap=120
+   number as the V1 headline.
 
 ## Honest caveats
 
 - This is **one market × one window × 3 decisions**. The *saturation* conclusion (real volume ≤ cap=80 here)
   is window-specific; a higher-arrival window/market could bind a higher cap, which is exactly why the freeze
-  is set at 120 (headroom) rather than the tight 80. The *direction* (advantage grows with cap; 56 truncates)
-  is robust because it follows from the served-count and SLA-rate mechanics, not from tuning.
+  is set at the **highest stable cap = 100,000 (uncapped)** rather than any tight per-window number — uncapped
+  never truncates. The *direction* (advantage grows with cap; 56 truncates) is robust because it follows from
+  the served-count and SLA-rate mechanics, not from tuning. (An earlier draft proposed cap=120 as a tractable
+  proxy; that is withdrawn — the cap must not be chosen to size the headline.)
 - Uncapped was **feasible** here (cheap), so we did not have to fall back to a lower completed cap. If a
   future heavier window makes uncapped expensive, report that and choose the highest completed cap — the
   runner records `cells_timed_out` per cap for exactly this.

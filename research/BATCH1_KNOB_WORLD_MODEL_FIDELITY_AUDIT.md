@@ -125,10 +125,10 @@ handoff has a real cost) and the handoff bytes; **SIMULATOR_INFERENCE** for the 
 
 | knob | direction fidelity | magnitude fidelity | production-benchmark status | headline-safe? |
 |--|--|--|--|--|
-| KV-cache precision (fp8/int8) | PUBLIC_BENCHMARK_DERIVED | SIMULATOR_INFERENCE | CONNECTED, regime-gated | yes (fp8/int8) |
+| KV-cache precision (fp8/int8) | PUBLIC_BENCHMARK_DERIVED | SIMULATOR_INFERENCE | optional integration, **default-off** + regime-gated | yes (fp8/int8) on opt-in |
 | KV-cache precision (int4) | — | NEEDS_PRODUCTION_TELEMETRY | diagnostic-only | **no** |
 | heterogeneous GPU assignment | PUBLIC_SPEC_DERIVED | SIMULATOR_INFERENCE | **NOT_APPLICABLE** (fixture-only) | n/a (not on benchmark) |
-| prefill/decode disaggregation | PUBLIC_BENCHMARK_DERIVED | SIMULATOR_INFERENCE | CONNECTED, regime-gated | directional-only |
+| prefill/decode disaggregation | PUBLIC_BENCHMARK_DERIVED | SIMULATOR_INFERENCE | optional integration, **default-off** + regime-gated | directional-only |
 
 **Sources:** [vLLM FP8 KV-cache blog](https://vllm.ai/blog/2026-04-22-fp8-kvcache) ·
 [vLLM Quantized KV docs](https://docs.vllm.ai/en/v0.10.1/features/quantization/quantized_kvcache.html) ·

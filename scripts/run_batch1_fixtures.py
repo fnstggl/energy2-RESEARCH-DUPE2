@@ -25,7 +25,12 @@ from aurelius.environment.gpu_assignment import (
     WorkloadClass,
     compare_assignment_policies,
 )
-from aurelius.environment.pd_disaggregation import PDWorkload, pd_serving_point
+from aurelius.environment.pd_disaggregation import (
+    PDWorkload,
+    distserve_goodput_comparison,
+    pd_serving_point,
+    pd_slo_goodput,
+)
 from aurelius.environment.roofline import GPU_HOUR_USD, Workload, serving_point
 from aurelius.environment.roofline_actions import action_serving_config, roofline_action_factors
 
@@ -238,6 +243,60 @@ def fixtures() -> list:
                 "fidelity": "SIMULATOR_INFERENCE (roofline); gpu_assignment NOT_APPLICABLE (homogeneous prod fleet)",
                 "expect": "help", "pass": (d["gp_pct_delta"] or 0) > 0 and d["sla_delta"] <= 0, **d})
 
+    out.extend(distserve_fixtures())
+    return out
+
+
+def distserve_fixtures() -> list:
+    """DistServe-shaped SLO-attainment fixtures (Batch-1 corrective). Uses DistServe's SLO-attainment goodput
+    metric (TTFT AND TPOT) as a SANITY CHECK that the PD world model can reproduce a DistServe-like win in the
+    genuine regime (high load, skewed phase mix, tight TTFT+TPOT, sufficient KV bandwidth) — NOT a reward path.
+    DistServe reports up to 4.48x goodput / 7.4x more requests / 12.6x tighter SLO; the model is adequate iff
+    it reaches a DistServe-ORDER ratio (>=1.5x) here and correctly shows no benefit / harm otherwise."""
+    out = []
+    # 13. correct split HELPS in the genuine DistServe regime (high load, prefill-heavy, tight TTFT+TPOT, NVLink)
+    hi = PDWorkload(arrival_rate=20, prefill_work_s=0.7, decode_work_s=0.3, context_tokens=2048,
+                    decode_tokens=64, kv_bandwidth_bytes_per_s=300e9)
+    r = distserve_goodput_comparison(hi, n_replicas=16, ttft_slo_s=1.0, tpot_slo_s=0.004)
+    out.append({"fixture": "13_distserve_correct_split_helps", "knob": "prefill_decode",
+                "baseline_bundle": "shared (colocated continuous batching)", "selected_bundle": r["best_split"],
+                "fidelity": "SIMULATOR_INFERENCE (SLO-attainment sanity check; DistServe reports 4.48-12.6x)",
+                "expect": "help", "goodput_ratio_disagg_over_shared": r["goodput_ratio_disagg_over_shared"],
+                "distserve_like": r["distserve_like"], "shared_attainment": r["shared"]["attainment"],
+                "best_attainment": r["best"]["attainment"], "pass": r["distserve_like"]})
+    # 14. WRONG split hurts (decode-heavy split on a prefill-heavy load saturates the prefill pool)
+    wrong = pd_slo_goodput(hi, "decode_heavy", n_replicas=16, ttft_slo_s=1.0, tpot_slo_s=0.004)
+    out.append({"fixture": "14_distserve_wrong_split_hurts", "knob": "prefill_decode",
+                "baseline_bundle": r["best_split"], "selected_bundle": "decode_heavy (wrong)",
+                "fidelity": "SIMULATOR_INFERENCE", "expect": "hurt",
+                "best_goodput": round(r["best"]["slo_safe_goodput"], 1),
+                "wrong_goodput": round(wrong["slo_safe_goodput"], 1),
+                "pass": wrong["slo_safe_goodput"] < r["best"]["slo_safe_goodput"]})
+    # 15. INSUFFICIENT KV bandwidth hurts (same split, vary only bandwidth: NVLink vs slow cross-node link)
+    bw_base = dict(arrival_rate=20, prefill_work_s=0.7, decode_work_s=0.3, context_tokens=4096, decode_tokens=64)
+    fast = pd_slo_goodput(PDWorkload(kv_bandwidth_bytes_per_s=300e9, **bw_base), "balanced_pd",
+                          n_replicas=16, ttft_slo_s=1.2, tpot_slo_s=0.006)
+    slow = pd_slo_goodput(PDWorkload(kv_bandwidth_bytes_per_s=1.0e9, **bw_base), "balanced_pd",
+                          n_replicas=16, ttft_slo_s=1.2, tpot_slo_s=0.006)
+    out.append({"fixture": "15_distserve_insufficient_bandwidth_hurts", "knob": "prefill_decode",
+                "baseline_bundle": "balanced_pd @ NVLink 300GB/s", "selected_bundle": "balanced_pd @ 1GB/s",
+                "fidelity": "SIMULATOR_INFERENCE (KV-handoff bytes/latency; DistServe placement condition)",
+                "expect": "hurt", "fast_bw_goodput": round(fast["slo_safe_goodput"], 1),
+                "slow_bw_goodput": round(slow["slo_safe_goodput"], 1),
+                "fast_handoff_latency_s": fast["kv_handoff_latency"],
+                "slow_handoff_latency_s": slow["kv_handoff_latency"],
+                "pass": slow["slo_safe_goodput"] < fast["slo_safe_goodput"]})
+    # 16. light / balanced load prefers SHARED (colocated) — no interference to remove, handoff is pure overhead
+    light = PDWorkload(arrival_rate=4, prefill_work_s=0.3, decode_work_s=0.3, context_tokens=512,
+                       decode_tokens=128, kv_bandwidth_bytes_per_s=300e9)
+    rl = distserve_goodput_comparison(light, n_replicas=16, ttft_slo_s=2.0, tpot_slo_s=0.05)
+    out.append({"fixture": "16_distserve_light_prefers_shared", "knob": "prefill_decode",
+                "baseline_bundle": "best split", "selected_bundle": "shared (preferred)",
+                "fidelity": "SIMULATOR_INFERENCE (statistical multiplexing)", "expect": "shared_wins",
+                "goodput_ratio_disagg_over_shared": rl["goodput_ratio_disagg_over_shared"],
+                "shared_goodput": round(rl["shared"]["slo_safe_goodput"], 1),
+                "best_split_goodput": round(rl["best"]["slo_safe_goodput"], 1),
+                "pass": rl["shared"]["slo_safe_goodput"] >= rl["best"]["slo_safe_goodput"] - 1e-6})
     return out
 
 

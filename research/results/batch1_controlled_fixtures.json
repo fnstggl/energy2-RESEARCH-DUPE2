@@ -1,6 +1,6 @@
 {
-  "n_fixtures": 12,
-  "n_pass": 12,
+  "n_fixtures": 16,
+  "n_pass": 16,
   "fixtures": [
     {
       "fixture": "1_kv_precision_helps_hbm_bound_decode",
@@ -120,7 +120,7 @@
       "gp_abs_delta": 67211.2,
       "gp_pct_delta": null,
       "sla_delta": -1.0,
-      "latency_delta_s": -0.06908,
+      "latency_delta_s": -0.14312,
       "gpu_hours": 0.09522,
       "cost": 0.190444
     },
@@ -138,7 +138,7 @@
       "gp_abs_delta": 631232.88,
       "gp_pct_delta": null,
       "sla_delta": -1.0,
-      "latency_delta_s": -2.78682,
+      "latency_delta_s": -4.83571,
       "gpu_hours": 0.08111,
       "cost": 0.162222
     },
@@ -181,6 +181,55 @@
       "latency_delta_s": -0.13795,
       "gpu_hours": 0.01095,
       "cost": 0.022171
+    },
+    {
+      "fixture": "13_distserve_correct_split_helps",
+      "knob": "prefill_decode",
+      "baseline_bundle": "shared (colocated continuous batching)",
+      "selected_bundle": "balanced_pd",
+      "fidelity": "SIMULATOR_INFERENCE (SLO-attainment sanity check; DistServe reports 4.48-12.6x)",
+      "expect": "help",
+      "goodput_ratio_disagg_over_shared": 12.84,
+      "distserve_like": true,
+      "shared_attainment": 0.00137,
+      "best_attainment": 0.01758,
+      "pass": true
+    },
+    {
+      "fixture": "14_distserve_wrong_split_hurts",
+      "knob": "prefill_decode",
+      "baseline_bundle": "balanced_pd",
+      "selected_bundle": "decode_heavy (wrong)",
+      "fidelity": "SIMULATOR_INFERENCE",
+      "expect": "hurt",
+      "best_goodput": 22.5,
+      "wrong_goodput": 10.7,
+      "pass": true
+    },
+    {
+      "fixture": "15_distserve_insufficient_bandwidth_hurts",
+      "knob": "prefill_decode",
+      "baseline_bundle": "balanced_pd @ NVLink 300GB/s",
+      "selected_bundle": "balanced_pd @ 1GB/s",
+      "fidelity": "SIMULATOR_INFERENCE (KV-handoff bytes/latency; DistServe placement condition)",
+      "expect": "hurt",
+      "fast_bw_goodput": 34.1,
+      "slow_bw_goodput": 20.0,
+      "fast_handoff_latency_s": 0.00179,
+      "slow_handoff_latency_s": 0.536871,
+      "pass": true
+    },
+    {
+      "fixture": "16_distserve_light_prefers_shared",
+      "knob": "prefill_decode",
+      "baseline_bundle": "best split",
+      "selected_bundle": "shared (preferred)",
+      "fidelity": "SIMULATOR_INFERENCE (statistical multiplexing)",
+      "expect": "shared_wins",
+      "goodput_ratio_disagg_over_shared": 1.0,
+      "shared_goodput": 511.3,
+      "best_split_goodput": 511.3,
+      "pass": true
     }
   ]
 }

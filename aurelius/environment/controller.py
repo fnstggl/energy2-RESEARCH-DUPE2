@@ -170,8 +170,14 @@ class ModelPredictiveEconomicController:
     planning_capacity_blocks: int = 512
     planning_prompt_tokens: int | None = None   # representative prompt length for the planning workload
     # Batch-1 ablation mask: which new knobs (kv_cache_precision_policy / prefill_decode_policy /
-    # gpu_assignment_policy) the planner may vary. None → all (default behaviour). Set by the ablation runner.
+    # gpu_assignment_policy) the planner may vary. None → use the product-boundary default (core orchestration
+    # on; optional serving-engine integrations OFF unless their enable flag is set). An explicit set overrides
+    # this entirely (used by the ablation runner).
     allowed_new_knobs: frozenset | None = None
+    # OPTIONAL serving-engine integrations are DEFAULT-OFF (product boundary: Aurelius must not silently take
+    # control of serving-engine internals). The operator opts in only when the serving stack exposes them.
+    enable_kv_cache_precision: bool = False        # OPTIONAL_SERVING_ENGINE_INTEGRATION (vLLM/TRT-LLM fp8/int8 KV)
+    enable_prefill_decode_disagg: bool = False     # OPTIONAL_SERVING_ENGINE_INTEGRATION (DistServe/Dynamo PD)
     # electricity (this PR): when True the horizon rollout prices each step at the FORECAST electricity price
     # path (traj.point("electricity_price", k)) so the controller chooses clock/DVFS against real diurnal
     # prices. Default False → every step uses the constant fleet price (today's behaviour, flat-price-identical).
@@ -384,6 +390,18 @@ class ModelPredictiveEconomicController:
         # disaggregation candidate only when the phase mix is clearly skewed AND there is contention to relieve
         # (else the shared pool's multiplexing wins and the KV handoff is pure overhead — no free disaggregation).
         pd_divergence = (prefill_heavy is not None) and (cap_press >= 0.30)
+        # PRODUCT-BOUNDARY default mask: core orchestration (gpu_assignment, auto-noop) is always allowed; the
+        # OPTIONAL serving-engine integrations (kv_cache_precision, prefill_decode) are DEFAULT-OFF and only
+        # enabled by explicit operator opt-in. An explicit allowed_new_knobs (ablation) overrides this default.
+        if self.allowed_new_knobs is not None:
+            allowed = self.allowed_new_knobs
+        else:
+            allowed = {"gpu_assignment_policy"}
+            if self.enable_kv_cache_precision:
+                allowed.add("kv_cache_precision_policy")
+            if self.enable_prefill_decode_disagg:
+                allowed.add("prefill_decode_policy")
+            allowed = frozenset(allowed)
         return PlannerRegimeState(
             decode_regime=self._decode_regime_hint(tm), sla_slack=None,
             queue_pressure=0.0, capacity_pressure=cap_press,
@@ -391,7 +409,7 @@ class ModelPredictiveEconomicController:
             output_token_mean=(tm.mean if tm else None), hbm_pressure=round(hbm_pressure, 4),
             pd_divergence=pd_divergence, prefill_heavy=prefill_heavy,
             heterogeneous_fleet=False,   # production cost path is single-dominant-GPU → NOT_APPLICABLE
-            allowed_new_knobs=self.allowed_new_knobs,
+            allowed_new_knobs=allowed,
             confidence=confidence, prev_bundle=self._prev_best_bundle)
 
     def _planner_package_decide(self, mode, score_fn, ar, tm, tp, cv, pr, confidence):

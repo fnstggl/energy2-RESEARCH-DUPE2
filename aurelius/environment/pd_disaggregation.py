@@ -38,15 +38,25 @@ PD_POLICY_TO_PREFILL_SHARE = {
 }
 PD_POLICY_OPTIONS = ("shared", "disaggregated_static", "prefill_heavy", "decode_heavy", "balanced_pd")
 
-# KV handoff interconnect bandwidth (GB/s) prefill→decode pool. Conservative inter-node band (NVLink is
-# faster intra-node; cross-pool disaggregation often crosses nodes → IB/RoCE class). SIMULATOR_INFERENCE.
+# KV handoff interconnect bandwidth (B/s) prefill→decode pool. DistServe §"Placement": intra-node NVLink
+# (~hundreds of GB/s) makes the KV handoff negligible; cross-node IB/RoCE (tens of GB/s) makes BANDWIDTH-AWARE
+# placement essential — below a threshold the handoff dominates and disaggregation HURTS. Default ≈ NVLink.
 HANDOFF_BANDWIDTH_BYTES_PER_S = 100e9
+# A handoff that consumes more than this fraction of the per-request decode budget makes disaggregation a net
+# loss (the KV transfer stalls the decode worker). DistServe's bandwidth/placement condition, as a guard.
+HANDOFF_BUDGET_FRACTION_HURT = 0.5
 # Shared-pool prefill/decode INTERFERENCE (the loss DistServe/Splitwise/Sarathi disaggregate to remove):
 # mixing prefill and decode on the same replicas costs efficiency in proportion to how BUSY the pool is and
 # how SKEWED the phase mix is (a near-balanced mix multiplexes cleanly; a dominant phase starves the other /
 # spikes inter-token latency). Disaggregated pools are phase-isolated → no interference, but pay the KV
 # handoff + the statistical-multiplexing penalty of two smaller pools. SIMULATOR_INFERENCE band.
 SHARED_INTERFERENCE_K = 0.9
+# DistServe's dominant colocation cost: in a shared pool a DECODE token waits behind in-flight PREFILL chunks
+# (the inter-token-latency / TPOT spike). Chunked prefill (Sarathi) mitigates but does NOT remove it → a
+# residual blocking. Scales with how much of the shared pool is doing prefill (its prefill utilization).
+# Disaggregated pools are phase-isolated → no TPOT blocking (but pay handoff + multiplexing). SIMULATOR_INFERENCE.
+PREFILL_DECODE_BLOCK_K = 1.5          # max decode slowdown from prefill blocking ≈ 1 + K at full prefill load
+CHUNKED_PREFILL_RESIDUAL = 0.5        # share of the blocking that survives chunked-prefill mitigation
 _GIB = 1024 ** 3
 
 
@@ -58,6 +68,8 @@ class PDWorkload:
     decode_work_s: float           # per-request decode service time
     context_tokens: int = 832      # KV context handed off prefill→decode
     kv_bytes_per_token: float = 131072.0   # llama-8b-gqa fp16 (BENCHMARK_DERIVED)
+    decode_tokens: int = 128       # output tokens (for TPOT/decode-budget SLO attainment)
+    kv_bandwidth_bytes_per_s: float = HANDOFF_BANDWIDTH_BYTES_PER_S  # interconnect for the prefill→decode handoff
 
 
 def _mmc_wait(offered: float, c: int, service_s: float) -> float:
@@ -123,7 +135,12 @@ def pd_serving_point(wl: PDWorkload, policy: str, *, n_replicas: int, period_sec
         contention = max(0.0, min(1.0, util) - 0.25)        # HoL blocking is a high-load phenomenon
         interference = 1.0 + SHARED_INTERFERENCE_K * contention * skew
         ttft *= interference
-        dec *= interference
+        # DistServe TPOT blocking: each decode token waits behind in-flight prefill chunks. Scales with the
+        # shared pool's prefill utilization (how often a prefill is co-scheduled) and only bites under load
+        # (the contention floor). Chunked prefill leaves a residual. This is the dominant colocation TPOT cost.
+        prefill_intensity = min(1.0, offered_p / c) * (contention / max(util, 1e-9) if util > 0 else 0.0)
+        tpot_block = 1.0 + PREFILL_DECODE_BLOCK_K * CHUNKED_PREFILL_RESIDUAL * prefill_intensity
+        dec *= interference * tpot_block
         return PDResult(
             selected_pd_policy="shared", prefill_pool=c, decode_pool=c,
             prefill_queue_wait=round(wait, 6), decode_queue_wait=round(wait, 6),
@@ -139,9 +156,15 @@ def pd_serving_point(wl: PDWorkload, policy: str, *, n_replicas: int, period_sec
     wait_d = _mmc_wait(offered_d, c_d, wl.decode_work_s)
     util_p = offered_p / c_p
     util_d = offered_d / c_d
-    # KV handoff: ship the full context KV from the prefill pool to the decode pool (DistServe/Splitwise).
+    # KV handoff: ship the full context KV from the prefill pool to the decode pool (DistServe/Splitwise),
+    # over the (possibly cross-node) interconnect. Low bandwidth → the transfer stalls the decode worker.
     handoff_bytes = wl.kv_bytes_per_token * max(1, wl.context_tokens)
-    handoff_latency = handoff_bytes / HANDOFF_BANDWIDTH_BYTES_PER_S
+    handoff_latency = handoff_bytes / max(1.0, wl.kv_bandwidth_bytes_per_s)
+    # DistServe bandwidth/placement guard: if the handoff eats more than HANDOFF_BUDGET_FRACTION_HURT of the
+    # decode budget, the transfer dominates and disaggregation is a net loss (extra stall on decode start).
+    decode_budget = max(wl.decode_work_s, 1e-9)
+    if handoff_latency > HANDOFF_BUDGET_FRACTION_HURT * decode_budget:
+        wait_d += (handoff_latency - HANDOFF_BUDGET_FRACTION_HURT * decode_budget)  # excess stalls decode
     idle_p = max(0.0, c_p - offered_p) * period_seconds
     idle_d = max(0.0, c_d - offered_d) * period_seconds
     # balanced pools (equal utilization) waste no capacity; divergence strandes one pool.
@@ -158,6 +181,54 @@ def pd_serving_point(wl: PDWorkload, policy: str, *, n_replicas: int, period_sec
         mean_completion_s=round(ttft + dec, 6), ttft_s=round(ttft, 6), decode_latency_s=round(dec, 6))
 
 
+def _slo_attainment(mean_latency_s: float, slo_s: float) -> float:
+    """P(latency ≤ slo) under an exponential-sojourn assumption (M/M/1-class): 1 − exp(−slo/mean). Monotone
+    in the slack slo/mean — a busier pool (higher mean) attains less; an idle pool attains ~1. DistServe
+    scores SLO *attainment*; this is the smooth per-phase attainment from the phase-pool model's mean."""
+    import math
+    if slo_s <= 0:
+        return 0.0
+    return max(0.0, min(1.0, 1.0 - math.exp(-slo_s / max(mean_latency_s, 1e-9))))
+
+
+def pd_slo_goodput(wl: PDWorkload, policy: str, *, n_replicas: int, ttft_slo_s: float,
+                   tpot_slo_s: float, period_seconds: float = 60.0) -> dict:
+    """SLO-attainment goodput for a PD policy (the DistServe metric). A request is good only if it meets BOTH
+    the TTFT SLO (first token) AND the TPOT SLO (per output token → a decode-budget = tpot·decode_tokens).
+    goodput = attainment · throughput. Captures DistServe's mechanism: colocation interference lowers both
+    means → lower attainment; a correct disaggregated split removes interference → higher attainment; a wrong
+    split or insufficient KV bandwidth stalls a pool → its mean explodes → attainment → 0."""
+    r = pd_serving_point(wl, policy, n_replicas=n_replicas, period_seconds=period_seconds)
+    decode_budget_s = max(1e-9, tpot_slo_s * max(1, wl.decode_tokens))
+    attain_ttft = _slo_attainment(r.ttft_s, ttft_slo_s)
+    attain_tpot = _slo_attainment(r.decode_latency_s, decode_budget_s)
+    attainment = attain_ttft * attain_tpot
+    throughput = wl.arrival_rate * max(1, wl.decode_tokens)
+    return {"policy": policy, "attainment": round(attainment, 5),
+            "attain_ttft": round(attain_ttft, 5), "attain_tpot": round(attain_tpot, 5),
+            "slo_safe_goodput": round(attainment * throughput, 3),
+            "ttft_s": r.ttft_s, "decode_latency_s": r.decode_latency_s,
+            "kv_handoff_latency": r.kv_handoff_latency, "prefill_pool_util": r.prefill_pool_utilization,
+            "decode_pool_util": r.decode_pool_utilization, "allocation_efficiency": r.allocation_efficiency}
+
+
+def distserve_goodput_comparison(wl: PDWorkload, *, n_replicas: int, ttft_slo_s: float, tpot_slo_s: float,
+                                 splits=("p40_d60", "p60_d40", "balanced_pd", "prefill_heavy", "decode_heavy"),
+                                 period_seconds: float = 60.0) -> dict:
+    """DistServe-shaped sanity check: SLO-attainment goodput of the shared (colocated continuous-batching)
+    pool vs the BEST disaggregated split, and their ratio. Used to ask 'can our PD model reproduce a
+    DistServe-like win?' — NOT a reward path. Returns the ratio and a `distserve_like` flag (≥1.5× goodput)."""
+    shared = pd_slo_goodput(wl, "shared", n_replicas=n_replicas, ttft_slo_s=ttft_slo_s,
+                            tpot_slo_s=tpot_slo_s, period_seconds=period_seconds)
+    cand = {p: pd_slo_goodput(wl, p, n_replicas=n_replicas, ttft_slo_s=ttft_slo_s, tpot_slo_s=tpot_slo_s,
+                              period_seconds=period_seconds) for p in splits}
+    best = max(cand, key=lambda p: cand[p]["slo_safe_goodput"])
+    ratio = cand[best]["slo_safe_goodput"] / max(shared["slo_safe_goodput"], 1e-9)
+    return {"shared": shared, "best_split": best, "best": cand[best], "all_splits": cand,
+            "goodput_ratio_disagg_over_shared": round(ratio, 3),
+            "distserve_like": ratio >= 1.5}
+
+
 def compare_pd_policies(wl: PDWorkload, *, n_replicas: int, policies=PD_POLICY_OPTIONS,
                         period_seconds: float = 60.0) -> dict:
     """``{policy: PDResult.to_dict()}`` for each policy + the completion-time winner. The shared baseline is
@@ -171,4 +242,5 @@ def compare_pd_policies(wl: PDWorkload, *, n_replicas: int, policies=PD_POLICY_O
 
 
 __all__ = ["PD_POLICY_TO_PREFILL_SHARE", "PD_POLICY_OPTIONS", "HANDOFF_BANDWIDTH_BYTES_PER_S",
-           "PDWorkload", "PDResult", "pd_serving_point", "compare_pd_policies"]
+           "HANDOFF_BUDGET_FRACTION_HURT", "PDWorkload", "PDResult", "pd_serving_point",
+           "compare_pd_policies", "pd_slo_goodput", "distserve_goodput_comparison"]

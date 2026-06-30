@@ -255,7 +255,9 @@ def regime_surface_options(state: PlannerRegimeState, *, optional_surfaces: tupl
     if not background_work:
         reasons.setdefault("colocation_excluded", "no background-work trace (co-location can only hurt SLA)")
 
-    # ablation mask: freeze any Batch-1 knob not in `allowed_new_knobs` to its no-op (records the reason).
+    # product-boundary / ablation mask: freeze any Batch-1 knob not in `allowed_new_knobs` to its no-op.
+    # By default the OPTIONAL serving-engine integrations (kv_cache_precision, prefill_decode) are NOT in the
+    # allowed set → held at no-op (default-off; require explicit operator opt-in). Records the reason.
     allowed = state.allowed_new_knobs
     if allowed is not None:
         for knob, noop in (("kv_cache_precision_policy", "inherit_weight_precision"),
@@ -263,7 +265,8 @@ def regime_surface_options(state: PlannerRegimeState, *, optional_surfaces: tupl
                            ("gpu_assignment_policy", "homogeneous_default")):
             if knob not in allowed and knob in surfaces and len(surfaces[knob]) > 1:
                 surfaces[knob] = (noop,)
-                reasons[f"{knob}_ablation_disabled"] = "ablation arm: knob held at no-op"
+                reasons[f"{knob}_disabled"] = (
+                    "optional serving-engine integration: default-off (requires explicit opt-in)")
     return surfaces, reasons
 
 

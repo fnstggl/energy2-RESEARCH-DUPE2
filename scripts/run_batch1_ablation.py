@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Batch-1 action-knob ablation ladder (Phase 7) — what each new knob contributes on the frozen Benchmark v1.
 
-Runs the frozen request cap from Phase 0 (default 120 = uncapped-equivalent) on one market+window through the
+Runs the Benchmark v1 cap (default 100000 = uncapped; caps >=80 are uncapped-equivalent per Phase 0) on the
 SAME reward path as the headline benchmark, with the hierarchical_search planner under eight ablation masks:
 
   1 baseline            (no new knobs)            5 kv + gpu
@@ -16,7 +16,7 @@ pass/fail (gp/$ up AND SLA not worse), runtime, candidates generated/evaluated, 
 planner actually SELECTED (the kv / pd / assignment mix). gpu_assignment is NOT_APPLICABLE on the production
 fleet (single dominant GPU type), so its ablation arms are reported as such — never a fake gain.
 
-Usage: python -m scripts.run_batch1_ablation [--cap 120] [--market pjm] [--max-decisions 3] [--win-len 4]
+Usage: python -m scripts.run_batch1_ablation [--cap 100000] [--market pjm] [--max-decisions 3] [--win-len 4]
 """
 
 from __future__ import annotations
@@ -135,7 +135,7 @@ def _pct(c, b):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cap", type=int, default=120)        # the frozen Benchmark v1 cap (Phase 0)
+    ap.add_argument("--cap", type=int, default=100000)        # the frozen Benchmark v1 cap (Phase 0)
     ap.add_argument("--market", default="pjm")
     ap.add_argument("--win-len", type=int, default=4)
     ap.add_argument("--max-decisions", type=int, default=3)

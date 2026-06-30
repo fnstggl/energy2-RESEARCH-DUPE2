@@ -24,10 +24,12 @@ inference, it is kept opt-in or labelled directional-only.
 7. **Magnitude headline-safe?** fp8/int8: borderline — direction is benchmark-grounded, magnitude is
    simulator-inferred → safe as *directional*. int4: **no**.
 8. **Direction headline-safe?** fp8/int8: **yes**. int4: **no** (unmodelled quality risk).
-9. **Default-on?** Yes — but **regime-gated** (generated only in memory-bound/HBM-pressed windows) and
-   Pareto-gated. Default value is the no-op `inherit_weight_precision`, so it never perturbs other regimes.
+9. **Default-on?** **No (corrected in the Batch-1 corrective PR).** KV-cache precision is an
+   `OPTIONAL_SERVING_ENGINE_INTEGRATION` and is **default-OFF** (requires `enable_kv_cache_precision`). When
+   enabled it is additionally regime-gated + Pareto-gated; default value is the no-op
+   `inherit_weight_precision`. See `BATCH1_ACTION_SURFACE_PRODUCT_BOUNDARY.md`.
 10. **Diagnostic-only?** Only `kv_int4_diagnostic_only` (opt-in via `allow_quality_risk`; quality-risk channel
-    + excluded from the headline planner). fp8/int8 are deployable.
+    + excluded from the headline planner). fp8/int8 are deployable **once the operator opts in**.
 
 ## 2. Heterogeneous GPU assignment (`gpu_assignment_policy`)
 
@@ -65,10 +67,13 @@ inference, it is kept opt-in or labelled directional-only.
    per-phase utilization.
 7. **Magnitude headline-safe?** No — directional only.
 8. **Direction headline-safe?** Yes (benchmark-grounded), but reported directional given no live phase queues.
-9. **Default-on?** Yes — but **regime-gated** (generated only when prefill/decode pressures diverge AND there
-   is contention) and Pareto-gated. Default value is the no-op `shared`.
-10. **Diagnostic-only?** No (CONNECTED), but every PD result is labelled **directional / SIMULATOR_INFERENCE**
-    until pilot disaggregated-pool telemetry.
+9. **Default-on?** **No (corrected in the Batch-1 corrective PR).** PD disaggregation is an
+   `OPTIONAL_SERVING_ENGINE_INTEGRATION` and is **default-OFF** (requires `enable_prefill_decode_disagg`, and a
+   serving stack that supports disaggregation). When enabled it is regime-gated + Pareto-gated; default value
+   is the no-op `shared`.
+10. **Diagnostic-only?** No (CONNECTED when opted in), but every PD result is labelled **directional /
+    SIMULATOR_INFERENCE** until pilot disaggregated-pool telemetry. The DistServe-shaped fixtures confirm the
+    model reproduces a DistServe-ORDER goodput win in the genuine regime.
 
 ---
 
@@ -81,7 +86,8 @@ inference, it is kept opt-in or labelled directional-only.
   no-op, regime-gated); we still label its *magnitude* simulator-inferred.
 - **int4 KV** is diagnostic-only (no quality model).
 - **heterogeneous GPU assignment** is NOT_APPLICABLE to the benchmark → fixture-only / SIMULATED_ONLY.
-- **PD disaggregation** is enabled but **directional-only** until live phase-queue telemetry.
+- **PD disaggregation** is **default-off / optional** (serving-engine integration) and **directional-only**
+  until live phase-queue telemetry; it reproduces a DistServe-order win in the genuine high-load skewed regime.
 
 This satisfies the hard rule: every knob whose win rests on weak simulator inference is opt-in (int4),
 not-on-benchmark (GPU assignment), or labelled directional (PD); only the benchmark-grounded, regime-gated,

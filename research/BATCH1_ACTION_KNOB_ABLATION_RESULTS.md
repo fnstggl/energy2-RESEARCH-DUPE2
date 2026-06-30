@@ -1,6 +1,10 @@
 # Batch-1 action-knob ablation ladder (Phase 7)
 
-Runs the **frozen Benchmark v1 cap = 120** (Phase 0) on `pjm` / the price-`expensive` window / 3 decisions
+> **Cap note (Batch-1 corrective):** the recommended Benchmark v1 cap is **100,000 (uncapped)** — caps ≥ 80
+> are uncapped-equivalent in served volume (Phase 0), so the cap=120 used in this ablation run is identical in
+> result to uncapped here (the cap=120 *recommendation* is withdrawn; see the freeze doc).
+
+Runs the (uncapped-equivalent) cap = 120 on `pjm` / the price-`expensive` window / 3 decisions
 through the **unchanged reward path** with `hierarchical_search`, under eight ablation masks plus the
 comparison arms. Runner: `scripts/run_batch1_ablation.py`; artifact:
 `research/results/batch1_action_knob_ablation.json`. The mask is threaded through the planner via
