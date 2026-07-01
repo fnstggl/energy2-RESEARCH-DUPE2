@@ -1,0 +1,97 @@
+{
+  "config": {
+    "market": "pjm",
+    "cap": 100000,
+    "window": "expensive",
+    "periods": 6,
+    "dominant_gpu_type": "H100",
+    "median_prompt_tokens": 0,
+    "mean_requests_per_period": 60
+  },
+  "data_quality": {
+    "prompt_token_data_present": false,
+    "caveat": "the Azure serving trace records input_tokens=0 (prompt side UNOBSERVED) \u2192 the prefill phase and large-context KV pressure cannot be exercised by this benchmark; prefill-side regime metrics (PD skew, KV HBM pressure) are degraded and read as decode-only/light",
+    "load_level": "light (few requests/period, low arrival rate) \u2192 not the high-load regime PD needs"
+  },
+  "kv_cache_precision": {
+    "periods": 6,
+    "pct_memory_bandwidth_bound": 100.0,
+    "pct_hbm_high_pressure": 0.0,
+    "mean_kv_occupancy_estimate": 0.012,
+    "kv_bytes_saved_pct_fp8": 50.0,
+    "kv_bytes_saved_pct_int8": 50.0,
+    "kv_eviction_pressure": "occupancy < working-set threshold in all periods (no eviction pressure)",
+    "product_category": "OPTIONAL_SERVING_ENGINE_INTEGRATION",
+    "default_off": true
+  },
+  "prefill_decode_disaggregation": {
+    "periods": 6,
+    "phase_mix": {
+      "prefill_heavy": 0,
+      "decode_heavy": 6,
+      "balanced": 0
+    },
+    "pct_skewed": 100.0,
+    "mean_interference_relief_estimate": 0.0,
+    "mean_phase_pool_utilization": 0.0021,
+    "mean_handoff_bytes": 12320768.0,
+    "mean_handoff_latency_s": 0.000123,
+    "resembles_distserve_high_load_skewed_regime": false,
+    "product_category": "OPTIONAL_SERVING_ENGINE_INTEGRATION",
+    "default_off": true
+  },
+  "gpu_assignment": {
+    "fleet_gpu_type_mix": {
+      "H100": 0.5,
+      "A100": 0.5
+    },
+    "server_level_gpu_type_counts": {
+      "XPU-C": 3,
+      "A10": 6,
+      "L20": 5,
+      "H20": 3,
+      "A100": 1,
+      "XPU-D": 2,
+      "XPU-B": 3,
+      "XPU-A": 1
+    },
+    "heterogeneous_fleetwide": true,
+    "gpu_type_constant_per_server": true,
+    "cost_path_charges": "single dominant GPU type per period (not per selected GPU type)",
+    "request_to_gpu_assignment_in_reward_path": false,
+    "routing_opportunity_across_types": true,
+    "applicability": "NOT_APPLICABLE (simulated-only / fixture-only)",
+    "required_before_headline": [
+      "per-replica/request GPU-type assignment mechanism in run_unified_replay",
+      "cost path that charges per selected GPU type (not the dominant)",
+      "per-(GPU,model) measured serving latency calibration"
+    ],
+    "default_on_auto_noop": true,
+    "product_category": "CORE_ORCHESTRATION_AUTO_NOOP"
+  },
+  "selection": {
+    "default_off": {
+      "gp_per_dollar": 560751.21,
+      "kv_mix": {
+        "inherit_weight_precision": 6
+      },
+      "pd_mix": {
+        "shared": 6
+      }
+    },
+    "opt_in": {
+      "gp_per_dollar": 560751.21,
+      "kv_mix": {
+        "inherit_weight_precision": 6
+      },
+      "pd_mix": {
+        "shared": 6
+      }
+    },
+    "kv_selected_default_off": false,
+    "kv_selected_opt_in": false,
+    "pd_selected_default_off": false,
+    "pd_selected_opt_in": false,
+    "headline_unchanged_by_opt_in": true
+  }
+}

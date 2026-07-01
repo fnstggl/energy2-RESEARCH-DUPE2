@@ -30,6 +30,24 @@ REQUIRES_PILOT_TELEMETRY = "REQUIRES_PILOT_TELEMETRY"   # needs operator data (A
 REJECTED = "REJECTED"                        # out of product scope
 STATUSES = (CONNECTED, SIMULATED_ONLY, PLANNED, REQUIRES_PILOT_TELEMETRY, REJECTED)
 
+# --- product-boundary taxonomy (Batch-1 corrective) -------------------------
+# Aurelius is primarily a GPU FLEET ORCHESTRATOR. It may optimize fleet-level decisions by default, but it
+# must NOT silently take control of serving-engine internals unless the serving stack explicitly exposes them.
+# Every surface is classified into exactly one product category:
+CORE_ORCHESTRATION_DEFAULT = "CORE_ORCHESTRATION_DEFAULT"          # fleet decision, optimized by default
+CORE_ORCHESTRATION_AUTO_NOOP = "CORE_ORCHESTRATION_AUTO_NOOP"      # fleet decision, deterministic no-op when N/A
+OPTIONAL_SERVING_ENGINE_INTEGRATION = "OPTIONAL_SERVING_ENGINE_INTEGRATION"  # serving-engine internal; default OFF
+DIAGNOSTIC_ONLY = "DIAGNOSTIC_ONLY"                                # value/surface usable only as a diagnostic
+PLANNED_ONLY = "PLANNED_ONLY"                                      # represented, not actuatable yet
+PRODUCT_CATEGORIES = (CORE_ORCHESTRATION_DEFAULT, CORE_ORCHESTRATION_AUTO_NOOP,
+                      OPTIONAL_SERVING_ENGINE_INTEGRATION, DIAGNOSTIC_ONLY, PLANNED_ONLY)
+# Action values that are DIAGNOSTIC_ONLY regardless of their surface's category (no quality model exists for
+# them, so a win on these values is never headline-safe).
+DIAGNOSTIC_ONLY_VALUES = {
+    "precision_policy": {"int4"},
+    "kv_cache_precision_policy": {"kv_int4_diagnostic_only"},
+}
+
 # batching_policy → (batch_concurrency, batch_service_factor) for run_unified_replay.
 # More concurrency packs more requests per replica (throughput ↑, queue ↓, same GPU-hours);
 # the service factor inflates each batched request's latency (shared compute → SLA risk ↑).
@@ -55,6 +73,7 @@ class ActionSpec:
     roadmap: str = ""          # roadmap id (e.g. "N4"), if any
     reward_channel: str = ""   # HOW a CONNECTED surface reaches the reward
     #                            ("run_unified_replay" kwarg, or "kv_service_factor", ...)
+    product_category: str = "" # product-boundary class (set explicitly, else derived in product_category())
 
     @property
     def default(self):
@@ -153,6 +172,21 @@ ACTION_SPECS: dict = {
         "SIMULATOR_INFERENCE magnitude; int4 quality/SLA risk is INFERRED (no quality model) so int4 wins "
         "are labelled unsafe/diagnostic — applied via roofline_actions modulation",
         roadmap="N5", reward_channel="roofline_serving"),
+    # KV-cache precision — SEPARATE dtype from the model weights (vLLM ships fp8/int8 KV independent of the
+    # weight precision). It sets KV bytes/token → decode-bandwidth roofline (memory-bound regime only) and
+    # the KV-budget-in-HBM (active-sequence capacity / eviction). The no-op `inherit_weight_precision`
+    # reproduces today's behaviour exactly. fp8/int8 KV ≈ lossless (headline-eligible); int4 KV is
+    # diagnostic-only (no quality model → quality-risk channel + excluded from the headline planner).
+    "kv_cache_precision_policy": ActionSpec(
+        "kv_cache_precision_policy", "KV-cache precision (separate from weights)", CONNECTED,
+        ("inherit_weight_precision", "kv_bf16", "kv_fp8", "kv_int8", "kv_int4_diagnostic_only"), None,
+        "roofline: KV dtype sets KV bytes/token → higher decode tokens/s in the memory-bandwidth-bound "
+        "regime (faster + cheaper) AND more active-sequence capacity / less HBM eviction (kv_precision.py)",
+        "SIMULATOR_INFERENCE latency magnitude; fp8/int8 KV ≈ lossless (PUBLIC_BENCHMARK_DERIVED, "
+        "headline-eligible); int4 KV quality risk is UNMODELLED → unsafe/diagnostic-only "
+        "(excluded from the headline planner, gated by allow_quality_risk)",
+        roadmap="PR-1", reward_channel="roofline_serving",
+        product_category=OPTIONAL_SERVING_ENGINE_INTEGRATION),  # serving-engine internal → DEFAULT OFF
     "spec_decode_policy": ActionSpec(
         "spec_decode_policy", "speculative decoding depth", CONNECTED,
         ("off", "shallow", "medium", "aggressive"), None,
@@ -179,13 +213,39 @@ ACTION_SPECS: dict = {
         "NO background-work trace exists (Azure is all latency-critical; ReplicaState.workload_class is "
         "unused) → co-location credits NO background goodput and can only HURT foreground SLA here; the "
         "generator prunes it off with this recorded reason", roadmap="N3"),
+    # prefill/decode disaggregation — promoted to CONNECTED (Batch-1 Phase 4). The roofline already models
+    # the split causally (serving_point disaggregated_static: a wrong split inflates one phase's work + a KV
+    # handoff cost); pd_disaggregation.py adds the conservative phase-pool QUEUE approximation (idle
+    # GPU-seconds by pool, handoff bytes/latency, allocation efficiency). Reaches reward only through the
+    # roofline service-time / GPU-seconds channel. "shared" is the no-op (no disaggregation, no handoff).
     "prefill_decode_policy": ActionSpec(
-        "prefill_decode_policy", "prefill/decode disaggregation allocation", SIMULATED_ONLY,
+        "prefill_decode_policy", "prefill/decode disaggregation allocation", CONNECTED,
         ("shared", "p40_d60", "p60_d40"), None,
-        "roofline: split capacity between prefill and decode pools (DistServe/Splitwise); a wrong split "
-        "queues one phase; handoff overhead on disaggregation (modelled in serving_point)",
-        "the live cluster replay has NO disaggregated prefill/decode capacity pools — only roofline models "
-        "the split analytically → SIMULATED_ONLY (diagnostic), not a structurally-live action", roadmap="N4"),
+        "roofline + pd_disaggregation: split capacity into prefill/decode pools (DistServe/Splitwise/Dynamo); "
+        "a wrong split queues one phase; KV handoff overhead on disaggregation. Reaches reward via service "
+        "time + GPU-seconds (no live persistent phase queues → conservative causal approximation)",
+        "SIMULATOR_INFERENCE: the live cluster replay has NO persistent disaggregated capacity pools; the "
+        "split + handoff + phase-queue effects are a conservative roofline/queueing approximation labelled "
+        "directional until pilot disaggregated-pool telemetry (DistServe-style optional integration)",
+        roadmap="N4", reward_channel="roofline_serving",
+        product_category=OPTIONAL_SERVING_ENGINE_INTEGRATION),  # serving-engine internal → DEFAULT OFF
+    # heterogeneous GPU-type assignment — route work to GPU classes (H100/A100/L40S/…) by their FLOPs /
+    # bandwidth / HBM / power / cost. SIMULATED_ONLY: the production benchmark's reward path costs the whole
+    # period at ONE dominant GPU type (gpu_type is constant per server, never a per-workload decision), so a
+    # heterogeneous-assignment ACTION is NOT_APPLICABLE there → it cannot fake a benefit on a homogeneous-cost
+    # fleet. It is a real causal lever in controlled fixtures (gpu_assignment.py: an explicit GPU mix + a
+    # per-workload assignment simulator) and turns CONNECTED once the fleet/cost path exposes per-replica
+    # GPU-type assignment. "homogeneous_default" is the no-op (everything on the dominant type).
+    "gpu_assignment_policy": ActionSpec(
+        "gpu_assignment_policy", "heterogeneous GPU-type assignment (workload → GPU class)", SIMULATED_ONLY,
+        ("homogeneous_default", "fastest_for_latency_sensitive", "cheapest_for_batch",
+         "memory_heavy_to_high_hbm", "balanced_heterogeneous", "diagnostic_oracle_assignment"), None,
+        "gpu_assignment.py: per-GPU-type roofline (FLOPs/bandwidth/HBM) + per-type cost (cost_model "
+        "OWNED_ECONOMICS / LEASE) route latency-sensitive→fast, batch→cheap, memory-heavy→high-HBM",
+        "NOT_APPLICABLE to the production benchmark (single dominant GPU type in the cost path; GPU type is "
+        "constant per server) → fixture-only until the fleet/cost path exposes per-replica assignment; "
+        "diagnostic_oracle_assignment is NON-deployable (labelled)", roadmap="PR-2",
+        product_category=CORE_ORCHESTRATION_AUTO_NOOP),  # core fleet orchestration; deterministic no-op when N/A
     "kv_routing_policy": ActionSpec(
         "kv_routing_policy", "per-request KV prefix routing (finer than routing_policy)",
         SIMULATED_ONLY, ("off", "prefix_affinity"), None,
@@ -238,10 +298,12 @@ class ActionBundle:
     placement_policy: str = "topology_blind"
     migration_policy: str = "off"
     precision_policy: str = "bf16"
+    kv_cache_precision_policy: str = "inherit_weight_precision"
     spec_decode_policy: str = "off"
     clock_policy: str = "base"
     colocation_policy: str = "off"
     prefill_decode_policy: str = "shared"
+    gpu_assignment_policy: str = "homogeneous_default"
     energy_policy: str = "off"
 
     def connected_kwargs(self) -> dict:
@@ -295,6 +357,42 @@ class ActionBundle:
         return out
 
 
+def product_category(name: str) -> str:
+    """The product-boundary category of a surface. Explicit on a spec when set, else derived from status:
+    CONNECTED fleet knobs → CORE_ORCHESTRATION_DEFAULT; SIMULATED_ONLY → OPTIONAL_SERVING_ENGINE_INTEGRATION;
+    PLANNED → PLANNED_ONLY. (The three Batch-1 knobs set it explicitly; gpu_assignment is core-auto-noop,
+    kv_cache_precision + prefill_decode are optional serving-engine integrations.)"""
+    spec = ACTION_SPECS[name]
+    if spec.product_category:
+        return spec.product_category
+    if spec.status in (PLANNED, REQUIRES_PILOT_TELEMETRY):
+        return PLANNED_ONLY
+    if spec.status == SIMULATED_ONLY:
+        return OPTIONAL_SERVING_ENGINE_INTEGRATION
+    return CORE_ORCHESTRATION_DEFAULT
+
+
+def value_is_diagnostic_only(name: str, value) -> bool:
+    """True if a specific surface VALUE is diagnostic-only (no quality model → never headline-safe), e.g.
+    ``precision_policy=int4`` or ``kv_cache_precision_policy=kv_int4_diagnostic_only``."""
+    return value in DIAGNOSTIC_ONLY_VALUES.get(name, set())
+
+
+# Optional serving-engine integrations are DEFAULT-OFF: the planner must not vary them unless the operator
+# explicitly opts in (a serving stack that exposes the capability). Core orchestration knobs are not in here.
+def optional_serving_engine_surfaces() -> tuple:
+    """CONNECTED/SIMULATED surfaces classified as OPTIONAL_SERVING_ENGINE_INTEGRATION (default-off)."""
+    return tuple(n for n in ACTION_SPECS
+                 if product_category(n) == OPTIONAL_SERVING_ENGINE_INTEGRATION
+                 and ACTION_SPECS[n].status in (CONNECTED, SIMULATED_ONLY))
+
+
+def core_orchestration_surfaces() -> tuple:
+    """Surfaces that are core fleet orchestration (default-on / auto-noop)."""
+    return tuple(n for n in ACTION_SPECS
+                 if product_category(n) in (CORE_ORCHESTRATION_DEFAULT, CORE_ORCHESTRATION_AUTO_NOOP))
+
+
 def replay_kwargs_from_action(action: dict) -> dict:
     """run_unified_replay action kwargs from a legacy/baseline action dict — any unset connected
     surface defaults to its no-op (capacity_multiplier 1.0, batching conservative)."""
@@ -309,4 +407,8 @@ __all__ = [
     "CONNECTED", "SIMULATED_ONLY", "PLANNED", "REQUIRES_PILOT_TELEMETRY", "REJECTED", "STATUSES",
     "BATCHING_MODELS", "ActionSpec", "ACTION_SPECS", "CONNECTED_SURFACES", "SIMULATED_SURFACES",
     "PLANNED_SURFACES", "ActionBundle", "replay_kwargs_from_action",
+    "CORE_ORCHESTRATION_DEFAULT", "CORE_ORCHESTRATION_AUTO_NOOP", "OPTIONAL_SERVING_ENGINE_INTEGRATION",
+    "DIAGNOSTIC_ONLY", "PLANNED_ONLY", "PRODUCT_CATEGORIES", "DIAGNOSTIC_ONLY_VALUES",
+    "product_category", "value_is_diagnostic_only", "optional_serving_engine_surfaces",
+    "core_orchestration_surfaces",
 ]

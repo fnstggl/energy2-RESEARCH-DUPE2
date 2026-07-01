@@ -1,0 +1,445 @@
+{
+  "config": {
+    "market": "pjm",
+    "arms": [
+      "sla_aware",
+      "production_scheduler",
+      "aurelius_mpc_current_default",
+      "aurelius_mpc_hierarchical_search",
+      "oracle_diagnostic"
+    ],
+    "caps": [
+      56,
+      80,
+      120,
+      200,
+      100000
+    ],
+    "win_len": 4,
+    "max_decisions": 3
+  },
+  "rows": [
+    {
+      "cap": 56,
+      "window": "expensive",
+      "periods": [
+        28,
+        30
+      ],
+      "requests_served_window": 168,
+      "n_decisions": 3,
+      "wall_seconds": 2.7,
+      "arms": {
+        "sla_aware": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 176180.57,
+          "sla_violation_rate": 0.0
+        },
+        "production_scheduler": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 190417.22,
+          "sla_violation_rate": 0.0
+        },
+        "aurelius_mpc_current_default": {
+          "status": "COMPLETED",
+          "seconds": 0.7,
+          "gp_per_dollar": 416124.13,
+          "sla_violation_rate": 0.0
+        },
+        "aurelius_mpc_hierarchical_search": {
+          "status": "COMPLETED",
+          "seconds": 1.1,
+          "gp_per_dollar": 490538.14,
+          "sla_violation_rate": 0.0
+        },
+        "oracle_diagnostic": {
+          "status": "COMPLETED",
+          "seconds": 0.8,
+          "gp_per_dollar": 553835.5,
+          "sla_violation_rate": 0.0
+        }
+      }
+    },
+    {
+      "cap": 80,
+      "window": "expensive",
+      "periods": [
+        28,
+        30
+      ],
+      "requests_served_window": 180,
+      "n_decisions": 3,
+      "wall_seconds": 2.8,
+      "arms": {
+        "sla_aware": {
+          "status": "COMPLETED",
+          "seconds": 0.1,
+          "gp_per_dollar": 167357.66,
+          "sla_violation_rate": 0.00556
+        },
+        "production_scheduler": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 180936.94,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_current_default": {
+          "status": "COMPLETED",
+          "seconds": 0.7,
+          "gp_per_dollar": 397033.16,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_hierarchical_search": {
+          "status": "COMPLETED",
+          "seconds": 1.2,
+          "gp_per_dollar": 551149.66,
+          "sla_violation_rate": 0.0
+        },
+        "oracle_diagnostic": {
+          "status": "COMPLETED",
+          "seconds": 0.8,
+          "gp_per_dollar": 602876.88,
+          "sla_violation_rate": 0.0
+        }
+      }
+    },
+    {
+      "cap": 120,
+      "window": "expensive",
+      "periods": [
+        28,
+        30
+      ],
+      "requests_served_window": 180,
+      "n_decisions": 3,
+      "wall_seconds": 2.6,
+      "arms": {
+        "sla_aware": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 167357.66,
+          "sla_violation_rate": 0.00556
+        },
+        "production_scheduler": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 180936.94,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_current_default": {
+          "status": "COMPLETED",
+          "seconds": 0.7,
+          "gp_per_dollar": 397033.16,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_hierarchical_search": {
+          "status": "COMPLETED",
+          "seconds": 1.1,
+          "gp_per_dollar": 551149.66,
+          "sla_violation_rate": 0.0
+        },
+        "oracle_diagnostic": {
+          "status": "COMPLETED",
+          "seconds": 0.8,
+          "gp_per_dollar": 602876.88,
+          "sla_violation_rate": 0.0
+        }
+      }
+    },
+    {
+      "cap": 200,
+      "window": "expensive",
+      "periods": [
+        28,
+        30
+      ],
+      "requests_served_window": 180,
+      "n_decisions": 3,
+      "wall_seconds": 2.6,
+      "arms": {
+        "sla_aware": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 167357.66,
+          "sla_violation_rate": 0.00556
+        },
+        "production_scheduler": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 180936.94,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_current_default": {
+          "status": "COMPLETED",
+          "seconds": 0.7,
+          "gp_per_dollar": 397033.16,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_hierarchical_search": {
+          "status": "COMPLETED",
+          "seconds": 1.1,
+          "gp_per_dollar": 551149.66,
+          "sla_violation_rate": 0.0
+        },
+        "oracle_diagnostic": {
+          "status": "COMPLETED",
+          "seconds": 0.8,
+          "gp_per_dollar": 602876.88,
+          "sla_violation_rate": 0.0
+        }
+      }
+    },
+    {
+      "cap": 100000,
+      "window": "expensive",
+      "periods": [
+        28,
+        30
+      ],
+      "requests_served_window": 180,
+      "n_decisions": 3,
+      "wall_seconds": 2.7,
+      "arms": {
+        "sla_aware": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 167357.66,
+          "sla_violation_rate": 0.00556
+        },
+        "production_scheduler": {
+          "status": "COMPLETED",
+          "seconds": 0.0,
+          "gp_per_dollar": 180936.94,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_current_default": {
+          "status": "COMPLETED",
+          "seconds": 0.7,
+          "gp_per_dollar": 397033.16,
+          "sla_violation_rate": 0.00556
+        },
+        "aurelius_mpc_hierarchical_search": {
+          "status": "COMPLETED",
+          "seconds": 1.1,
+          "gp_per_dollar": 551149.66,
+          "sla_violation_rate": 0.0
+        },
+        "oracle_diagnostic": {
+          "status": "COMPLETED",
+          "seconds": 0.8,
+          "gp_per_dollar": 602876.88,
+          "sla_violation_rate": 0.0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "56": {
+      "requests_served_window": 168,
+      "window": "expensive",
+      "wall_seconds": 2.7,
+      "cells_completed": 5,
+      "cells_timed_out": 0,
+      "baseline_gp_per_dollar": 190417.22,
+      "sla_aware_gp_per_dollar": 176180.57,
+      "aurelius_hierarchical": {
+        "gp_per_dollar": 490538.14,
+        "vs_production_scheduler": {
+          "abs": 300120.92,
+          "pct": 157.61,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 314357.57,
+          "pct": 178.43
+        }
+      },
+      "aurelius_current_default": {
+        "gp_per_dollar": 416124.13,
+        "vs_production_scheduler": {
+          "abs": 225706.91,
+          "pct": 118.53,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 239943.56,
+          "pct": 136.19
+        }
+      },
+      "oracle_gp_per_dollar": 553835.5,
+      "sla_violation_rate": {
+        "sla_aware": 0.0,
+        "production_scheduler": 0.0,
+        "aurelius_mpc_current_default": 0.0,
+        "aurelius_mpc_hierarchical_search": 0.0,
+        "oracle_diagnostic": 0.0
+      }
+    },
+    "80": {
+      "requests_served_window": 180,
+      "window": "expensive",
+      "wall_seconds": 2.8,
+      "cells_completed": 5,
+      "cells_timed_out": 0,
+      "baseline_gp_per_dollar": 180936.94,
+      "sla_aware_gp_per_dollar": 167357.66,
+      "aurelius_hierarchical": {
+        "gp_per_dollar": 551149.66,
+        "vs_production_scheduler": {
+          "abs": 370212.72,
+          "pct": 204.61,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 383792.0,
+          "pct": 229.32
+        }
+      },
+      "aurelius_current_default": {
+        "gp_per_dollar": 397033.16,
+        "vs_production_scheduler": {
+          "abs": 216096.22,
+          "pct": 119.43,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 229675.5,
+          "pct": 137.24
+        }
+      },
+      "oracle_gp_per_dollar": 602876.88,
+      "sla_violation_rate": {
+        "sla_aware": 0.00556,
+        "production_scheduler": 0.00556,
+        "aurelius_mpc_current_default": 0.00556,
+        "aurelius_mpc_hierarchical_search": 0.0,
+        "oracle_diagnostic": 0.0
+      }
+    },
+    "120": {
+      "requests_served_window": 180,
+      "window": "expensive",
+      "wall_seconds": 2.6,
+      "cells_completed": 5,
+      "cells_timed_out": 0,
+      "baseline_gp_per_dollar": 180936.94,
+      "sla_aware_gp_per_dollar": 167357.66,
+      "aurelius_hierarchical": {
+        "gp_per_dollar": 551149.66,
+        "vs_production_scheduler": {
+          "abs": 370212.72,
+          "pct": 204.61,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 383792.0,
+          "pct": 229.32
+        }
+      },
+      "aurelius_current_default": {
+        "gp_per_dollar": 397033.16,
+        "vs_production_scheduler": {
+          "abs": 216096.22,
+          "pct": 119.43,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 229675.5,
+          "pct": 137.24
+        }
+      },
+      "oracle_gp_per_dollar": 602876.88,
+      "sla_violation_rate": {
+        "sla_aware": 0.00556,
+        "production_scheduler": 0.00556,
+        "aurelius_mpc_current_default": 0.00556,
+        "aurelius_mpc_hierarchical_search": 0.0,
+        "oracle_diagnostic": 0.0
+      }
+    },
+    "200": {
+      "requests_served_window": 180,
+      "window": "expensive",
+      "wall_seconds": 2.6,
+      "cells_completed": 5,
+      "cells_timed_out": 0,
+      "baseline_gp_per_dollar": 180936.94,
+      "sla_aware_gp_per_dollar": 167357.66,
+      "aurelius_hierarchical": {
+        "gp_per_dollar": 551149.66,
+        "vs_production_scheduler": {
+          "abs": 370212.72,
+          "pct": 204.61,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 383792.0,
+          "pct": 229.32
+        }
+      },
+      "aurelius_current_default": {
+        "gp_per_dollar": 397033.16,
+        "vs_production_scheduler": {
+          "abs": 216096.22,
+          "pct": 119.43,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 229675.5,
+          "pct": 137.24
+        }
+      },
+      "oracle_gp_per_dollar": 602876.88,
+      "sla_violation_rate": {
+        "sla_aware": 0.00556,
+        "production_scheduler": 0.00556,
+        "aurelius_mpc_current_default": 0.00556,
+        "aurelius_mpc_hierarchical_search": 0.0,
+        "oracle_diagnostic": 0.0
+      }
+    },
+    "100000": {
+      "requests_served_window": 180,
+      "window": "expensive",
+      "wall_seconds": 2.7,
+      "cells_completed": 5,
+      "cells_timed_out": 0,
+      "baseline_gp_per_dollar": 180936.94,
+      "sla_aware_gp_per_dollar": 167357.66,
+      "aurelius_hierarchical": {
+        "gp_per_dollar": 551149.66,
+        "vs_production_scheduler": {
+          "abs": 370212.72,
+          "pct": 204.61,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 383792.0,
+          "pct": 229.32
+        }
+      },
+      "aurelius_current_default": {
+        "gp_per_dollar": 397033.16,
+        "vs_production_scheduler": {
+          "abs": 216096.22,
+          "pct": 119.43,
+          "sla_not_worse": true
+        },
+        "vs_sla_aware": {
+          "abs": 229675.5,
+          "pct": 137.24
+        }
+      },
+      "oracle_gp_per_dollar": 602876.88,
+      "sla_violation_rate": {
+        "sla_aware": 0.00556,
+        "production_scheduler": 0.00556,
+        "aurelius_mpc_current_default": 0.00556,
+        "aurelius_mpc_hierarchical_search": 0.0,
+        "oracle_diagnostic": 0.0
+      }
+    }
+  }
+}

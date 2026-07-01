@@ -169,6 +169,15 @@ class ModelPredictiveEconomicController:
     planning_kv_cost_mode: str | None = None
     planning_capacity_blocks: int = 512
     planning_prompt_tokens: int | None = None   # representative prompt length for the planning workload
+    # Batch-1 ablation mask: which new knobs (kv_cache_precision_policy / prefill_decode_policy /
+    # gpu_assignment_policy) the planner may vary. None → use the product-boundary default (core orchestration
+    # on; optional serving-engine integrations OFF unless their enable flag is set). An explicit set overrides
+    # this entirely (used by the ablation runner).
+    allowed_new_knobs: frozenset | None = None
+    # OPTIONAL serving-engine integrations are DEFAULT-OFF (product boundary: Aurelius must not silently take
+    # control of serving-engine internals). The operator opts in only when the serving stack exposes them.
+    enable_kv_cache_precision: bool = False        # OPTIONAL_SERVING_ENGINE_INTEGRATION (vLLM/TRT-LLM fp8/int8 KV)
+    enable_prefill_decode_disagg: bool = False     # OPTIONAL_SERVING_ENGINE_INTEGRATION (DistServe/Dynamo PD)
     # electricity (this PR): when True the horizon rollout prices each step at the FORECAST electricity price
     # path (traj.point("electricity_price", k)) so the controller chooses clock/DVFS against real diurnal
     # prices. Default False → every step uses the constant fleet price (today's behaviour, flat-price-identical).
@@ -363,11 +372,44 @@ class ModelPredictiveEconomicController:
         cap_press = 0.0
         if ar is not None and ar.mean > 1e-9:
             cap_press = max(0.0, min(1.0, (ar.p90 / ar.mean) - 1.0))
+        # Batch-1 regime signals — cheap causal proxies (forecast prompt/output only; no world/future read):
+        prompt = float(self.planning_prompt_tokens or 512)
+        out_mean = float(tm.mean) if (tm and tm.mean) else 128.0
+        context = prompt + out_mean
+        # HBM-pressure proxy: long context × burstiness press the KV budget (→ KV-precision regime gate).
+        hbm_pressure = min(1.0, context / 4096.0) * (0.5 + 0.5 * cap_press)
+        # prefill/decode skew: prefill GPU-seconds ≈ prompt·prefill_rate; decode ≈ out·decode_rate (decode
+        # per-token ~2× prefill per-token in the legacy band). prefill-heavy when prompt dominates.
+        prefill_work = prompt * 1.0
+        decode_work = out_mean * 2.0
+        prefill_heavy = None
+        if prefill_work > 1.8 * decode_work:
+            prefill_heavy = True
+        elif decode_work > 1.8 * prefill_work:
+            prefill_heavy = False
+        # disaggregation candidate only when the phase mix is clearly skewed AND there is contention to relieve
+        # (else the shared pool's multiplexing wins and the KV handoff is pure overhead — no free disaggregation).
+        pd_divergence = (prefill_heavy is not None) and (cap_press >= 0.30)
+        # PRODUCT-BOUNDARY default mask: core orchestration (gpu_assignment, auto-noop) is always allowed; the
+        # OPTIONAL serving-engine integrations (kv_cache_precision, prefill_decode) are DEFAULT-OFF and only
+        # enabled by explicit operator opt-in. An explicit allowed_new_knobs (ablation) overrides this default.
+        if self.allowed_new_knobs is not None:
+            allowed = self.allowed_new_knobs
+        else:
+            allowed = {"gpu_assignment_policy"}
+            if self.enable_kv_cache_precision:
+                allowed.add("kv_cache_precision_policy")
+            if self.enable_prefill_decode_disagg:
+                allowed.add("prefill_decode_policy")
+            allowed = frozenset(allowed)
         return PlannerRegimeState(
             decode_regime=self._decode_regime_hint(tm), sla_slack=None,
             queue_pressure=0.0, capacity_pressure=cap_press,
             price_percentile=self.current_price_percentile,
-            output_token_mean=(tm.mean if tm else None), hbm_pressure=None,
+            output_token_mean=(tm.mean if tm else None), hbm_pressure=round(hbm_pressure, 4),
+            pd_divergence=pd_divergence, prefill_heavy=prefill_heavy,
+            heterogeneous_fleet=False,   # production cost path is single-dominant-GPU → NOT_APPLICABLE
+            allowed_new_knobs=allowed,
             confidence=confidence, prev_bundle=self._prev_best_bundle)
 
     def _planner_package_decide(self, mode, score_fn, ar, tm, tp, cv, pr, confidence):
@@ -661,6 +703,7 @@ class EpisodeReport:
     prefill_tokens_remaining: int = 0                   # prefill tokens NOT saved (paid)
     # roofline action mixes + diagnostics (PR roofline-economic MPC actions)
     precision_mix: dict = field(default_factory=dict)   # precision_policy → periods chosen
+    kv_cache_precision_mix: dict = field(default_factory=dict)  # kv_cache_precision_policy → periods (Batch-1)
     spec_decode_mix: dict = field(default_factory=dict)  # spec_decode_policy → periods
     clock_mix: dict = field(default_factory=dict)       # clock_policy → periods
     colocation_mix: dict = field(default_factory=dict)  # colocation_policy → periods (SIMULATED, pruned off)
@@ -712,6 +755,7 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
     placement_mix: dict = {}
     migration_mix: dict = {}
     precision_mix: dict = {}
+    kv_precision_mix: dict = {}
     spec_mix: dict = {}
     clock_mix: dict = {}
     coloc_mix: dict = {}
@@ -753,11 +797,13 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         placement_mix[_pl] = placement_mix.get(_pl, 0) + 1
         migration_mix[_mg] = migration_mix.get(_mg, 0) + 1
         _pc = merged.get("precision_policy", "bf16")
+        _kvp = merged.get("kv_cache_precision_policy", "inherit_weight_precision")
         _sd = merged.get("spec_decode_policy", "off")
         _ck = merged.get("clock_policy", "base")
         _co = merged.get("colocation_policy", "off")
         _pd = merged.get("prefill_decode_policy", "shared")
         precision_mix[_pc] = precision_mix.get(_pc, 0) + 1
+        kv_precision_mix[_kvp] = kv_precision_mix.get(_kvp, 0) + 1
         spec_mix[_sd] = spec_mix.get(_sd, 0) + 1
         clock_mix[_ck] = clock_mix.get(_ck, 0) + 1
         coloc_mix[_co] = coloc_mix.get(_co, 0) + 1
@@ -894,7 +940,8 @@ def run_period_episode(name, decide_fn, real_per_period, frames, eval_indices, *
         realized_gpu_seconds=round(kv_realized_gpu_s, 2),
         mean_ttft_p95=round(kv_ttft_sum / topo_n, 4) if topo_n else 0.0,
         prefill_tokens_remaining=int(kv_prefill_rem),
-        precision_mix=precision_mix, spec_decode_mix=spec_mix, clock_mix=clock_mix,
+        precision_mix=precision_mix, kv_cache_precision_mix=kv_precision_mix,
+        spec_decode_mix=spec_mix, clock_mix=clock_mix,
         colocation_mix=coloc_mix, prefill_decode_mix=pd_mix, decode_regime_mix=rl_regime_mix,
         mean_decode_arithmetic_intensity=round(rl_ai_sum / rl_n, 4) if rl_n else 0.0,
         mean_ridge_point=round(rl_ridge_sum / rl_n, 2) if rl_n else 0.0,

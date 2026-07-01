@@ -25,6 +25,10 @@ adds interference. Nothing here is UNKNOWN.
 
 from __future__ import annotations
 
+from .kv_precision import (
+    KV_CACHE_PRECISION_TO_ROOFLINE,
+    KV_PRECISION_QUALITY_RISK,
+)
 from .roofline import (
     DEFAULT_GPU,
     GPU_SPECS,
@@ -52,7 +56,8 @@ PREFILL_DECODE_TO_ROOFLINE = {
 # → any int4 win is labelled unsafe/diagnostic. SIMULATOR_INFERENCE.
 PRECISION_QUALITY_RISK = {"bf16": 0.0, "fp8": 0.0, "int4": 0.05}
 
-NEUTRAL_POLICIES = {"precision_policy": "bf16", "spec_decode_policy": "off", "clock_policy": "base",
+NEUTRAL_POLICIES = {"precision_policy": "bf16", "kv_cache_precision_policy": "inherit_weight_precision",
+                    "spec_decode_policy": "off", "clock_policy": "base",
                     "colocation_policy": "off", "prefill_decode_policy": "shared"}
 
 
@@ -72,6 +77,8 @@ def action_serving_config(bundle, *, gpu: str = DEFAULT_GPU, batch_size: int = 1
     cfg = ServingConfig(
         gpu=gpu if gpu in GPU_SPECS else DEFAULT_GPU, batch_size=max(1, int(batch_size)),
         precision=PRECISION_TO_ROOFLINE.get(_pol(bundle, "precision_policy"), "bf16"),
+        kv_precision=KV_CACHE_PRECISION_TO_ROOFLINE.get(
+            _pol(bundle, "kv_cache_precision_policy"), "inherit"),
         spec_decode_accept=accept, spec_decode_draft_frac=draft if draft > 0 else 0.2,
         clock_factor=CLOCK_TO_ROOFLINE.get(_pol(bundle, "clock_policy"), 1.0),
         colocation_frac=COLOCATION_TO_ROOFLINE.get(_pol(bundle, "colocation_policy"), 0.0),
@@ -115,6 +122,13 @@ def roofline_action_factors(bundle, workload: Workload, *, gpu: str = DEFAULT_GP
     neutral = serving_point(workload, neutral_cfg)
     act = serving_point(workload, act_cfg)
     coloc_useful = act.get("coloc_useful_gpu_seconds", 0.0) if background_work else 0.0
+    # quality/SLA risk is the COMBINED probability of a weight-precision OR KV-precision quality failure
+    # (independent): 1 − (1−weight_risk)(1−kv_risk). fp8/int8 KV ≈ lossless (0); int4 KV carries a
+    # conservative UNMODELLED risk → any int4-KV win is headline-unsafe. No bonus — penalty channel only.
+    w_risk = PRECISION_QUALITY_RISK.get(_pol(bundle, "precision_policy"), 0.0)
+    kv_pol = _pol(bundle, "kv_cache_precision_policy")
+    kv_risk = KV_PRECISION_QUALITY_RISK.get(KV_CACHE_PRECISION_TO_ROOFLINE.get(kv_pol, "inherit"), 0.0)
+    combined_risk = 1.0 - (1.0 - w_risk) * (1.0 - kv_risk)
     return {
         "prefill_factor": _ratio(act, neutral, "prefill_gpu_seconds"),
         "decode_factor": _ratio(act, neutral, "decode_gpu_seconds"),
@@ -126,7 +140,14 @@ def roofline_action_factors(bundle, workload: Workload, *, gpu: str = DEFAULT_GP
         # factors are per-phase GPU-seconds ratios that EXCLUDE this completion-level penalty, so the phase
         # path applies it separately (else forced co-location would look free).
         "interference_factor": _ratio(act, neutral, "coloc_penalty"),
-        "quality_sla_risk": PRECISION_QUALITY_RISK.get(_pol(bundle, "precision_policy"), 0.0),
+        "quality_sla_risk": combined_risk,
+        "kv_quality_risk": kv_risk,
+        "kv_precision": KV_CACHE_PRECISION_TO_ROOFLINE.get(kv_pol, "inherit"),
+        "kv_bytes_per_token": act.get("kv_bytes_per_token", 0.0),
+        "kv_bytes_per_token_neutral": neutral.get("kv_bytes_per_token", 0.0),
+        "kv_memory_saved_pct": round(
+            100.0 * (1.0 - act.get("kv_bytes_per_token", 1.0) / neutral.get("kv_bytes_per_token", 1.0)), 3)
+        if neutral.get("kv_bytes_per_token") else 0.0,
         "coloc_useful_gpu_seconds": round(coloc_useful, 5),
         "decode_regime": act.get("decode_regime", "memory_bandwidth_bound"),
         "decode_arithmetic_intensity": act.get("decode_arithmetic_intensity", 0.0),

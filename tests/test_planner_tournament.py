@@ -88,12 +88,17 @@ def test_fixed_grid_is_full_core_product():
 
 # --- physics generator changes by regime -------------------------------------------------------------
 def test_physics_generator_changes_by_regime():
-    # the SET always contains the core grid (the invariant), but the regime prior changes the ORDER — which
-    # is what matters under a budget cap (regime-preferred candidates are evaluated first).
+    # the core grid (precision×batching×capacity×clock at no-op KV/PD) is ALWAYS present (the invariant);
+    # the regime prior changes the ORDER and, with the Batch-1 knobs, the regime-specific ADDITIONS:
+    # memory-bound generates KV-precision candidates that the compute-bound regime freezes off.
+    from aurelius.environment.planner.candidate_generators import core_grid
     mem = physics_guided_candidates(_state(decode_regime="memory_bandwidth_bound"))
     comp = physics_guided_candidates(_state(decode_regime="compute_bound"))
-    assert [_key(b) for b in mem] != [_key(b) for b in comp]
-    assert {_key(b) for b in mem} == {_key(b) for b in comp}   # same set (core grid) — invariant holds
+    core = {_key(b) for b in core_grid()}
+    assert core <= {_key(b) for b in mem}                      # invariant: core grid present in both
+    assert core <= {_key(b) for b in comp}
+    assert [_key(b) for b in mem] != [_key(b) for b in comp]   # order differs (regime prior)
+    assert {_key(b) for b in mem} != {_key(b) for b in comp}   # sets differ by regime-gated KV-precision knobs
 
 
 def test_classify_regimes_labels():
