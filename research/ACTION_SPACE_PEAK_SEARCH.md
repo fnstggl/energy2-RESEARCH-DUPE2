@@ -59,6 +59,18 @@ knobs move gp/$ by <1%. So a structured ~75-eval search reaches the plateau that
 random needs vastly more draws to *stumble* onto the same corner that structure reaches directly. This is
 evidence the planner's tournament win was **not** an artifact of a lucky small sample.
 
+## Reproducibility on post-Batch-1 `main`
+
+The committed artifact was produced on the pre-Batch-1 tree; re-running the harness on current `main` (after the
+Batch-1 action-knob work, PRs #125/#126) **reproduces the meaningful numbers exactly**: `sla_aware` = 105,924.1,
+`production_scheduler` = 150,030.7, `hierarchical@100` peak = **1,454,635.9**, **+869.56%** vs
+production_scheduler — byte-identical. This is expected: Batch-1 added the new serving-engine knobs
+(`kv_cache_precision`, `prefill_decode`) as **default-OFF / frozen-at-no-op** for the headline, so the deployable
+headline-safe space my search measured (the 12 core surfaces, int4 excluded, product 209,952) and the scoring of
+every bundle in it are unchanged. The one cosmetic shift: hierarchical_search's evaluation count reads **88** on
+post-Batch-1 `main` (vs 80 pre-Batch-1) because the new default-off knobs are *nominally* in the candidate space
+but frozen at no-op — the winning bundle and its gp/$ are identical, so the peak conclusion is unaffected.
+
 ## Caveats (fidelity)
 
 - **SIMULATED / SIMULATOR_INFERENCE.** Single decision, single market·window (pjm·expensive, period 81), req_cap
