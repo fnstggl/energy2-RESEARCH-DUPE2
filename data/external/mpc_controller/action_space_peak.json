@@ -1,0 +1,110 @@
+{
+  "harness": "single_decision tournament (market_window_scorer, pjm\u00b7expensive, req_cap 80)",
+  "deployable_space_size": 209952,
+  "int4_excluded": true,
+  "period": 81,
+  "baselines": {
+    "sla_aware": {
+      "gp_per_dollar": 105924.1,
+      "sla_violation_rate": 0.3738,
+      "surfaces": {
+        "capacity_policy": "backlog_aware",
+        "ordering_policy": "abs_conformal"
+      }
+    },
+    "production_scheduler": {
+      "gp_per_dollar": 150030.7,
+      "sla_violation_rate": 0.3135,
+      "surfaces": {
+        "capacity_policy": "backlog_aware",
+        "ordering_policy": "abs_conformal",
+        "admission_policy": "class_aware",
+        "routing_policy": "kv_aware",
+        "capacity_multiplier": 1.25,
+        "batching_policy": "balanced",
+        "placement_policy": "rack_local"
+      }
+    }
+  },
+  "hierarchical_at_100": {
+    "gp_per_dollar": 1454635.9,
+    "sla_violation_rate": 0.2883,
+    "surfaces": {
+      "capacity_policy": "forecasted_mcs",
+      "ordering_policy": "abs_conformal",
+      "admission_policy": "class_aware",
+      "routing_policy": "kv_aware",
+      "capacity_multiplier": 0.75,
+      "batching_policy": "aggressive",
+      "placement_policy": "network_aware",
+      "precision_policy": "fp8",
+      "spec_decode_policy": "aggressive",
+      "clock_policy": "high"
+    },
+    "evaluated": 80
+  },
+  "search_harder": {
+    "random_scored": 5000,
+    "random_best_by_reward_gp": 1448727.1,
+    "random_best_by_reward_sla": 0.3016,
+    "random_best_by_reward_surfaces": {
+      "capacity_policy": "forecasted_mcs",
+      "routing_policy": "shortest_queue",
+      "capacity_multiplier": 0.75,
+      "batching_policy": "aggressive",
+      "precision_policy": "fp8",
+      "spec_decode_policy": "aggressive",
+      "clock_policy": "high"
+    },
+    "random_best_by_raw_gp": 1448727.1,
+    "random_best_by_raw_gp_sla": 0.3016,
+    "random_best_by_raw_gp_surfaces": {
+      "capacity_policy": "forecasted_mcs",
+      "routing_policy": "shortest_queue",
+      "capacity_multiplier": 0.75,
+      "batching_policy": "aggressive",
+      "precision_policy": "fp8",
+      "spec_decode_policy": "aggressive",
+      "clock_policy": "high"
+    },
+    "cross_entropy": {
+      "gp_per_dollar": 1114798.5,
+      "sla_violation_rate": 0.2778,
+      "surfaces": {
+        "capacity_multiplier": 0.75,
+        "batching_policy": "aggressive",
+        "precision_policy": "fp8",
+        "spec_decode_policy": "medium",
+        "clock_policy": "high"
+      },
+      "evaluated": 29
+    }
+  },
+  "peak": {
+    "which": "hierarchical@100",
+    "gp_per_dollar": 1454635.9,
+    "sla_violation_rate": 0.2883,
+    "surfaces": {
+      "capacity_policy": "forecasted_mcs",
+      "ordering_policy": "abs_conformal",
+      "admission_policy": "class_aware",
+      "routing_policy": "kv_aware",
+      "capacity_multiplier": 0.75,
+      "batching_policy": "aggressive",
+      "placement_policy": "network_aware",
+      "precision_policy": "fp8",
+      "spec_decode_policy": "aggressive",
+      "clock_policy": "high"
+    },
+    "evaluated": 80,
+    "distinct_bundles_evaluated_total": 5109,
+    "coverage_pct_of_deployable_space": 2.4334
+  },
+  "peak_vs_hierarchical_at_100": {
+    "abs": 0.0,
+    "pct": 0.0
+  },
+  "peak_vs_production_scheduler_pct": 869.56,
+  "hierarchical_vs_production_scheduler_pct": 869.56,
+  "note": "Diagnostic only; SIMULATED; single decision; a large-sample LOWER BOUND on the true peak, not an exhaustive proof of global optimality."
+}
