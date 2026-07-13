@@ -26,9 +26,10 @@ def _recs(n, out, prompt):
 # --- prefill/decode separation (the Cause-A fix) ----------------------------
 
 def test_prefix_hit_reduces_prefill_only_decode_unchanged():
+    # scalar-economics regression (PR #107): pinned to LEGACY so the absolute decode value holds.
     recs = _recs(4, out=100, prompt=512)
-    cold = compute_phase_serving(recs, [0, 0, 0, 0])
-    hit = compute_phase_serving(recs, [512, 512, 512, 512])     # full prompt cached
+    cold = compute_phase_serving(recs, [0, 0, 0, 0], timing_model="legacy_scalar")
+    hit = compute_phase_serving(recs, [512, 512, 512, 512], timing_model="legacy_scalar")  # full prompt cached
     assert hit.prefill_gpu_seconds < cold.prefill_gpu_seconds   # prefill falls
     assert hit.decode_gpu_seconds == cold.decode_gpu_seconds    # decode UNCHANGED (KV-insensitive)
     assert all(abs(d - 100 * TPOT_S * 0.92) < 1e-6 for d in hit.decode_work_s)  # balanced batch factor
@@ -63,9 +64,10 @@ def test_decode_heavy_stays_decode_bound_despite_reuse():
 
 def test_prefill_heavy_benefits_more_from_reuse():
     # long prompts, short outputs: prefill is a big share → reuse cuts realized work materially.
+    # scalar-economics regression (PR #107): pinned to LEGACY so the prefill-share threshold holds.
     recs = _recs(20, out=20, prompt=4000)
-    cold = compute_phase_serving(recs, [0] * 20)
-    hit = compute_phase_serving(recs, [4000] * 20)
+    cold = compute_phase_serving(recs, [0] * 20, timing_model="legacy_scalar")
+    hit = compute_phase_serving(recs, [4000] * 20, timing_model="legacy_scalar")
     rel = (cold.realized_gpu_seconds - hit.realized_gpu_seconds) / cold.realized_gpu_seconds
     assert rel > 0.3                                          # prefill-heavy → large realized-work cut
 

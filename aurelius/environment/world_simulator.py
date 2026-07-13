@@ -407,10 +407,11 @@ def simulate_period(ws: CanonicalWorldState, bundle, recs: list, forecast: dict,
             compute_phase_serving,
             env_timing_model,
         )
-        # V2→V1 promotion: timing model is selectable via kv_state (config) or the AURELIUS_TIMING_MODEL
-        # env (default legacy_scalar → unchanged). In roofline mode the BASE rate is resolved per
-        # (gpu_type, model): gpu_type defaults to the fleet's DOMINANT replica GPU (conservative resolver)
-        # so an H100 fleet is no longer priced with an L40S-class decode constant.
+        # Production physics: timing model is ROOFLINE by default (canonical path); selectable via kv_state
+        # (config) or AURELIUS_TIMING_MODEL. Set "legacy_scalar" to reproduce old benchmarks. In roofline
+        # mode the BASE rate is resolved per (gpu_type, model): gpu_type defaults to the fleet's DOMINANT
+        # replica GPU (conservative resolver) so an H100 fleet is no longer priced with an L40S-class
+        # decode constant. Flipping the default DOES change benchmark numbers — an intentional correction.
         timing_model = (kv_state or {}).get("timing_model") or env_timing_model()
         gpu_type = (kv_state or {}).get("gpu_type") or _dominant_gpu_type(ws) or DEFAULT_TIMING_GPU
         model = ((kv_state or {}).get("model_ids") or (DEFAULT_TIMING_MODEL_ARCH,))[0]

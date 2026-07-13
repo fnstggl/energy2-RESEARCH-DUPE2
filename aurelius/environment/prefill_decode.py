@@ -35,27 +35,33 @@ HYBRID_IDLE_FLOOR_FRAC = 0.5        # ≥ half of provisioned GPU-seconds is bil
 BATCH_DECODE_FACTOR = {"conservative": 1.0, "balanced": 0.92, "aggressive": 0.82}
 BATCH_SATURATION_SEQS = {"conservative": 64, "balanced": 48, "aggressive": 32}
 
-# --- timing model selector (V2→V1 promotion) --------------------------------
-# ``legacy_scalar`` keeps the existing fleet-wide constants (BENCHMARK_DERIVED, L40S-class — see
-# ROOFLINE_REUSE_DECISION.md); it is the DEFAULT so every existing benchmark/caller is bit-for-bit
-# unchanged. ``roofline`` resolves the per-request BASE prefill/decode rate from the GPU type + model
-# architecture using the on-repo ported roofline (``roofline_external``), so an H100 is no longer priced
-# with an L40S-class decode constant. The relative roofline ACTION factors (precision/spec/clock, via
-# ``roofline_actions``) compose unchanged on top of whichever base is selected.
+# --- timing model selector (V2→V1 promotion; roofline is now the canonical DEFAULT) ----------------
+# ``roofline`` (DEFAULT) resolves the per-request BASE prefill/decode rate from the GPU type + model
+# architecture using the on-repo ported roofline (``roofline_external``) — the production-realistic path.
+# It is BENCHMARK_DERIVED (public GPU specs + public model arch), deterministic, clone-safe, and validated
+# by controlled fixtures, so per the production-default policy it is the canonical behaviour: an H100 is no
+# longer priced with an L40S-class decode constant.
+# ``legacy_scalar`` keeps the old fleet-wide constants (L40S-class — see ROOFLINE_REUSE_DECISION.md) and is
+# retained ONLY as an explicit regression-reproduction mode (``timing_model="legacy_scalar"`` or
+# ``AURELIUS_TIMING_MODEL=legacy_scalar``). Flipping the default DOES change benchmark numbers — by design;
+# the change is a production-physics correction (removing phantom SLA on fast GPUs), documented in
+# research/V1_ROOFLINE_DEFAULT_ON_RESULTS.md. The relative roofline ACTION factors (precision/spec/clock,
+# via ``roofline_actions``) compose unchanged on top of whichever base is selected.
 TIMING_MODELS = ("legacy_scalar", "roofline")
-DEFAULT_TIMING_MODEL = "legacy_scalar"          # default keeps public benchmark semantics
-DEFAULT_TIMING_GPU = "H100"                     # conservative fleet default when a caller doesn't resolve one
+DEFAULT_TIMING_MODEL = "roofline"               # canonical production default (was legacy_scalar pre-this-PR)
+LEGACY_TIMING_MODEL = "legacy_scalar"           # explicit regression-reproduction fallback
+DEFAULT_TIMING_GPU = "H100"                     # bare-function default when a caller doesn't resolve a fleet GPU
 DEFAULT_TIMING_MODEL_ARCH = "llama-8b-gqa"
 # provenance for the resolved rates (consumed by diagnostics / docs; never touches reward).
 TIMING_PROVENANCE = {
-    "legacy_scalar": "BENCHMARK_DERIVED (fleet-wide scalar; L40S-class decode constant)",
-    "roofline": "BENCHMARK_DERIVED (per-(GPU,model) FLOP/bandwidth roofline; public specs + arch)",
+    "legacy_scalar": "BENCHMARK_DERIVED (fleet-wide scalar; L40S-class decode constant — legacy regression mode)",
+    "roofline": "BENCHMARK_DERIVED (per-(GPU,model) FLOP/bandwidth roofline; public specs + arch — production default)",
 }
 
 
 def env_timing_model(default: str = DEFAULT_TIMING_MODEL) -> str:
-    """Optional env selector ``AURELIUS_TIMING_MODEL`` (``legacy_scalar``/``roofline``). Callers that do NOT
-    consult this stay on the default — benchmarks are never silently changed by the environment."""
+    """Env selector ``AURELIUS_TIMING_MODEL`` (``roofline``/``legacy_scalar``). Default is now ``roofline``
+    (the canonical production path). Set ``AURELIUS_TIMING_MODEL=legacy_scalar`` to reproduce old benchmarks."""
     import os
     m = os.environ.get("AURELIUS_TIMING_MODEL", "").strip().lower()
     return m if m in TIMING_MODELS else default
@@ -151,12 +157,12 @@ def compute_phase_serving(reqs, saved_tokens, *, model_cold_s=None, batching="ba
     is applied only to the token-driven part — the calibrated absolute level is preserved; roofline
     supplies only the relative mechanism delta. Never a reward bonus.
 
-    ``timing_model`` selects the per-request BASE rate (V2→V1 promotion): ``legacy_scalar`` (default) uses the
-    fleet-wide ``prefill_s_per_token`` / ``TPOT_S`` constants and is BIT-FOR-BIT the prior behaviour;
-    ``roofline`` resolves the base rate per (``gpu_type``, ``model``, prompt, context) from
-    ``resolve_serving_rates`` so an H100 is not priced with an L40S-class decode constant. The
-    ``roofline_factors`` (precision/spec/clock) compose unchanged on top of either base. Still never a reward
-    bonus — only TTFT / service time / GPU-seconds / SLA / cost move."""
+    ``timing_model`` selects the per-request BASE rate. ``roofline`` (DEFAULT, canonical production path)
+    resolves the base rate per (``gpu_type``, ``model``, prompt, context) from ``resolve_serving_rates`` so an
+    H100 is not priced with an L40S-class decode constant. ``legacy_scalar`` (explicit regression mode) uses
+    the fleet-wide ``prefill_s_per_token`` / ``TPOT_S`` constants and is BIT-FOR-BIT the pre-default-flip
+    behaviour. The ``roofline_factors`` (precision/spec/clock) compose unchanged on top of either base. Still
+    never a reward bonus — only TTFT / service time / GPU-seconds / SLA / cost move."""
     if timing_model not in TIMING_MODELS:
         raise ValueError(f"unknown timing_model {timing_model!r}; expected one of {TIMING_MODELS}")
     res = PhaseResult()
