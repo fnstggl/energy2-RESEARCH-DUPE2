@@ -1,0 +1,1161 @@
+{
+  "cells": {
+    "pjm|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 130538.91,
+        "sla_violation_rate": 0.03818,
+        "sla_safe_goodput": 48180589.0,
+        "operator_cost": 369.08986,
+        "gpu_hours": 399.878,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.66,
+        "queue_delay_p99": 9.8404,
+        "cold_start_events": 542,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389
+      },
+      "seconds": 44.7
+    },
+    "pjm|clock_only": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.2
+    },
+    "pjm|fixed_24_grid": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "fixed_24_grid",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 463646.35,
+        "sla_violation_rate": 0.00733,
+        "sla_safe_goodput": 57962413.0,
+        "operator_cost": 125.01428,
+        "gpu_hours": 134.75,
+        "energy_kwh": 211.8648,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 53,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 25,
+          "theoretical_bundles": 24,
+          "runtime_s": 13.1175,
+          "timed_out": false
+        }
+      },
+      "seconds": 67.1
+    },
+    "pjm|physics_guided_candidates": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "physics_guided_candidates",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 463646.35,
+        "sla_violation_rate": 0.00733,
+        "sla_safe_goodput": 57962413.0,
+        "operator_cost": 125.01428,
+        "gpu_hours": 134.75,
+        "energy_kwh": 211.8648,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 53,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "base": 2,
+          "high": 1
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "physics_guided_candidates",
+          "candidate_bundles_evaluated": 19,
+          "theoretical_bundles": 12,
+          "runtime_s": 10.862,
+          "timed_out": false
+        }
+      },
+      "seconds": 59.8
+    },
+    "pjm|aurelius_mpc_current_default": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_current_default",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 620784.74,
+        "sla_violation_rate": 0.0081,
+        "sla_safe_goodput": 57925565.0,
+        "operator_cost": 93.31023,
+        "gpu_hours": 100.592,
+        "energy_kwh": 212.2304,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 36,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 1,
+          "kv_aware": 2
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "physics_guided_beam_widening",
+          "candidate_bundles_evaluated": 51,
+          "theoretical_bundles": 24,
+          "runtime_s": 29.7873,
+          "timed_out": false
+        }
+      },
+      "seconds": 114.1
+    },
+    "pjm|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1047909.94,
+        "sla_violation_rate": 0.00223,
+        "sla_safe_goodput": 60442767.0,
+        "operator_cost": 57.67935,
+        "gpu_hours": 61.425,
+        "energy_kwh": 294.9623,
+        "queue_delay_p95": 9.7357,
+        "queue_delay_p99": 12.6915,
+        "cold_start_events": 18,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 1.0,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 72,
+          "theoretical_bundles": 71,
+          "runtime_s": 48.6062,
+          "timed_out": false
+        }
+      },
+      "seconds": 167.2
+    },
+    "pjm|exhaustive_default4": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "exhaustive_default4",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 618044.64,
+        "sla_violation_rate": 0.00809,
+        "sla_safe_goodput": 57919222.0,
+        "operator_cost": 93.71366,
+        "gpu_hours": 101.025,
+        "energy_kwh": 212.6761,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 36,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 1,
+          "base": 2
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 55,
+          "theoretical_bundles": 54,
+          "runtime_s": 30.9144,
+          "timed_out": false
+        }
+      },
+      "seconds": 113.8
+    },
+    "ercot|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 130178.26,
+        "sla_violation_rate": 0.04468,
+        "sla_safe_goodput": 36584518.0,
+        "operator_cost": 281.034,
+        "gpu_hours": 323.697,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.5898,
+        "queue_delay_p99": 9.7986,
+        "cold_start_events": 285,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9998,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065
+      },
+      "seconds": 33.2
+    },
+    "ercot|clock_only": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.1
+    },
+    "ercot|fixed_24_grid": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "fixed_24_grid",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 465788.37,
+        "sla_violation_rate": 0.01018,
+        "sla_safe_goodput": 45014380.0,
+        "operator_cost": 96.64127,
+        "gpu_hours": 108.453,
+        "energy_kwh": 173.0275,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 44,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 25,
+          "theoretical_bundles": 24,
+          "runtime_s": 8.6591,
+          "timed_out": false
+        }
+      },
+      "seconds": 46.6
+    },
+    "ercot|physics_guided_candidates": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "physics_guided_candidates",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 465788.37,
+        "sla_violation_rate": 0.01018,
+        "sla_safe_goodput": 45014380.0,
+        "operator_cost": 96.64127,
+        "gpu_hours": 108.453,
+        "energy_kwh": 173.0275,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 44,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "physics_guided_candidates",
+          "candidate_bundles_evaluated": 19,
+          "theoretical_bundles": 12,
+          "runtime_s": 6.8166,
+          "timed_out": false
+        }
+      },
+      "seconds": 41.5
+    },
+    "ercot|aurelius_mpc_current_default": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_current_default",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 627443.32,
+        "sla_violation_rate": 0.01053,
+        "sla_safe_goodput": 45049550.0,
+        "operator_cost": 71.7986,
+        "gpu_hours": 80.364,
+        "energy_kwh": 178.651,
+        "queue_delay_p95": 0.0045,
+        "queue_delay_p99": 4.013,
+        "cold_start_events": 30,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 1,
+          "kv_aware": 2
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "physics_guided_beam_widening",
+          "candidate_bundles_evaluated": 55,
+          "theoretical_bundles": 24,
+          "runtime_s": 22.0162,
+          "timed_out": false
+        }
+      },
+      "seconds": 81.9
+    },
+    "ercot|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1077593.68,
+        "sla_violation_rate": 0.00263,
+        "sla_safe_goodput": 48337999.0,
+        "operator_cost": 44.85735,
+        "gpu_hours": 50.208,
+        "energy_kwh": 234.6681,
+        "queue_delay_p95": 9.1008,
+        "queue_delay_p99": 11.534,
+        "cold_start_events": 13,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 82,
+          "theoretical_bundles": 81,
+          "runtime_s": 36.5238,
+          "timed_out": false
+        }
+      },
+      "seconds": 117.9
+    },
+    "ercot|exhaustive_default4": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "exhaustive_default4",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 625712.59,
+        "sla_violation_rate": 0.01056,
+        "sla_safe_goodput": 45040564.0,
+        "operator_cost": 71.98283,
+        "gpu_hours": 80.569,
+        "energy_kwh": 178.9925,
+        "queue_delay_p95": 0.0045,
+        "queue_delay_p99": 4.013,
+        "cold_start_events": 31,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 55,
+          "theoretical_bundles": 54,
+          "runtime_s": 20.0439,
+          "timed_out": false
+        }
+      },
+      "seconds": 79.7
+    },
+    "caiso|production_scheduler": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "production_scheduler",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 130000.36,
+        "sla_violation_rate": 0.04584,
+        "sla_safe_goodput": 44359995.0,
+        "operator_cost": 341.22979,
+        "gpu_hours": 391.525,
+        "energy_kwh": 0.0,
+        "queue_delay_p95": 8.5885,
+        "queue_delay_p99": 9.8075,
+        "cold_start_events": 367,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9998,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "balanced": 3
+        },
+        "placement_mix": {
+          "rack_local": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.25": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "base": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018
+      },
+      "seconds": 40.9
+    },
+    "caiso|clock_only": {
+      "status": "TIMEOUT",
+      "result": null,
+      "seconds": 300.2
+    },
+    "caiso|fixed_24_grid": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "fixed_24_grid",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 484669.9,
+        "sla_violation_rate": 0.00988,
+        "sla_safe_goodput": 54856834.0,
+        "operator_cost": 113.18391,
+        "gpu_hours": 128.878,
+        "energy_kwh": 220.3133,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 52,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 25,
+          "theoretical_bundles": 24,
+          "runtime_s": 12.3516,
+          "timed_out": false
+        }
+      },
+      "seconds": 60.6
+    },
+    "caiso|physics_guided_candidates": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "physics_guided_candidates",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 484669.9,
+        "sla_violation_rate": 0.00988,
+        "sla_safe_goodput": 54856834.0,
+        "operator_cost": 113.18391,
+        "gpu_hours": 128.878,
+        "energy_kwh": 220.3133,
+        "queue_delay_p95": 0.0,
+        "queue_delay_p99": 0.0,
+        "cold_start_events": 52,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "physics_guided_candidates",
+          "candidate_bundles_evaluated": 19,
+          "theoretical_bundles": 12,
+          "runtime_s": 9.6509,
+          "timed_out": false
+        }
+      },
+      "seconds": 51.9
+    },
+    "caiso|aurelius_mpc_current_default": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_current_default",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 648064.41,
+        "sla_violation_rate": 0.0105,
+        "sla_safe_goodput": 54812013.0,
+        "operator_cost": 84.57803,
+        "gpu_hours": 96.306,
+        "energy_kwh": 219.8338,
+        "queue_delay_p95": 0.01,
+        "queue_delay_p99": 4.5002,
+        "cold_start_events": 37,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 1,
+          "kv_aware": 2
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "physics_guided_beam_widening",
+          "candidate_bundles_evaluated": 55,
+          "theoretical_bundles": 24,
+          "runtime_s": 30.4457,
+          "timed_out": false
+        }
+      },
+      "seconds": 104.5
+    },
+    "caiso|aurelius_mpc_hierarchical_search": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "aurelius_mpc_hierarchical_search",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 1111878.56,
+        "sla_violation_rate": 0.00238,
+        "sla_safe_goodput": 58553494.0,
+        "operator_cost": 52.66177,
+        "gpu_hours": 59.964,
+        "energy_kwh": 286.4857,
+        "queue_delay_p95": 9.4224,
+        "queue_delay_p99": 11.6837,
+        "cold_start_events": 18,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "kv_aware": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "network_aware": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "aggressive": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "hierarchical_search",
+          "candidate_bundles_evaluated": 72,
+          "theoretical_bundles": 71,
+          "runtime_s": 46.5175,
+          "timed_out": false
+        }
+      },
+      "seconds": 145.4
+    },
+    "caiso|exhaustive_default4": {
+      "status": "COMPLETED",
+      "result": {
+        "arm": "exhaustive_default4",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 645507.33,
+        "sla_violation_rate": 0.01052,
+        "sla_safe_goodput": 54797371.0,
+        "operator_cost": 84.89039,
+        "gpu_hours": 96.661,
+        "energy_kwh": 220.312,
+        "queue_delay_p95": 0.0043,
+        "queue_delay_p99": 3.1926,
+        "cold_start_events": 37,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "aggressive": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "0.75": 3
+        },
+        "precision_mix": {
+          "fp8": 3
+        },
+        "clock_mix": {
+          "high": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 55,
+          "theoretical_bundles": 54,
+          "runtime_s": 28.8977,
+          "timed_out": false
+        }
+      },
+      "seconds": 101.7
+    }
+  },
+  "config": {
+    "arms": [
+      "production_scheduler",
+      "clock_only",
+      "fixed_24_grid",
+      "physics_guided_candidates",
+      "aurelius_mpc_current_default",
+      "aurelius_mpc_hierarchical_search",
+      "exhaustive_default4"
+    ],
+    "max_decisions": 3,
+    "cell_timeout_s": 1800,
+    "req_cap": "uncapped",
+    "win_len": 6,
+    "mooncake_limit": 12000,
+    "harness": "PR124_benchmark_v1 (run_period_episode, persistent world, real diurnal prices); identical to request_cap_sweep uncapped cells; only the search strategy varies per arm",
+    "single_variable": "forecaster, simulator, objective, cost model, constraint gates, baseline, windows, and load identical across arms; candidate set / search mode is the only difference between planner arms"
+  },
+  "windows": {
+    "pjm": {
+      "win": [
+        81,
+        82,
+        83
+      ],
+      "counts": {
+        "81": 199577,
+        "82": 184279,
+        "83": 193056
+      }
+    },
+    "ercot": {
+      "win": [
+        75,
+        76,
+        77
+      ],
+      "counts": {
+        "75": 137877,
+        "76": 148345,
+        "77": 156494
+      }
+    },
+    "caiso": {
+      "win": [
+        77,
+        78,
+        79
+      ],
+      "counts": {
+        "77": 156494,
+        "78": 180004,
+        "79": 193123
+      }
+    }
+  }
+}
