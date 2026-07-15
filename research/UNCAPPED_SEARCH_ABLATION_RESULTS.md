@@ -28,7 +28,7 @@ and all arms in THIS run share one code version, so within-run comparisons are e
 | arm | PJM | ERCOT | CAISO | mean ratio | mean pct |
 |---|---|---|---|---|---|
 | production_scheduler (anchor) | 130,538.91 | 130,178.26 | 130,000.36 | 1.00x | 0 |
-| clock_only | TIMEOUT (300 s) | TIMEOUT (300 s) | TIMEOUT (300 s) | see below | see below |
+| clock_only | 91,465 (0.70x) | 88,067 (0.68x) | 88,909 (0.68x) | 0.69x | -31.3% (extended budget; times out at 300 s) |
 | fixed_24_grid | 463,646.35 | 465,788.37 | 484,669.90 | 3.62x | +261.9% |
 | physics_guided_candidates (argmax, no beam) | 463,646.35 | 465,788.37 | 484,669.90 | 3.62x | +261.9% |
 | exhaustive_default4 (full safe grid) | 618,044.64 | 625,712.59 | 645,507.33 | 4.84x | +383.6% |
@@ -45,8 +45,13 @@ hierarchical arm is lowest in all three markets.
 market: the single-surface policy it selects leaves the serving posture unmanaged at
 ~190k requests per period, and the replay cost grows super-linearly (the same failure
 mode as the naive `sla_aware` baseline in the published sweep). A retry pass at a 1,800 s
-cell budget is recorded in the artifact (`uncapped_search_ablation.json`); see the
-artifact for its final status.
+cell budget completed all three markets, and the result is that even when forced to
+finish, the single-surface arm is **below the baseline**: PJM 91,465 gp/$ (0.70x,
+-29.9% vs baseline), ERCOT 88,067 gp/$ (0.68x, -32.4%), CAISO 88,909 gp/$ (0.68x,
+-31.6%), each with a ~0.43 SLA violation rate (roughly 10x the baseline's). So the
+single-surface search is not merely intractable at the standard harness budget; given far
+more compute it still selects a policy worse than the constructed baseline, on both
+economics and SLA.
 
 ## Reading
 

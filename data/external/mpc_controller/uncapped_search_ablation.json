@@ -55,9 +55,65 @@
       "seconds": 44.7
     },
     "pjm|clock_only": {
-      "status": "TIMEOUT",
-      "result": null,
-      "seconds": 300.2
+      "status": "COMPLETED",
+      "result": {
+        "arm": "clock_only",
+        "periods": [
+          81,
+          83
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 91465.11,
+        "sla_violation_rate": 0.43162,
+        "sla_safe_goodput": 22774158.0,
+        "operator_cost": 248.99285,
+        "gpu_hours": 273.594,
+        "energy_kwh": 256.2544,
+        "queue_delay_p95": 3180.1593,
+        "queue_delay_p99": 3366.4602,
+        "cold_start_events": 173,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9999,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "low": 3
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.11389,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 4,
+          "theoretical_bundles": 3,
+          "runtime_s": 2.082,
+          "timed_out": false
+        }
+      },
+      "seconds": 1441.3
     },
     "pjm|fixed_24_grid": {
       "status": "COMPLETED",
@@ -424,9 +480,67 @@
       "seconds": 33.2
     },
     "ercot|clock_only": {
-      "status": "TIMEOUT",
-      "result": null,
-      "seconds": 300.1
+      "status": "COMPLETED",
+      "result": {
+        "arm": "clock_only",
+        "periods": [
+          75,
+          77
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 88066.54,
+        "sla_violation_rate": 0.42863,
+        "sla_safe_goodput": 17003228.0,
+        "operator_cost": 193.07252,
+        "gpu_hours": 217.853,
+        "energy_kwh": 149.2421,
+        "queue_delay_p95": 3084.5445,
+        "queue_delay_p99": 3296.718,
+        "cold_start_events": 123,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9998,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "high": 1,
+          "low": 1,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.05065,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 4,
+          "theoretical_bundles": 3,
+          "runtime_s": 1.3807,
+          "timed_out": false
+        }
+      },
+      "seconds": 833.8
     },
     "ercot|fixed_24_grid": {
       "status": "COMPLETED",
@@ -791,9 +905,66 @@
       "seconds": 40.9
     },
     "caiso|clock_only": {
-      "status": "TIMEOUT",
-      "result": null,
-      "seconds": 300.2
+      "status": "COMPLETED",
+      "result": {
+        "arm": "clock_only",
+        "periods": [
+          77,
+          79
+        ],
+        "n_decisions": 3,
+        "gp_per_dollar": 88909.24,
+        "sla_violation_rate": 0.42793,
+        "sla_safe_goodput": 20212679.0,
+        "operator_cost": 227.3406,
+        "gpu_hours": 259.294,
+        "energy_kwh": 224.6019,
+        "queue_delay_p95": 3104.3612,
+        "queue_delay_p99": 3309.2551,
+        "cold_start_events": 165,
+        "warm_hold_gpu_hours": 0.0,
+        "migration_cost": 0.0,
+        "mean_kv_prefix_hit_rate": 0.9998,
+        "mean_topology_factor": 1.0,
+        "quality_sla_risk_mean": 0.0,
+        "routing_mix": {
+          "round_robin": 3
+        },
+        "batching_mix": {
+          "conservative": 3
+        },
+        "placement_mix": {
+          "topology_blind": 3
+        },
+        "migration_mix": {
+          "off": 3
+        },
+        "prewarm_mix": {
+          "off": 3
+        },
+        "capacity_multiplier_mix": {
+          "1.0": 3
+        },
+        "precision_mix": {
+          "bf16": 3
+        },
+        "clock_mix": {
+          "high": 2,
+          "base": 1
+        },
+        "spec_decode_mix": {
+          "off": 3
+        },
+        "avg_price_paid": 0.03018,
+        "search": {
+          "method": "explicit",
+          "candidate_bundles_evaluated": 4,
+          "theoretical_bundles": 3,
+          "runtime_s": 2.0306,
+          "timed_out": false
+        }
+      },
+      "seconds": 1200.1
     },
     "caiso|fixed_24_grid": {
       "status": "COMPLETED",
@@ -1155,6 +1326,143 @@
         "77": 156494,
         "78": 180004,
         "79": 193123
+      }
+    }
+  },
+  "summary": {
+    "pjm": {
+      "status": {
+        "production_scheduler": "COMPLETED",
+        "clock_only": "COMPLETED",
+        "fixed_24_grid": "COMPLETED",
+        "physics_guided_candidates": "COMPLETED",
+        "aurelius_mpc_current_default": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED",
+        "exhaustive_default4": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "production_scheduler": 130538.91,
+        "clock_only": 91465.11,
+        "fixed_24_grid": 463646.35,
+        "physics_guided_candidates": 463646.35,
+        "aurelius_mpc_current_default": 620784.74,
+        "aurelius_mpc_hierarchical_search": 1047909.94,
+        "exhaustive_default4": 618044.64
+      },
+      "sla_violation_rate": {
+        "production_scheduler": 0.03818,
+        "clock_only": 0.43162,
+        "fixed_24_grid": 0.00733,
+        "physics_guided_candidates": 0.00733,
+        "aurelius_mpc_current_default": 0.0081,
+        "aurelius_mpc_hierarchical_search": 0.00223,
+        "exhaustive_default4": 0.00809
+      },
+      "pct_vs_production": {
+        "clock_only": -29.93,
+        "fixed_24_grid": 255.18,
+        "physics_guided_candidates": 255.18,
+        "aurelius_mpc_current_default": 375.56,
+        "aurelius_mpc_hierarchical_search": 702.76,
+        "exhaustive_default4": 373.46
+      },
+      "headline_delta_recovered_pct": {
+        "clock_only": -4.26,
+        "fixed_24_grid": 36.31,
+        "physics_guided_candidates": 36.31,
+        "aurelius_mpc_current_default": 53.44,
+        "aurelius_mpc_hierarchical_search": 100.0,
+        "exhaustive_default4": 53.14
+      }
+    },
+    "ercot": {
+      "status": {
+        "production_scheduler": "COMPLETED",
+        "clock_only": "COMPLETED",
+        "fixed_24_grid": "COMPLETED",
+        "physics_guided_candidates": "COMPLETED",
+        "aurelius_mpc_current_default": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED",
+        "exhaustive_default4": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "production_scheduler": 130178.26,
+        "clock_only": 88066.54,
+        "fixed_24_grid": 465788.37,
+        "physics_guided_candidates": 465788.37,
+        "aurelius_mpc_current_default": 627443.32,
+        "aurelius_mpc_hierarchical_search": 1077593.68,
+        "exhaustive_default4": 625712.59
+      },
+      "sla_violation_rate": {
+        "production_scheduler": 0.04468,
+        "clock_only": 0.42863,
+        "fixed_24_grid": 0.01018,
+        "physics_guided_candidates": 0.01018,
+        "aurelius_mpc_current_default": 0.01053,
+        "aurelius_mpc_hierarchical_search": 0.00263,
+        "exhaustive_default4": 0.01056
+      },
+      "pct_vs_production": {
+        "clock_only": -32.35,
+        "fixed_24_grid": 257.81,
+        "physics_guided_candidates": 257.81,
+        "aurelius_mpc_current_default": 381.99,
+        "aurelius_mpc_hierarchical_search": 727.78,
+        "exhaustive_default4": 380.66
+      },
+      "headline_delta_recovered_pct": {
+        "clock_only": -4.44,
+        "fixed_24_grid": 35.42,
+        "physics_guided_candidates": 35.42,
+        "aurelius_mpc_current_default": 52.49,
+        "aurelius_mpc_hierarchical_search": 100.0,
+        "exhaustive_default4": 52.3
+      }
+    },
+    "caiso": {
+      "status": {
+        "production_scheduler": "COMPLETED",
+        "clock_only": "COMPLETED",
+        "fixed_24_grid": "COMPLETED",
+        "physics_guided_candidates": "COMPLETED",
+        "aurelius_mpc_current_default": "COMPLETED",
+        "aurelius_mpc_hierarchical_search": "COMPLETED",
+        "exhaustive_default4": "COMPLETED"
+      },
+      "gp_per_dollar": {
+        "production_scheduler": 130000.36,
+        "clock_only": 88909.24,
+        "fixed_24_grid": 484669.9,
+        "physics_guided_candidates": 484669.9,
+        "aurelius_mpc_current_default": 648064.41,
+        "aurelius_mpc_hierarchical_search": 1111878.56,
+        "exhaustive_default4": 645507.33
+      },
+      "sla_violation_rate": {
+        "production_scheduler": 0.04584,
+        "clock_only": 0.42793,
+        "fixed_24_grid": 0.00988,
+        "physics_guided_candidates": 0.00988,
+        "aurelius_mpc_current_default": 0.0105,
+        "aurelius_mpc_hierarchical_search": 0.00238,
+        "exhaustive_default4": 0.01052
+      },
+      "pct_vs_production": {
+        "clock_only": -31.61,
+        "fixed_24_grid": 272.82,
+        "physics_guided_candidates": 272.82,
+        "aurelius_mpc_current_default": 398.51,
+        "aurelius_mpc_hierarchical_search": 755.29,
+        "exhaustive_default4": 396.54
+      },
+      "headline_delta_recovered_pct": {
+        "clock_only": -4.18,
+        "fixed_24_grid": 36.12,
+        "physics_guided_candidates": 36.12,
+        "aurelius_mpc_current_default": 52.76,
+        "aurelius_mpc_hierarchical_search": 100.0,
+        "exhaustive_default4": 52.5
       }
     }
   }
