@@ -104,3 +104,7 @@ data/external/hf/*/*/*/processed/analysis_sample.jsonl
 # only the bounded committed samples + summary/eval JSON are tracked).
 data/external/economic_overlay/analysis_corpus/
 data/external/economic_overlay/raw/
+
+# Aurelius Replay (self-serve POC) local run artifacts — reports, uploads,
+# fingerprints. Never committed; they may derive from real customer logs.
+aurelius_replay_runs/
